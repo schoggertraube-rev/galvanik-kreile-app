@@ -3,12 +3,12 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
-import { overdueInvoiceCondition } from "@/lib/server/paymentContract";
+import { classifyOverdue } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
-import {invoiceAlreadySent} from './communicationDocumentPort';
+import {readUnsentInvoiceOriginals,readInvoiceMailCohort} from './communicationDocumentPort';
 import {evaluateOrderPriority} from '@/lib/priority';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 
 import {
   CUSTOMER_AGREEMENT_TYPES,
@@ -34,7 +34,7 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
         AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
       (SELECT count(*)::integer FROM private.v_open_quotes_v1 quote WHERE quote.tenant_id=customer.tenant_id AND quote.customer_id=customer.id) AS active_quotes,
       (SELECT count(*)::integer FROM public.invoices invoice WHERE ${money} AND invoice.tenant_id=customer.tenant_id AND invoice.customer_id=customer.id
-        AND ${overdueInvoiceCondition()}) AS overdue,
+        AND ${classifyOverdue()}) AS overdue,
       (SELECT count(*)::integer FROM public.intake_item source WHERE source.tenant_id=customer.tenant_id AND source.richtung IN ('rein','intern') AND ${openCondition} AND source.zuordnung='offen'
         AND (${mails} OR source.kanal<>'mail' AND ${intake} AND source.erstellt_von=${auth.userId}::uuid)
         AND (source.kunde_id=customer.id OR source.kunde_id IS NULL AND customer.email IS NOT NULL AND lower(btrim(source.absender_adresse))=lower(btrim(customer.email)))) AS unassigned,
@@ -106,7 +106,9 @@ export type CustomerSummary = CustomerStoredProfile & {
   invoiceOpenCents?: number;
   /** All current issued originals, using the actual dispatch membership proof. */
   invoiceUnsentCount?:number;
-  invoiceUnsentOriginals?:Array<{id:string;number:string;version:number;orderId:string}>;
+  invoiceUnsentOriginals?:Array<{id:string;number:string;version:number;orderId:string|null}>;
+  /** The existing sender's first actual cohort; all originals above remain visible. */
+  invoiceSendGroupIds?:string[];
   agreements: CustomerAgreementSummary[];
   agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
@@ -124,7 +126,7 @@ export type CustomerKennzahlen={
 };
 
 /** The customer picture's single metrics port. No search-answer or persisted rollup. */
-async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string):Promise<CustomerKennzahlen>{
+export async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string,readDay?:string):Promise<CustomerKennzahlen>{
  const money=hasAuthorizationArea(auth,'zahlungen');
  const rows=await tx.execute<{from_date:string;to_date:string;as_of:Date|string;paid_count:number;payment_days:string|number|null;overdue_count:number;overdue_open:string|number;net_revenue:string|number;open_total:string|number;released_count:number;complaint_count:number;release_integrity:boolean}>(sql`
   WITH calendar AS (
@@ -160,7 +162,7 @@ async function readCustomerKennzahlen(tx:PrivilegedTenantTransaction,auth:Author
   CROSS JOIN LATERAL (
    SELECT count(*)::integer AS invoice_count,coalesce(sum(invoice.payment_open_amount_cents),0)::bigint AS open_amount
    FROM public.invoices invoice
-   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${overdueInvoiceCondition()} AND ${money}
+   WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${classifyOverdue(readDay)} AND ${money}
   ) overdue
   CROSS JOIN LATERAL (
    SELECT coalesce(sum(invoice.net_amount_cents) FILTER(WHERE (invoice.issued_at AT TIME ZONE 'Europe/Berlin')::date BETWEEN calendar.from_date AND calendar.to_date),0)
@@ -507,14 +509,25 @@ export async function readCustomerSummary(
        const kennzahlen=await readCustomerKennzahlen(tx,authorization,input.customerId);
        const summary=mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable,kennzahlen);
        if(hasAuthorizationArea(authorization,'preise')){
-        const [pending]=await tx.execute<{count:number;originals:Array<{id:string;number:string;version:number;orderId:string}>}>(sql`SELECT count(*)::integer AS count,coalesce(jsonb_agg(jsonb_build_object('id',invoice.id::text,'number',invoice.invoice_number,'version',invoice.aggregate_version,'orderId',invoice.order_id) ORDER BY invoice.issued_at,invoice.id),'[]'::jsonb) AS originals FROM public.invoices invoice
-         WHERE invoice.tenant_id=${authorization.tenantId} AND invoice.customer_id=${input.customerId}
-          AND invoice.status='issued' AND invoice.contract_version=1
-          AND NOT ${invoiceAlreadySent(authorization.tenantId,sql`invoice.id`)}`);
+        const originals=await readUnsentInvoiceOriginals(tx,authorization.tenantId,input.customerId);
+        const pending={count:originals.length,originals:originals.map(({id,number,version,orderId,handover})=>({id,number,version,orderId,handover}))};
         if(!pending||!Number.isSafeInteger(pending.count)||pending.count<0)throw Error('CUSTOMER_UNSENT_INVOICE_COUNT_INVALID');
         if(!Array.isArray(pending.originals)||pending.originals.length!==pending.count)throw Error('CUSTOMER_UNSENT_ORIGINALS_INVALID');
         summary.invoiceUnsentCount=pending.count;
-        summary.invoiceUnsentOriginals=pending.originals;
+        summary.invoiceUnsentOriginals=pending.originals.map(({handover,...original})=>{void handover;return original;});
+        if(pending.count===0)summary.invoiceSendGroupIds=[];
+        else{
+          const first=pending.originals[0];
+          if(first.orderId===null||first.handover==='pickup'||first.handover==='shipping'){
+            try{
+              // The same reader retains prepared originals here so the existing
+              // N5/Sent-Items recovery button cannot disappear from the overview.
+              const cohort=await withTenantSavepoint(tx,nested=>readInvoiceMailCohort(nested,authorization.tenantId,input.customerId,first.handover,[],first.orderId===null));
+              const ids=new Set(cohort.map(row=>row.id));
+              if(ids.has(first.id)&&cohort.length===ids.size&&cohort.every(row=>pending.originals.some(original=>original.id===row.id)))summary.invoiceSendGroupIds=pending.originals.filter(original=>ids.has(original.id)).map(original=>original.id);
+            }catch(error){console.error('[CUSTOMER_INVOICE_GROUP_SOURCE_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});}
+          }
+        }
        }
        return summary;
     });

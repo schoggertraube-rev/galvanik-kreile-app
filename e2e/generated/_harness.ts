@@ -7,7 +7,7 @@ import { createPinLoginHandle } from "../../src/lib/server/pinLoginHandle";
 import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } from "../../src/lib/domain/workingDays";
 import { generatedFlowRuntime } from "./_model";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
-import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets } from "./_fixtureReset";
+import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets,settleFixtureReads } from "./_fixtureReset";
 import {protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from './_readFault';
 
 export type FlowExpectation = {
@@ -1789,8 +1789,10 @@ function assertServer(expectation: { fehler?: string } | undefined, state: FlowR
 }
 
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
+  let failed=false;
   try { await runGeneratedFlowCaseBody(page,canonicalFixtureCase(flowCase)); }
   catch(error){
+    failed=true;
     if(flowCase.id==='C09'&&flowCase.paket==='AP-C'){
       // Keep the write assertion strict and report the real UI's reason
       // when no copied order was booked; no synthetic success or retry.
@@ -1809,6 +1811,13 @@ export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
       await page.screenshot({path:path.resolve(".git",`flow-${flowCase.id}.png`),timeout:3_000});
     }catch(diagnosticError){console.error("[FLOW_FAILURE_DIAGNOSTICS_FAILED]",diagnosticError);}
     throw error;
+  }finally{
+    try{await settleFixtureReads(page);}
+    catch(error){
+      if(!failed)throw error;
+      // Keep the actual case failure primary; cleanup cannot turn it green.
+      console.error('[FLOW_FIXTURE_REQUEST_DRAIN_FAILED]',error);
+    }
   }
 }
 

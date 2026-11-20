@@ -30,7 +30,7 @@ export async function createInvoiceElectronicOriginal(pdf:Uint8Array,input:Invoi
   ||!isDeepStrictEqual(fields.get('rechnung.absender'),expectedSender)
   ||!isDeepStrictEqual(fields.get('rechnung.betrag'),expectedAmounts)
   ||!isDeepStrictEqual(fields.get('rechnung.steuersaetze'),expectedRates)){
-  throw new InvoiceElectronicSourceError({kind:'order',objectId:snapshot.order.orderId,field:'rounding'});
+  throw new InvoiceElectronicSourceError({kind:'order',objectId:snapshot.order?.orderId,field:'rounding'});
  }
  return Buffer.from(bytes);
 }

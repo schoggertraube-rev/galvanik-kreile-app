@@ -193,11 +193,12 @@ async function createReadyOrder(label: string, paymentMode: PaymentMode): Promis
 
   setSession(USERS.admin, "admin");
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+  const {readCustomerInvoiceTerms}=await import("@/modules/customers/server-public");
   const issued = await createInvoice({
     orderId,
     expectedVersion: frozen.receipt.aggregateVersion,
     clientEventId: randomUUID(),
-  });
+  },undefined,undefined,undefined,undefined,readCustomerInvoiceTerms);
   expect(issued.code).toBe("OK");
   if (issued.code !== "OK") throw new Error(`F1_5_C_INVOICE_FAILED:${issued.code}`);
   return {

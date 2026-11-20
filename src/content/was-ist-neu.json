@@ -1,5 +1,16 @@
 [
   {
+    "datum": "2026-11-20",
+    "pr": 246,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Deine Rechnung übernimmt Zahlungsziel und Skonto aus den passenden Kundenregeln.",
+      "Heute zeigt Sammelrechnungen; nach Storno gilt erneut deine aktuelle Sammelabsprache.",
+      "Dein Versandauftrag behält seine Rechnungen; spätere gehen mit der nächsten Mail."
+    ]
+  },
+  {
     "datum": "2026-11-18",
     "pr": 239,
     "seite": "auftraege",

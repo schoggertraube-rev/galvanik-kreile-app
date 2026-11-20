@@ -15,6 +15,7 @@ import {confirmPaymentAction} from '@/app/actions/payments.actions';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {recognizeInvoicePdf} from '@/modules/eingang/server-public';
 import {createInvoice} from '@/lib/server/commands/immutableInvoiceCommand';
+import {readCustomerInvoiceTerms} from '@/modules/customers/server-public';
 
 beforeAll(()=>{
  const url=process.env.DATABASE_URL;
@@ -71,7 +72,7 @@ it.each([
   if(priced.code!=='OK')throw Error('TEST_A4_FREE_TEXT_PRICE:'+priced.code);invoiceVersion=priced.receipt.aggregateVersion;
  }
  const input={orderId,expectedVersion:invoiceVersion,clientEventId:randomUUID()};
- const result=await withSession(full,()=>'directCommand' in scenario&&scenario.directCommand?createInvoice(input,undefined,undefined,undefined,recognizeInvoicePdf):issueInvoiceAction(input));
+ const result=await withSession(full,()=>'directCommand' in scenario&&scenario.directCommand?createInvoice(input,undefined,undefined,undefined,recognizeInvoicePdf,readCustomerInvoiceTerms):issueInvoiceAction(input));
  if(!scenario.valid){
   expect(result).toMatchObject({code:'VALIDATION_ERROR'});
   if(missingCompany)expect(result).toMatchObject({message:expect.stringContaining('Einstellungen unter Firmendaten')});

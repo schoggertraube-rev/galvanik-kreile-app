@@ -33,7 +33,7 @@ export function v45CustomerFacts(customer:ContactFacts,visibility:{prices:boolea
 }
 /** The customer's rule seam uses the same summary/metrics snapshot, not a
  * second customer or revenue query. This is not the full U2 presentation. */
-function readV45CustomerRuleRaw(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginals'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
+function readV45CustomerRuleRaw(auth:AuthorizationSnapshot,customer:Pick<CustomerSummary,'id'|'updatedAt'|'email'|'billingEmail'|'invoiceUnsentCount'|'invoiceUnsentOriginals'|'invoiceSendGroupIds'|'kennzahlen'|'name'|'invoiceOpenCents'>,signals?:CustomerListSignals){
  const facts=v45CustomerFacts(customer,{prices:hasAuthorizationArea(auth,'preise'),payments:hasAuthorizationArea(auth,'zahlungen')},customer.kennzahlen?.overdue?.invoiceCount);
  const source={kind:'customer' as const,id:customer.id,updatedAt:customer.updatedAt,...(signals?.asOf?{signalsAt:signals.asOf}:{})};
  const rule=readAuthorizedV45Rule(auth,'kunde',facts);
@@ -65,9 +65,11 @@ function readV45CustomerRuleRaw(auth:AuthorizationSnapshot,customer:Pick<Custome
  if(rule.hauptaktion==='customer.invoice'){
   const originals=customer.invoiceUnsentOriginals;
   if(!Array.isArray(originals)||!originals.length||originals.length!==customer.invoiceUnsentCount||originals.some(original=>typeof original.id!=='string'||typeof original.number!=='string'||!Number.isSafeInteger(original.version)))return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_INVOICE_ORIGINAL'],...withheld,hauptaktion:null};
-  const original=originals[0];
-  number=CUSTOMER_INVOICE_ACTION_COPY.numbers(originals.map(row=>row.number));
-  befehl={datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customer.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:originals.map(row=>row.id)}};
+  const ids=customer.invoiceSendGroupIds;
+  if(!Array.isArray(ids)||!ids.length||new Set(ids).size!==ids.length||ids[0]!==originals[0].id||ids.some(id=>!originals.some(original=>original.id===id)))return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_INVOICE_MAIL_GROUP'],...withheld,hauptaktion:null};
+  const group=originals.filter(original=>ids.includes(original.id)),original=group[0];
+  number=CUSTOMER_INVOICE_ACTION_COPY.numbers(group.map(row=>row.number));
+  befehl={datei:'src/app/actions/communications.actions.ts',funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:customer.id,attachment:{kind:'INVOICE',documentId:original.id},expectedInvoiceIds:group.map(row=>row.id)}};
  }else if(rule.hauptaktion==='customer.edit')befehl={datei:'src/app/actions/customers.actions.ts',funktion:'updateCustomerAction',argumente:{customerId:customer.id}};
  else return {code:'SOURCE_INCOMPLETE' as const,missing:['CUSTOMER_ACTION_BINDING'],...withheld,hauptaktion:null};
  const parameters=readV45ActionValues(rule.textKey,{name:customer.name,...(number?{number}:{})});if(parameters.code!=='OK')return {...parameters,...withheld,hauptaktion:null};

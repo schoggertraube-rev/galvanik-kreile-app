@@ -5,7 +5,7 @@ export type ShipmentGroupMember={orderId:string;expectedVersion:number;agreement
 // No browser-supplied tracking number or customer identity is authoritative.
 export type ShipmentGroupInput={orderId:string;groupId:string;expectedGroupVersion:string;clientEventId:string;members:ShipmentGroupMember[];offlineOriginal?:OfflineOriginal};
 export type ShipmentGroupReceipt={eventId:string;clientEventId:string;groupId:string;groupVersion:string;actorId:string;occurredAt:string;trackingNumber:string;carrier:string;shipments:{shipmentId:string;orderId:string;goodsOutEventId:string|null}[];offlineOriginal?:OfflineOriginal};
-export type ShipmentGroupResult={code:'OK';receipt:ShipmentGroupReceipt;replayed:boolean}|{code:'UNAUTHENTICATED'|'FORBIDDEN'|'NOT_FOUND'|'CONFLICT'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string;blockedOrderId?:string;blockedOrderNumber?:string;creditApplication?:CustomerCreditApplicationRead};
+export type ShipmentGroupResult={code:'OK';receipt:ShipmentGroupReceipt;replayed:boolean}|{code:'UNAUTHENTICATED'|'FORBIDDEN'|'NOT_FOUND'|'ORDER_IN_COLLECTION'|'CONFLICT'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string;blockedOrderId?:string;blockedOrderNumber?:string;creditApplication?:CustomerCreditApplicationRead};
 export function isShipmentGroupInput(value:unknown):value is ShipmentGroupInput{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,uuid=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);

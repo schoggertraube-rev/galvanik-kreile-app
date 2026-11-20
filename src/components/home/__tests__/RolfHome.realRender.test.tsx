@@ -13,6 +13,7 @@ const ports = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
+vi.mock('@/components/communication/CommunicationPanel',()=>({CommunicationPanel:({targetId,invoiceOriginal}:{targetId:string;invoiceOriginal?:{documentId:string}})=><div data-testid="TEST-canonical-composer" data-customer={targetId} data-original={invoiceOriginal?.documentId}/> }));
 vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox }));
 vi.mock("@/app/actions/eingang.actions",()=>({getIntakeDraftsAction:vi.fn(async()=>({code:"OK",drafts:[]})),discardIntakeDraftAction:vi.fn(async()=>({code:"OK",drafts:[]}))}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
@@ -296,4 +297,15 @@ it('opens a persisted KV follow-up through the existing task receiver instead of
   fireEvent.click(screen.getByRole('button',{name:'Öffnen'}));
   expect(opened).toHaveBeenCalledTimes(1);expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ziel:'aufgabe',arg:'TEST-followup'});expect(ports.openOrder).not.toHaveBeenCalled();
  }finally{window.removeEventListener('kreile:oeffne',opened);}
+});
+
+it.each([1,2])('KORR S38a-2 opens the existing composer for %i actual projected originals instead of the unsupported invoice overlay',async count=>{
+ const original={customerId:'TEST-customer',documentId:'TEST-replacement',number:'R-2026-1234',expectedInvoiceIds:count===1?['TEST-replacement']:['TEST-replacement','TEST-second-original'],count};
+ const item={key:'invoice-mail:'+original.documentId,field:'action' as const,kind:'invoice' as const,invoiceId:original.documentId,title:original.number,meta:'TEST customer',urgency:'warning' as const,primaryActionLabel:count===1?'Rechnung R-2026-1234 senden' as const:`${count} Rechnungen senden` as const,invoiceMail:original};
+ const model={kind:'data' as const,projection,role:'meister' as const,canCreateOrder:false,canWorkOrders:false,canDelegate:false,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[item]}};
+ render(<RolfHomeClient model={model} ports={actionPorts}/>);
+ fireEvent.click(screen.getByRole('button',{name:count===1?'Rechnung R-2026-1234 senden':`${count} Rechnungen senden`}));
+ const composer=await screen.findByTestId('TEST-canonical-composer');
+ expect(composer).toHaveAttribute('data-customer',original.customerId);expect(composer).toHaveAttribute('data-original',original.documentId);
+ expect(ports.openInvoice).not.toHaveBeenCalled();
 });

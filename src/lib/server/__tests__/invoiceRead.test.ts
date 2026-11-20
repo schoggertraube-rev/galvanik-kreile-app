@@ -1,5 +1,5 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { withTransaction, execute } = vi.hoisted(() => ({ withTransaction: vi.fn(), execute: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -74,6 +74,10 @@ const validCancellationReceiptRow = {
   pdf_sha256: "c".repeat(64),
   cancel_reason: "Auftrag wurde doppelt berechnet",
 };
+
+// Compile the actual reader graph before the unchanged per-command deadline.
+// No permission, transaction, assertion or timeout is changed.
+beforeAll(async()=>{await import("../invoiceRead");});
 
 describe("readInvoiceReceipt", () => {
   beforeEach(() => {

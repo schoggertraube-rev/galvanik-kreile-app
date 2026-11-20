@@ -1,11 +1,12 @@
 "use server";
+import {readCustomerInvoiceTerms} from '@/modules/customers/server-public';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
 import {readInvoiceVat} from "@/modules/accounting/server-public";
 import {readCustomerCredit,readCustomerCreditInTransaction} from "@/modules/accounting/server-public";
 import type {CustomerCreditResult,CustomerCreditApplyInput} from "@/modules/accounting/public";
 import {readCustomerProfile} from "@/modules/customers/server-public";
-import {synchronizeCancellationCreditRetryTask} from '@/modules/tasks/server-public';
+import {synchronizeCancelledCollectionTask,synchronizeCancellationCreditRetryTask} from '@/modules/tasks/server-public';
 import {recordIntakeTaskEffect,recognizeInvoicePdf} from '@/modules/eingang/server-public';
 
 import { revalidatePath } from "next/cache";
@@ -53,13 +54,42 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
  return observeAction('issueInvoiceAction',subjectForAction('issueInvoiceAction',input),async()=>{
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf);
+  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");
   }
   return result;
 
+ },readLoggingSettings);
+}
+
+/** Native collection branch of the existing number/original writer. */
+export async function addOrderToCollectionAction(input:import('@/lib/domain/invoiceCollectionContract').InvoiceCollectionPlanInput){
+ return observeAction('addOrderToCollectionAction',subjectForAction('addOrderToCollectionAction',input),async()=>{
+  const {addOrderToCollection}=await import('@/lib/server/commands/recordGoodsOutCommand');
+  const result=await addOrderToCollection(input);
+  if(result.code==='OK')revalidatePath('/orders');
+  return result;
+ },readLoggingSettings);
+}
+
+export async function issueCollectionInvoiceAction(input:import('@/lib/domain/invoiceIntentContract').IssueCollectionInvoiceInput):Promise<import('@/lib/server/commands/immutableInvoiceCommand').CreateCollectionInvoiceResult>{
+ return observeAction('issueCollectionInvoiceAction',subjectForAction('issueCollectionInvoiceAction',input),async()=>{
+  const {createCollectionInvoice}=await import('@/lib/server/commands/immutableInvoiceCommand');
+  const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
+  const result=await createCollectionInvoice(input,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
+  if(result.code==='OK'){revalidatePath('/buchhaltung/rechnungen');revalidatePath('/warendurchlauf');}
+  return result;
+ },readLoggingSettings);
+}
+
+export async function removeOrderFromCollectionAction(input:import('@/lib/domain/invoiceCollectionContract').InvoiceCollectionRemoveInput){
+ return observeAction('removeOrderFromCollectionAction',subjectForAction('removeOrderFromCollectionAction',input),async()=>{
+  const {removeOrderFromCollection}=await import('@/lib/server/commands/recordGoodsOutCommand');
+  const result=await removeOrderFromCollection(input);
+  if(result.code==='OK'){revalidatePath('/orders');revalidatePath('/buchhaltung/rechnungen');}
+  return result;
  },readLoggingSettings);
 }
 
@@ -82,6 +112,8 @@ export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<Ca
  return observeAction('cancelInvoiceAction',subjectForAction('cancelInvoiceAction',input),async()=>{
   const { cancelInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const result = await cancelInvoice(input,readInvoiceVat,{
+    collectionFailed:async(tx,auth,key)=>synchronizeCancelledCollectionTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},false),
+    collectionSettled:async(tx,auth,key)=>synchronizeCancelledCollectionTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},true),
     failed:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'ensure'),
     settled:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'settle'),
   },recognizeInvoicePdf);

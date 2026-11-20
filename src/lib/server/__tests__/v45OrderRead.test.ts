@@ -16,7 +16,7 @@ it('PL16:43 keeps uncaptured packPhoto as a named R15 gap while binding the qual
  const areas=['auftraege','preise','zahlungen','buchhaltung'] as const;
  const auth={tenantId:'TEST-pack-source',userId:'11111111-1111-4111-8111-111111111111',displayName:'TEST',role:'werkstatt' as const,active:true as const,areas,permissions:getPermissionsForAreas(areas)};
  type Release=NonNullable<Parameters<typeof readV45OrderRule>[2]>;
- const release={orderId:sourceCard.id,value:{code:'OK',orderVersion:3,freezeId:'TEST-freeze',invoiceState:'issued',paymentReady:true,informed:{orderId:sourceCard.id,freezeId:'TEST-freeze'},complaintIds:[],overdueInvoiceIds:[]}} as unknown as Release;
+ const release={orderId:sourceCard.id,value:{code:'OK',orderVersion:3,freezeId:'TEST-freeze',invoiceState:'issued',paymentReady:true,informed:{orderId:sourceCard.id,freezeId:'TEST-freeze'},complaintIds:[],overdueInvoiceIds:[],collectionState:{orderId:sourceCard.id,orderVersion:3,collectionPlanned:false,collectionPrepared:false}}} as unknown as Release;
  const result=readV45OrderRule(auth,{...card,...sourceCard,items:[{id:'TEST-item',position:1,name:'TEST part',quantity:2,material:null,surfaceRequested:'TEST',catalogServiceId:null,unit:null,unitPriceCents:null,vatRateBasisPoints:null,finished:true,extraWork:[]}],customerName:'TEST customer',customerId:'TEST-customer',orderNumber:'TEST-1',title:'TEST shipment',dueAt:null,station:'fertig',handoverMode:'shipping',operationalFacts:{rework:false,pricesMissing:false,complaint:false}},release,undefined,knownSources);
  expect(result.hauptaktion?.befehl,JSON.stringify(result)).toMatchObject({funktion:'recordGoodsOutAction',argumente:{orderId:sourceCard.id,expectedVersion:3,mode:'versand'}});
  expect(result.datenluecken).toContain('packPhoto');
@@ -49,6 +49,16 @@ it('KORR-S13-2 overdue uses the versioned release source; absent or stale debt e
  expect(v45OrderReleaseFacts(sourceCard,source)).toMatchObject({overdue:true});
  expect(v45OrderReleaseFacts({...sourceCard,version:4},source)).not.toHaveProperty('overdue');
  expect(v45OrderReleaseFacts(sourceCard,{...source,value:{code:'UNAVAILABLE'}})).not.toHaveProperty('overdue');
+});
+it('S38a N-Fakt-01 projects only matching qualified collection booleans and retains unknown stale or malformed sources',()=>{
+ type Release=NonNullable<Parameters<typeof v45OrderReleaseFacts>[1]>;
+ const state={orderId:sourceCard.id,orderVersion:3,collectionPlanned:true,collectionPrepared:false};
+ const source={orderId:sourceCard.id,value:{code:'OK',orderVersion:3,informed:null,collectionState:state}} as unknown as Release;
+ expect(v45OrderReleaseFacts(sourceCard,source)).toMatchObject({collectionPlanned:true,collectionPrepared:false});
+ for(const collectionState of [{...state,orderVersion:4},{...state,orderId:'TEST-other-order'},{...state,collectionPrepared:null}]){
+  const read=v45OrderReleaseFacts(sourceCard,{...source,value:{...source.value,collectionState}} as unknown as Release);
+  expect(read).not.toHaveProperty('collectionPlanned');expect(read).not.toHaveProperty('collectionPrepared');
+ }
 });
 it('KORR-S13-2 no money right exposes the canonical blocked action and preserves the first look',async()=>{
  const {getPermissionsForAreas}=await import('@/lib/auth/authorizationContract');

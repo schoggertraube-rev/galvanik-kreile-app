@@ -3,14 +3,16 @@ import { sql } from "drizzle-orm";
 import {getAuthorizationActionGrants,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
 
 /** Shared invoice fact for customer hints and the release gate; alias is invoice. */
-export function overdueInvoiceCondition() {
+export function classifyOverdue(today?:string) {
+  const day=today===undefined?sql`(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date`:sql`${today}::date`;
   return sql`private.invoice_is_overdue_v1(invoice.status::text,invoice.payment_status::text,
     invoice.payment_open_amount_cents,invoice.due_date,
-    (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date)`;
+    ${day})`;
 }
 export const PAYMENT_MODES = ["vorkasse", "abholung", "rechnung"] as const;
 export const ORDER_PAYMENT_MODES = ["vorkasse", "abholung", "rechnung", "keiner"] as const;
@@ -24,8 +26,9 @@ export type PaymentCurrency = "EUR";
 export type PaymentSummary = {
   invoiceId: string;
   invoiceNumber: string;
-  orderId: string;
-  orderNumber: string;
+  orderId: string|null;
+  orderNumber: string|null;
+  collection?:InvoiceCollectionOriginal;
   totalAmountCents: number;
   paidAmountCents: number;
   openAmountCents: number;
@@ -37,7 +40,7 @@ export type PaymentSummary = {
   receiptId: string | null;
   eventId: string | null;
   correlationId: string | null;
-  paymentModeVersion: number;
+  paymentModeVersion: number|null;
   paymentVersion: number;
   goodsOutAllowed: boolean;
 };
@@ -45,8 +48,9 @@ export type PaymentSummary = {
 export type PaymentSummaryRow = {
   invoice_id: string;
   tenant_id: string;
-  order_id: string;
-  order_number: string;
+  order_id: string|null;
+  order_number: string|null;
+  collection_source?:unknown;
   invoice_number: string;
   total_amount_cents: number | string;
   payment_contract_version: number | string | null;
@@ -60,7 +64,7 @@ export type PaymentSummaryRow = {
   payment_receipt_id: string | null;
   payment_event_id: string | null;
   payment_correlation_id: string | null;
-  payment_mode_version: number | string;
+  payment_mode_version: number | string|null;
   payment_version: number | string | null;
   goods_out_allowed: boolean;
   integrity_ok: boolean;
@@ -74,7 +78,7 @@ export async function readOrderPaymentSummaries(tx:PrivilegedTenantTransaction,t
     FROM private.v_payment_summary_v1 payment JOIN public.invoices invoice
       ON invoice.tenant_id=payment.tenant_id AND invoice.id=payment.invoice_id
     LEFT JOIN public.invoices original ON original.tenant_id=invoice.tenant_id AND original.id=invoice.ursprung_rechnung_id AND original.belegart='auftrag'
-    WHERE payment.tenant_id=${tenantId} AND ${typeof source==='string'?sql`payment.order_id=${source}`:sql`payment.invoice_id=${source.invoiceId}::uuid`} ORDER BY payment.invoice_id`);
+    WHERE payment.tenant_id=${tenantId} AND ${typeof source==='string'?sql`(payment.order_id=${source} OR (payment.order_id IS NULL AND EXISTS(SELECT 1 FROM private.v_invoice_order_members_v1 member WHERE member.tenant_id=payment.tenant_id AND member.invoice_id=payment.invoice_id AND member.order_id=${source})))`:sql`payment.invoice_id=${source.invoiceId}::uuid`} ORDER BY payment.invoice_id`);
 }
 
 export type GoodsOutReadback = {
@@ -104,6 +108,7 @@ export type OrderPaymentState = {
 };
 
 export type OrderPaymentStateRow = {
+  payment_collection_source?:unknown;
   order_id: string;
   tenant_id: string;
   order_number: string;
@@ -201,18 +206,22 @@ export function isPaymentMethod(value: unknown): value is PaymentMethod {
 
 /** Visibility gate for financial consumers; a pickup context never grants another order. */
 export function mapPaymentSummaryRow(row:PaymentSummaryRow,authorization:AuthorizationSnapshot,context?:PickupPaymentReadContext):PaymentSummary{
- if(!canReadPaymentSummary(authorization,context)||context!==undefined&&context.orderId!==row.order_id)throw Error('PAYMENT_SUMMARY_INTEGRITY_INVALID');
+ if(!canReadPaymentSummary(authorization,context))throw Error('PAYMENT_SUMMARY_INTEGRITY_INVALID');
+ if(context!==undefined&&context.orderId!==row.order_id){
+  if(row.order_id!==null||!parseInvoiceCollectionOriginal(row.collection_source).members.some(member=>member.orderId===context.orderId))throw Error('PAYMENT_SUMMARY_INTEGRITY_INVALID');
+ }
  return mapPaymentSummaryEvidenceRow(row,authorization.tenantId);
 }
 
 /** Existing payment evidence validation also serves the orders-only delivery note.
  * Server-internal source/hash validation grants no financial projection to a login. */
 export function mapPaymentSummaryEvidenceRow(row:PaymentSummaryRow,tenantId:string):PaymentSummary {
+  const collection=row.order_id===null?parseInvoiceCollectionOriginal(row.collection_source):null;
   const contractVersion = toSafeInteger(row.payment_contract_version, "PAYMENT_SUMMARY_CONTRACT_INVALID");
   const totalAmountCents = toSafeInteger(row.total_amount_cents, "PAYMENT_SUMMARY_TOTAL_INVALID");
   const paidAmountCents = toSafeInteger(row.payment_paid_amount_cents, "PAYMENT_SUMMARY_PAID_INVALID");
   const openAmountCents = toSafeInteger(row.payment_open_amount_cents, "PAYMENT_SUMMARY_OPEN_INVALID");
-  const paymentModeVersion = toSafeInteger(row.payment_mode_version, "PAYMENT_SUMMARY_MODE_VERSION_INVALID");
+  const paymentModeVersion = collection?null:toSafeInteger(row.payment_mode_version, "PAYMENT_SUMMARY_MODE_VERSION_INVALID");
   const paymentVersion = toSafeInteger(row.payment_version, "PAYMENT_SUMMARY_VERSION_INVALID");
   const mode = row.payment_mode;
   const status = row.payment_status;
@@ -223,8 +232,7 @@ export function mapPaymentSummaryEvidenceRow(row:PaymentSummaryRow,tenantId:stri
     row.integrity_ok !== true
     || row.tenant_id !== tenantId
     || !UUID_PATTERN.test(row.invoice_id)
-    || !isCanonicalTextId(row.order_id)
-    || !isCanonicalTextId(row.order_number)
+    || (collection?row.order_number!==null||row.payment_mode_version!==null||mode!=='rechnung':!isCanonicalTextId(row.order_id)||!isCanonicalTextId(row.order_number)||row.collection_source!=null)
     || !INVOICE_NUMBER_PATTERN.test(row.invoice_number)
     || contractVersion !== PAYMENT_CONTRACT_VERSION
     || !isPaymentMode(mode)
@@ -234,7 +242,7 @@ export function mapPaymentSummaryEvidenceRow(row:PaymentSummaryRow,tenantId:stri
     || paidAmountCents < 0
     || openAmountCents < 0
     || paidAmountCents + openAmountCents !== totalAmountCents
-    || paymentModeVersion < 0
+    || paymentModeVersion!==null&&paymentModeVersion < 0
     || paymentVersion < 0
     || typeof row.goods_out_allowed !== "boolean"
   ) {
@@ -277,6 +285,7 @@ export function mapPaymentSummaryEvidenceRow(row:PaymentSummaryRow,tenantId:stri
     invoiceNumber: row.invoice_number,
     orderId: row.order_id,
     orderNumber: row.order_number,
+    ...(collection?{collection}:{}),
     totalAmountCents,
     paidAmountCents,
     openAmountCents,
@@ -368,8 +377,9 @@ export function mapOrderPaymentStateRow(
     payment = mapPaymentSummaryRow({
       invoice_id: row.invoice_id,
       tenant_id: row.tenant_id,
-      order_id: row.order_id,
-      order_number: row.order_number,
+      order_id: row.payment_collection_source == null ? row.order_id : null,
+      order_number: row.payment_collection_source == null ? row.order_number : null,
+      collection_source: row.payment_collection_source,
       invoice_number: row.invoice_number,
       total_amount_cents: row.total_amount_cents as number | string,
       payment_contract_version: row.payment_contract_version,
@@ -383,7 +393,7 @@ export function mapOrderPaymentStateRow(
       payment_receipt_id: row.payment_receipt_id,
       payment_event_id: row.payment_event_id,
       payment_correlation_id: row.payment_correlation_id,
-      payment_mode_version: row.payment_mode_version,
+      payment_mode_version: row.payment_collection_source == null ? row.payment_mode_version : null,
       payment_version: row.payment_version,
       goods_out_allowed: row.payment_goods_out_allowed,
       integrity_ok: row.payment_integrity_ok,

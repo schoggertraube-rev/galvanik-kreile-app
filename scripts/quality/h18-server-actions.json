@@ -2,6 +2,13 @@
   "version": 1,
   "inventorySha256": "4f53fa32a202e826c6ba47c196a41d1e4535fb02a8b28bf161f008067b02a9cf",
   "testedWriteActions": {
+    "src/app/actions/invoices.actions.ts#addOrderToCollectionAction": [
+      "src/test/acceptance/s38a_collection.integration.test.ts"
+    ],
+    "src/app/actions/invoices.actions.ts#issueCollectionInvoiceAction": [
+      "src/test/acceptance/s38a_native_collection_original.integration.test.ts",
+      "src/test/acceptance/s38a_collection_issuer.integration.test.ts"
+    ],
     "src/app/actions/auth.actions.ts#getAuthBootstrapAction": [
       "src/test/acceptance/package_feature_switches.integration.test.ts"
     ],
@@ -421,6 +428,9 @@
     ],
     "src/app/actions/settings.actions.ts#readPackageSwitchesAction": [
       "src/test/acceptance/package_feature_switches.integration.test.ts"
+    ],
+    "src/app/actions/invoices.actions.ts#removeOrderFromCollectionAction": [
+      "src/test/acceptance/s38a_native_collection_original.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

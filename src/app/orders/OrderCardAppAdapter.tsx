@@ -4,6 +4,7 @@ import {capturePendingItemFinished} from '@/lib/offline/pendingStore';
 import {readServerReachability} from '@/lib/offline/serverReachability';
 import {invoiceSettingsCorrection} from '@/lib/client/invoiceSourceCorrection';
 import {E_INVOICE_CORRECTION_COPY} from '@/ui/situationCatalog';
+import {INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
 import type {InvoiceElectronicSourceLocation} from '@/lib/domain/invoiceElectronicFields';
 import {releaseRejectedWorkshopRequest} from '@/lib/offline/workshopRejectionContract';
 import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
@@ -369,7 +370,7 @@ export function OrderCardAppAdapter({
         setSnapshot(next);
         setState({
           kind: "data",
-          card: mapCard(card, result.data.evidence, context, next.catalog),
+          card: {...mapCard(card, result.data.evidence, context, next.catalog),...(result.data.customerInformed?.code==='OK'&&result.data.customerInformed.invoiceMailQueued===true?{invoiceMailWaiting:INVOICE_DELIVERY_COPY.queued(card.customerName)}:{})},
         });
         return next;
       } catch (error) {

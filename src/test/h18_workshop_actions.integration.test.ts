@@ -497,7 +497,7 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     }[]>`
       SELECT collection.customer_id,
         collection.monat = date_trunc('month', timezone('Europe/Berlin', now()))::date AS current_month,
-        collection.ziel_tage AS target_days,
+        (SELECT agreement.ziel_tage FROM public.customer_agreements agreement WHERE agreement.tenant_id=collection.tenant_id AND agreement.id::text=event.payload->>'agreementId') AS target_days,
         collection.status,
         link.order_id,
         event.event_type,

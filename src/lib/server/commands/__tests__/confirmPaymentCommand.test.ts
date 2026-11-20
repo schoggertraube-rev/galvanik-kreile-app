@@ -254,6 +254,7 @@ describe("confirmPayment", () => {
       if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
       if (text.includes("FROM public.events")) return Promise.resolve([]);
       if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([]);
+      if (text.includes("FROM public.invoices")) return Promise.resolve([]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
     for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
@@ -276,6 +277,7 @@ describe("confirmPayment", () => {
       if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
       if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([{ ...orderReference, payment_mode: "abholung", station: "fertig" }]);
       if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) return Promise.resolve([{ ...openInvoice, payment_mode: "abholung" }]);
+      if (text.includes("FROM public.invoices")) return Promise.resolve([{ ...openInvoice, payment_mode: "abholung" }]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
     resolveAuthorization.mockResolvedValueOnce({
@@ -293,6 +295,7 @@ describe("confirmPayment", () => {
       const text = queryText(query);
       if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
       if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([{ ...orderReference, payment_mode: "abholung", station: "galvanik" }]);
+      if (text.includes("FROM public.invoices")) return Promise.resolve([{ ...openInvoice, payment_mode: "abholung" }]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
     await expect(confirmPayment({ ...input, method: "bar" })).resolves.toEqual({ code: "FORBIDDEN", message: "Kassieren ist nur bei fertiger Ware zur Abholung erlaubt." });
@@ -304,6 +307,7 @@ describe("confirmPayment", () => {
       if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
       if (text.includes("FROM public.events")) return Promise.resolve([]);
       if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([]);
+      if (text.includes("FROM public.invoices")) return Promise.resolve([]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
     const { confirmPayment } = await import("../confirmPaymentCommand");
@@ -332,6 +336,7 @@ describe("confirmPayment", () => {
         if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) {
           return Promise.resolve([invoice]);
         }
+        if (text.includes("FROM public.invoices")) return Promise.resolve([invoice]);
         throw new Error(`Unexpected SQL: ${text}`);
       });
       await expect(confirmPayment(input)).resolves.toMatchObject({ code: expectedCode });
@@ -356,6 +361,7 @@ describe("confirmPayment", () => {
         if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) {
           return Promise.resolve([openInvoice]);
         }
+        if (text.includes("FROM public.invoices")) return Promise.resolve([openInvoice]);
         throw new Error(`Unexpected SQL: ${text}`);
       });
       const result = await confirmPayment(command);

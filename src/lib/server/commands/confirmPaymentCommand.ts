@@ -15,7 +15,8 @@ import {
   resolveAuthorization,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
-import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
+import {CUSTOMER_CREDIT_COPY,FINANCIAL_ACCESS_COPY} from '@/ui/situationCatalog';
+import {parseInvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   withPrivilegedTenantTransaction,
@@ -47,7 +48,8 @@ export type ConfirmPaymentReceipt = {
   eventId: string;
   invoiceId: string;
   invoiceNumber: string;
-  orderId: string;
+  orderId: string|null;
+  collectionId?:string;
   receiptId: string;
   clientEventId: string;
   correlationId: string;
@@ -80,7 +82,10 @@ export type ConfirmPaymentResult =
 type LockedInvoice = {
   id: string;
   tenant_id: string;
-  order_id: string;
+  order_id: string|null;
+  collection_id?:string|null;
+  collection_original?:unknown;
+  fiscal_source_valid?:boolean;
   invoice_number: string;
   status: string;
   gross_amount_cents: number | string | null;
@@ -185,6 +190,7 @@ function isValidInput(input: unknown): input is ConfirmPaymentInput {
 }
 
 function parseInvoiceState(invoice: LockedInvoice, tenantId: string): ParsedInvoiceState | null {
+  const collection=readPaymentCollection(invoice);
   const grossAmountCents = toSafeInteger(invoice.gross_amount_cents);
   const paidAmountCents = toSafeInteger(invoice.payment_paid_amount_cents);
   const openAmountCents = toSafeInteger(invoice.payment_open_amount_cents);
@@ -197,7 +203,7 @@ function parseInvoiceState(invoice: LockedInvoice, tenantId: string): ParsedInvo
   if (
     invoice.tenant_id !== tenantId
     || !UUID_PATTERN.test(invoice.id)
-    || !isCanonicalTextId(invoice.order_id)
+    || (collection===null?!isCanonicalTextId(invoice.order_id):invoice.order_id!==null||mode!=='rechnung')
     || !INVOICE_NUMBER_PATTERN.test(invoice.invoice_number)
     || toSafeInteger(invoice.payment_contract_version) !== PAYMENT_CONTRACT_VERSION
     || grossAmountCents === null
@@ -253,7 +259,9 @@ function parsePaymentEvent(row: PaymentEventRow, tenantId: string): PaymentEvent
     throw new Error("PAYMENT_RECEIPT_PAYLOAD_INVALID");
   }
   const payload = row.payload as Record<string, unknown>;
+  const collection=Object.hasOwn(payload,'collectionId');
   const expectedKeys = [
+    ...(collection?['collectionId']:[]),
     ...(payload.method==='guthaben'?['creditVersion']:[]),
     "amountCents", "currency", "grossAmountCents", "invoiceId", "method", "occurredAt",
     "openAmountCents", "orderId", "paidAmountCents", "paymentMode", "paymentStatus",
@@ -286,7 +294,7 @@ function parsePaymentEvent(row: PaymentEventRow, tenantId: string): PaymentEvent
     || !actualKeys.every((key, index) => key === expectedKeys[index])
     || typeof payload.invoiceId !== "string"
     || !UUID_PATTERN.test(payload.invoiceId)
-    || !isCanonicalTextId(payload.orderId)
+    || (collection?payload.orderId!==null||row.order_id!==null||typeof payload.collectionId!=='string'||!UUID_PATTERN.test(payload.collectionId)||payload.paymentMode!=='rechnung':!isCanonicalTextId(payload.orderId))
     || payload.orderId !== row.order_id
     || !isCanonicalTextId(payload.receiptId, 200)
     || amountCents === null
@@ -316,7 +324,8 @@ function parsePaymentEvent(row: PaymentEventRow, tenantId: string): PaymentEvent
   return {
     eventId: row.event_id,
     invoiceId: payload.invoiceId,
-    orderId: payload.orderId,
+    orderId: payload.orderId as string|null,
+    ...(collection?{collectionId:payload.collectionId as string}:{}),
     receiptId: payload.receiptId,
     clientEventId: row.client_event_id,
     correlationId: row.correlation_id,
@@ -361,6 +370,7 @@ function receiptMatchesCurrentInvoice(
   return state !== null
     && invoice.id === receipt.invoiceId
     && invoice.order_id === receipt.orderId
+    && receipt.collectionId===readPaymentCollection(invoice)?.collectionId
     && state.grossAmountCents === receipt.grossAmountCents
     && state.mode === receipt.paymentMode
     && state.paymentVersion === receipt.paymentVersion
@@ -386,6 +396,7 @@ function replayReceiptMatchesInvoice(
   }
   return invoice.id === receipt.invoiceId
     && invoice.order_id === receipt.orderId
+    && receipt.collectionId===readPaymentCollection(invoice)?.collectionId
     && state.grossAmountCents === receipt.grossAmountCents
     && state.mode === receipt.paymentMode
     && state.paymentVersion > receipt.paymentVersion
@@ -435,6 +446,9 @@ async function readInvoice(
       id::text,
       tenant_id,
       order_id,
+      snapshot#>>'{collection,collectionId}' AS collection_id,
+      snapshot->'collection' AS collection_original,
+      CASE WHEN order_id IS NULL AND snapshot ? 'collection' THEN private.invoice_original_source_valid(tenant_id,customer_id,order_id,order_version,freeze_id,service_date,snapshot,issued_at) ELSE NULL END AS fiscal_source_valid,
       invoice_number,
       status,
       gross_amount_cents,
@@ -459,11 +473,26 @@ async function readInvoice(
   return tx.execute<LockedInvoice>(sql`${base} FOR UPDATE`);
 }
 
+/** Same immutable fiscal source as issuance; never a representative order. */
+function readPaymentCollection(invoice:LockedInvoice){
+ if(invoice.order_id!==null){
+  if(invoice.collection_id!=null||invoice.collection_original!=null)throw Error('PAYMENT_SOURCE_XOR_INVALID');
+  return null;
+ }
+ const collection=parseInvoiceCollectionOriginal(invoice.collection_original);
+ if(invoice.collection_id!==collection.collectionId||invoice.fiscal_source_valid!==true)throw Error('PAYMENT_COLLECTION_SOURCE_INVALID');
+ return collection;
+}
+
 async function lockInvoiceOrder(
   tx: PrivilegedTenantTransaction,
   tenantId: string,
   invoiceId: string,
+  source:LockedInvoice,
 ): Promise<LockedPaymentOrder[]> {
+  const collection=readPaymentCollection(source);
+  if(collection)return tx.execute<LockedPaymentOrder>(sql`SELECT id,tenant_id,payment_mode,payment_mode_version,station FROM public.orders
+    WHERE tenant_id=${tenantId} AND id IN (${sql.join(collection.members.map(member=>sql`${member.orderId}`),sql`,`)}) ORDER BY id FOR UPDATE`);
   return tx.execute<LockedPaymentOrder>(sql`
     SELECT
       orders.id,
@@ -559,21 +588,27 @@ export async function confirmPayment(input: unknown,credit?:PaymentCreditComposi
       // All payment-axis commands then lock the order. That serializes mode
       // changes, invoice issuance and payment confirmation without reversing
       // the createInvoice lock order.
-      const orderRows = await lockInvoiceOrder(tx, tenantId, input.invoiceId);
+      const sourceRows=await readInvoice(tx,tenantId,input.invoiceId,false),source=sourceRows[0];
+      if(sourceRows.length!==1||!source)return {code:'NOT_FOUND',message:'Rechnung nicht verfügbar.'};
+      const collection=readPaymentCollection(source);
+      if(collection&&!canManageFinance)return {code:'FORBIDDEN',message:FINANCIAL_ACCESS_COPY.paymentsMissing};
+      const orderRows = await lockInvoiceOrder(tx, tenantId, input.invoiceId,source);
+      const memberIds=collection?new Set(collection.members.map(member=>member.orderId)):null;
+      // The first row is used only by the unchanged single-order branch below.
       const order = orderRows[0];
-      if (
+      if (collection?orderRows.length!==collection.members.length||orderRows.some(row=>row.tenant_id!==tenantId||!memberIds?.has(row.id)):(
         orderRows.length !== 1 || !order || order.tenant_id !== tenantId ||
         !isPaymentMode(order.payment_mode) || toSafeInteger(order.payment_mode_version) === null
-      ) {
+      )) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
       }
-      if (!canManageFinance && (order.payment_mode !== "abholung" || order.station !== "fertig")) {
+      if (!collection&&!canManageFinance && (order.payment_mode !== "abholung" || order.station !== "fertig")) {
         return { code: "FORBIDDEN", message: "Kassieren ist nur bei fertiger Ware zur Abholung erlaubt." };
       }
 
       const invoiceRows = await readInvoice(tx, tenantId, input.invoiceId, true);
       const invoice = invoiceRows[0];
-      if (invoiceRows.length !== 1 || !invoice || invoice.order_id !== order.id) {
+      if (invoiceRows.length !== 1 || !invoice || (collection?invoice.order_id!==null||readPaymentCollection(invoice)?.collectionId!==collection.collectionId:invoice.order_id !== order.id)) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
       }
       if (invoice.status !== "issued") {
@@ -615,6 +650,7 @@ export async function confirmPayment(input: unknown,credit?:PaymentCreditComposi
       const payload = {
         invoiceId: invoice.id,
         orderId: invoice.order_id,
+        ...(collection?{collectionId:collection.collectionId}:{}),
         receiptId,
         amountCents: input.amount,
         grossAmountCents: current.grossAmountCents,

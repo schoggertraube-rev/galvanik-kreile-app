@@ -98,3 +98,11 @@ export function isCancelInvoiceInput(input: unknown): input is CancelInvoiceInpu
       &&typeof value.reissueWithoutShipping.replacementClientEventId==="string"&&UUID_PATTERN.test(value.reissueWithoutShipping.replacementClientEventId)
       &&value.reissueWithoutShipping.replacementClientEventId!==value.clientEventId);
 }
+
+/** Native multi-order source, issued by the existing invoice writer. */
+export type IssueCollectionInvoiceInput={collectionId:string;expectedVersion:number;clientEventId:string};
+export function isIssueCollectionInvoiceInput(value:unknown):value is IssueCollectionInvoiceInput{
+ if(!plainObject(value)||Object.keys(value).sort().join(',')!=='clientEventId,collectionId,expectedVersion')return false;
+ return typeof value.collectionId==='string'&&UUID_PATTERN.test(value.collectionId)&&typeof value.clientEventId==='string'&&UUID_PATTERN.test(value.clientEventId)
+  &&typeof value.expectedVersion==='number'&&Number.isSafeInteger(value.expectedVersion)&&value.expectedVersion>0&&value.expectedVersion<=2147483647;
+}

@@ -1,3 +1,4 @@
+import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import {mapInvoiceIssueReceipt,readCreateInvoiceReceipts,mapInvoiceCancellationReceipt,readCancellationInvoiceReceipts} from '@/lib/server/commands/immutableInvoiceCommand';
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import {readInvoiceVat} from '@/modules/accounting/public';
@@ -9,6 +10,7 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type {
   ImmutableInvoiceCancellationReceipt,
   ImmutableInvoiceReceipt,
+  ImmutableInvoiceCollectionReceipt,
 } from "@/lib/server/commands/immutableInvoiceCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
@@ -19,7 +21,7 @@ const HEX64_PATTERN = /^[a-f0-9]{64}$/;
 export type ReadInvoiceReceiptInput = {
   orderId: string;
   clientEventId: string;
-};
+}|{collectionId:string;clientEventId:string};
 
 export type ReadInvoiceCancellationReceiptInput = {
   invoiceId: string;
@@ -27,7 +29,7 @@ export type ReadInvoiceCancellationReceiptInput = {
 };
 
 export type ReadInvoiceReceiptResult =
-  | { code: "OK"; data: ImmutableInvoiceReceipt | null }
+  | { code: "OK"; data: ImmutableInvoiceReceipt | ImmutableInvoiceCollectionReceipt | null }
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
@@ -55,7 +57,8 @@ export type ReadInvoicePdfResult =
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
-export type ImmutableInvoiceSummary = {
+type ImmutableInvoiceSingleSummary = {
+  collection?:never;
   invoiceId: string;
   invoiceNumber: string;
   orderId: string;
@@ -82,6 +85,9 @@ export type ImmutableInvoiceSummary = {
   cancellationPdfSha256: string | null;
 };
 
+export type ImmutableInvoiceCollectionSummary=Omit<ImmutableInvoiceSingleSummary,'orderId'|'orderNumber'|'orderVersion'|'serviceDate'|'collection'>&{orderId:null;orderNumber:null;orderVersion:null;serviceDate:null;collection:InvoiceCollectionOriginal};
+export type ImmutableInvoiceSummary=ImmutableInvoiceSingleSummary|ImmutableInvoiceCollectionSummary;
+
 export type ReadInvoiceSummariesResult =
   | { code: "OK"; data: ImmutableInvoiceSummary[] }
   | { code: "FORBIDDEN"; message: string }
@@ -100,7 +106,7 @@ type PdfRow = {
 type SummaryRow = {
   id: string;
   tenant_id: string;
-  order_id: string;
+  order_id: string|null;
   customer_id: string;
   invoice_number: string;
   status: string;
@@ -109,8 +115,8 @@ type SummaryRow = {
   snapshot: unknown;
   vat_amount_cents: number | string;
   gross_amount_cents: number | string;
-  service_date: Date | string;
-  order_version: number | string;
+  service_date: Date | string|null;
+  order_version: number | string|null;
   due_date: Date | string;
   issued_at: Date | string;
   aggregate_version: number | string;
@@ -121,7 +127,7 @@ type SummaryRow = {
   cancelled_at: Date | string | null;
   cancellation_pdf_ref: string | null;
   cancellation_pdf_sha256: string | null;
-  order_number: string;
+  order_number: string|null;
   customer_name: string;
   integrity_ok: boolean;
 };
@@ -130,6 +136,7 @@ function isReceiptInput(value: unknown): value is ReadInvoiceReceiptInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const input = value as Record<string, unknown>;
   const keys = Object.keys(input).sort();
+  if(keys.length===2&&keys[0]==='clientEventId'&&keys[1]==='collectionId')return typeof input.collectionId==='string'&&UUID_PATTERN.test(input.collectionId)&&typeof input.clientEventId==='string'&&UUID_PATTERN.test(input.clientEventId);
   return keys.length === 2
     && keys[0] === "clientEventId"
     && keys[1] === "orderId"
@@ -185,21 +192,21 @@ function toSafeInteger(value: unknown, error: string): number {
 
 function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot,readVat:InvoiceVatReader): ImmutableInvoiceSummary {
   const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_SUMMARY_VERSION_INVALID");
-  const orderVersion = toSafeInteger(row.order_version, "INVOICE_SUMMARY_ORDER_VERSION_INVALID");
+  const collection=row.order_id===null?parseInvoiceCollectionOriginal((row.snapshot as {collection:unknown}).collection):undefined;
+  const orderVersion = collection?null:toSafeInteger(row.order_version, "INVOICE_SUMMARY_ORDER_VERSION_INVALID");
+  const sourceValid=collection?row.order_id===null&&row.order_version===null&&row.service_date===null&&row.order_number===null:isCanonicalTextId(row.order_id)&&typeof row.order_number==='string'&&row.order_number.trim().length>0&&orderVersion!==null&&orderVersion>0;
   const {netAmountCents,vatAmountCents,grossAmountCents,headRate:vatRateBasisPoints,groups:vatGroups}=readVat(row);
   const commonValid = row.integrity_ok === true
     && row.tenant_id === authorization.tenantId
     && UUID_PATTERN.test(row.id)
-    && isCanonicalTextId(row.order_id)
+    && sourceValid
     && isCanonicalTextId(row.customer_id)
     && INVOICE_NUMBER_PATTERN.test(row.invoice_number)
     && row.pdf_ref === `invoice://${row.id}/original`
     && HEX64_PATTERN.test(row.pdf_sha256)
-    && orderVersion > 0
     && netAmountCents >= 0
     && vatAmountCents >= 0
     && grossAmountCents === netAmountCents + vatAmountCents
-    && row.order_number.trim().length > 0
     && row.customer_name.trim().length > 0;
   const issuedValid = row.status === "issued"
     && aggregateVersion === 1
@@ -224,22 +231,18 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot,readVa
     throw new Error("INVOICE_SUMMARY_INTEGRITY_INVALID");
   }
 
-  return {
+  const common:Omit<ImmutableInvoiceSingleSummary,'orderId'|'orderNumber'|'orderVersion'|'serviceDate'|'collection'> = {
     invoiceId: row.id,
     invoiceNumber: row.invoice_number,
-    orderId: row.order_id,
-    orderNumber: row.order_number,
     customerId: row.customer_id,
     customerName: row.customer_name,
     status: row.status as "issued" | "cancelled",
     aggregateVersion: aggregateVersion as 1 | 2,
-    orderVersion,
     netAmountCents,
     vatRateBasisPoints,
     vatGroups,
     vatAmountCents,
     grossAmountCents,
-    serviceDate: toDateOnly(row.service_date),
     dueDate: toDateOnly(row.due_date),
     issuedAt: toIso(row.issued_at),
     originalPdfRef: row.pdf_ref,
@@ -250,6 +253,9 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot,readVa
     cancellationPdfRef: row.cancellation_pdf_ref,
     cancellationPdfSha256: row.cancellation_pdf_sha256,
   };
+  if(collection)return {...common,orderId:null,orderNumber:null,orderVersion:null,serviceDate:null,collection};
+  if(row.order_id===null||row.order_number===null||orderVersion===null||row.service_date===null)throw Error('INVOICE_SUMMARY_SINGLE_SOURCE_INVALID');
+  return {...common,orderId:row.order_id,orderNumber:row.order_number,orderVersion,serviceDate:toDateOnly(row.service_date)};
 }
 
 export async function readInvoiceReceipt(
@@ -265,6 +271,13 @@ export async function readInvoiceReceipt(
   }
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      if('collectionId'in input){
+        const rows=await readCreateInvoiceReceipts(tx,{collectionId:input.collectionId,clientEventId:input.clientEventId});
+        if(rows.length>1)throw Error('INVOICE_COLLECTION_READ_AMBIGUOUS');
+        const receipt=rows[0]?mapInvoiceIssueReceipt(rows[0],authorization.tenantId,rows[0].actor_id,requireVat(readVat)):null;
+        if(receipt&&receipt.collection.collectionId!==input.collectionId)throw Error('INVOICE_READ_COLLECTION_MISMATCH');
+        return receipt;
+      }
       const rows = await readCreateInvoiceReceipts(tx,input.clientEventId);
       if (rows.length > 1) throw new Error("INVOICE_READ_AMBIGUOUS");
       if(rows[0]&&rows[0].order_id!==input.orderId)throw Error('INVOICE_READ_ORDER_MISMATCH');

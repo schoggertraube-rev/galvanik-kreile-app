@@ -1,5 +1,5 @@
 'use server';
-import {berlinCalendarDay} from '@/lib/domain/workingDays';
+
 import {rejectDeferredLegacy} from "@/lib/server/authHelper";
 
 
@@ -155,10 +155,10 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
 export async function getOffenePostenAnalysisAction(von: string, bis: string) {
   await rejectDeferredLegacy("buchhaltung");
 
-  const today = berlinCalendarDay();
+
   const raw = (await invoiceRows()).filter((invoice) => invoice.status === 'issued');
   const offene = raw.filter((invoice) => invoice.openAmountCents > 0);
-  const ueberfaellig = offene.filter((invoice) => invoice.dueDate < today);
+  const ueberfaellig = offene.filter((invoice) => invoice.overdue);
   
   const offeneSumme = offene.reduce((sum, invoice) => sum + (invoice.openAmountCents / 100), 0);
   const ueberfaelligSumme = ueberfaellig.reduce((sum, invoice) => sum + (invoice.openAmountCents / 100), 0);
@@ -194,7 +194,7 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
         netto: invoice.netAmountCents / 100,
         brutto: invoice.grossAmountCents / 100,
         datum: invoice.issuedAt.slice(0, 10),
-        status: invoice.dueDate < today ? 'ueberfaellig' : invoice.paymentStatus,
+        status: invoice.overdue ? 'ueberfaellig' : invoice.paymentStatus,
         kunde: invoice.customerId,
         faelligAm: invoice.dueDate,
       }))

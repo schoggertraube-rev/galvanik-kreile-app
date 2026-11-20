@@ -4,6 +4,7 @@ export { createCustomerCommand, createCustomerInTransaction, readCustomerCreateR
 export { updateCustomerInTransaction, updateCustomerCommand } from "./server/updateCustomerCommand";
 export { readCustomerAddress } from "./server/customerAddressRead";
 export { readCustomerProfile } from "./server/customerWriteContract";
+export { readCustomerInvoiceTerms } from "./server/readCustomerInvoiceTerms";
 export { enableCustomerInvoiceTermsCommand } from "./server/enableCustomerInvoiceTermsCommand";
 export { saveCustomerAgreementCommand, revokeCustomerAgreementCommand } from "./server/customerAgreementCommand";
 export { readCustomerOrderReadinessCommand } from "./server/readCustomerOrderReadinessCommand";

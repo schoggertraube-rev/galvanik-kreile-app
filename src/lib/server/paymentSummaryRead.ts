@@ -10,7 +10,7 @@ import {
   mapOrderPaymentStateRow,
   mapPaymentSummaryRow,
   readOrderPaymentSummaries,
-  overdueInvoiceCondition,
+  classifyOverdue,
   type OrderPaymentState,
   type OrderPaymentStateRow,
   type PaymentSummary,
@@ -107,7 +107,7 @@ export async function getPaymentState(
             AND orders.customer_id = invoice.customer_id
           WHERE orders.tenant_id = state.tenant_id
             AND orders.id = state.order_id
-            AND ${overdueInvoiceCondition()}
+            AND ${classifyOverdue()}
           ORDER BY invoice.due_date,invoice.id
         ) AS customer_overdue_invoice_ids
         FROM private.v_goods_out_ui_state_v1 state

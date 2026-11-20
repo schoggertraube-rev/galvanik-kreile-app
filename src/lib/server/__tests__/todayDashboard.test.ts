@@ -43,13 +43,13 @@ describe("classifyOrderForToday", () => {
 });
 
 describe("classifyMoneyForToday", () => {
-  const invoice = { customerCountry: "Deutschland", dueDate: "2026-10-27", goodsOutRecorded: false, paymentMode: "rechnung", paymentStatus: "offen", station: "fertig" };
+  const invoice = { overdue:true,overdueAsOf:TODAY,customerCountry: "Deutschland", dueDate: "2026-10-27", goodsOutRecorded: false, paymentMode: "rechnung", paymentStatus: "offen", station: "fertig" };
 
   it("shows only overdue open invoices", () => {
     expect(classifyMoneyForToday(invoice, TODAY)).toBe("overdue_invoice");
-    expect(classifyMoneyForToday({ ...invoice, dueDate: TODAY }, TODAY)).toBeNull();
-    expect(classifyMoneyForToday({ ...invoice, dueDate: "2026-10-29" }, TODAY)).toBeNull();
-    expect(classifyMoneyForToday({ ...invoice, paymentStatus: "bezahlt" }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice,overdue:false, dueDate: TODAY }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice,overdue:false, dueDate: "2026-10-29" }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice,overdue:false, paymentStatus: "bezahlt" }, TODAY)).toBeNull();
   });
 
   it("shows open prepayment only for finished domestic orders before goods out", () => {
@@ -189,10 +189,17 @@ describe('S05 qualified order calendar slice',()=>{
 });
 
 // Explicit synthetic projection boundaries; real read/auth is covered separately.
+it('includes native collections without an order, but rejects a missing station on an order invoice',()=>{
+ const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00Z'));
+ const row={id:'TEST-native-collection',order_id:null,payment_version:0,due_date:'2026-11-11',open_amount_cents:11900,overdue:true,overdue_as_of:calendar.today,customer_country:'DE',payment_mode:'rechnung',payment_status:'offen',station:null};
+ expect(projectTodayInvoiceMoney({code:'OK',data:[row]},calendar)).toMatchObject({code:'OK',openCount:1,openCents:11900,overdueCount:1,overdueCents:11900});
+ expect(projectTodayInvoiceMoney({code:'OK',data:[{...row,order_id:'TEST-order'}]},calendar)).toMatchObject({code:'SOURCE_INCOMPLETE',knownTotals:{openCount:0,openCents:0}});
+});
+
 it('keeps all open invoice amounts and separates overdue/today/upcoming without a list limit',()=>{
  const calendar=readTodayCalendar(new Date('2026-11-12T12:00:00Z'));
  const rows=[{id:'late',payment_version:2,due_date:'2026-11-11',open_amount_cents:1250},{id:'today',payment_version:1,due_date:'2026-11-12',open_amount_cents:'2500'},
- {id:'next',payment_version:3,due_date:'2026-11-19',open_amount_cents:300},{id:'later',payment_version:4,due_date:'2026-11-20',open_amount_cents:400}].map(row=>({...row,customer_country:'DE',payment_mode:'rechnung',payment_status:'offen',station:'fertig'}));
+ {id:'next',payment_version:3,due_date:'2026-11-19',open_amount_cents:300},{id:'later',payment_version:4,due_date:'2026-11-20',open_amount_cents:400}].map(row=>({...row,overdue:row.id==='late',overdue_as_of:calendar.today,customer_country:'DE',payment_mode:'rechnung',payment_status:'offen',station:'fertig'}));
  expect(projectTodayInvoiceMoney({code:'OK',data:rows},calendar)).toMatchObject({code:'OK',openCount:4,openCents:4450,overdueCount:1,overdueCents:1250,today:2,upcoming:1});
  expect(projectTodayInvoiceMoney({code:'OK',data:[]},calendar)).toMatchObject({code:'OK',openCount:0,openCents:0,today:0,upcoming:0});
  expect(projectTodayInvoiceMoney({code:'SOURCE_INCOMPLETE'},calendar)).toEqual({code:'SOURCE_INCOMPLETE',missing:['INVOICE_MONEY_SOURCE']});

@@ -193,6 +193,7 @@ export type OrderCardModel = {
   shippingService?:string|null;
   shippingServiceError?:string;
   handoverNotice?:{message:string;taskId:string|null;originalItemId:string|null;taskState?:'offen'|'erledigt'|'nicht_verfuegbar'};
+  invoiceMailWaiting?:string;
   id: string;
   version: number;
   orderNumber: string;

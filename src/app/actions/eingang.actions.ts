@@ -1,4 +1,5 @@
 "use server";
+import {repairCancelledCollectionRouting} from '@/lib/server/commands/immutableInvoiceCommand';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
@@ -10,6 +11,7 @@ import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {repairEvidenceVisibilityTask} from '@/lib/server/evidenceVisibilityUploadPort';
 import {applyEvidenceUploadVisibility} from '@/lib/server/evidenceVisibilityUpload';
 import {EVIDENCE_VISIBILITY_COPY,INCOMING_INVOICE_COPY} from '@/ui/situationCatalog';
+import {repairCollectionFollowupTask} from '@/lib/server/commands/recordGoodsOutCommand';
 import {repairProductionPricingTask} from '@/lib/server/productionSnapshotPort';
 import {repairCancellationCreditTask} from '@/lib/server/commands/customerCreditCommand';
 import {offlinePartition} from "@/lib/server/offlinePartition";
@@ -82,7 +84,7 @@ import type {TaskOpenRequest} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect,recognizeInvoicePdf} from '@/modules/eingang/server-public';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{if(!await repairInvoiceReissueTask(tx,auth,task,recognizeInvoicePdf)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairProductionPricingTask(tx,auth,task);await repairEvidenceVisibilityTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
+const taskEffects={beforeComplete:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:import('@/modules/tasks/public').TaskRecord,input:import('@/modules/tasks/public').TaskCompleteInput)=>{if(!await repairInvoiceReissueTask(tx,auth,task,recognizeInvoicePdf)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairCancelledCollectionRouting(tx,auth,task.client_key);await repairCollectionFollowupTask(tx,auth,task);await repairProductionPricingTask(tx,auth,task);await repairEvidenceVisibilityTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,input);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,input);},effect:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>{
  const blocked=await protectDispatchCallTask(tx,auth,input);if(blocked)return blocked;
  const storageBlocked=await protectStorageFinalTask(tx,auth,input);if(storageBlocked)return storageBlocked;
  await protectStoragePostalTask(tx,auth,input);
@@ -138,7 +140,7 @@ export async function completeIntakeTaskAction(input:unknown){
   if(!orders.ok)return {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
   const taskId='taskId' in input?input.taskId:null;
   const answered=orders.data.filter(order=>['STOPPED','PAUSED','APPOINTMENT_EXPIRED'].includes(order.finishedDispatch?.reminder?.state??'')||['CALL_NOT_REACHED'].includes(order.finishedDispatch?.reminder?.state??'')&&!!order.finishedDispatch?.reminder?.callTaskId&&order.finishedDispatch.reminder.callTaskId!==taskId).map(order=>({id:order.id,version:order.version}));
-  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{if(!await repairInvoiceReissueTask(tx,auth,task,recognizeInvoicePdf)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairProductionPricingTask(tx,auth,task);await repairEvidenceVisibilityTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
+  return completeTask(input,{...taskEffects,beforeComplete:async(tx,auth,task,value)=>{if(!await repairInvoiceReissueTask(tx,auth,task,recognizeInvoicePdf)){const creditBlocked=await repairCancellationCreditTask(tx,auth,task);if(creditBlocked)return creditBlocked;}await repairCancelledCollectionRouting(tx,auth,task.client_key);await repairCollectionFollowupTask(tx,auth,task);await repairProductionPricingTask(tx,auth,task);await repairEvidenceVisibilityTask(tx,auth,task);const blocked=await recordDispatchCallResult(tx,auth,task,value,answered);if(blocked)return blocked;return recordStoragePostalResult(tx,auth,task,value);}});
  }
  return completeTask(input,taskEffects);
 

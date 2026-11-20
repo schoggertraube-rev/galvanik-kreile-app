@@ -2,14 +2,14 @@ import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import {InvoicesClient} from '@/app/buchhaltung/rechnungen/InvoicesClient';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
-import {OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
+import {OFFLINE_RECONCILIATION_COPY,E_INVOICE_COPY} from '@/ui/situationCatalog';
 import type {ImmutableInvoiceSummary} from '@/lib/server/invoiceRead';
 
-const ports=vi.hoisted(()=>({queue:vi.fn(),read:vi.fn(),receipt:vi.fn()}));
+const ports=vi.hoisted(()=>({queue:vi.fn(),read:vi.fn(),receipt:vi.fn(),customerAllowed:true}));
 vi.mock('@/lib/offline/queueFinancialCommand',()=>({queueFinancialCommand:ports.queue}));
 vi.mock('@/app/actions/invoices.actions',()=>({getInvoiceSummariesAction:ports.read,getInvoiceCancellationReceiptAction:ports.receipt}));
 vi.mock('@/hooks/useHydrated',()=>({useHydrated:()=>true}));
-vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:'a'.repeat(64)})}));
+vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:'a'.repeat(64),hasArea:(area:string)=>area==='kunden'&&ports.customerAllowed})}));
 
 // Explicit synthetic consumer boundary; real financial writer/receipt proofs live in acceptance.
 const row:ImmutableInvoiceSummary={invoiceId:'11111111-1111-4111-8111-111111111111',invoiceNumber:'TEST-R1',orderId:'22222222-2222-4222-8222-222222222222',orderNumber:'TEST-A1',customerId:'TEST-customer',customerName:'TEST consumer',status:'issued',aggregateVersion:1,orderVersion:3,netAmountCents:10000,vatRateBasisPoints:1900,vatGroups:[{rateBp:1900,netCents:10000,vatCents:1900,grossCents:11900}],vatAmountCents:1900,grossAmountCents:11900,serviceDate:'2026-11-14',dueDate:'2026-11-28',issuedAt:'2026-11-14T10:00:00Z',originalPdfRef:'TEST-original',originalPdfSha256:'a'.repeat(64),cancelledAt:null,cancelledBy:null,cancelReason:null,cancellationPdfRef:null,cancellationPdfSha256:null};
@@ -64,4 +64,19 @@ it('a later background terminal receipt releases only its consumed invoice key, 
  await waitFor(()=>expect(ports.queue).toHaveBeenCalledTimes(3));
  expect(ports.queue.mock.calls[2][1].input.clientEventId).toBe(next.clientEventId);
  expect(ports.read).toHaveBeenCalledTimes(1);expect(JSON.stringify(detail)).toBe(before);expect(ports.receipt).not.toHaveBeenCalled();
+});
+
+
+it.each([true,false])('synthetic native fiscal list renders all member references without an invented order link; customer area=%s',(allowed)=>{
+ ports.customerAllowed=allowed;
+ const native:ImmutableInvoiceSummary={...row,orderId:null,orderNumber:null,orderVersion:null,serviceDate:null,collection:{collectionId:'77777777-7777-4777-8777-777777777777',month:'2026-10-01',version:1,members:[1,2,3].map(i=>({orderId:'TEST-member-'+i,orderNumber:'TEST-A'+i,title:'TEST member '+i,orderVersion:3,freezeId:'88888888-8888-4888-8888-88888888888'+i,serviceDate:'2026-10-10'}))}};
+ try{
+  render(<InvoicesClient initialState={{state:'DATA',data:[native],canCancel:false}}/>);
+  for(const member of native.collection.members)expect(screen.getByText(E_INVOICE_COPY.collectionMember(member.orderNumber,'10.10.2026'))).toBeTruthy();
+  expect(screen.queryByRole('link',{name:'Auftrag öffnen'})).toBeNull();
+  const customer=screen.queryByRole('link',{name:E_INVOICE_COPY.collectionOpenCustomer});
+  if(allowed)expect(customer?.getAttribute('href')).toBe('/customers/TEST-customer');else expect(customer).toBeNull();
+  expect(document.querySelector('a[href="/orders/null"]')).toBeNull();
+  expect(ports.queue).not.toHaveBeenCalled();expect(ports.read).not.toHaveBeenCalled();
+ }finally{ports.customerAllowed=true;}
 });

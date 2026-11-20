@@ -260,7 +260,8 @@ async function prepareCommands() {
     import('@/modules/fundament/server-public'),
     import('@/modules/eingang/server-public'),
   ]);
-  return {...Object.assign({}, ...modules),readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf};
+  const {readCustomerInvoiceTerms}=await import('@/modules/customers/server-public');
+  return {...Object.assign({}, ...modules),readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms};
 }
 let preparedCommands: Awaited<ReturnType<typeof prepareCommands>>;
 
@@ -448,12 +449,12 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
     if (frozen.code !== "OK") throw new Error(`F1_5_B2_FREEZE_FAILED:${frozen.code}`);
 
     setSession(USERS.admin, "admin");
-    const { createInvoice,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf } = preparedCommands;
+    const { createInvoice,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms } = preparedCommands;
     const issued = await createInvoice({
       orderId,
       expectedVersion: frozen.receipt.aggregateVersion,
       clientEventId: INVOICE_EVENT,
-    },undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf);
+    },undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
     expect(issued.code, JSON.stringify(issued)).toBe("OK");
     if (issued.code !== "OK") throw new Error(`F1_5_B2_INVOICE_FAILED:${issued.code}`);
     const invoiceId = issued.receipt.invoiceId;

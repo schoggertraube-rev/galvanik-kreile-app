@@ -14,7 +14,7 @@ import {usePermissions} from '@/lib/auth/PermissionsContext';
 import {queueFinancialCommand} from '@/lib/offline/queueFinancialCommand';
 import {releaseRejectedWorkshopRequest} from '@/lib/offline/workshopRejectionContract';
 import type {WorkshopAcknowledgement} from '@/lib/offline/syncPendingFiles';
-import {CUSTOMER_CREDIT_COPY,OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
+import {CUSTOMER_CREDIT_COPY,OFFLINE_RECONCILIATION_COPY,E_INVOICE_COPY} from '@/ui/situationCatalog';
 
 export type InvoicePageInitialState =
   | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; canCancel: boolean }
@@ -58,7 +58,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, { kind: "success" | "error"; text: string }>>({});
   const requestIds = useRef<Record<string, string>>({});
-  const {offlineScope}=usePermissions();
+  const {offlineScope,hasArea}=usePermissions();
   const currentScope=useRef(offlineScope);
   useLayoutEffect(()=>{currentScope.current=offlineScope;return()=>{currentScope.current=null;};},[offlineScope]);
   useEffect(()=>{
@@ -233,9 +233,9 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                           {row.status === "issued" ? "Ausgestellt" : "Storniert"}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-text-muted">{row.customerName} · Auftrag {row.orderNumber}</p>
+                      {row.collection===undefined?<p className="mt-1 text-sm text-text-muted">{row.customerName} · Auftrag {row.orderNumber}</p>:<><p className="mt-1 text-sm text-text-muted">{row.customerName}</p>{row.collection.members.map(member=><p key={member.orderId} className="mt-1 text-sm text-text-muted">{E_INVOICE_COPY.collectionMember(member.orderNumber,formatDate(member.serviceDate))}</p>)}</>}
                       <p className="mt-1 text-xs text-text-muted">
-                        Leistung {formatDate(row.serviceDate)} · Ausgabe {formatDate(row.issuedAt)} · Version {row.aggregateVersion}
+                        {E_INVOICE_COPY.invoiceTimeline(row.serviceDate===null?null:formatDate(row.serviceDate),formatDate(row.issuedAt),row.aggregateVersion)}
                       </p>
                     </div>
                     <div className="text-left lg:text-right">
@@ -261,9 +261,9 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                         Stornobeleg-PDF
                       </a>
                     ) : null}
-                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href={`/orders/${row.orderId}`} prefetch={false}>
+                    {row.collection===undefined?<Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href={`/orders/${row.orderId}`} prefetch={false}>
                       Auftrag öffnen
-                    </Link>
+                    </Link>:hasArea("kunden")?<Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href={`/customers/${encodeURIComponent(row.customerId)}`} prefetch={false}>{E_INVOICE_COPY.collectionOpenCustomer}</Link>:null}
                   </div>
 
                   {row.status === "cancelled" ? (

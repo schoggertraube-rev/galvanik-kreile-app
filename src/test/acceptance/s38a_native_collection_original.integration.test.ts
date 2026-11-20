@@ -1,0 +1,450 @@
+// @vitest-environment node
+// Explicit SYNTHETIC initial historical TEST records: no claim that today's
+// physical action happened last month. Issuance/Auth/DB/PDF/XML/retry are real.
+// No clock override, trigger bypass, updated immutable evidence or remote data.
+import {createHash,randomUUID} from 'node:crypto';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import path from 'node:path';
+import {beforeAll,expect,it,vi} from 'vitest';
+const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
+vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
+import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {issueCollectionInvoiceAction,issueInvoiceAction,getInvoiceReceiptAction,cancelInvoiceAction,getInvoiceCancellationReceiptAction,applyCustomerCreditAction,getCustomerCreditAction,getInvoiceSummariesAction,getInvoiceTruthAction,removeOrderFromCollectionAction} from '@/app/actions/invoices.actions';
+import {readInvoicePdf} from '@/lib/server/invoiceRead';
+import {resolveAuthorization} from '@/lib/server/authorization';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {sql as statement} from 'drizzle-orm';
+import {revokeCustomerAgreementAction} from '@/app/actions/customers.actions';
+import {confirmPaymentAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
+import {readPaymentSummary,getPaymentState} from '@/lib/server/paymentSummaryRead';
+import {getIntakeTaskAction,completeIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {searchTenantAction} from '@/app/actions/search.actions';
+import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
+import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+import {getCustomerSummaryAction} from '@/app/actions/customers.actions';
+import {historicalCollection} from '../../../e2e/ablauf/invoiceCollectionFixture';
+
+beforeAll(()=>{
+ const url=process.env.DATABASE_URL;
+ if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).pathname!=='/postgres')throw Error('TEST_S38_NATIVE_LOOPBACK_REQUIRED');
+});
+
+async function inspectOriginal(bytes:Uint8Array,members:Array<{number:string}>,label:string,invoiceId:string){
+ const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
+ const task=getDocument({data:bytes.slice(),verbosity:0});
+ try{
+  const document=await task.promise,attachments=await document.getAttachments();
+  expect(attachments?.size).toBe(1);if(!attachments)throw Error('TEST_COLLECTION_EMBEDDED_ORIGINAL_REQUIRED');
+  const [id,attachment]=[...attachments][0];expect(attachment.filename).toBe('factur-x.xml');
+  const xml=await document.getAttachmentContent(id);if(!xml)throw Error('TEST_COLLECTION_XML_BYTES_REQUIRED');
+  let visible='';for(let page=1;page<=document.numPages;page++){
+   const content=await(await document.getPage(page)).getTextContent();
+   visible+=content.items.filter((row):row is Extract<typeof row,{str:string}>=>'str'in row).map(row=>row.str).join(' ');
+  }
+  const decoded=new TextDecoder().decode(xml);
+  for(const member of members){expect(visible).toContain('Auftrag '+member.number);expect(decoded).toContain(member.number);}
+  expect((visible.match(/Leistungsdatum/gu)??[]).length).toBeGreaterThanOrEqual(3);
+  const dir=path.resolve('.git/kreile-s38a-native-collection-evidence');mkdirSync(dir,{recursive:true});
+  writeFileSync(path.join(dir,label+'.pdf'),bytes);writeFileSync(path.join(dir,label+'.xml'),xml);
+  writeFileSync(path.join(dir,label+'.json'),JSON.stringify({invoiceId,tenant,pdfSha256:createHash('sha256').update(bytes).digest('hex'),source:'Actual native issue Action/Auth/DB original; initial historic TEST sources explicitly synthetic'},null,2));
+  return decoded;
+ }finally{await task.destroy();}
+}
+
+/** A14 creates one ordinary original and a two-member original. The existing
+ * three-member checks above stay unchanged; these new sizes have their own proof. */
+async function inspectRemovalOriginal(bytes:Uint8Array,members:Array<{number:string}>,label:string,invoiceId:string,invoiceNumber:string,kind:'single'|'collection'){
+ const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
+ const task=getDocument({data:bytes.slice(),verbosity:0});
+ try{
+  const document=await task.promise,attachments=await document.getAttachments();
+  expect(attachments?.size).toBe(1);if(!attachments)throw Error('TEST_A14_EMBEDDED_ORIGINAL_REQUIRED');
+  const [id,attachment]=[...attachments][0];expect(attachment.filename).toBe('factur-x.xml');
+  const xml=await document.getAttachmentContent(id);if(!xml)throw Error('TEST_A14_XML_REQUIRED');
+  let text='';for(let page=1;page<=document.numPages;page++){
+   const content=await(await document.getPage(page)).getTextContent();
+   text+=content.items.filter((row):row is Extract<typeof row,{str:string}>=>'str'in row).map(row=>row.str).join(' ');
+  }
+  const decoded=new TextDecoder().decode(xml);
+  expect(decoded).toContain('<ram:ID>'+invoiceNumber+'</ram:ID>');
+  for(const member of members){
+   expect(text).toContain(member.number);
+   if(kind==='collection')expect(decoded).toContain(member.number);
+  }
+  expect((text.match(/Leistungsdatum/gu)??[]).length).toBeGreaterThanOrEqual(members.length);
+  const dir=path.resolve('.git/kreile-s38a-native-collection-evidence');mkdirSync(dir,{recursive:true});
+  writeFileSync(path.join(dir,label+'.pdf'),bytes);writeFileSync(path.join(dir,label+'.xml'),xml);
+  writeFileSync(path.join(dir,label+'.json'),JSON.stringify({invoiceId,tenant,pdfSha256:createHash('sha256').update(bytes).digest('hex'),source:'Actual invoice Action/Auth/DB original; initial historic TEST sources explicitly synthetic'},null,2));
+ }finally{await task.destroy();}
+}
+
+it('A12 native collection issues one real original: 33.33+33.33+33.34 has 19.00 VAT, all services, no representative order, exact fresh replay',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const input={collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()};
+ const result=await withSession(full,()=>issueCollectionInvoiceAction(input));
+ expect(result,JSON.stringify(result)).toMatchObject({code:'OK',replayed:false});
+ if(result.code!=='OK')throw Error('TEST_NATIVE_COLLECTION_ISSUE:'+result.code);
+ expect(result.receipt).toMatchObject({orderId:null,orderVersion:null,netAmountCents:10000,vatAmountCents:1900,grossAmountCents:11900,collection:{collectionId:source.collectionId,month:source.month,version:1}});
+ expect(result.receipt.collection.members.map(row=>row.orderId).sort()).toEqual(source.members.map(row=>row.orderId).sort());
+ const truth=await withSession(full,()=>getInvoiceTruthAction({customerId:source.customerId}));
+ expect(truth,JSON.stringify(truth)).toMatchObject({code:'OK'});
+ if(truth.code!=='OK')throw Error('TEST_NATIVE_COLLECTION_TRUTH_REQUIRED');
+ expect(truth.data).toHaveLength(1);
+ expect(truth.data[0]).toMatchObject({invoiceId:result.receipt.invoiceId,orderId:null,collection:result.receipt.collection,grossAmountCents:11900,openAmountCents:11900});
+ expect(await withSession(full,()=>getInvoiceTruthAction(JSON.parse(JSON.stringify({customerId:source.customerId}))))).toEqual(truth);
+ const {listRechnungenAction}=await import('@/app/buchhaltung/actions');
+ const accounting=await withSession(full,()=>listRechnungenAction({kundeId:source.customerId}));
+ expect(accounting).toHaveLength(1);
+ expect(accounting[0]).toMatchObject({id:result.receipt.invoiceId,nummer:result.receipt.invoiceNumber,kundeId:source.customerId,netto:100,brutto:119,openAmountCents:11900});
+ const noPrices=await createFixture(['wartung'],'developer');
+ expect(await withSession(noPrices,()=>getInvoiceTruthAction({customerId:source.customerId}))).toMatchObject({code:'FORBIDDEN'});
+ const [stored]=await sql`SELECT order_id,freeze_id,service_date,snapshot,pdf_content,pdf_sha256,payment_open_amount_cents FROM public.invoices WHERE tenant_id=${tenant} AND id=${result.receipt.invoiceId}::uuid`;
+ expect(stored).toMatchObject({order_id:null,freeze_id:null,service_date:null,payment_open_amount_cents:11900});
+ expect(stored.snapshot.collection.members).toHaveLength(3);
+ expect(createHash('sha256').update(stored.pdf_content).digest('hex')).toBe(stored.pdf_sha256);
+ const xml=await inspectOriginal(new Uint8Array(stored.pdf_content),source.members,'a12',result.receipt.invoiceId);
+ expect(xml).toContain('119.00');expect(xml).toContain('19.00');
+ const retry=await withSession(full,()=>issueCollectionInvoiceAction(JSON.parse(JSON.stringify(input))));
+ expect(retry).toEqual({...result,replayed:true});
+ expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${tenant} AND customer_id=${source.customerId}`).toHaveLength(1);
+ expect(await sql`SELECT status,invoice_id::text,version FROM public.invoice_collections WHERE tenant_id=${tenant} AND id=${source.collectionId}::uuid`).toEqual([{status:'abgerechnet',invoice_id:result.receipt.invoiceId,version:2}]);
+ const [number]=await sql`SELECT last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant}`;
+ expect(number.last_number).toBe(1);
+});
+
+it('A7/A8 real native two-rate invoice is once-only under parallel sessions and refuses another actor or reused stale version',async()=>{
+ const source=await historicalCollection([1900,700,1900]);
+ const before=await sql`SELECT last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant}`;
+ const initialNumber=before.length===0?0:Number(before[0].last_number);
+ const input={collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()};
+ const results=await Promise.all([withSession(full,()=>issueCollectionInvoiceAction(input)),withSession(full,()=>issueCollectionInvoiceAction(JSON.parse(JSON.stringify(input))))]);
+ const issued=results.find(row=>row.code==='OK'&&!row.replayed);
+ expect(results.filter(row=>row.code==='OK'&&!row.replayed)).toHaveLength(1);
+ expect(results.filter(row=>row.code==='OK'&&row.replayed)).toHaveLength(1);
+ if(!issued||issued.code!=='OK')throw Error('TEST_COLLECTION_PARALLEL_ISSUE_REQUIRED:'+JSON.stringify(results));
+ expect(issued.receipt).toMatchObject({netAmountCents:10000,vatAmountCents:1500,grossAmountCents:11500,orderId:null});
+ const [stored]=await sql`SELECT snapshot,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${issued.receipt.invoiceId}::uuid`;
+ expect([...stored.snapshot.totals.vatBreakdown].sort((a:{rateBp:number},b:{rateBp:number})=>a.rateBp-b.rateBp)).toEqual([{rateBp:700,netCents:3333,vatCents:233,grossCents:3566},{rateBp:1900,netCents:6667,vatCents:1267,grossCents:7934}]);
+ await inspectOriginal(new Uint8Array(stored.pdf_content),source.members,'a7',issued.receipt.invoiceId);
+ const other=await createFixture(['preise']);
+ expect(await withSession(other,()=>issueCollectionInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>issueCollectionInvoiceAction({...input,expectedVersion:2}))).toMatchObject({code:'CONFLICT'});
+ const noPrice=await createFixture(['wartung'],'developer');
+ expect(await withSession(noPrice,()=>issueCollectionInvoiceAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_MEMBER_READ_AUTH_REQUIRED');
+ const readInput={collectionId:source.collectionId,clientEventId:input.clientEventId};
+ expect(await withSession(full,()=>getInvoiceReceiptAction(JSON.parse(JSON.stringify(readInput))))).toEqual({code:'OK',data:issued.receipt});
+ expect(await withSession(other,()=>getInvoiceReceiptAction(readInput))).toEqual({code:'OK',data:issued.receipt});
+ expect(await withSession(full,()=>getInvoiceReceiptAction({...readInput,collectionId:randomUUID()}))).toEqual({code:'OK',data:null});
+ expect(await withSession(full,()=>getInvoiceReceiptAction({...readInput,orderId:source.members[0].orderId} as never))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(noPrice,()=>getInvoiceReceiptAction(readInput))).toMatchObject({code:'FORBIDDEN'});
+ const pdf=await readInvoicePdf(auth.data,issued.receipt.invoiceId);
+ expect(pdf.code).toBe('OK');if(pdf.code!=='OK')throw Error('TEST_NATIVE_ORIGINAL_READ_REQUIRED');
+ expect(pdf.data.pdf).toEqual(stored.pdf_content);expect(pdf.data.pdfSha256).toBe(stored.pdf_sha256);
+ const summaries=await withSession(full,()=>getInvoiceSummariesAction());
+ expect(summaries,JSON.stringify(summaries)).toMatchObject({code:'OK'});
+ if(summaries.code!=='OK')throw Error('TEST_NATIVE_INVOICE_SUMMARY_REQUIRED');
+ const nativeRows=summaries.data.filter(row=>row.invoiceId===issued.receipt.invoiceId);
+ expect(nativeRows).toHaveLength(1);expect(nativeRows[0]).toMatchObject({orderId:null,orderNumber:null,orderVersion:null,serviceDate:null,collection:issued.receipt.collection});
+ expect(await withSession(noPrice,()=>getInvoiceSummariesAction())).toMatchObject({code:'FORBIDDEN'});
+ for(const member of source.members){
+  const found=await withSession(full,()=>searchTenantAction(member.number));
+  expect(found,JSON.stringify(found)).toMatchObject({code:'OK'});if(found.code!=='OK')throw Error('TEST_NATIVE_INVOICE_SEARCH_REQUIRED');
+  const hits=found.hits.filter(hit=>hit.type==='INVOICE'&&hit.id===issued.receipt.invoiceId);
+  expect(hits).toHaveLength(1);for(const originalMember of source.members)expect(hits[0].context).toContain(originalMember.number);
+ }
+ const mapped=await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<{order_id:string;invoice_id:string;collection_id:string}>(statement`SELECT order_id,invoice_id::text,collection_id::text FROM private.v_invoice_order_members_v1 WHERE tenant_id=${tenant} AND invoice_id=${issued.receipt.invoiceId}::uuid`));
+ expect(mapped.map(row=>row.order_id).sort()).toEqual(source.members.map(row=>row.orderId).sort());
+ expect(mapped.every(row=>row.invoice_id===issued.receipt.invoiceId&&row.collection_id===source.collectionId)).toBe(true);
+ await expect(sql.begin(async tx=>{await tx`UPDATE public.invoice_collections SET version=version+1 WHERE tenant_id=${tenant} AND id=${source.collectionId}::uuid`;})).rejects.toThrow('append-only');
+ await expect(sql.begin(async tx=>{
+  // Raw schema-boundary attempt, not a product authorization proof. Give the
+  // source validator its actual isolated tenant, so the member guard is reached.
+  await tx`SELECT set_config('app.tenant_id',${tenant},true)`;
+  await tx`DELETE FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid`;
+ })).rejects.toThrow('INVOICE_COLLECTION_MEMBERS_CHANGED');
+ expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${tenant} AND customer_id=${source.customerId}`).toHaveLength(1);
+ const [after]=await sql`SELECT snapshot,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${issued.receipt.invoiceId}::uuid`;
+ expect(after).toEqual(stored);
+ const [number]=await sql`SELECT last_number FROM private.invoice_number_sequences WHERE tenant_id=${tenant}`;
+ expect(number.last_number).toBe(initialNumber+1);
+});
+
+it('native payment uses the existing payment command once and the global reader counts one fiscal invoice, not its three members',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_PAYMENT_ORIGINAL_REQUIRED:'+JSON.stringify(issue));
+ const payer=await createFixture(['zahlungen'],'buero');
+ const input={invoiceId:issue.receipt.invoiceId,amount:4000,method:'ueberweisung' as const,expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()};
+ const paid=await withSession(payer,()=>confirmPaymentAction(input));
+ expect(paid,JSON.stringify(paid)).toMatchObject({code:'OK',receipt:{invoiceId:issue.receipt.invoiceId,orderId:null,collectionId:source.collectionId,amountCents:4000,paidAmountCents:4000,openAmountCents:7900,confirmedBy:payer.actorId}});
+ if(paid.code!=='OK')throw Error('TEST_NATIVE_PAYMENT_REQUIRED');
+ expect(await withSession(payer,()=>confirmPaymentAction(JSON.parse(JSON.stringify(input))))).toEqual({...paid,replayed:true});
+ expect(await withSession(full,()=>confirmPaymentAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(payer,()=>confirmPaymentAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT',currentOpenAmountCents:7900});
+ expect(await withSession(payer,()=>confirmPaymentAction({...input,expectedVersion:1,expectedOpenAmountCents:7900,amount:7901,clientEventId:randomUUID()}))).toMatchObject({code:'VALIDATION_ERROR'});
+ const cashOnly=await createFixture(['kassieren','auftraege'],'werkstatt');
+ expect(await withSession(cashOnly,()=>confirmPaymentAction({...input,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ const auth=await withSession(payer,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_PAYMENT_READ_AUTH_REQUIRED');
+ expect(auth.data.permissions).not.toContain('perm_view_prices');
+ const summary=await readPaymentSummary(auth.data);expect(summary.code).toBe('OK');if(summary.code!=='OK')throw Error('TEST_NATIVE_PAYMENT_READ_REQUIRED');
+ expect(summary.data.filter(row=>row.invoiceId===issue.receipt.invoiceId)).toMatchObject([{invoiceId:issue.receipt.invoiceId,orderId:null,totalAmountCents:11900,paidAmountCents:4000,openAmountCents:7900}]);
+ expect(await sql`SELECT order_id,amount_eur::text FROM public.payments WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{order_id:null,amount_eur:'40.00'}]);
+ for(const member of source.members){
+  const state=await getPaymentState(auth.data,member.orderId);
+  expect(state,JSON.stringify(state)).toMatchObject({code:'OK',data:{orderId:member.orderId,invoiceState:'issued',paymentActorId:payer.actorId,payment:{invoiceId:issue.receipt.invoiceId,orderId:null,paidAmountCents:4000,openAmountCents:7900,collection:{collectionId:source.collectionId}}}});
+ }
+});
+
+
+it('A15 native collection cancellation keeps its original, releases all real members once and credits only its received payment',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_CANCEL_ORIGINAL_REQUIRED:'+JSON.stringify(issue));
+ const [before]=await sql`SELECT snapshot,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${issue.receipt.invoiceId}::uuid`;
+ const paid=await withSession(full,()=>confirmPaymentAction({invoiceId:issue.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}));
+ expect(paid).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>revokeCustomerAgreementAction({agreementId:source.agreementId,version:1,clientKey:randomUUID(),reason:'TEST K4 individual reissue after revoked collection'}))).toMatchObject({code:'OK'});
+ const input={invoiceId:issue.receipt.invoiceId,expectedVersion:1 as const,reason:'TEST native collection cancellation',clientEventId:randomUUID()};
+ const cancelled=await withSession(full,()=>cancelInvoiceAction(input));
+ expect(cancelled,JSON.stringify(cancelled)).toMatchObject({code:'OK',receipt:{invoiceId:issue.receipt.invoiceId,orderId:null,orderVersion:null,status:'cancelled',collection:{collectionId:source.collectionId},originalPdfSha256:issue.receipt.pdfSha256}});
+ if(cancelled.code!=='OK')throw Error('TEST_NATIVE_CANCEL_REQUIRED');
+ expect(cancelled.receipt.cancellationNumber).not.toBe(issue.receipt.invoiceNumber);
+ expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toEqual({...cancelled,replayed:true});
+ expect(await withSession(full,()=>getInvoiceCancellationReceiptAction({invoiceId:issue.receipt.invoiceId,clientEventId:input.clientEventId}))).toEqual({code:'OK',data:cancelled.receipt});
+ const other=await createFixture(['zahlungen']);
+ expect(await withSession(other,()=>cancelInvoiceAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid`).toHaveLength(0);
+ const [after]=await sql`SELECT snapshot,pdf_content,pdf_sha256,cancellation_pdf_content,cancellation_pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=${issue.receipt.invoiceId}::uuid`;
+ expect({snapshot:after.snapshot,pdf_content:after.pdf_content,pdf_sha256:after.pdf_sha256}).toEqual(before);
+ expect(createHash('sha256').update(after.cancellation_pdf_content).digest('hex')).toBe(after.cancellation_pdf_sha256);
+ const cancellationXml=await inspectOriginal(new Uint8Array(after.cancellation_pdf_content),source.members,'a15-cancel',issue.receipt.invoiceId);
+ expect(cancellationXml).toContain('-119.00');
+ expect(await sql`SELECT kind,amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{kind:'storno_gutschrift',amount_cents:'4000',actor_user_id:full.actorId}]);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND event_type='INVOICE_CANCELLED_V1' AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(1);
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_NATIVE_CANCEL_READ_AUTH');
+ expect((await readPaymentSummary(auth.data))).toMatchObject({code:'OK'});
+ for(const member of source.members){
+  const singleInput={orderId:member.orderId,expectedVersion:3,clientEventId:randomUUID()};
+  const single=await withSession(full,()=>issueInvoiceAction(singleInput));
+  expect(single,JSON.stringify(single)).toMatchObject({code:'OK',receipt:{orderId:member.orderId,eventSchemaVersion:2,invoiceSourceState:'after_goods_out'}});
+  if(single.code!=='OK')throw Error('TEST_RELEASED_MEMBER_INVOICE_REQUIRED');
+  expect(await withSession(full,()=>issueInvoiceAction(JSON.parse(JSON.stringify(singleInput))))).toEqual({...single,replayed:true});
+  expect(single.receipt.invoiceId).not.toBe(issue.receipt.invoiceId);
+ }
+ expect(await sql`SELECT id FROM public.invoices WHERE tenant_id=${tenant} AND customer_id=${source.customerId} AND status='issued'`).toHaveLength(3);
+});
+
+
+it('native cancellation R2 retains all member releases and one customer-bound normal retry task until the real credit is repaired',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_CREDIT_ORIGINAL_REQUIRED');
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:issue.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const input={invoiceId:issue.receipt.invoiceId,expectedVersion:1 as const,reason:'TEST native credit SQL follow-up',clientEventId:randomUUID()};
+ const fault='test_s38_credit_'+randomUUID().replaceAll('-','');
+ if(!/^TEST-ablauf-[a-f0-9-]+$/.test(tenant))throw Error('TEST_FAULT_SCOPE_REQUIRED');
+ await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.invoice_id='${issue.receipt.invoiceId}'::uuid AND NEW.kind='storno_gutschrift' THEN RAISE EXCEPTION 'TEST_S38_CREDIT_SQL_FAILURE' USING ERRCODE='23514'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.customer_credit_entries FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+ let pending:{taskId:string;version:number}|undefined;
+ try{
+  expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT status FROM public.invoices WHERE tenant_id=${tenant} AND id=${issue.receipt.invoiceId}::uuid`).toEqual([{status:'cancelled'}]);
+  expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid`).toHaveLength(0);
+  const tasks=await sql`SELECT id::text,version,bezug_typ,bezug_id,status,erstellt_von::text FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`;
+  expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({bezug_typ:'kunde',bezug_id:source.customerId,status:'offen',erstellt_von:full.actorId});
+  pending={taskId:tasks[0].id,version:tasks[0].version};
+  expect(await withSession(full,()=>getIntakeTaskAction({taskId:pending!.taskId}))).toMatchObject({code:'OK',creditSource:'KNOWN',canComplete:true,reference:{type:'kunde',id:source.customerId}});
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await sql`SELECT id FROM public.tasks WHERE tenant_id=${tenant} AND client_key=${input.clientEventId}::uuid`).toHaveLength(1);
+ }finally{
+  await sql.unsafe(`DROP TRIGGER ${fault} ON public.customer_credit_entries`);
+  await sql.unsafe(`DROP FUNCTION private.${fault}()`);
+ }
+ if(!pending)throw Error('TEST_NATIVE_CREDIT_TASK_REQUIRED');
+ const resolver=await createFixture(['zahlungen','kunden','eingang'],'buero');
+ const complete={...pending,note:null};
+ expect(await withSession(resolver,()=>completeIntakeTaskAction(complete))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});
+ expect(await withSession(resolver,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(complete))))).toMatchObject({code:'OK',task:{status:'erledigt'}});
+ expect(await sql`SELECT amount_cents::text,actor_user_id::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${issue.receipt.invoiceId}::uuid`).toEqual([{amount_cents:'4000',actor_user_id:full.actorId}]);
+});
+
+
+it('native collection credit uses the existing real customer balance and payment command once, without any member price right',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const first=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(first.code!=='OK')throw Error('TEST_NATIVE_CREDIT_INITIAL_ORIGINAL_REQUIRED');
+ expect(await withSession(full,()=>confirmPaymentAction({invoiceId:first.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:first.receipt.invoiceId,expectedVersion:1,reason:'TEST native credit source',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ // K4 already returned these actual members to an open same-month collection.
+ // Reissue that real source instead of inserting a conflicting synthetic second one.
+ const reopened=await sql`SELECT id::text,version FROM public.invoice_collections WHERE tenant_id=${tenant} AND customer_id=${source.customerId} AND monat=${source.month}::date AND status='offen'`;
+ expect(reopened).toHaveLength(1);
+ const targetSource={...source,collectionId:reopened[0].id};
+ expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${targetSource.collectionId}::uuid ORDER BY order_id`).toEqual(source.members.map(member=>({order_id:member.orderId})).sort((a,b)=>a.order_id.localeCompare(b.order_id)));
+ const target=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:targetSource.collectionId,expectedVersion:reopened[0].version,clientEventId:randomUUID()}));
+ if(target.code!=='OK')throw Error('TEST_NATIVE_CREDIT_TARGET_REQUIRED:'+JSON.stringify(target));
+ const payer=await createFixture(['zahlungen','kunden'],'buero');
+ const read=await withSession(payer,()=>getOrderPaymentStateAction({orderId:targetSource.members[1].orderId}));
+ expect(read,JSON.stringify(read)).toMatchObject({code:'OK',data:{payment:{orderId:null,invoiceId:target.receipt.invoiceId},creditApplication:{code:'OK',proposal:{command:'credit.apply',input:{invoiceId:target.receipt.invoiceId,amount:4000,expectedOpenAmountCents:11900}}}}});
+ if(read.code!=='OK'||read.data.creditApplication?.code!=='OK'||!read.data.creditApplication.proposal)throw Error('TEST_NATIVE_CREDIT_PROPOSAL_REQUIRED');
+ const input={...JSON.parse(JSON.stringify(read.data.creditApplication.proposal.input)),clientEventId:randomUUID()};
+ const applied=await withSession(payer,()=>applyCustomerCreditAction(input));
+ expect(applied,JSON.stringify(applied)).toMatchObject({code:'OK',receipt:{invoiceId:target.receipt.invoiceId,orderId:null,collectionId:targetSource.collectionId,method:'guthaben',amountCents:4000,paidAmountCents:4000,openAmountCents:7900,confirmedBy:payer.actorId}});
+ if(applied.code!=='OK')throw Error('TEST_NATIVE_CREDIT_APPLICATION_REQUIRED');
+ expect(await withSession(payer,()=>applyCustomerCreditAction(JSON.parse(JSON.stringify(input))))).toEqual({...applied,replayed:true});
+ expect(await withSession(payer,()=>getCustomerCreditAction(source.customerId))).toMatchObject({code:'OK',credit:{balanceCents:0}});
+ expect(await sql`SELECT amount_cents::text FROM public.customer_credit_entries WHERE tenant_id=${tenant} AND invoice_id=${target.receipt.invoiceId}::uuid AND kind='verrechnung'`).toEqual([{amount_cents:'-4000'}]);
+ // Existing S08 contract: credit is an internal transfer, never a second external cash receipt.
+ expect(await sql`SELECT order_id,amount_eur::text FROM public.payments WHERE tenant_id=${tenant} AND invoice_id=${target.receipt.invoiceId}::uuid`).toEqual([]);
+});
+
+
+it('native collection originals form one customer fiscal mail group with their stored PDFs and no fabricated ready notification',async()=>{
+ await requestMailStep('S38-native-fiscal');
+ const first=await historicalCollection([1900,1900,1900]);
+ const a=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:first.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(a.code!=='OK')throw Error('TEST_NATIVE_MAIL_FIRST_ORIGINAL');
+ const second=await historicalCollection([1900,700,1900],{customerId:first.customerId,agreementId:first.agreementId});
+ const b=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:second.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(b.code!=='OK')throw Error('TEST_NATIVE_MAIL_SECOND_ORIGINAL');
+ const originals=await sql`SELECT id::text,invoice_number,pdf_content,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} AND id=ANY(${[a.receipt.invoiceId,b.receipt.invoiceId]}::uuid[]) ORDER BY invoice_number`;
+ const card=await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(card,JSON.stringify(card)).toMatchObject({code:'OK'});if(card.code!=='OK')throw Error('TEST_NATIVE_CUSTOMER_CARD_REQUIRED');
+ expect(card.data.invoiceUnsentCount).toBe(2);
+ expect(card.data.invoiceUnsentOriginals?.map(row=>({id:row.id,orderId:row.orderId}))).toEqual(originals.map(row=>({id:row.id,orderId:null})));
+ expect(card.data).toMatchObject({invoiceRevenueCents:20000,invoiceOpenCents:23400});
+ const primary=card.data.nextActionRule?.hauptaktion;
+ expect(primary).toMatchObject({befehl:{funktion:'sendCustomerMailAction',argumente:{targetType:'CUSTOMER',targetId:first.customerId,attachment:{kind:'INVOICE',documentId:a.receipt.invoiceId},expectedInvoiceIds:originals.map(row=>row.id)}}});
+ if(!primary||!('befehl'in primary))throw Error('TEST_NATIVE_CUSTOMER_COMMAND_REQUIRED');
+ const bound=JSON.parse(JSON.stringify(primary.befehl.argumente)) as Pick<Parameters<typeof sendCustomerMailAction>[0],'targetType'|'targetId'|'attachment'|'expectedInvoiceIds'>;
+ const input={...bound,clientRequestId:randomUUID(),subject:'TEST native fiscal originals',body:'TEST unveraenderte Nachricht mit gespeicherten Originalen'};
+ const noPrice=await createFixture(['kunden','mails'],'buero');
+ expect(await withSession(noPrice,()=>sendCustomerMailAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));
+ expect(sent,JSON.stringify(sent)).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('TEST_NATIVE_FISCAL_MAIL_REQUIRED');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ const reread=await withSession(full,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(reread).toMatchObject({code:'OK',data:{invoiceUnsentCount:0,invoiceUnsentOriginals:[],invoiceRevenueCents:20000,invoiceOpenCents:23400}});
+ const hidden=await withSession(noPrice,()=>getCustomerSummaryAction({customerId:first.customerId}));
+ expect(hidden).toMatchObject({code:'OK'});if(hidden.code!=='OK')throw Error('TEST_NATIVE_CUSTOMER_HIDDEN_REQUIRED');
+ expect(hidden.data).not.toHaveProperty('invoiceUnsentOriginals');expect(hidden.data).not.toHaveProperty('invoiceSendGroupIds');expect(hidden.data).not.toHaveProperty('invoiceOpenCents');
+ const sends=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&String(url).endsWith('/sendMail')&&init?.method==='POST');
+ expect(sends).toHaveLength(1);
+ const message=JSON.parse(String(sends[0][1]?.body)).message;
+ expect(message.attachments).toHaveLength(2);
+ for(const original of originals){
+  const attachment=message.attachments.filter((row:{name:string})=>row.name===original.invoice_number+'.pdf');
+  expect(attachment).toHaveLength(1);expect(createHash('sha256').update(Buffer.from(attachment[0].contentBytes,'base64')).digest('hex')).toBe(original.pdf_sha256);
+ }
+ const [proof]=await sql`SELECT payload FROM public.events WHERE tenant_id=${tenant} AND event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND correlation_id=${input.clientRequestId}::uuid`;
+ expect(proof.payload.document).toMatchObject({kind:'INVOICE',orderId:null,collection:{collectionId:first.collectionId}});
+ expect(proof.payload.document.bundle).toHaveLength(1);expect(proof.payload.document.bundle[0]).toMatchObject({orderId:null,collection:{collectionId:second.collectionId}});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND event_type='ORDER_CUSTOMER_INFORMED_V1' AND order_id=ANY(${[...first.members,...second.members].map(member=>member.orderId)}::text[])`).toHaveLength(0);
+ expect(await sql`SELECT direction,channel FROM public.communication_messages WHERE tenant_id=${tenant} AND thread_id=${sent.data.threadId}::uuid`).toEqual([{direction:'outgoing',channel:'email'}]);
+ const again=await withSession(full,()=>sendCustomerMailAction({...input,clientRequestId:randomUUID()}));
+ expect(again.code).not.toBe('OK');
+ expect(vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&String(url).endsWith('/sendMail')&&init?.method==='POST')).toHaveLength(1);
+});
+
+
+it('native fiscal mail preserves a real Graph acceptance across cancellation and uses one normal customer clarification task',async()=>{
+ await requestMailStep('S38-native-cancel-mail');
+ const source=await historicalCollection([1900,1900,1900]);
+ const issue=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ if(issue.code!=='OK')throw Error('TEST_NATIVE_MAIL_RACE_ORIGINAL');
+ const prior=vi.mocked(globalThis.fetch).getMockImplementation();if(!prior)throw Error('TEST_EXTERNAL_GRAPH_BOUNDARY_REQUIRED');
+ let sends=0;
+ vi.mocked(globalThis.fetch).mockImplementation(async(input,init)=>{
+  if(String(input).includes('graph.microsoft.com')&&String(input).endsWith('/sendMail')&&init?.method==='POST'){
+   sends++;
+   expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:issue.receipt.invoiceId,expectedVersion:1,reason:'TEST cancellation after original transport',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+   return new Response(null,{status:202});
+  }
+  return prior(input,init);
+ });
+ const input={targetType:'CUSTOMER' as const,targetId:source.customerId,clientRequestId:randomUUID(),subject:'TEST actual original transport before cancellation',body:'TEST saved native fiscal original',attachment:{kind:'INVOICE' as const,documentId:issue.receipt.invoiceId},expectedInvoiceIds:[issue.receipt.invoiceId]};
+ const sent=await withSession(full,()=>sendCustomerMailAction(input));
+ expect(sent,JSON.stringify(sent)).toMatchObject({code:'OK'});if(sent.code!=='OK')throw Error('TEST_NATIVE_MAIL_RACE_ACCEPTANCE');
+ const tasks=await sql`SELECT task.id::text,task.version,task.bezug_typ,task.bezug_id,task.fuer_bereich,task.status FROM public.tasks task JOIN public.events source ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text AND source.event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' WHERE task.tenant_id=${tenant} AND source.payload->>'invoiceId'=${issue.receipt.invoiceId}`;
+ expect(tasks).toHaveLength(1);expect(tasks[0]).toMatchObject({bezug_typ:'kunde',bezug_id:source.customerId,fuer_bereich:'preise',status:'offen'});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'OK',canComplete:true,reference:{type:'kunde',id:source.customerId}});
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+ expect(sends).toBe(1);
+ expect(await sql`SELECT id FROM public.communication_messages WHERE tenant_id=${tenant} AND thread_id=${sent.data.threadId}::uuid AND direction='outgoing'`).toHaveLength(1);
+ const resolver=await createFixture(['preise'],'buero');
+ expect(await withSession(resolver,()=>getIntakeTaskAction({taskId:tasks[0].id}))).toMatchObject({code:'OK',canComplete:true,canOpenReference:false});
+ expect(await withSession(resolver,()=>completeIntakeTaskAction({taskId:tasks[0].id,version:tasks[0].version,note:'TEST cancellation delivered to actual customer'}))).toMatchObject({code:'OK',task:{status:'erledigt',erledigt_von:resolver.actorId}});
+});
+
+it('A14 removes one real member only before issuance, preserves physical history and allows its existing individual invoice path',async()=>{
+ const source=await historicalCollection([1900,1900,1900]);
+ const member=source.members[0];
+ const before=await sql`SELECT row_to_json(m)::jsonb AS original FROM public.invoice_collection_orders m WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`;
+ const originalGoods=await sql`SELECT row_to_json(e)::jsonb AS original FROM public.events e WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_PICKED_UP_V3'`;
+ mkdirSync('.git/kreile-r24-collection-removal-originals',{recursive:true});
+ writeFileSync('.git/kreile-r24-collection-removal-originals/'+source.collectionId+'.json',JSON.stringify({members:before,goods:originalGoods}));
+ await expect(sql.begin(async tx=>{
+  await tx`SELECT set_config('app.tenant_id',${tenant},true)`;
+  await tx`DELETE FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid AND order_id=${member.orderId}`;
+  throw Error('TEST_ABORT_UNEXPECTED_UNQUALIFIED_REMOVAL');
+ })).rejects.toThrow('INVOICE_COLLECTION_MEMBERS_CHANGED');
+ expect(await sql`SELECT row_to_json(m)::jsonb AS original FROM public.invoice_collection_orders m WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`).toEqual(before);
+ const input={collectionId:source.collectionId,orderId:member.orderId,expectedVersion:1,clientEventId:randomUUID()};
+ const results=await Promise.all([withSession(full,()=>removeOrderFromCollectionAction(input)),withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))))]);
+ expect(results.filter(row=>row.code==='OK'&&!row.replayed)).toHaveLength(1);
+ expect(results.filter(row=>row.code==='OK'&&row.replayed)).toHaveLength(1);
+ const removed=results.find(row=>row.code==='OK'&&!row.replayed);
+ if(!removed||removed.code!=='OK')throw Error('TEST_COLLECTION_REMOVAL_REQUIRED:'+JSON.stringify(results));
+ expect(removed.receipt).toMatchObject({orderId:member.orderId,orderVersion:3,collectionId:source.collectionId,collectionVersion:1,collectionVersionAfter:2,actorId:full.actorId,goodsOutEventId:originalGoods[0].original.id});
+ expect(await withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))))).toEqual({...removed,replayed:true});
+ const another=await createFixture(['preise']),denied=await createFixture(['auftraege']);
+ expect(await withSession(another,()=>removeOrderFromCollectionAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(denied,()=>removeOrderFromCollectionAction(input))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>removeOrderFromCollectionAction({...input,orderId:source.members[1].orderId,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT row_to_json(e)::jsonb AS original FROM public.events e WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_PICKED_UP_V3'`).toEqual(originalGoods);
+ expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`).toEqual(source.members.slice(1).map(row=>({order_id:row.orderId})).sort((a,b)=>a.order_id.localeCompare(b.order_id)));
+ const individual=await withSession(full,()=>issueInvoiceAction({orderId:member.orderId,expectedVersion:3,clientEventId:randomUUID()}));
+ expect(individual,JSON.stringify(individual)).toMatchObject({code:'OK',receipt:{orderId:member.orderId}});
+ if(individual.code!=='OK')throw Error('TEST_REMOVED_MEMBER_INVOICE_REQUIRED');
+ const [individualOriginal]=await sql`SELECT pdf_content FROM public.invoices WHERE tenant_id=${tenant} AND id=${individual.receipt.invoiceId}::uuid`;
+ await inspectRemovalOriginal(new Uint8Array(individualOriginal.pdf_content),[member],'a14-single',individual.receipt.invoiceId,individual.receipt.invoiceNumber,'single');
+ await requestMailStep('S38-A14-post-handover-fiscal');
+ const mailInput={targetType:'CUSTOMER' as const,targetId:source.customerId,clientRequestId:randomUUID(),subject:'TEST Rechnung zu ausgegebener Ware',body:'TEST gespeichertes Original nach belegter Ausgabe',attachment:{kind:'INVOICE' as const,documentId:individual.receipt.invoiceId},expectedInvoiceIds:[individual.receipt.invoiceId]};
+ const delivered=await withSession(full,()=>sendCustomerMailAction(mailInput));
+ expect(delivered,JSON.stringify(delivered)).toMatchObject({code:'OK'});
+ if(delivered.code!=='OK')throw Error('TEST_A14_FISCAL_DELIVERY_REQUIRED');
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(mailInput))))).toMatchObject({code:'OK',data:{threadId:delivered.data.threadId,replayed:true}});
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_CUSTOMER_INFORMED_V1'`).toHaveLength(0);
+ const collective=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:2,clientEventId:randomUUID()}));
+ expect(collective,JSON.stringify(collective)).toMatchObject({code:'OK'});
+ if(collective.code!=='OK')throw Error('TEST_REMAINING_COLLECTION_REQUIRED');
+ expect(collective.receipt.collection.members.map(row=>row.orderId).sort()).toEqual(source.members.slice(1).map(row=>row.orderId).sort());
+ const [collectiveOriginal]=await sql`SELECT pdf_content FROM public.invoices WHERE tenant_id=${tenant} AND id=${collective.receipt.invoiceId}::uuid`;
+ await inspectRemovalOriginal(new Uint8Array(collectiveOriginal.pdf_content),source.members.slice(1),'a14-collection',collective.receipt.invoiceId,collective.receipt.invoiceNumber,'collection');
+ const originalIssued=await sql`SELECT row_to_json(i)::jsonb AS original FROM public.invoices i WHERE tenant_id=${tenant} AND id=${collective.receipt.invoiceId}::uuid`;
+ expect(await withSession(full,()=>removeOrderFromCollectionAction({...input,orderId:source.members[1].orderId,expectedVersion:3,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT row_to_json(i)::jsonb AS original FROM public.invoices i WHERE tenant_id=${tenant} AND id=${collective.receipt.invoiceId}::uuid`).toEqual(originalIssued);
+});
+
+it('A14 missing removal evidence rolls back the collection and leaves the real physical source readable for the same retry',async()=>{
+ const source=await historicalCollection([1900,1900,1900]),member=source.members[0];
+ const input={collectionId:source.collectionId,orderId:member.orderId,expectedVersion:1,clientEventId:randomUUID()};
+ const capture=async()=>({collection:await sql`SELECT row_to_json(c)::jsonb AS original FROM public.invoice_collections c WHERE tenant_id=${tenant} AND id=${source.collectionId}::uuid`,members:await sql`SELECT row_to_json(m)::jsonb AS original FROM public.invoice_collection_orders m WHERE tenant_id=${tenant} AND collection_id=${source.collectionId}::uuid ORDER BY order_id`,physical:await sql`SELECT row_to_json(e)::jsonb AS original FROM public.events e WHERE tenant_id=${tenant} AND order_id=${member.orderId} AND event_type='ORDER_PICKED_UP_V3'`});
+ const before=await capture();mkdirSync('.git/kreile-r24-collection-removal-originals',{recursive:true});
+ writeFileSync('.git/kreile-r24-collection-removal-originals/'+source.collectionId+'.json',JSON.stringify(before));
+ if(!/^TEST-ablauf-[a-f0-9-]+$/.test(tenant))throw Error('TEST_ISOLATED_TENANT_REQUIRED');
+ const probe='test_s38_remove_'+randomUUID().replaceAll('-','');
+ await sql.unsafe(`CREATE FUNCTION public.${probe}() RETURNS trigger LANGUAGE plpgsql AS $probe$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.event_type='ORDER_COLLECTION_MEMBER_REMOVED_V1' THEN RETURN NULL; END IF; RETURN NEW; END; $probe$; CREATE TRIGGER ${probe} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION public.${probe}();`);
+ try{
+  expect(await withSession(full,()=>removeOrderFromCollectionAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  expect(await capture()).toEqual(before);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid`).toHaveLength(0);
+ }finally{
+  await sql.unsafe(`DROP TRIGGER ${probe} ON public.events; DROP FUNCTION public.${probe}();`);
+ }
+ const repaired=await withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))));
+ expect(repaired,JSON.stringify(repaired)).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(full,()=>removeOrderFromCollectionAction(JSON.parse(JSON.stringify(input))))).toEqual({...repaired,replayed:true});
+ expect((await capture()).physical).toEqual(before.physical);
+});

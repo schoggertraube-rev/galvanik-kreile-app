@@ -1,15 +1,19 @@
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
+import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import "server-only";
+import {classifyOverdue} from "./paymentContract";
+import {berlinCalendarDay} from "@/lib/domain/workingDays";
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
-export type InvoiceTruthRow = {
+type InvoiceTruthSource={orderId:string;collection?:never}|{orderId:null;collection:InvoiceCollectionOriginal};
+export type InvoiceTruthRow = InvoiceTruthSource & {
   invoiceId: string;
   invoiceNumber: string;
   customerId: string;
-  orderId: string;
+  customerName:string|null;
   status: "issued" | "cancelled";
   netAmountCents: number;
   vatRateBasisPoints: number|null;
@@ -17,6 +21,9 @@ export type InvoiceTruthRow = {
   vatAmountCents: number;
   grossAmountCents: number;
   dueDate: string;
+  overdue: boolean;
+  overdueAsOf: string;
+  overdueDays:number;
   issuedAt: string;
   paymentStatus: "offen" | "teilbezahlt" | "bezahlt" | null;
   paidAmountCents: number;
@@ -31,7 +38,7 @@ type InvoiceTruthDbRow = {
   id: string;
   invoice_number: string;
   customer_id: string;
-  order_id: string;
+  order_id: string|null;
   status: string;
   net_amount_cents: number | string;
   vat_rate_basis_points: number | string | null;
@@ -39,6 +46,9 @@ type InvoiceTruthDbRow = {
   vat_amount_cents: number | string;
   gross_amount_cents: number | string;
   due_date: Date | string;
+  overdue: boolean;
+  overdue_as_of: string;
+  overdue_days:number;
   issued_at: Date | string;
   payment_status: string | null;
   payment_paid_amount_cents: number | string | null;
@@ -47,7 +57,7 @@ type InvoiceTruthDbRow = {
 
 function cents(value: unknown, code: string): number {
   const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(code);
+  if (value===null||value===undefined||!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(code);
   return parsed;
 }
 
@@ -64,6 +74,14 @@ function instant(value: Date | string): string {
 }
 
 function mapRow(row: InvoiceTruthDbRow,readVat:InvoiceVatReader): InvoiceTruthRow {
+  if(typeof row.overdue!=="boolean"||!validDate(row.overdue_as_of))throw Error("INVOICE_TRUTH_OVERDUE_SOURCE_INVALID");
+  if(!Number.isSafeInteger(row.overdue_days)||row.overdue_days<0||(row.overdue?row.overdue_days<1:row.overdue_days!==0))throw Error("INVOICE_TRUTH_OVERDUE_DAY_INVALID");
+  const snapshot=row.snapshot as {customer?:{name?:unknown};collection?:unknown};
+  const name=snapshot?.customer?.name;
+  // One fiscal row; native collections expose all frozen members, never a representative order.
+  const source:InvoiceTruthSource=row.order_id===null
+    ?{orderId:null,collection:parseInvoiceCollectionOriginal(snapshot?.collection)}
+    :{orderId:row.order_id};
   const vat=readVat(row);
   if (
     (row.status !== "issued" && row.status !== "cancelled")
@@ -73,7 +91,8 @@ function mapRow(row: InvoiceTruthDbRow,readVat:InvoiceVatReader): InvoiceTruthRo
     invoiceId: row.id,
     invoiceNumber: row.invoice_number,
     customerId: row.customer_id,
-    orderId: row.order_id,
+    customerName:typeof name==='string'&&name.trim()?name:null,
+    ...source,
     status: row.status,
     netAmountCents:vat.netAmountCents,
     vatRateBasisPoints:vat.headRate,
@@ -81,10 +100,13 @@ function mapRow(row: InvoiceTruthDbRow,readVat:InvoiceVatReader): InvoiceTruthRo
     vatAmountCents:vat.vatAmountCents,
     grossAmountCents:vat.grossAmountCents,
     dueDate: dateOnly(row.due_date),
+    overdue: row.overdue,
+    overdueAsOf: row.overdue_as_of,
+    overdueDays:row.overdue_days,
     issuedAt: instant(row.issued_at),
     paymentStatus: row.payment_status as InvoiceTruthRow["paymentStatus"],
-    paidAmountCents: row.payment_paid_amount_cents === null ? 0 : cents(row.payment_paid_amount_cents, "INVOICE_TRUTH_PAID_INVALID"),
-    openAmountCents: row.payment_open_amount_cents === null ? 0 : cents(row.payment_open_amount_cents, "INVOICE_TRUTH_OPEN_INVALID"),
+    paidAmountCents: cents(row.payment_paid_amount_cents, "INVOICE_TRUTH_PAID_INVALID"),
+    openAmountCents: cents(row.payment_open_amount_cents, "INVOICE_TRUTH_OPEN_INVALID"),
   };
 }
 
@@ -96,12 +118,13 @@ export async function readInvoiceTruth(
   authorization: AuthorizationSnapshot,
   filter: { from?: string; to?: string; customerId?: string } = {},
   readVat?:InvoiceVatReader,
+  readDay=berlinCalendarDay(),
 ): Promise<InvoiceTruthReadResult> {
   if (!authorization.permissions.includes("perm_view_prices")) {
     return { code: "FORBIDDEN", message: "Rechnungsdaten sind mit diesem Login nicht erlaubt." };
   }
   if (
-    !filter||typeof filter!=='object'||Array.isArray(filter)
+    !validDate(readDay)||!filter||typeof filter!=='object'||Array.isArray(filter)
     ||Object.keys(filter).some(key=>!['from','to','customerId'].includes(key))
     ||(filter.from !== undefined && !validDate(filter.from))
     || (filter.to !== undefined && !validDate(filter.to))
@@ -122,6 +145,9 @@ export async function readInvoiceTruth(
                invoice.vat_amount_cents,
                invoice.gross_amount_cents,
                invoice.due_date,
+               ${classifyOverdue(readDay)} AS overdue,
+               ${readDay}::text AS overdue_as_of,
+               CASE WHEN ${classifyOverdue(readDay)} THEN ${readDay}::date-invoice.due_date ELSE 0 END AS overdue_days,
                invoice.issued_at,
                invoice.payment_status,
                invoice.payment_paid_amount_cents,

@@ -144,7 +144,9 @@ export interface Ausgangsrechnung {
   ustBetrag?: number;
   bezahltAm?: string;
   status: AusgangsrechnungStatus;
-  mahnstufe: number;
+  mahnstufe: number|null;
+  /** Missing on historical imported providers; never replace by original gross. */
+  openAmountCents?:number;
   erechnungXml?: string;
   leadId?: string;
   bemerkung?: string;

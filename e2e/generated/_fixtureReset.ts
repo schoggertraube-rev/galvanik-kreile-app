@@ -1,4 +1,10 @@
 export type FixtureResetTable={schema:string;name:string};
+/** Drain the existing browser's requests before its fixture/page teardown.
+ * Closing a page first aborts the client while the real server transaction can
+ * still hold read locks. No reset retry, lock rule or test timeout changes. */
+export async function settleFixtureReads(page:{isClosed:()=>boolean;waitForLoadState:(state:'networkidle')=>Promise<void>}):Promise<void>{
+ if(!page.isClosed())await page.waitForLoadState('networkidle');
+}
 export function fixtureResetTargets(tables:readonly FixtureResetTable[]):string{
  if(!tables.length||tables.some(table=>!['public','private'].includes(table.schema)||!/^[a-z_][a-z0-9_]*$/.test(table.name)))throw Error('FLOW_REPLAY_TABLE_NAME_INVALID');
  const names=[...new Set(tables.map(table=>`"${table.schema}"."${table.name}"`))].sort();

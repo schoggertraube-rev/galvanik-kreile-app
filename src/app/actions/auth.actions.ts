@@ -142,6 +142,27 @@ async function verifyAndMigratePin(
   return true;
 }
 
+/** Bounded identifiers only: no query, values, PIN, details or stack. */
+function pinLoginFailureDetails(error: unknown): { name: string; code: string | null } {
+  try {
+    const names = new Set(["Error", "TypeError", "RangeError", "ReferenceError", "SyntaxError", "AggregateError", "DrizzleQueryError", "PostgresError", "DatabaseError"]);
+    const ownName = error !== null && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "name")?.value : undefined;
+    const name = typeof ownName === "string" && names.has(ownName) ? ownName : error instanceof Error ? "Error" : "UnknownError";
+    const seen = new Set<object>();
+    let current: unknown = error;
+    for (let depth = 0; depth < 4 && current !== null && typeof current === "object" && !seen.has(current); depth++) {
+      seen.add(current);
+      const code = Object.getOwnPropertyDescriptor(current, "code")?.value;
+      if (typeof code === "string" && /^(?:[0-9A-Z]{5}|E(?:CONNRESET|CONNREFUSED|TIMEDOUT|PIPE|AI_AGAIN|NOTFOUND))$/.test(code)) return { name, code };
+      current = Object.getOwnPropertyDescriptor(current, "cause")?.value;
+    }
+    return { name, code: null };
+  } catch {
+    // Even a malformed diagnostic object must preserve the caught login result.
+    return { name: "UnknownError", code: null };
+  }
+}
+
 /** PIN login for every active tenant user exposed on the start screen. */
 export async function loginWithPin(
   loginHandle: string,
@@ -218,8 +239,8 @@ export async function loginWithPin(
     }
 
     return { ok: true, role: loginRole };
-  } catch {
-    console.error("PIN login failed.");
-    return { ok: false, message: "Server-Fehler beim Login." };
+  } catch (error) {
+    console.error("PIN login failed.", pinLoginFailureDetails(error));
+    return { ok: false, message: PIN_LOGIN_COPY.unavailable };
   }
 }

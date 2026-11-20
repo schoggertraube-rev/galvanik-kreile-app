@@ -22,7 +22,7 @@ Keine Skills oder Unteragenten für Planung und Prüfung.
 
 **Codex-eigene Dateien:** `_review/BAULOG.md`, `STAND.md`, `ABLAUF_STAND.md`, `ABLAUF_INVENTAR.md`, `HAUPTWEGE_BEFEHLE.md`, `UI_ERSETZT_LISTE.md`, `shots/`. Alle anderen Dateien unter `_review/` schreibt nur der PL. Codex committet sie täglich unverändert im lokalen Git `_review/` („Steuerstand <Datum>“), nach BAUREGELN 7.
 
-**Nie:** Merge, Secrets in Dateien, Vercel-CLI-Deploy, `git stash`, Force-Push, Clones, Worktrees, zweiter Schreiber. Production und Remote-Migration nur in S50/S51 mit PL-Zeile „Owner-Freigabe Production Sxx“. Kostenpflichtige Dienste nur, wo OWNER_ENTSCHEIDUNGEN sie freigibt (U-236).
+**Nie:** Merge, Secrets in Dateien, Vercel-CLI-Deploy, `git stash`, Force-Push, Clones, Worktrees, zweiter Schreiber. Production und Remote-Migration nur in S50/S51 mit PL-Zeile „Owner-Freigabe Production Sxx“, außer Dev-Projekt syhaigjhsbpjmtnggqka nach R35. Kostenpflichtige Dienste nur, wo OWNER_ENTSCHEIDUNGEN sie freigibt (U-236).
 
 **„Nie Merge“ heißt (PL 13.11.11:25, BAUREGELN §7):** Codex merged nie einen PR und schreibt nie auf `main`. Pflicht ist dagegen, nach jedem Owner-Merge `origin/main` normal in den eigenen Arbeitszweig zu mergen (`git merge origin/main`, kein Rebase, kein Squash), Konflikte so aufzulösen, dass beide Stände erhalten bleiben, danach die betroffenen Tests gezielt.
 

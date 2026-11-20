@@ -47,10 +47,11 @@ function quoteHit(quote: QuoteReadback, query: string,canReadMoney:boolean): Sea
 }
 
 function invoiceHit(invoice: ImmutableInvoiceSummary, query: string): SearchHit | null {
+  const orderNumbers=invoice.collection?invoice.collection.members.map(member=>member.orderNumber).join(', '):invoice.orderNumber;
   const matched: { field: SearchMatchField; label: string; value: string } | null = contains(invoice.invoiceNumber, query)
     ? { field: "invoiceNumber", label: "Rechnungsnummer", value: invoice.invoiceNumber }
-    : contains(invoice.orderNumber, query)
-      ? { field: "orderNumber", label: "Auftragsnummer", value: invoice.orderNumber }
+    : contains(orderNumbers, query)
+      ? { field: "orderNumber", label: "Auftragsnummer", value: orderNumbers }
       : contains(invoice.customerName, query)
         ? { field: "customerName", label: "Kunde", value: invoice.customerName }
         : contains(invoice.dueDate, query)
@@ -61,13 +62,13 @@ function invoiceHit(invoice: ImmutableInvoiceSummary, query: string): SearchHit 
     type: "INVOICE",
     id: invoice.invoiceId,
     title: invoice.invoiceNumber,
-    subtitle: `${invoice.customerName} · ${invoice.orderNumber}`,
+    subtitle: `${invoice.customerName} · ${orderNumbers}`,
     status: invoice.status,
     matchField: matched.field,
     source: "Rechnungen",
     matchLabel: matched.label,
     matchValue: matched.value,
-    context: `${invoice.invoiceNumber} · ${invoice.customerName} · ${invoice.orderNumber}`,
+    context: `${invoice.invoiceNumber} · ${invoice.customerName} · ${orderNumbers}`,
     href: `/buchhaltung/rechnungen`,
     actionLabel: "Rechnung öffnen",
   };

@@ -40,6 +40,7 @@ describe("invoice truth read", () => {
       vat_amount_cents: 1425,
       gross_amount_cents: 8925,
       due_date: "2026-11-10",
+      overdue: false,overdue_as_of:"2026-11-19",overdue_days:0,
       issued_at: "2026-10-28T10:00:00.000Z",
       payment_status: "bezahlt",
       payment_paid_amount_cents: 8925,
