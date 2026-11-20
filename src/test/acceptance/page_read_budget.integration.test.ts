@@ -1,10 +1,11 @@
 // @vitest-environment node
-import {afterAll,expect,it} from 'vitest';
+import {afterAll,expect,it,vi} from 'vitest';
 import postgres from 'postgres';
 import {drizzle} from 'drizzle-orm/postgres-js';
 import {sql} from 'drizzle-orm';
 import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,pageReadFetchPort} from '@/db/readBudget';
 import {createServer} from 'node:http';
+import {readMicrosoftGraphSentMailByRequest,readMicrosoftGraphSentMailReference,readMicrosoftGraphSentDocumentEvidence} from '@/lib/server/microsoftGraph';
 
 const url=process.env.DATABASE_URL;
 if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1')throw Error('TEST_LOOPBACK_REPLAY_REQUIRED');
@@ -72,6 +73,43 @@ it('aborts actual provider HTTP before headers and during a slow body, retaining
   expect(aborted).toBe(2);
  }finally{
   for(const timer of timers)clearTimeout(timer);
+  server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+ }
+});
+
+
+it.each(['request','reference','document'] as const)('keeps the same actual deadline through the existing Graph %s reader and its response body',async(kind)=>{
+ // Explicitly synthetic external provider only; actual reader, token path,
+ // fetch implementation, native HTTP socket and cancellation remain real.
+ const environment={MS_GRAPH_TENANT_ID:'TEST-tenant',MS_GRAPH_CLIENT_ID:'TEST-client',MS_GRAPH_CLIENT_SECRET:'TEST-no-real-secret',MS_GRAPH_MAILBOX:'TEST@example.invalid'};
+ let aborted=0;
+ const timers=new Set<ReturnType<typeof setTimeout>>();
+ const server=createServer((request,response)=>{
+  if(request.url==='/TEST-token'){response.setHeader('content-type','application/json');response.end(JSON.stringify({access_token:'TEST-provider-boundary-token'}));return;}
+  response.writeHead(200,{'content-type':'application/json'});response.flushHeaders();response.write('{"value":[');
+  const timer=setTimeout(()=>response.end(']}'),750);timers.add(timer);
+  response.on('close',()=>{if(!response.writableEnded)aborted++;clearTimeout(timer);timers.delete(timer);});
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const address=server.address();if(!address||typeof address==='string')throw Error('TEST_L1_GRAPH_HTTP_ADDRESS');
+ const base='http://127.0.0.1:'+address.port;
+ const transport:typeof fetch=(input,init)=>fetch(base+(String(input).includes('login.microsoftonline.com')?'/TEST-token':'/TEST-sent'),init);
+ const logger=vi.spyOn(console,'error').mockImplementation(()=>undefined);
+ try{
+  const warm=await transport('https://login.microsoftonline.com/TEST');expect(await warm.json()).toHaveProperty('access_token');
+  const started=Date.now();
+  const result=await withPageReadBudget<{code:string}>(()=>kind==='request'
+   ?readMicrosoftGraphSentMailByRequest({clientRequestId:'11111111-1111-4111-8111-111111111111',recipient:'TEST-recipient@example.invalid',preparedAt:new Date().toISOString()},environment,transport)
+   :kind==='reference'?readMicrosoftGraphSentMailReference('<TEST@example.invalid>','TEST-recipient@example.invalid',environment,transport)
+   :readMicrosoftGraphSentDocumentEvidence('<TEST@example.invalid>','TEST-recipient@example.invalid',environment,transport),80);
+  expect(result.code).toBe('UNAVAILABLE');
+  expect(Date.now()-started).toBeLessThan(400);
+  // Native close is delivered asynchronously after fetch rejects.
+  for(let attempt=0;attempt<20&&aborted===0;attempt++)await new Promise(resolve=>setTimeout(resolve,5));
+  expect(aborted).toBe(1);
+  const outside=await transport('https://login.microsoftonline.com/TEST');expect(await outside.json()).toHaveProperty('access_token');
+ }finally{
+  logger.mockRestore();for(const timer of timers)clearTimeout(timer);
   server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
  }
 });

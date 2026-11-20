@@ -12,6 +12,16 @@ const REQUIRED_ENV = [
 ] as const;
 
 type FetchPort = typeof fetch;
+/** Retain caller cancellation and the request-wide read deadline even in
+ * legacy Sent-Items adapters with their own provider timeout. */
+function boundedGraphRead(fetchPort:FetchPort):FetchPort{
+ return pageReadFetchPort((input,init)=>{
+  const original=init?.signal??(input instanceof Request?input.signal:undefined);
+  const providerDeadline=AbortSignal.timeout(10000);
+  return fetchPort(input,{...init,signal:original?AbortSignal.any([original,providerDeadline]):providerDeadline});
+ });
+}
+
 type Environment = Record<string, string | undefined>;
 
 export type GraphConfigurationStatus =
@@ -312,7 +322,7 @@ export async function sendMicrosoftGraphMail(
 export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId:string;recipient:string;preparedAt:string},env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}|{notFound:true}>>{
  const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
  if(!/^[0-9a-f-]{36}$/i.test(input.clientRequestId)||!Number.isFinite(Date.parse(input.preparedAt)))return {code:'UNAVAILABLE',message:'Versandbeleg fehlt.'};
- const bounded:FetchPort=(request,init)=>fetchPort(request,{...init,signal:AbortSignal.timeout(10000)});
+ const bounded=boundedGraphRead(fetchPort);
  try{
   const token=await accessToken(config,bounded),select='id,internetMessageId,internetMessageHeaders';
   const query=new URLSearchParams({'$top':'100','$select':select,'$filter':'sentDateTime ge '+new Date(Date.parse(input.preparedAt)-60000).toISOString()});
@@ -353,7 +363,7 @@ export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId
 export async function readMicrosoftGraphSentMailReference(internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}>>{
  const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
  if(!/^<[^<>\s]{1,998}>$/.test(internetMessageId)||!/^\S+@\S+\.\S+$/.test(replySender))return {code:'UNAVAILABLE',message:'Antwortreferenz fehlt oder ist ungültig.'};
- const bounded:FetchPort=(input,init)=>fetchPort(input,{...init,signal:AbortSignal.timeout(10000)});
+ const bounded=boundedGraphRead(fetchPort);
  try{
   const token=await accessToken(config,bounded),query=new URLSearchParams({'$top':'2','$filter':"internetMessageId eq '"+internetMessageId.replaceAll("'","''")+"'",'$select':'id,internetMessageId,from,toRecipients,isDraft,sentDateTime,internetMessageHeaders'});
   const response=await graphGetMessage(config,token,'mailFolders/sentitems/messages?'+query,bounded);if(!response.ok)await providerFailure(response,'GRAPH_SENT_REPLY_REFERENCE');
@@ -431,7 +441,7 @@ export async function readMicrosoftGraphSentDocumentEvidence(
  const config=readConfig(env);
  if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
  if(!/^<[^<>\s]{1,998}>$/.test(internetMessageId)||!/^\S+@\S+\.\S+$/.test(replySender)||replySender.length>320)return {code:'UNAVAILABLE',message:'Die direkte Antwortreferenz ist nicht eindeutig lesbar.'};
- const boundedFetch:FetchPort=(input,init)=>fetchPort(input,{...init,signal:AbortSignal.timeout(10000)});
+ const boundedFetch=boundedGraphRead(fetchPort);
  try{
   const token=await accessToken(config,boundedFetch),query=new URLSearchParams({'$top':'2','$filter':"internetMessageId eq '"+internetMessageId.replaceAll("'","''")+"'",'$select':'id,internetMessageId,from,toRecipients,isDraft,sentDateTime,hasAttachments'});
   const response=await graphGetMessage(config,token,'mailFolders/sentitems/messages?'+query,boundedFetch);
