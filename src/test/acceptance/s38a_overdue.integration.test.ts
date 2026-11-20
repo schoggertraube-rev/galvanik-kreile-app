@@ -2,7 +2,7 @@
 // A38a A10: actual issue/payment/auth/DB readers. Only the calendar read day is
 // controlled; immutable originals and real issuer/auth/session time never change.
 import {randomUUID} from 'node:crypto';
-import {expect,it,vi} from 'vitest';
+import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
@@ -21,6 +21,13 @@ import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {listOffenePostenAction} from '@/app/buchhaltung/actions';
 import {getAgingDaten} from '@/app/cockpit/actions';
+import {setExtraWorkHourlyRateAction} from '@/app/actions/orders.actions';
+
+beforeAll(async()=>{
+ // The following current order writers need a real audited current rate, not
+ // the synthetic legacy row otherwise introduced by the historical K1 setup.
+ expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+});
 
 it('K1 includes the real native collection original in Today reminders and both money totals',async()=>{
  // Only historical initial records are synthetic; original issuance and every reader are real.

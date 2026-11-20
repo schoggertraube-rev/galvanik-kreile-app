@@ -276,8 +276,13 @@ it('native collection credit uses the existing real customer balance and payment
  if(first.code!=='OK')throw Error('TEST_NATIVE_CREDIT_INITIAL_ORIGINAL_REQUIRED');
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:first.receipt.invoiceId,amount:4000,method:'ueberweisung',expectedVersion:0,expectedOpenAmountCents:11900,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>cancelInvoiceAction({invoiceId:first.receipt.invoiceId,expectedVersion:1,reason:'TEST native credit source',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
- const targetSource=await historicalCollection([1900,1900,1900],{customerId:source.customerId,agreementId:source.agreementId});
- const target=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:targetSource.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
+ // K4 already returned these actual members to an open same-month collection.
+ // Reissue that real source instead of inserting a conflicting synthetic second one.
+ const reopened=await sql`SELECT id::text,version FROM public.invoice_collections WHERE tenant_id=${tenant} AND customer_id=${source.customerId} AND monat=${source.month}::date AND status='offen'`;
+ expect(reopened).toHaveLength(1);
+ const targetSource={...source,collectionId:reopened[0].id};
+ expect(await sql`SELECT order_id FROM public.invoice_collection_orders WHERE tenant_id=${tenant} AND collection_id=${targetSource.collectionId}::uuid ORDER BY order_id`).toEqual(source.members.map(member=>({order_id:member.orderId})).sort((a,b)=>a.order_id.localeCompare(b.order_id)));
+ const target=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:targetSource.collectionId,expectedVersion:reopened[0].version,clientEventId:randomUUID()}));
  if(target.code!=='OK')throw Error('TEST_NATIVE_CREDIT_TARGET_REQUIRED:'+JSON.stringify(target));
  const payer=await createFixture(['zahlungen','kunden'],'buero');
  const read=await withSession(payer,()=>getOrderPaymentStateAction({orderId:targetSource.members[1].orderId}));
