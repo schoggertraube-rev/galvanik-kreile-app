@@ -400,6 +400,7 @@
         "listOutlookInboxAction",
         "attachOutlookMailAction",
         "sendCustomerMailAction",
+        "confirmInvoiceHandoverAction",
         "importOutlookMailAction"
       ],
       "classification": "REAL_PENDING_SECRET",
