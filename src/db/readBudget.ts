@@ -2,14 +2,17 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 
 /** Canonical startup/old-schema defaults; qualified company values override them.
  * The native settings contract checks the additive SQL defaults against these. */
-export const DEFAULT_PAGE_READ_SETTINGS={queryTimeoutMs:10_000,invoiceMailBatchLimit:101} as const;
+export const DEFAULT_PAGE_READ_SETTINGS={
+ queryTimeoutMs:10_000,invoiceMailBatchLimit:101,
+ authorizationTimeoutMs:1000,authorizationPoolSize:2,authorizationIdleTimeoutSeconds:20,
+ get graphTimeoutMs(){return this.queryTimeoutMs;},
+} as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
 type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>)};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
-export const DEFAULT_CONNECTION_READ_SETTINGS={authorizationTimeoutMs:1000,authorizationPoolSize:2,authorizationIdleTimeoutSeconds:20,graphTimeoutMs:DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs} as const;
-export const AUTHORIZATION_READ_TIMEOUT_MS=DEFAULT_CONNECTION_READ_SETTINGS.authorizationTimeoutMs;
+export const AUTHORIZATION_READ_TIMEOUT_MS=DEFAULT_PAGE_READ_SETTINGS.authorizationTimeoutMs;
 export const isAuthorizationRead=():boolean=>budgets.getStore()?.kind==='authorization';
 /** Separate short read scope; returning to a page restores its own deadline. */
 export function withAuthorizationReadBudget<T>(work:()=>Promise<T>):Promise<T>{

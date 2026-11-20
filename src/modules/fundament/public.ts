@@ -84,8 +84,10 @@ export function parsePageReadSettings(value:unknown):PageReadSettings|null{
 export function pageReadSettingsFromCompany(value:unknown,defaults:Readonly<PageReadSettings>):{settings:PageReadSettings;schemaReady:boolean}|null{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
  const row=value as Record<string,unknown>;
- if(row.hasQueryTimeout===false&&row.hasInvoiceBatchLimit===false)
-  return parsePageReadSettings(defaults)?{settings:{...defaults},schemaReady:false}:null;
+ if(row.hasQueryTimeout===false&&row.hasInvoiceBatchLimit===false){
+  const settings=parsePageReadSettings({queryTimeoutMs:defaults.queryTimeoutMs,invoiceMailBatchLimit:defaults.invoiceMailBatchLimit});
+  return settings?{settings,schemaReady:false}:null;
+ }
  if(row.hasQueryTimeout!==true||row.hasInvoiceBatchLimit!==true)return null;
  const settings=parsePageReadSettings({queryTimeoutMs:row.queryTimeoutMs,invoiceMailBatchLimit:row.invoiceMailBatchLimit});
  return settings?{settings,schemaReady:true}:null;
