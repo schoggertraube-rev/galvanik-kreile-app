@@ -237,6 +237,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const orders=orderSource.code==='OK'?orderSource.data:[];
   logPageReadPhase('today.initial',diagnosticStarted,{rows:orders.length});
   const sourceNotices:TodayItem[]=[];
+  const retainOrderSourceNotice=(order:{id:string;version:number;orderNumber:string})=>{if(!sourceNotices.some(item=>item.key==='source-order:'+order.id))sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});};
   // One existing App composition owns the narrow bulk U2 projection and
   // its canonical rights/source ports, without complete cards or actor menus.
   const batch=ordersAllowed?await withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:orders.map(order=>order.id)})):null;
@@ -244,7 +245,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const orderActionReads=orders.map(order=>{
    const source=cardSources.get(order.id);
    if(source?.code!=='OK'||source.data.card.version!==order.version){
-    sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
+    retainOrderSourceNotice(order);
     return {orderId:order.id,version:order.version,read:null};
    }
    const {card,handoverConsequences:shipping,pickupAppointment:appointment}=source.data;
@@ -268,6 +269,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
       for(const row of orderActionReads)if(!versions.some(current=>current.id===row.orderId&&current.version===row.version))row.read=null;
     }catch{for(const row of orderActionReads)row.read=null;}
   }
+  // A late version-read failure must not silently remove known orders.
+  for(const order of orders)if(orderActionReads.some(row=>row.orderId===order.id&&row.read===null))retainOrderSourceNotice(order);
   const orderActions={code:orderSource.code==='OK'&&orderActionReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
     rows:orderActionReads.flatMap(row=>row.read?[{...row,read:row.read}]:[]),
     missingOrderIds:orderActionReads.filter(row=>row.read===null).map(row=>row.orderId)};

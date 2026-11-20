@@ -392,6 +392,36 @@ it('PL13:42 proves an actual unfinished Intake order is not applicable without a
  }finally{errors.mockRestore();}
 });
 
+it('retains every known order exit when the actual final version read reaches its expired request budget',async()=>{
+ const customer=await customerFixture('TEST L1 late version budget');
+ const first=await intakeOrderFixture('TEST L1 late version first',customer),second=await intakeOrderFixture('TEST L1 late version second',customer);
+ const ids=[first.receipt.orderId,second.receipt.orderId];
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_LATE_VERSION_AUTH');
+ const {getTodayOrderReadAction}=await import('@/app/actions/orders.actions');
+ const before=await withSession(full,()=>getTodayOrderReadAction({orderIds:ids}));expect(before.code).toBe('OK');if(before.code!=='OK')throw Error('TEST_LATE_VERSION_BATCH');
+ expect(before.data.rows.every(row=>row.result.code==='OK')).toBe(true);
+ // Controlled external clock only: actual source ports, native SQL, Auth and
+ // final timeout guard are unchanged. Advance after the real batch has read.
+ const realNow=Date.now.bind(Date);let offset=0,sawBatch=false,sawExpiredVersion=false;
+ const clock=vi.spyOn(Date,'now').mockImplementation(()=>realNow()+offset);
+ const logger=vi.spyOn(console,'info').mockImplementation((...args:unknown[])=>{
+  if(args[0]!=='[PAGE_READ_PHASE]'||typeof args[1]!=='string')return;
+  const phase=JSON.parse(args[1]) as {phase:string;counts:{failed?:number;ok?:number};reasons:string[]};
+  if(phase.phase==='today.batch'&&phase.counts.ok===1){sawBatch=true;offset=DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs+1;}
+  if(phase.phase==='today.versions'&&phase.counts.failed===1&&phase.reasons.includes('PAGE_READ_TIMEOUT'))sawExpiredVersion=true;
+ });
+ try{
+  const today=await withSession(full,()=>withPageReadBudget(()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
+  expect(sawBatch).toBe(true);expect(sawExpiredVersion).toBe(true);
+  for(const orderId of ids){
+   expect(today.orderActions?.missingOrderIds).toContain(orderId);
+   expect(today.orderActions?.rows.some(row=>row.orderId===orderId)).toBe(false);
+   const notices=today.items.filter(item=>item.key==='source-order:'+orderId);
+   expect(notices).toHaveLength(1);expect(notices[0]).toMatchObject({orderId,primaryActionLabel:'Auftrag öffnen',urgency:'warning'});
+  }
+ }finally{logger.mockRestore();clock.mockRestore();}
+});
+
 it('batches the actual shipping header once without changing zero, one, several, stale or denied proposal results',async()=>{
  const {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch}=await import('@/lib/server/commands/immutableInvoiceCommand');
  const {readInvoiceVat}=await import('@/modules/accounting/server-public');
