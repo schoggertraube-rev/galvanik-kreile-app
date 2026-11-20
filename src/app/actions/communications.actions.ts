@@ -94,7 +94,9 @@ function invoiceRemainderKey(tenantId:string,requestId:string,anchor:string){
 }
 
 /** PL20.11.01:02: acknowledged groups continue through this same sender.
- * A pending group never enters this loop; every child retains its own N5 proof. */
+ * A pending group never enters this loop; every child retains its own N5 proof.
+ * PL20.11.03:10/A18: this is one explicit user send, not autonomous contact.
+ * A customer's automatic-mail opt-out does not cancel that explicit request. */
 export async function sendCustomerMailAction(input:CustomerMailInput):Promise<CustomerMailResult>{
  const first=await sendCustomerMailGroup(input);
  if(first.code!=='OK'||input?.attachment?.kind!=='INVOICE'||input.confirmedResend||input.expectedInvoiceIds?.length!==101)return first;
@@ -186,7 +188,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput):Promise<CustomerMa
  }
  let attachment,document:CommunicationDocument|undefined;
  let legacyReplaces:LegacyQuoteReplacement|undefined;
- let invoiceGroup:{customerId:string;handover:string|null;native:boolean}|undefined;
+ let invoiceGroup:{customerId:string;handover:string|null;native:boolean;unreservedOnly?:boolean}|undefined;
  if(input.attachment?.kind==='INVOICE'&&(!Array.isArray(input.expectedInvoiceIds)||!input.expectedInvoiceIds.length||input.expectedInvoiceIds.length>101||new Set(input.expectedInvoiceIds).size!==input.expectedInvoiceIds.length||input.expectedInvoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))||!input.expectedInvoiceIds.includes(input.attachment.documentId))){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
  const reconcileInvoice=(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,threadId:string)=>applyRecoveredInvoiceMailEffects(auth,threadId,(writeTx,value)=>createCanceledInvoiceMailTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)}),tx);
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
@@ -238,7 +240,10 @@ async function sendCustomerMailGroup(input:CustomerMailInput):Promise<CustomerMa
    document={...selectedDocument,kind:'INVOICE',bundle:[]};
    invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode,native:invoice.order_id===null};
    const resend=await withPrivilegedTenantTransaction(auth,tx=>qualifyInvoiceResend(tx,auth,invoice.id,invoice.customer_id));if(resend)document.resend=resend;
-   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null))).filter(row=>row.id!==invoice.id);
+   // An explicit other order can send its own new originals. The customer
+   // command still resumes the frozen group exposed by its canonical reader.
+   invoiceGroup.unreservedOnly=input.targetType==='ORDER'&&!resend;
+   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null,invoiceGroup!.unreservedOnly))).filter(row=>row.id!==invoice.id);
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
    for(const other of others){
     const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;

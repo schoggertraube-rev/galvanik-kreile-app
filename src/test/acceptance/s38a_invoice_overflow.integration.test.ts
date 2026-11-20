@@ -2,10 +2,10 @@
 // One isolated TEST scenario. Every fiscal original is issued by the real Actions;
 // setup steps stay below the unchanged per-test limit, no cloned invoice/PDF rows.
 import {createHash,randomUUID} from 'node:crypto';
-import {beforeAll,it,expect,vi} from 'vitest';
+import {beforeAll,beforeEach,it,expect,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,withSession,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
 import {getCustomerSummaryAction,updateCustomerAction} from '@/app/actions/customers.actions';
@@ -20,6 +20,19 @@ type MailCommandArgs=Pick<Parameters<typeof sendCustomerMailAction>[0],'targetTy
 let firstInput:Parameters<typeof sendCustomerMailAction>[0]|undefined;
 const sentHashes:string[]=[];
 const sentSizes:number[]=[];
+beforeEach(()=>{
+  // Read-only steps must not depend on a previous test's cached Graph token.
+  // Sending steps install their existing requestMailStep provider boundary.
+  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+    const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+    if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-overflow-read-provider-token'.repeat(4),expires_in:3600});
+    if(url.hostname==='graph.microsoft.com'){
+      if(init?.method==='POST')throw Error('TEST_UNEXPECTED_PROVIDER_WRITE_IN_READ_STEP');
+      return Response.json({value:[]});
+    }
+    return nativeFetch(input,init);
+  });
+});
 function retainActualBoundaryBytes(expectedCounts:readonly number[]){
   const mails=vi.mocked(globalThis.fetch).mock.calls.filter(([url,init])=>String(url).includes('graph.microsoft.com')&&String(url).endsWith('/sendMail')&&init?.method==='POST')
     .map(([,init])=>JSON.parse(String(init?.body)).message.attachments as Array<{contentBytes:string}>);
