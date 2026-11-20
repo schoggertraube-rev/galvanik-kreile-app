@@ -28,6 +28,8 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
 import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
+import {recordInvoiceMailRemainderFailure} from '@/lib/server/communicationDocumentPort';
+import {synchronizeInvoiceMailRemainderTask} from '@/modules/tasks/server-public';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 
@@ -82,9 +84,50 @@ async function confirmQuoteDelivery(input:{clientRequestId:string},document:Extr
  return marked.code==='OK'?{...data,notice:notices.join(' ')||undefined}:{...data,notice:'E-Mail mit KV '+document.number+' · Fassung '+document.edition+' wurde versendet. KV-Stand konnte nicht angepasst werden: '+marked.message+' Nicht erneut senden.'};
 }
 
-export async function sendCustomerMailAction(input: TargetInput & {
+type CustomerMailInput=TargetInput & {
  clientRequestId:string;subject:string;body:string;confirmedResend?:true;expectedInvoiceIds?:string[];attachment?:{kind:'QUOTE'|'INVOICE';documentId:string};collectionReminder?:{stage:'E1'|'E2'|'E4';handover:'pickup'|'shipping';dueDate:string;clientKey?:string};
-}):Promise<Awaited<ReturnType<typeof sendCommunicationMail>>|Awaited<ReturnType<typeof confirmQuoteDelivery>>|{code:'UNAUTHENTICATED';message:string}>{
+};
+type CustomerMailResult=Awaited<ReturnType<typeof sendCommunicationMail>>|Awaited<ReturnType<typeof confirmQuoteDelivery>>|{code:'UNAUTHENTICATED';message:string};
+function invoiceRemainderKey(tenantId:string,requestId:string,anchor:string){
+ const bytes=createHash('sha256').update('invoice-mail-remainder:'+tenantId+':'+requestId+':'+anchor).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
+ const h=bytes.subarray(0,16).toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
+}
+
+/** PL20.11.01:02: acknowledged groups continue through this same sender.
+ * A pending group never enters this loop; every child retains its own N5 proof. */
+export async function sendCustomerMailAction(input:CustomerMailInput):Promise<CustomerMailResult>{
+ const first=await sendCustomerMailGroup(input);
+ if(first.code!=='OK'||input?.attachment?.kind!=='INVOICE'||input.confirmedResend||input.expectedInvoiceIds?.length!==101)return first;
+ const authorizationResult=await authorization();
+ if(!authorizationResult.ok)return {code:'UNAUTHENTICATED',message:authorizationResult.message};
+ const auth=authorizationResult.data;
+ const markerId=invoiceRemainderKey(auth.tenantId,input.clientRequestId,'followup');
+ const taskDependencies={effect:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,actor:AuthorizationSnapshot,effect:import('@/modules/tasks/server-public').TaskEffectRequest)=>recordIntakeTaskEffect(tx,actor,effect,readCustomerProfile)};
+ const failed=async(reason:string):Promise<CustomerMailResult>=>{
+  try{await recordInvoiceMailRemainderFailure(auth,{markerId,requestId:input.clientRequestId,threadId:first.data.threadId,customerId:first.data.customerId,reason},(tx,key)=>synchronizeInvoiceMailRemainderTask(tx,auth,key,false,taskDependencies));}
+  catch(error){console.error('[INVOICE_MAIL_REMAINDER_PROOF_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});}
+  return {code:'UNAVAILABLE',message:INVOICE_DELIVERY_COPY.remainderPending};
+ };
+ try{
+ const original=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
+ if(original.code!=='OK')return failed('ORIGINAL_PROOF_UNAVAILABLE');
+ if(original.document.kind!=='INVOICE'||original.document.resend)return first;
+ const group=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{customer_id:string;handover_mode:string|null}>(sql`SELECT invoice.customer_id,orders.handover_mode
+  FROM public.invoices invoice LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
+  WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${input.attachment!.documentId}::uuid`));
+ if(group.length!==1)return failed('ORIGINAL_GROUP_UNAVAILABLE');
+ for(;;){
+  const remaining=await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,group[0].customer_id,group[0].handover_mode,undefined,original.document.kind==='INVOICE'&&original.document.orderId===null));
+  if(!remaining.length){await withPrivilegedTenantTransaction(auth,tx=>synchronizeInvoiceMailRemainderTask(tx,auth,markerId,true,taskDependencies));return first;}
+  const clientRequestId=invoiceRemainderKey(auth.tenantId,input.clientRequestId,remaining[0].id);
+  const next=await sendCustomerMailGroup({targetType:'CUSTOMER',targetId:group[0].customer_id,subject:input.subject,body:input.body,clientRequestId,
+   attachment:{kind:'INVOICE',documentId:remaining[0].id},expectedInvoiceIds:remaining.map(row=>row.id)});
+  if(next.code!=='OK')return failed(next.code);
+ }
+ }catch(error){console.error('[INVOICE_MAIL_REMAINDER_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});return failed('REMAINDER_SOURCE_UNAVAILABLE');}
+}
+
+async function sendCustomerMailGroup(input:CustomerMailInput):Promise<CustomerMailResult>{
  return observeAction('sendCustomerMailAction',subjectForAction('sendCustomerMailAction',input),async()=>{
  try{
  const authorizationResult=await authorization();

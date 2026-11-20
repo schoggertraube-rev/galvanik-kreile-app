@@ -281,6 +281,32 @@ export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,ten
  if(expected.length!==prepared.length)throw Error('INVOICE_EXPECTED_LIST_INVALID');
 }
 
+/** R2: the existing outgoing original is the authority for remainder recovery. */
+export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string){
+ const rows=await tx.execute<{customerId:string;actorId:string;requestId:string;threadId:string;reason:string}>(sql`SELECT thread.customer_id AS "customerId",marker.user_id::text AS "actorId",marker.correlation_id::text AS "requestId",thread.id::text AS "threadId",marker.payload->>'reason' AS reason
+  FROM public.events marker JOIN public.communication_threads thread ON thread.tenant_id=marker.tenant_id AND thread.id::text=marker.payload->>'threadId' AND thread.source='MS_GRAPH_OUT:'||marker.correlation_id::text AND thread.status='sent'
+  JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.client_event_id=thread.id AND prepared.user_id=thread.created_by AND prepared.status='success' AND prepared.event_schema_version=1
+  JOIN public.events sent ON sent.tenant_id=prepared.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text AND sent.payload->>'intent'=prepared.payload->>'intent' AND sent.payload->'document'=prepared.payload->'document' AND sent.status='success' AND sent.event_schema_version=1
+  JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.created_by=prepared.user_id
+  WHERE marker.tenant_id=${auth.tenantId} AND marker.id=${markerId} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.status='success'
+   AND marker.payload->>'customerId'=thread.customer_id AND prepared.payload->'document'->>'kind'='INVOICE'`);
+ if(!rows.length){const marker=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${markerId} AND event_type='INVOICE_MAIL_REMAINDER_PENDING_V1'`);if(!marker.length)return null;}
+ if(rows.length!==1||!rows[0].reason)throw Error('INVOICE_MAIL_REMAINDER_SOURCE_INVALID');
+ return rows[0];
+}
+
+export async function recordInvoiceMailRemainderFailure(auth:AuthorizationSnapshot,input:{markerId:string;requestId:string;threadId:string;customerId:string;reason:string},createTask:(tx:PrivilegedTenantTransaction,markerId:string)=>Promise<void>){
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('invoice-mail-remainder:'||${auth.tenantId}||':'||${input.requestId},0))`);
+  await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+   VALUES(${input.markerId},${auth.tenantId},'INVOICE_MAIL_REMAINDER_PENDING_V1','INVOICE_MAIL_REMAINDER_PENDING_V1',${JSON.stringify({threadId:input.threadId,customerId:input.customerId,reason:input.reason})}::jsonb,'success',${auth.userId}::uuid,${input.markerId}::uuid,${input.requestId}::uuid,1,statement_timestamp()) ON CONFLICT(id) DO NOTHING`);
+  const source=await readInvoiceMailRemainderFailure(tx,auth,input.markerId);
+  if(!source||source.actorId!==auth.userId||source.customerId!==input.customerId||source.threadId!==input.threadId||source.requestId!==input.requestId)throw Error('INVOICE_MAIL_REMAINDER_SOURCE_CHANGED');
+  try{await withTenantSavepoint(tx,savepoint=>createTask(savepoint,input.markerId));return true;}
+  catch(error){console.error('[INVOICE_MAIL_REMAINDER_TASK_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});return false;}
+ });
+}
+
 /** PL21:12: one corrected-address resend of the same PDFs, qualified by the existing secured DSN reader. */
 export async function qualifyInvoiceResend(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,invoiceId:string,customerId:string,actualRecipient?:string):Promise<InvoiceResendEvidence|null>{
  const sent=await tx.execute<{id:string;event_schema_version:number;payload:{threadId:string;document:CommunicationDocument;intent:string;bodySha256:string}}>(sql`SELECT sent.id::text,sent.event_schema_version,sent.payload FROM public.events sent WHERE sent.tenant_id=${auth.tenantId} AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.status='success' AND ${invoiceSentMembership(sql`${invoiceId}`)} ORDER BY sent.created_at DESC,sent.id DESC LIMIT 1`);

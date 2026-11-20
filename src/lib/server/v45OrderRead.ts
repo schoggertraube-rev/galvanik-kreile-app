@@ -10,6 +10,7 @@ import {readV45FirstLook} from './v45FirstLookRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
 import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
 import {formatEuro} from '@/lib/domain/formatEuro';
+import {INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
 import type {OrderPaymentStateReadResult} from './paymentSummaryRead';
 import type {readInvoiceShippingConsequences} from './commands/immutableInvoiceCommand';
 import type {ManualShippingReadResult} from '@/modules/orders/public';
@@ -140,9 +141,11 @@ function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,
  const binding=rule.hauptaktion&&Object.hasOwn(ORDER_U2_BINDINGS.commands,rule.hauptaktion)?ORDER_U2_BINDINGS.commands[rule.hauptaktion as keyof typeof ORDER_U2_BINDINGS.commands]:null;
  const invoiceMailOriginals=canTransportInvoiceDocument(auth)&&release?.orderId===card.id&&release.value.code==='OK'&&release.value.orderVersion===card.version?release.value.invoiceMailOriginals:undefined;
  const befehl=binding?binding({card,part,invoiceMailOriginals,sources}):null;
+ const queued=rule.hauptaktion==='order.notify'&&release?.orderId===card.id&&release.value.code==='OK'&&release.value.orderVersion===card.version&&release.value.invoiceMailQueued===true;
  let hauptaktion:null|{ziel?:{tab:'parts'};elementId:string;textKey:string;werte:Record<string,string|number>;recht:string|null;befehl:OrderCommand}=null;
  const bindingGaps:string[]=[];
- if(rule.hauptaktion!==null){
+ if(queued&&!card.customerName)bindingGaps.push('INVOICE_MAIL_CUSTOMER_NAME');
+ if(rule.hauptaktion!==null&&!queued){
   if(!befehl)bindingGaps.push('ORDER_ACTION_BINDING:'+rule.hauptaktion);
   else if(!('textKey'in rule)||typeof rule.textKey!=='string'||!('recht'in rule))bindingGaps.push('ORDER_ACTION_METADATA');
   else{
@@ -157,7 +160,7 @@ function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,
  }
  const erstblick=hauptaktion||rule.hauptaktion===null?first.erstblick:first.erstblick.map(field=>field.key==='auftrag.hauptaktion'?{...field,werte:{elementId:null}}:field);
  const datenluecken=[...first.datenluecken,...(rule.datenluecken??[]),...bindingGaps,...(actions.code==='OK'?[]:actions.missing)];
- return {...rule,hauptaktion,erstblick,weitere:actions.code==='OK'?actions.weitere:null,...(datenluecken.length?{datenluecken}:{}),quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,...(actions.code==='OK'?{erwartungSha256:actions.quelle.sha256}:{})},source};
+ return {...rule,...(queued?{zustand:'invoice_mail_queued',versandhinweis:card.customerName?INVOICE_DELIVERY_COPY.queued(card.customerName):null}:{}),hauptaktion,erstblick,weitere:actions.code==='OK'?actions.weitere:null,...(datenluecken.length?{datenluecken}:{}),quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,...(actions.code==='OK'?{erwartungSha256:actions.quelle.sha256}:{})},source};
 }
 
 export function readV45OrderRule(...args:Parameters<typeof readV45OrderRuleRaw>){return completeU2Read(readV45OrderRuleRaw(...args));}

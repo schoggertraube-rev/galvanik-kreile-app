@@ -284,6 +284,10 @@ export const ORDER_ITEM_COMPLETION_COPY = {
 };
 
 export const INVOICE_DELIVERY_COPY={
+ queued:(customer:string)=>`Geht mit der nächsten Rechnungsmail an ${customer} raus`,
+ remainderPending:'Weitere Rechnungen senden – Versand noch nicht bestätigt',
+ remainderTask:'Weitere Rechnungen senden – Versandbeleg fehlt',
+ remainderDone:'Weitere Rechnungen gesendet – Versand bestätigt',
  alreadySent:(number:string,date:string)=>`Rechnung ${number} wurde schon am ${date} gesendet.`,
  expectedListMissing:(number:string)=>`Die Liste hat sich geändert – ${number} ist dazugekommen bzw. weggefallen.`,
  listChanged:(number:string,added:boolean)=>`Die Liste hat sich geändert – ${number} ist ${added?'dazugekommen':'weggefallen'}.`,

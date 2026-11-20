@@ -16,6 +16,8 @@ import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import {CUSTOMER_CREDIT_COPY,SITUATION_COPY,LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
 import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask,readCanceledInvoiceTaskCompletion} from '@/lib/server/communicationDocumentPort';
+import {readInvoiceMailRemainderFailure} from '@/lib/server/communicationDocumentPort';
+import {INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
@@ -539,6 +541,23 @@ export async function createMailboxFetchRetryTask(tx:PrivilegedTenantTransaction
  if(source.actorId!==auth.userId)throw Error('MAILBOX_TASK_ORIGINAL_ACTOR_REQUIRED');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
  return (await persistTask(tx,auth,{clientKey:source.key,version:0,kind:'aufgabe',title:MAILBOX_SYNC_COPY.retryTask,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'allgemein',id:null},note:MAILBOX_SYNC_COPY.retryTask},deps)).task.id;
+}
+
+/** Fixed R2 follow-up, qualified by the acknowledged invoice original. */
+export async function synchronizeInvoiceMailRemainderTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string,repaired:boolean,deps:Dependencies){
+ const source=await readInvoiceMailRemainderFailure(tx,auth,markerId);
+ if(!source){if(repaired)return;throw Error('INVOICE_MAIL_REMAINDER_MARKER_MISSING');}
+ if(source.actorId!==auth.userId)throw Error('INVOICE_MAIL_REMAINDER_ACTOR_CHANGED');
+ const prior=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${markerId}::uuid FOR UPDATE`);
+ if(prior.length){
+  const task=prior.length===1?await find(tx,auth,prior[0].id,true):null;
+  if(!task||task.erstellt_von!==source.actorId||task.bezug_typ!=='kunde'||task.bezug_id!==source.customerId||task.art!=='aufgabe')throw Error('INVOICE_MAIL_REMAINDER_TASK_CHANGED');
+  if(repaired&&task.status==='offen')await finishTask(tx,auth,{taskId:task.id,version:task.version,note:INVOICE_DELIVERY_COPY.remainderDone},deps);
+  return;
+ }
+ if(repaired)throw Error('INVOICE_MAIL_REMAINDER_TASK_MISSING');
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ await persistTask(tx,auth,{clientKey:markerId,version:0,kind:'aufgabe',title:INVOICE_DELIVERY_COPY.remainderTask,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'kunde',id:source.customerId},note:INVOICE_DELIVERY_COPY.remainderPending},deps,false);
 }
 
 export async function createIntakeMailFailureTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,source:{itemId:string;key:string;graphId:string;actors:string[];reason:string},deps:Dependencies){
