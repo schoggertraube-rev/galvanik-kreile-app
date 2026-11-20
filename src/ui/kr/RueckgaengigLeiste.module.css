@@ -1,5 +1,0 @@
-/* Layout only. Appearance is the unchanged v10 .toast/.toast button source. */
-.bar{position:relative;inset:auto;margin:8px auto;max-width:min(520px,calc(100vw - 24px));transform:none}
-.ring{flex:none;width:24px;height:24px}
-.stack{max-height:min(35dvh,240px);overflow:auto}
-.row{display:flex;align-items:center;justify-content:space-between;gap:14px}

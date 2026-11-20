@@ -433,6 +433,8 @@ export const CUSTOMER_CREDIT_COPY={
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
+ proposalMissing:(number:string,invoice:boolean,reason:'freigabe'|'einstellungen'|'original'|'quelle')=>`Versandvorschlag für ${invoice?'Rechnung':'Auftrag'} ${number.length>24?number.slice(0,23)+'…':number} fehlt: ${{freigabe:'Freigabebeleg fehlt',einstellungen:'Versandangaben fehlen',original:'Originalbeleg ist unklar',quelle:'Quelle nicht lesbar'}[reason]}.`,
+ orderQuoteMissing:(number:string)=>`Preisbeleg zu Auftrag ${number.length>24?number.slice(0,23)+'…':number} ist nicht lesbar.`,
  noAdditionalInvoiceNeeded:'Versandkosten sind 0 € – keine Zusatzrechnung nötig',
  groupAlreadyCharged:(number:string,other:string)=>`${number} und ${other} sind schon einzeln mit Versand berechnet – verschick sie getrennt.`,
  reissueReleaseBlocked:(number:string)=>`Stell zuerst die Rechnung zu ${number} ohne Versand neu aus – dann kann die Ware raus.`,
@@ -486,30 +488,4 @@ export const E_INVOICE_CORRECTION_COPY={
 /** Owner 19.11.: literal vorfinal source copy, separate from frozen V45 flows. */
 export const VORFINAL_COPY = {
   "vorfinal.kopf.plus.label": "Neuer Eingang",
-} as const;
-
-/** S19 component inspection, never a simulated domain command. */
-export const COMPONENT_PREVIEW_COPY={
- title:'Bausteine · TEST',notice:'TEST-Vorschau: Hier wird nichts gespeichert oder verschickt.',
- component:'Baustein',state:'Darstellung',normal:'Normal',loading:'Laden',disabled:'Deaktiviert',
- source:'Auftrag',open:'Auftrag öffnen',refresh:'Neu laden',
- missing:'Wähle einen TEST-Auftrag aus der Auftragsliste.',
- unavailable:'Die Quelle ist nicht lesbar. Lade sie erneut.',
- unbound:'Der Fachbefehl wird im zugehörigen Bereich verbunden.',
- noFact:'Diese Angabe ist nicht belegt.',draft:'Deine Eingabe bleibt nur in dieser Vorschau.',
- overlay:'Dialog öffnen',field:'Deine Eingabe',history:'Belegter Verlauf',
- errors:{offline:'Kein Netz',server:'Server nicht erreichbar',conflict:'Stand geändert',permission:'Recht fehlt',
-  empty:'Keine Daten',mailbox:'Postfach nicht erreichbar',send_unknown:'Versand noch unklar',save:'Speichern fehlgeschlagen'},
- names:{hauptaktion:'Hauptaktion',vertiefung:'Vertiefung',verlauf:'Verlauf',formularfeld:'Formularfeld',
- lage:'Lage',suchtreffer:'Suchtreffer',fehler:'Fehler',werkstattkachel:'Werkstattkachel',teilchip:'Teilchip',
- zeit:'Arbeitszeit',overlay:'Dialog',mehrarbeit:'Mehrarbeit',kundenbild:'Kundenbild',
- kv_dokument:'KV-Dokument',kv_verlauf:'KV-Verlauf',eingang:'Eingang'},
-} as const;
-
-/** U-291: local cancellation is not a confirmed server reversal. */
-export const PENDING_UNDO_COPY={title:'Wartende Aktionen',undo:'Rückgängig',
- count:(count:number)=>`${count} Aktionen warten`,
- remaining:'Zeit für Rückgängig',pending:'Wartet auf Übertragung',started:'Übertragung gestartet',
- unknown:'Deine wartenden Änderungen sind gerade nicht lesbar.',
- unconfirmed:'Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand.',
 } as const;

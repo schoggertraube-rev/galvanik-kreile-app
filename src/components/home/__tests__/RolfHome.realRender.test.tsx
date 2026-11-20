@@ -25,6 +25,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 }));
 
 import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
+import {SHIPPING_FEE_COPY,SITUATION_COPY} from '@/ui/situationCatalog';
 
 const actionPorts = {
   savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
@@ -33,6 +34,16 @@ const actionPorts = {
   assignOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 2 } }),
   handBackOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 3 } }),
 };
+
+it('shows a concrete source notice and opens the same real order path instead of hiding the missing proposal',()=>{
+ const title=SHIPPING_FEE_COPY.proposalMissing('A-2026-0001',false,'freigabe');
+ const item={key:'source-shipping:order-1',field:'action' as const,kind:'order' as const,orderId:'order-1',orderVersion:1,title,meta:'',urgency:'warning' as const,primaryActionLabel:SITUATION_COPY.quote.openOrder};
+ render(<RolfHomeClient model={{kind:'data',role:'meister',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[item]}}} ports={actionPorts}/>);
+ expect(screen.getAllByText(title)[0]).toBeVisible();
+ for(const button of screen.getAllByRole('button',{name:'Auftrag öffnen'}))fireEvent.click(button);
+ expect(ports.openOrder).toHaveBeenCalledWith('order-1');
+ expect(title.length).toBeLessThanOrEqual(90);
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
