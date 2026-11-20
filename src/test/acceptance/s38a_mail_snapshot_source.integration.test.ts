@@ -9,7 +9,7 @@ import {customerFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixtur
 import {cancelInvoiceAction} from '@/app/actions/invoices.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {readInvoiceMailCohort,readInvoiceMailUnacknowledged} from '@/lib/server/communicationDocumentPort';
+import {readInvoiceMailCohort,readInvoiceMailUnacknowledged,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
 
 it('K3/K6 keeps a cancelled unsent original unacknowledged, even though it is no longer eligible for sending',async()=>{
  const customerId=await customerFixture('TEST K3 immutable acknowledgement boundary');
@@ -23,4 +23,5 @@ it('K3/K6 keeps a cancelled unsent original unacknowledged, even though it is no
  const eligible=await withPrivilegedTenantTransaction(auth.data,tx=>readInvoiceMailCohort(tx,tenant,customerId,'pickup',undefined,false,false,{snapshotIds:ids}));
  expect(eligible.map(row=>row.id)).toEqual([first.invoice.invoiceId]);
  expect(await read()).toEqual(ids);expect(await read()).toEqual(ids);
+ expect(await withPrivilegedTenantTransaction(auth.data,tx=>readInvoiceMailOpenRemainder(tx,tenant,customerId,ids))).toEqual([first.invoice.invoiceId]);
 });

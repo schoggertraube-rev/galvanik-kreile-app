@@ -755,7 +755,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `INVOICE_DELIVERY_COPY.followupEditBlocked`: "Diese Aufgabe folgt dem gespeicherten Rechnungsauftrag."
 - `INVOICE_DELIVERY_COPY.remainderPending`: "Weitere Rechnungen senden – Versand noch nicht bestätigt"
 - `INVOICE_DELIVERY_COPY.remainderTask`: "Weitere Rechnungen senden – Versandbeleg fehlt"
-- `INVOICE_DELIVERY_COPY.remainderDone`: "Weitere Rechnungen gesendet – Versand bestätigt"
+- `INVOICE_DELIVERY_COPY.remainderDone`: "Rechnungsauftrag erledigt – kein offenes Original übrig"
 - `INVOICE_DELIVERY_COPY.listChanged`: "dazugekommen"
 - `INVOICE_DELIVERY_COPY.listChanged`: "weggefallen"
 - `COLLECTION_FOLLOWUP_COPY.pendingHistory`: "Sammelzuordnung offen – Übergabe gespeichert"

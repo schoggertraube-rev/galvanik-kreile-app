@@ -1,3 +1,4 @@
+import {readCancellationInvoiceReceipts,mapInvoiceCancellationReceipt} from './commands/immutableInvoiceCommand';
 import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import 'server-only';
 import type {CommunicationOriginal} from './communicationOriginalPort';
@@ -10,6 +11,18 @@ import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenan
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {appendOrderInformed,readReadyNotificationContext} from './orderReleaseRead';
 import {DISPATCH_NOTICE_COPY,INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
+
+export type UnsentInvoiceOriginal={id:string;number:string;version:number;orderId:string|null;handover:string|null;customerId:string;customerName:string};
+/** One unsent-original query shared by customer summary and Today. */
+export async function readUnsentInvoiceOriginals(tx:PrivilegedTenantTransaction,tenantId:string,customerId?:string):Promise<UnsentInvoiceOriginal[]>{
+ const rows=await tx.execute<UnsentInvoiceOriginal>(sql`SELECT invoice.id::text,invoice.invoice_number AS number,invoice.aggregate_version AS version,invoice.order_id AS "orderId",orders.handover_mode AS handover,invoice.customer_id AS "customerId",customer.name AS "customerName"
+  FROM public.invoices invoice LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
+  JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
+  WHERE invoice.tenant_id=${tenantId} ${customerId!==undefined?sql`AND invoice.customer_id=${customerId}`:sql``}
+   AND invoice.status='issued' AND invoice.contract_version=1 AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)} ORDER BY invoice.issued_at,invoice.id`);
+ if(rows.some(row=>typeof row.id!=='string'||typeof row.number!=='string'||typeof row.customerId!=='string'||typeof row.customerName!=='string'||!Number.isSafeInteger(row.version)))throw Error('INVOICE_UNSENT_ORIGINAL_SOURCE_INVALID');
+ return rows;
+}
 
 export type InvoiceResendEvidence={bounceEventId:string;bounceItemId:string;bouncedThreadId:string;correctionEventId:string;recipient:string;originals:Array<{id:string;sha256:string}>};
 type InvoiceMailDocumentBase={resend?:InvoiceResendEvidence;id:string;number:string;version:number;sha256:string};
@@ -300,6 +313,27 @@ export async function readInvoiceMailUnacknowledged(tx:PrivilegedTenantTransacti
  return invoiceIds.filter(id=>!rows.some(row=>row.id===id&&row.acknowledged));
 }
 
+
+/** KORR-S38a-2: cancellation settles an original's send obligation, never a
+ * delivery ACK. Keep the independent unacknowledged reader unchanged. */
+export async function readInvoiceMailOpenRemainder(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,invoiceIds:readonly string[]){
+ if(!invoiceIds.length||new Set(invoiceIds).size!==invoiceIds.length)throw Error('INVOICE_MAIL_REQUEST_IDS_INVALID');
+ const rows=await tx.execute<{id:string;status:string;acknowledged:boolean;cancel_key:string|null}>(sql`SELECT invoice.id::text,invoice.status,${invoiceAlreadySent(tenantId,sql`invoice.id`)} AS acknowledged,
+  (SELECT event.client_event_id::text FROM public.events event WHERE event.tenant_id=invoice.tenant_id AND event.event_type='INVOICE_CANCELLED_V1' AND event.status='success' AND event.payload->>'invoiceId'=invoice.id::text) AS cancel_key
+  FROM public.invoices invoice WHERE invoice.tenant_id=${tenantId} AND invoice.customer_id=${customerId}
+   AND invoice.id::text=ANY(ARRAY[${sql.join(invoiceIds.map(id=>sql`${id}`),sql`, `)}]::text[])`);
+ if(rows.length!==invoiceIds.length||rows.some(row=>typeof row.acknowledged!=='boolean'||!['issued','cancelled'].includes(row.status)))throw Error('INVOICE_MAIL_REQUEST_ORIGINAL_SOURCE_INCOMPLETE');
+ for(const row of rows){
+  if(row.acknowledged||row.status==='issued')continue;
+  if(!row.cancel_key)throw Error('INVOICE_MAIL_CANCELLATION_SOURCE_INCOMPLETE');
+  const sources=await readCancellationInvoiceReceipts(tx,row.cancel_key,row.id);
+  if(sources.length!==1)throw Error('INVOICE_MAIL_CANCELLATION_SOURCE_INCOMPLETE');
+  const receipt=mapInvoiceCancellationReceipt(sources[0],tenantId,sources[0].actor_id);
+  if(receipt.invoiceId!==row.id)throw Error('INVOICE_MAIL_CANCELLATION_SOURCE_CHANGED');
+ }
+ return invoiceIds.filter(id=>rows.some(row=>row.id===id&&row.status==='issued'&&!row.acknowledged));
+}
+
 function invoiceMailSnapshotKey(markerId:string){
  const bytes=createHash('sha256').update('invoice-mail-request-snapshot:'+markerId).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
  const h=bytes.subarray(0,16).toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
@@ -340,8 +374,8 @@ export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransac
  const snapshots=await tx.execute<{payload:{invoiceIds:string[];customerId:string};actor:string;request_id:string}>(sql`SELECT payload,user_id::text AS actor,correlation_id::text AS request_id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${invoiceMailSnapshotKey(markerId)+':snapshot'} AND event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND status='success' AND event_schema_version=1`);
  if(snapshots.length!==1||snapshots[0].actor!==rows[0].actorId||snapshots[0].request_id!==rows[0].requestId||snapshots[0].payload.customerId!==rows[0].customerId||!Array.isArray(snapshots[0].payload.invoiceIds)||!snapshots[0].payload.invoiceIds.length)throw Error('INVOICE_MAIL_REMAINDER_SNAPSHOT_INVALID');
  const invoiceIds=snapshots[0].payload.invoiceIds;
- const unacknowledged=await readInvoiceMailUnacknowledged(tx,auth.tenantId,rows[0].customerId,invoiceIds);
- return {...rows[0],pending:unacknowledged.length>0};
+ const remainder=await readInvoiceMailOpenRemainder(tx,auth.tenantId,rows[0].customerId,invoiceIds);
+ return {...rows[0],pending:remainder.length>0};
 }
 
 export async function recordInvoiceMailRemainderFailure(auth:AuthorizationSnapshot,input:{markerId:string;requestId:string;threadId:string;customerId:string;reason:string},createTask:(tx:PrivilegedTenantTransaction,markerId:string)=>Promise<void>){

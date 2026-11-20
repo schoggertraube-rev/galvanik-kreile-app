@@ -28,7 +28,7 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
 import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
-import {recordInvoiceMailRemainderFailure,freezeInvoiceMailRequest,readInvoiceMailUnacknowledged} from '@/lib/server/communicationDocumentPort';
+import {recordInvoiceMailRemainderFailure,freezeInvoiceMailRequest,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
 import {synchronizeInvoiceMailRemainderTask} from '@/modules/tasks/server-public';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
@@ -121,7 +121,7 @@ export async function sendCustomerMailAction(input:CustomerMailInput):Promise<Cu
   return {code:'UNAVAILABLE',message:INVOICE_DELIVERY_COPY.remainderPending};
  };
  try{
-  const remaining=()=>withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailUnacknowledged(tx,auth.tenantId,snapshot.customerId,snapshot.invoiceIds));
+  const remaining=()=>withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailOpenRemainder(tx,auth.tenantId,snapshot.customerId,snapshot.invoiceIds));
   let rest=await remaining();
   const maxGroups=Math.ceil(snapshot.invoiceIds.length/101);
   for(let round=1;rest.length&&round<maxGroups;round++){

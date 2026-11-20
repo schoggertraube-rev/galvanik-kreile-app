@@ -1,4 +1,4 @@
-import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 const api=vi.hoisted(()=>({getMicrosoftGraphStatusAction:vi.fn(),listOutlookInboxAction:vi.fn(),attachOutlookMailAction:vi.fn(),sendCustomerMailAction:vi.fn()}));
 vi.mock('@/app/actions/communications.actions',()=>api);
@@ -19,4 +19,24 @@ it('uses the existing composer for the prefilled complaint without another inbox
  expect(api.listOutlookInboxAction).not.toHaveBeenCalled();
  expect(api.sendCustomerMailAction).not.toHaveBeenCalled();
  expect(screen.queryByRole('button',{name:'Versenden'})).not.toBeInTheDocument();
+});
+
+it('KORR S38a-2 uses the existing sender and same original N5 arguments after a lost invoice-mail reply',async()=>{
+ vi.clearAllMocks();api.getMicrosoftGraphStatusAction.mockResolvedValue({code:'OK'});
+ api.sendCustomerMailAction.mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST reply unavailable'}).mockResolvedValueOnce({code:'OK',data:{threadId:'TEST-thread'}});
+ const invoiceOriginal={documentId:'TEST-actual-projected-original',expectedInvoiceIds:['TEST-actual-projected-original']};
+ render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer" invoiceOriginal={invoiceOriginal}/>);
+ await screen.findByRole('textbox',{name:'Betreff'});
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST stored invoice'}});
+ fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST original message'}});
+ fireEvent.submit(screen.getByRole('textbox',{name:'Betreff'}).closest('form')!);
+ await screen.findByText('TEST reply unavailable');
+ const first=api.sendCustomerMailAction.mock.calls[0][0];
+ expect(first).toMatchObject({targetType:'CUSTOMER',targetId:'TEST-customer',attachment:{kind:'INVOICE',documentId:invoiceOriginal.documentId},expectedInvoiceIds:invoiceOriginal.expectedInvoiceIds,subject:'TEST stored invoice',body:'TEST original message'});
+ expect(typeof first.clientRequestId).toBe('string');expect(screen.queryByRole('combobox',{name:'PDF-Anhang'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Mit gleicher Kennung erneut versuchen'}));
+ await waitFor(()=>expect(api.sendCustomerMailAction).toHaveBeenCalledTimes(2));
+ expect(api.sendCustomerMailAction.mock.calls[1][0]).toEqual(first);
+ expect(api.listOutlookInboxAction).not.toHaveBeenCalled();
+ expect(api.getMicrosoftGraphStatusAction).not.toHaveBeenCalled();
 });

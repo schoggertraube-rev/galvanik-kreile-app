@@ -40,3 +40,8 @@ export function taskValidation(value:unknown):Record<string,string>{
  if(Object.keys(value).some(key=>!['clientKey','taskId','version','kind','title','dueDate','time','forLogin','forArea','reference','note','itemId','itemVersion'].includes(key)))fields.form='Unbekannte Aufgabenfelder.';
  return fields;
 }
+
+/** The UI and actual completion command use the same qualified remainder. */
+export function invoiceMailRemainderAllowsCompletion(source:'KNOWN'|'SOURCE_INCOMPLETE',remainder:{pending:boolean}|null):boolean{
+ return source==='KNOWN'&&(remainder===null||remainder.pending===false);
+}
