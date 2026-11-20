@@ -12,9 +12,11 @@ const engines=process.env.GITHUB_ACTIONS==='true'?[chromium]:[chromium,webkit,fi
 it(`keeps owner control geometry, keyboard and reduced motion across ${engines.length} browsers and three widths`,async()=>{
  const result=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
   import React from 'react';import {createRoot} from 'react-dom/client';
-  import {GlobalesPlus} from './src/ui/kr/GlobalesPlus';import {Button} from './src/ui/kr/Button';
+  import {GlobalesPlus} from './src/ui/kr/GlobalesPlus';import {Button} from './src/ui/kr/Button';import {Zeit} from './src/ui/kr/Zeit';
   const counters={open:0,command:0};Object.assign(window,{TEST_s18:counters});
-  createRoot(document.getElementById('root')).render(<><GlobalesPlus onOeffnen={()=>counters.open++}/><Button art="primaer" text="TEST Befehl" onClick={()=>counters.command++}/></>);
+  function TimeFixture(){const [minutes,setMinutes]=React.useState(''),[date,setDate]=React.useState('2026-11-20'),[note,setNote]=React.useState('');
+   return <form data-testid="TEST-time" onSubmit={event=>event.preventDefault()}><Zeit auftragId="TEST-order" version={7} variante="heute_offen" datum={date} heute="2026-11-20" minuten={minutes} dauerText="TEST Tageswert" enthaltenText="TEST Mehrarbeit enthalten" notiz={note} auswahl={[]} grenzen={{min:0,max:720,schritt:1}} verteilung={<p>TEST Teilzuordnung unverändert</p>} laden={false} deaktiviert={false} fehler={null} aktion={{text:'TEST Fachport fehlt',onAusloesen:null,gesperrt:true,grund:'TEST Präsentationsprobe ohne Schreibwirkung'}} onDatum={setDate} onMinuten={setMinutes} onNotiz={setNote}/></form>;}
+  createRoot(document.getElementById('root')).render(<><GlobalesPlus onOeffnen={()=>counters.open++}/><Button art="primaer" text="TEST Befehl" onClick={()=>counters.command++}/><TimeFixture/></>);
  `},bundle:true,write:false,outfile:'TEST-s18.js',platform:'browser',jsx:'automatic',define:{'process.env.NODE_ENV':'"test"'}});
  const script=result.outputFiles.find(file=>file.path.endsWith('.js'))?.text;
  if(!script)throw Error('TEST_S18_BROWSER_BUNDLE_MISSING');
@@ -45,6 +47,14 @@ it(`keeps owner control geometry, keyboard and reduced motion across ${engines.l
       await page.keyboard.press('Tab');expect(await primary.evaluate(el=>el===document.activeElement)).toBe(true);
       await page.keyboard.press('Enter');
       expect(await page.evaluate(()=>Reflect.get(window,'TEST_s18'))).toEqual({open:1,command:1});
+      // Real browser layout is required by the one existing Enter handler; JSDOM has no visible field geometry.
+      const time=page.getByTestId('TEST-time'),total=time.getByRole('spinbutton'),date=time.locator('input[type=date]'),note=time.locator('textarea');
+      expect(await time.getByRole('slider').count()).toBe(0);
+      await total.fill('75');await total.press('Enter');expect(await date.evaluate(el=>el===document.activeElement)).toBe(true);
+      expect(await total.inputValue()).toBe('75');expect(await time.getByRole('slider').inputValue()).toBe('75');
+      await date.press('Enter');expect(await note.evaluate(el=>el===document.activeElement)).toBe(true);
+      await note.fill('TEST Notiz');await note.press('End');await note.press('Enter');
+      expect(await note.inputValue()).toBe('TEST Notiz\n');expect(await note.evaluate(el=>el===document.activeElement)).toBe(true);
       const durations=async()=>primary.evaluate(el=>getComputedStyle(el).transitionDuration.split(',').map(value=>Number.parseFloat(value)*1000));
       expect((await durations()).every(ms=>ms<=250)).toBe(true);
       await page.emulateMedia({reducedMotion:'reduce'});

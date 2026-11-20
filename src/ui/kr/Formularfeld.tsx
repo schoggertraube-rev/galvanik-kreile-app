@@ -9,6 +9,7 @@ interface FeldBasis {
   laden:boolean;
   deaktiviert:boolean;
   pflicht?:boolean;
+  grenzen?:{min?:string|number;max?:string|number;schritt?:string|number};
   fehler?:{text:string;specId:string};
 }
 export type FormularfeldProps=FeldBasis&(
@@ -38,6 +39,7 @@ export function Formularfeld(props:FormularfeldProps) {
       :props.art==='mehrzeilig'?<textarea {...common} value={props.wert}
         onChange={event=>props.onWert(event.currentTarget.value)}/>
       :<input {...common} type={props.art==='zahl'?'number':props.art==='datum'?'date':'text'}
+        min={props.grenzen?.min} max={props.grenzen?.max} step={props.grenzen?.schritt}
         value={props.wert} onChange={event=>props.onWert(event.currentTarget.value)}/>}
     {props.fehler?<p className="muted" id={errorId} data-spec-id={props.fehler.specId}>{props.fehler.text}</p>:null}
   </div>;
