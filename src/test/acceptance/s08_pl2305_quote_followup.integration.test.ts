@@ -9,7 +9,7 @@ import {changeOrderContentAction,getLiveOrderCardAction,getTodayOrderReadAction,
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {readSettingsAction,saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {db} from '@/db';
-import {PageReadTimeout,pageReadFetchPort,withPageReadBudget,withPageReadQueryLimits} from '@/db/readBudget';
+import {DEFAULT_PAGE_READ_SETTINGS,PageReadTimeout,pageReadFetchPort,withPageReadBudget,withPageReadQueryLimits} from '@/db/readBudget';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readEvidenceRecordsByTarget,readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
 import {readMicrosoftGraphSentDocumentEvidence,readMicrosoftGraphSentMailByRequest,readMicrosoftGraphSentMailReference} from '@/lib/server/microsoftGraph';
@@ -18,7 +18,7 @@ import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {DEFAULT_PAGE_READ_SETTINGS,SALES_STAGE_FEATURES,pageReadSettingsFromCompany} from '@/modules/fundament/public';
+import {SALES_STAGE_FEATURES,pageReadSettingsFromCompany} from '@/modules/fundament/public';
 import {readPageReadSettings} from '@/modules/fundament/server-public';
 import {sql as drizzleSql} from 'drizzle-orm';
 import {drizzle} from 'drizzle-orm/postgres-js';
@@ -158,7 +158,7 @@ it('qualifies real company JSON before and after the additive schema, rejecting 
  const [row]=await sql`SELECT to_jsonb(company) AS source FROM public.company_settings company WHERE tenant_id=${tenant}`;
  expect(row?.source).toBeDefined();
  const source=row.source as Record<string,unknown>;
- const project=(value:Record<string,unknown>)=>pageReadSettingsFromCompany({hasQueryTimeout:Object.hasOwn(value,'seiten_abfrage_ms'),hasInvoiceBatchLimit:Object.hasOwn(value,'rechnung_mail_grenze'),queryTimeoutMs:value.seiten_abfrage_ms,invoiceMailBatchLimit:value.rechnung_mail_grenze});
+ const project=(value:Record<string,unknown>)=>pageReadSettingsFromCompany({hasQueryTimeout:Object.hasOwn(value,'seiten_abfrage_ms'),hasInvoiceBatchLimit:Object.hasOwn(value,'rechnung_mail_grenze'),queryTimeoutMs:value.seiten_abfrage_ms,invoiceMailBatchLimit:value.rechnung_mail_grenze},DEFAULT_PAGE_READ_SETTINGS);
  expect(project(source)).toEqual({settings:companyInput.pageReads,schemaReady:true});
  // Only an explicitly labelled synthetic old-schema projection omits both
  // new keys; no live column, row, migration or evidence is changed.
@@ -251,6 +251,14 @@ const native=postgres(url,{prepare:false,max:1});
 const client=withPageReadQueryLimits(native);
 const budgetDb=drizzle(client);
 afterAll(()=>native.end({timeout:5}));
+
+it('sets the actual PostgreSQL transaction timeout and restores the existing connection setting afterward',async()=>{
+ const [before]=await budgetDb.execute<{milliseconds:number}>(drizzleSql`SELECT setting::integer AS milliseconds FROM pg_settings WHERE name='statement_timeout'`);
+ const [inside]=await withPageReadBudget(()=>budgetDb.transaction(tx=>tx.execute<{milliseconds:number}>(drizzleSql`SELECT setting::integer AS milliseconds FROM pg_settings WHERE name='statement_timeout'`)),2000);
+ expect(inside.milliseconds).toBeGreaterThan(0);expect(inside.milliseconds).toBeLessThanOrEqual(2000);
+ const [after]=await budgetDb.execute<{milliseconds:number}>(drizzleSql`SELECT setting::integer AS milliseconds FROM pg_settings WHERE name='statement_timeout'`);
+ expect(after).toEqual(before);
+});
 
 it('cancels a real active query and frees the existing connection for the next read',async()=>{
   await budgetDb.execute(drizzleSql`SELECT 1`);

@@ -1,5 +1,8 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 
+/** PL-approved startup/old-schema defaults; qualified company values override them. */
+export const DEFAULT_PAGE_READ_SETTINGS={queryTimeoutMs:10_000,invoiceMailBatchLimit:101} as const;
+
 /** Request-local only. Commands outside a page read retain their transaction contract. */
 type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
@@ -94,9 +97,16 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
           // finish cancellation/rollback before releasing this transaction.
           // An outer race at that point could reuse a connection too early.
           const timer=setTimeout(()=>reject(new PageReadTimeout()),budget.deadline-Date.now());
-          args[callbackIndex]=(sql:object)=>{
+          args[callbackIndex]=async(sql:object)=>{
             clearTimeout(timer);
-            if(Date.now()>=budget.deadline)throw new PageReadTimeout();
+            const remaining=budget.deadline-Date.now();
+            if(remaining<=0)throw new PageReadTimeout();
+            // PostgreSQL is the second cancellation boundary: even if the
+            // separate native cancel connection fails, this read cannot run
+            // indefinitely. Transaction-local state never leaks into the pool.
+            const native=sql as {unsafe:(query:string,parameters:string[])=>QueryLike};
+            const setting=native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining)]);
+            await withinBudget(()=>setting,()=>setting.cancel());
             return callback(withPageReadQueryLimits(sql));
           };
           Promise.resolve(Reflect.apply(value,target,args)).then(result=>{clearTimeout(timer);resolve(result);},error=>{clearTimeout(timer);reject(error);});

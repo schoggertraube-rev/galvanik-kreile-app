@@ -1,3 +1,4 @@
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
 import {parsePageReadSettings,pageReadSettingsFromCompany} from '../public';
@@ -63,7 +64,7 @@ export async function readPageReadSettings(context:{tenantId:string}){
   SELECT ${pageReadProjection}
   FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY id LIMIT 2`));
  if(rows.length!==1)throw Error('PAGE_READ_SETTINGS_SOURCE_INCOMPLETE');
- const source=pageReadSettingsFromCompany(rows[0].page_read_source);
+ const source=pageReadSettingsFromCompany(rows[0].page_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!source)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');
  return source.settings;
 }
@@ -200,8 +201,8 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           city: company.city, country: company.country, taxId: company.tax_id, taxNumber: company.tax_number ?? null,
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
-          pageReads:pageReadSettingsFromCompany(company.page_read_source)?.settings??null,
-          pageReadsSchemaReady:pageReadSettingsFromCompany(company.page_read_source)?.schemaReady===true,
+          pageReads:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.settings??null,
+          pageReadsSchemaReady:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.schemaReady===true,
           protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
         } : EMPTY_COMPANY,
         users: users.map((user): ManagedUser => {

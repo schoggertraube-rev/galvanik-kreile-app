@@ -13,7 +13,7 @@ import {
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
 import {withPageReadBudget,configurePageReadBudget} from '@/db/readBudget';
 import {readPageReadSettingsAction} from '@/app/actions/orders.actions';
-import {DEFAULT_PAGE_READ_SETTINGS} from '@/modules/fundament/public';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
 function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   return {

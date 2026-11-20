@@ -1,6 +1,6 @@
 "use server";
 import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget} from '@/db/readBudget';
-import {DEFAULT_PAGE_READ_SETTINGS} from '@/modules/fundament/public';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';

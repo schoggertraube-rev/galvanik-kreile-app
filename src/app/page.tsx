@@ -3,7 +3,7 @@ import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authori
 import { HomeAppAdapter } from "@/app/HomeAppAdapter";
 import { ProductActorAccessUnavailable } from "@/components/foundation/FoundationUnavailable";
 import {withPageReadBudget} from '@/db/readBudget';
-import {DEFAULT_PAGE_READ_SETTINGS} from '@/modules/fundament/public';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
 export const dynamic = "force-dynamic";
 

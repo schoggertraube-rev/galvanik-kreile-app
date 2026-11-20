@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {PAGE_READ_COPY} from "@/ui/situationCatalog";
-import {DEFAULT_PAGE_READ_SETTINGS} from "@/modules/fundament/public";
 import { useEffect, useState, useTransition } from "react";
 import {
   changeOwnPinAction,
@@ -374,8 +373,8 @@ export function SettingsAdminClient({
       </div>
       <div id="company-data" className={styles.grid}>{field("companyName", E_INVOICE_SETTINGS_COPY.fieldLabels.companyName)}{field("street", E_INVOICE_SETTINGS_COPY.fieldLabels.street)}{field("zip", E_INVOICE_SETTINGS_COPY.fieldLabels.zip)}{field("city", E_INVOICE_SETTINGS_COPY.fieldLabels.city)}{field("country", E_INVOICE_SETTINGS_COPY.fieldLabels.country)}{field("taxId", E_INVOICE_SETTINGS_COPY.fieldLabels.taxId)}{field("taxNumber", E_INVOICE_SETTINGS_COPY.fieldLabels.taxNumber)}{field("iban", E_INVOICE_SETTINGS_COPY.fieldLabels.iban)}{field("bic", E_INVOICE_SETTINGS_COPY.fieldLabels.bic)}{field("bankName", E_INVOICE_SETTINGS_COPY.fieldLabels.bankName)}{field("paymentTermDays", E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays, "number")}{field("logoUrl", E_INVOICE_SETTINGS_COPY.fieldLabels.logoUrl)}</div>
       <div className={styles.grid}>
-        <label>{PAGE_READ_COPY.timeout}<input type="number" min="1" disabled={initialSnapshot.company.pageReadsSchemaReady!==true} value={company.pageReads?.queryTimeoutMs??''} onChange={event=>setCompany(current=>({...current,pageReads:{...(current.pageReads??DEFAULT_PAGE_READ_SETTINGS),queryTimeoutMs:Number(event.target.value)}}))}/></label>
-        <label>{PAGE_READ_COPY.mailBatch}<input type="number" min="1" disabled={initialSnapshot.company.pageReadsSchemaReady!==true} value={company.pageReads?.invoiceMailBatchLimit??''} onChange={event=>setCompany(current=>({...current,pageReads:{...(current.pageReads??DEFAULT_PAGE_READ_SETTINGS),invoiceMailBatchLimit:Number(event.target.value)}}))}/></label>
+        <label>{PAGE_READ_COPY.timeout}<input type="number" min="1" disabled={initialSnapshot.company.pageReadsSchemaReady!==true} value={company.pageReads?.queryTimeoutMs??''} onChange={event=>setCompany(current=>current.pageReads?{...current,pageReads:{...current.pageReads,queryTimeoutMs:Number(event.target.value)}}:current)}/></label>
+        <label>{PAGE_READ_COPY.mailBatch}<input type="number" min="1" disabled={initialSnapshot.company.pageReadsSchemaReady!==true} value={company.pageReads?.invoiceMailBatchLimit??''} onChange={event=>setCompany(current=>current.pageReads?{...current,pageReads:{...current.pageReads,invoiceMailBatchLimit:Number(event.target.value)}}:current)}/></label>
       </div>
       {initialSnapshot.company.pageReadsSchemaReady!==true?<p role="status">{PAGE_READ_COPY.settingsPending}</p>:null}
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
