@@ -29,3 +29,10 @@ it('renders no false success, no second bar and no cosmetic command timer for ze
  view.rerender(<RueckgaengigLeiste {...p} eintraege={[]} quelleUnbekannt/>);expect(screen.getByText(COPY.unknown)).toBeVisible();
  expect(screen.queryByRole('button')).toBeNull();expect(p.onRueckgaengig).not.toHaveBeenCalled();
 });
+
+it('retains an unconfirmed withdrawal error even when the last confirmed list has no originals',()=>{
+ const p=props();render(<RueckgaengigLeiste {...p} eintraege={[]} fehler={COPY.unconfirmed}/>);
+ expect(screen.getByText(COPY.unconfirmed)).toBeVisible();
+ expect(screen.queryByRole('button')).toBeNull();expect(screen.queryByRole('progressbar')).toBeNull();
+ expect(p.onRueckgaengig).not.toHaveBeenCalled();
+});

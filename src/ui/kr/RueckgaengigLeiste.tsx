@@ -18,7 +18,7 @@ export interface RueckgaengigLeisteProps {
  * schedules a command or authorizes withdrawal: the existing queue CAS does.
  * Ring values are discrete source-state updates, with no new motion curve. */
 export function RueckgaengigLeiste(props:RueckgaengigLeisteProps){
-  if(props.eintraege.length===0&&!props.quelleUnbekannt)return null;
+  if(props.eintraege.length===0&&!props.quelleUnbekannt&&!props.fehler)return null;
   const remaining=(row:RueckgaengigEintrag)=>{
     const deadline=Date.parse(row.frist);
     return Number.isFinite(deadline)&&Number.isFinite(props.jetzt)?Math.max(0,Math.min(10,Math.ceil((deadline-props.jetzt)/1000))):null;
