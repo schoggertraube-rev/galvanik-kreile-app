@@ -1,5 +1,6 @@
 import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
+import {db} from "@/db";
 import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
 
 import { sql } from "drizzle-orm";
@@ -803,23 +804,34 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
     rows=[];
     // A source SQL exception rolls back before isolating the same query per
     // order. A damaged original must never poison healthy orders or the tx.
-    for(const id of orderIds){
-     try{rows.push(...await withTenantSavepoint(tx,nested=>readRows(nested,[id])));}
-     catch(error){
-      console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId:id,name:error instanceof Error?error.name:'UnknownError'});
-      results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+    let next=0;
+    const readIsolated=async()=>{
+     while(next<orderIds.length){
+      const id=orderIds[next++];
+      try{
+       // Independent tenant transactions keep SQL failures isolated while the
+       // existing data-pool size bounds parallel reads. Each order still uses
+       // exactly the same snapshot SQL and its own native savepoint.
+       rows.push(...await withPrivilegedTenantTransaction(authorization,isolated=>withTenantSavepoint(isolated,nested=>readRows(nested,[id]))));
+      }catch(error){
+       console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId:id,name:error instanceof Error?error.name:'UnknownError'});
+       results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+      }
      }
-    }
+    };
+    await Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>readIsolated()));
    }
    const byOrder=new Map<string,TodayCardRow[]>();
    for(const row of rows){const group=byOrder.get(row.order_id);if(group)group.push(row);else byOrder.set(row.order_id,[row]);}
-   for(const orderId of orderIds){
-    if(results.has(orderId))continue;
-    try{
+   let nextCard=0;
+   const qualifyIsolated=async()=>{
+    while(nextCard<orderIds.length){
+     const orderId=orderIds[nextCard++];if(results.has(orderId))continue;
+     try{await withPrivilegedTenantTransaction(authorization,async tx=>{
      const group=byOrder.get(orderId)??[];
      const records=<T>(kind:string)=>group.filter(row=>row.kind===kind).map(row=>row.data as T);
      const queues=records<QueueRow&OrderOriginRow>('queue');
-     if(!queues.length){results.set(orderId,{code:'NOT_FOUND',message:'Auftrag nicht verfügbar.'});continue;}
+     if(!queues.length){results.set(orderId,{code:'NOT_FOUND',message:'Auftrag nicht verfügbar.'});return;}
      const queue=qualifyOrderQueue(authorization,queues),origin=qualifyOrderOrigin(authorization,queues),isReworkOrder=origin.source==='REKLAMATION_NACHARBEIT';
      const content=records<ContentEventRow>('content');if(content.length>1)throw Error('ORDER_CARD_CONTENT_EVENT_INVALID');
      const items=qualifyCurrentOrderItems(authorization,queue,isReworkOrder,records<IntakeRow>('intake'),records<CurrentItemRow>('item'),content[0]??null,records<OrderPriceEvent>('price'));
@@ -840,11 +852,13 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
       items:money?cardItems:cardItems.map(item=>({...item,unitPriceCents:null,vatRateBasisPoints:null,extraWork:item.extraWork.map(line=>({...line,hourlyRateCents:null,amountCents:null}))})),
       freeze:money||!freeze?freeze:{...freeze,hourlyRateCents:null,totalAmountCents:null},...(handoverNotice?{handoverNotice}:{}),
       operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint)}});
-    }catch(error){
+    });}catch(error){
      console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});
      results.set(orderId,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
     }
-   }
+    }
+   };
+   await Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>qualifyIsolated()));
    return results;
   });
  }catch(error){
