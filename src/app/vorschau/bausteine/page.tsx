@@ -1,4 +1,5 @@
 import {notFound} from 'next/navigation';
+import {canInspectComponentPreview} from '@/lib/auth/authorizationContract';
 import {ComponentPreviewFrame} from '@/modules/fundament/public';
 import {getAuthBootstrapAction} from '@/app/actions/auth.actions';
 import {getLiveOrderCardAction,getExtraWorkMasterDataAction} from '@/app/actions/orders.actions';
@@ -14,7 +15,7 @@ export const dynamic='force-dynamic';
 export default async function ComponentPreviewPage({searchParams}:{searchParams:Promise<{auftrag?:string;kv?:string;eingang?:string}>}){
  if(!componentPreviewEnvironmentAllowed({deployment:process.env.VERCEL_ENV,node:process.env.NODE_ENV,database:process.env.DATABASE_URL}))notFound();
  const auth=await getAuthBootstrapAction();
- if(auth.status!=='authenticated'||auth.user.packageSwitches?.ui_v45!==true)notFound();
+ if(auth.status!=='authenticated'||!canInspectComponentPreview(auth.user)||auth.user.packageSwitches?.ui_v45!==true)notFound();
  const input=await searchParams;
  const source=typeof input.auftrag==='string'&&input.auftrag.length>0&&input.auftrag.length<=128
   ?await getLiveOrderCardAction({orderId:input.auftrag}):null;

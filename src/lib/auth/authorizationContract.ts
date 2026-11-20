@@ -249,3 +249,6 @@ export function getAuthorizationActionGrants(
 
 /** Cancellation acknowledgements contain no positions; payments can finish their existing command. */
 export function canReadInvoiceCancellationProof(auth:Parameters<typeof hasAuthorizationArea>[0]&{permissions:readonly string[]}){return auth.permissions.includes('perm_view_prices')||hasAuthorizationArea(auth,'zahlungen');}
+
+/** S19 inspection is developer-only; it grants no domain read or write authority. */
+export function canInspectComponentPreview(auth:Parameters<typeof hasAuthorizationArea>[0]):boolean{return hasAuthorizationArea(auth,'wartung');}
