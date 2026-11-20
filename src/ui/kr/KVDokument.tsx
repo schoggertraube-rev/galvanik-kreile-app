@@ -30,7 +30,7 @@ function Wert({quelle}:{quelle:DokumentWert}){
  * date and edition. All values belong to one supplied commercial original;
  * no recalculation, current-price lookup or invented PDF/send evidence. */
 export function KVDokument(props:KVDokumentProps){
-  return <article data-spec-id="baustein.kv_dokument" data-quote-id={props.quoteId}
+  return <article className="kv-paper" data-spec-id="baustein.kv_dokument" data-quote-id={props.quoteId}
     data-source-version={props.version} data-edition={props.fassung} data-original-id={props.originalId??undefined}
     data-zustand={props.variante} aria-busy={props.laden}>
     <h3>{props.titel}</h3><p className="muted">{props.bezug}</p>
