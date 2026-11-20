@@ -118,7 +118,7 @@ describe.each(['cancel','reissue'] as const)('KORR S38a-2 %s actual frozen remai
   expect(auth.data.areas).not.toContain('auftraege');expect(auth.data.areas).not.toContain('mails');
   const today=await withSession(prices,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction));
   const item=today.items.find(row=>row.invoiceId===replacementId&&row.invoiceMail);
-  expect(item).toMatchObject({primaryActionLabel:'Rechnung '+replacementNumber+' senden',invoiceMail:{documentId:replacementId,expectedInvoiceIds:[replacementId],customerId}});
+  expect(item).toMatchObject({primaryActionLabel:'Rechnung '+replacementNumber+' an '+item!.meta+' senden',invoiceMail:{documentId:replacementId,expectedInvoiceIds:[replacementId],customerId}});
   const denied=await createFixture(['mails']);
   const deniedAuth=await withSession(denied,()=>resolveAuthorization());if(!deniedAuth.ok)throw Error('TEST_TODAY_DENIED_AUTH_REQUIRED');
   const hidden=await withSession(denied,()=>readTodayDashboard(deniedAuth.data,getComplaints,getQuoteFollowupsForTodayAction));

@@ -332,6 +332,9 @@
     "src/app/actions/quotes.actions.ts#prepareQuoteFromIntakeAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
+    "src/app/actions/communications.actions.ts#confirmInvoiceHandoverAction": [
+      "src/test/acceptance/s38a_invoice_manual_handover.integration.test.ts"
+    ],
     "src/app/actions/communications.actions.ts#sendCustomerMailAction": [
       "src/test/acceptance/s20_mail_protocol.integration.test.ts",
       "src/test/acceptance/kv_v04_server.integration.test.ts",

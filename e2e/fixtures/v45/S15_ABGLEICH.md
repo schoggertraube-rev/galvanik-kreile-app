@@ -175,8 +175,9 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 
-## Nur im Bestand (774)
+## Nur im Bestand (780)
 
+- `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
 - `EVIDENCE_VISIBILITY_COPY.missing`: "Das Foto ist nicht mehr da. Lade den Auftrag neu."
@@ -758,6 +759,11 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COLLECTION_REMINDER_COPY.proofUnavailable`: "Der Original-Versandbeleg konnte nicht sicher gelesen werden."
 - `COLLECTION_REMINDER_COPY.preparedConflict`: "Die Sammelerinnerung wurde bereits vorbereitet oder der Auftrag hat sich geändert. Lies den aktuellen Ausgang neu."
 - `ORDER_ITEM_COMPLETION_COPY.alreadyChanged`: "Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut."
+- `INVOICE_DELIVERY_COPY.manualHandover`: "Schon übergeben"
+- `INVOICE_DELIVERY_COPY.manualHandoverSaved`: "Rechnung übergeben – Beleg gespeichert."
+- `INVOICE_DELIVERY_COPY.manualHandoverFailed`: "Übergabe noch nicht gespeichert. Versuch es erneut."
+- `INVOICE_DELIVERY_COPY.manualHandoverConflict`: "Rechnung oder Kennung geändert. Lade die Rechnung neu."
+- `INVOICE_DELIVERY_COPY.manualHandoverForbidden`: "Die Rechnungsübergabe ist für Deinen Login nicht freigegeben."
 - `INVOICE_DELIVERY_COPY.followupEditBlocked`: "Diese Aufgabe folgt dem gespeicherten Rechnungsauftrag."
 - `INVOICE_DELIVERY_COPY.remainderPending`: "Weitere Rechnungen senden – Versand noch nicht bestätigt"
 - `INVOICE_DELIVERY_COPY.remainderTask`: "Weitere Rechnungen senden – Versandbeleg fehlt"

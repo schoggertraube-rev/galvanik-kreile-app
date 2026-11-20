@@ -7,7 +7,7 @@ import { createPinLoginHandle } from "../../src/lib/server/pinLoginHandle";
 import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } from "../../src/lib/domain/workingDays";
 import { generatedFlowRuntime } from "./_model";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
-import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets,settleFixtureReads } from "./_fixtureReset";
+import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets,settleFixtureReads,readFixtureResetBlockers } from "./_fixtureReset";
 import {protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from './_readFault';
 
 export type FlowExpectation = {
@@ -203,11 +203,17 @@ async function resetGeneratedDomain() {
   const targets=fixtureResetTargets(affectedTables);
   // Fixture cleanup only, on the guarded local replay connection. Append-only
   // tables may be reset here; real app connections retain every trigger.
-  await retryFixtureResetDeadlock(() => sql.begin(async (cleanup) => {
+  await retryFixtureResetDeadlock(async () => {
+    // The previous page is already torn down. Network-idle alone cannot prove
+    // that Next has finished its SQL transaction after a disconnected request.
+    // Use the existing assertion deadline; NOWAIT and all three attempts stay.
+    await expect.poll(()=>readFixtureResetBlockers(sql,affectedTables),{message:'FLOW_REPLAY_SERVER_READS_NOT_FINISHED'}).toHaveLength(0);
+    return sql.begin(async (cleanup) => {
     await lockFixtureResetTables(cleanup,affectedTables);
     await cleanup.unsafe("SET LOCAL session_replication_role = replica");
     await cleanup.unsafe(`TRUNCATE TABLE ${targets} CASCADE`);
-  }));
+    });
+  });
   await sql`DELETE FROM public.company_settings WHERE tenant_id = ${TENANT}`;
   for (const row of baselineSettings) await upsertFixture("company_settings", row);
 }
