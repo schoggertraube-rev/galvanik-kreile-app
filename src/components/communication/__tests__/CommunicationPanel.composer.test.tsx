@@ -40,3 +40,28 @@ it('KORR S38a-2 uses the existing sender and same original N5 arguments after a 
  expect(api.listOutlookInboxAction).not.toHaveBeenCalled();
  expect(api.getMicrosoftGraphStatusAction).not.toHaveBeenCalled();
 });
+
+it.each(['CUSTOMER','ORDER'] as const)('H1 prefills the same editable invoice draft for %s and sends without typing known facts',async(targetType)=>{
+ vi.clearAllMocks();api.sendCustomerMailAction.mockResolvedValue({code:'OK',data:{threadId:'TEST-prefilled'}});
+ const invoiceOriginal={documentId:'TEST-original-42',expectedInvoiceIds:['TEST-original-42'],number:'TEST-R-42'};
+ render(<CommunicationPanel targetType={targetType} targetId="TEST-target" invoiceOriginal={invoiceOriginal}/>);
+ expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue('Rechnung TEST-R-42');
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen');
+ fireEvent.submit(screen.getByRole('textbox',{name:'Betreff'}).closest('form')!);
+ await waitFor(()=>expect(api.sendCustomerMailAction).toHaveBeenCalledTimes(1));
+ expect(api.sendCustomerMailAction.mock.calls[0][0]).toMatchObject({targetType,targetId:'TEST-target',attachment:{kind:'INVOICE',documentId:invoiceOriginal.documentId},expectedInvoiceIds:invoiceOriginal.expectedInvoiceIds,subject:'Rechnung TEST-R-42',body:'Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen'});
+ expect(api.getMicrosoftGraphStatusAction).not.toHaveBeenCalled();
+});
+
+it('H1 retains human edits across rereading and uses no invented invoice number for a group',()=>{
+ vi.clearAllMocks();
+ const invoiceOriginal={documentId:'TEST-original-42',expectedInvoiceIds:['TEST-original-42','TEST-original-43'],number:'TEST-R-42'};
+ const view=render(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer" invoiceOriginal={invoiceOriginal}/>);
+ expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue('Ihre Rechnungsunterlagen');
+ fireEvent.change(screen.getByRole('textbox',{name:'Betreff'}),{target:{value:'TEST persönliche Ergänzung'}});
+ fireEvent.change(screen.getByRole('textbox',{name:'Nachricht'}),{target:{value:'TEST vollständiger Originaltext'}});
+ view.rerender(<CommunicationPanel targetType="CUSTOMER" targetId="TEST-customer" invoiceOriginal={{...invoiceOriginal}}/>);
+ expect(screen.getByRole('textbox',{name:'Betreff'})).toHaveValue('TEST persönliche Ergänzung');
+ expect(screen.getByRole('textbox',{name:'Nachricht'})).toHaveValue('TEST vollständiger Originaltext');
+ expect(api.sendCustomerMailAction).not.toHaveBeenCalled();
+});
