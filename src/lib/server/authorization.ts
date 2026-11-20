@@ -1,3 +1,4 @@
+import {withAuthorizationReadBudget} from '@/db/readBudget';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {PACKAGE_SWITCHES,mapPackageSwitchRows} from '@/modules/fundament/public';
 import type {PackageSwitchValues} from '@/modules/fundament/public';
@@ -138,7 +139,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
   let dbUser;
   let areas: AccessArea[] = [];
   try {
-    const rows = await db
+    const rows = await withAuthorizationReadBudget(async()=>await db
       .select({
         id: appUsers.id,
         tenantId: appUsers.tenantId,
@@ -160,7 +161,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
         )`,
       })
       .from(appUsers)
-      .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, sessionTenantId)));
+      .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, sessionTenantId))));
     dbUser = rows[0];
     const rawAreas = dbUser?.areas ?? (process.env.NODE_ENV === "test" && dbUser && isAppRole(dbUser.role)
       ? [...ROLE_ACCESS_AREA_TEMPLATES[dbUser.role]]
@@ -262,7 +263,7 @@ export async function resolveLoginIdentityByEmail(
   tenantId: string
 ): Promise<LoginIdentityResult> {
   try {
-    const [user] = await db
+    const [user] = await withAuthorizationReadBudget(async()=>await db
       .select({
         id: appUsers.id,
         email: appUsers.email,
@@ -278,7 +279,7 @@ export async function resolveLoginIdentityByEmail(
         )`,
       })
       .from(appUsers)
-      .where(and(eq(appUsers.email, email), eq(appUsers.tenantId, tenantId)));
+      .where(and(eq(appUsers.email, email), eq(appUsers.tenantId, tenantId))));
 
     if (!user || !user.email) {
       return { ok: false, message: "AUTH_ERROR: Benutzer nicht gefunden" };

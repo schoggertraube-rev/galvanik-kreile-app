@@ -239,7 +239,10 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const cardSources=new Map(batch?.code==='OK'?batch.data.rows.map(row=>[row.orderId,row.result]):[]);
   const orderActionReads=orders.map(order=>{
    const source=cardSources.get(order.id);
-   if(source?.code!=='OK'||source.data.card.version!==order.version)return {orderId:order.id,version:order.version,read:null};
+   if(source?.code!=='OK'||source.data.card.version!==order.version){
+    sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
+    return {orderId:order.id,version:order.version,read:null};
+   }
    const {card,handoverConsequences:shipping,pickupAppointment:appointment}=source.data;
    if(shipping?.code==='SOURCE_INCOMPLETE')sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
    if(hasAuthorizationArea(auth,'preise')&&card.operationalFacts?.pricesMissing===null)sourceNotices.push({key:'source-quote:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:SHIPPING_FEE_COPY.orderQuoteMissing(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});

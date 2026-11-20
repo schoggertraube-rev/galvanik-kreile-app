@@ -9,7 +9,7 @@ import {changeOrderContentAction,getLiveOrderCardAction,getTodayOrderReadAction,
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {readSettingsAction,saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {db} from '@/db';
-import {DEFAULT_PAGE_READ_SETTINGS,PageReadTimeout,pageReadFetchPort,withPageReadBudget,withPageReadQueryLimits} from '@/db/readBudget';
+import {DEFAULT_PAGE_READ_SETTINGS,PageReadTimeout,pageReadFetchPort,withPageReadBudget,withPageReadQueryLimits,withAuthorizationReadBudget} from '@/db/readBudget';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readEvidenceRecordsByTarget,readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
 import {readMicrosoftGraphSentDocumentEvidence,readMicrosoftGraphSentMailByRequest,readMicrosoftGraphSentMailReference} from '@/lib/server/microsoftGraph';
@@ -29,6 +29,7 @@ import {afterAll,beforeAll,describe,expect,it,vi} from 'vitest';
 import {INVOICE_MAIL_COMPOSER_COPY} from '@/ui/situationCatalog';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {requestMailStep} from '../../../e2e/ablauf/requestMailStep';
+afterAll(()=>withAuthorizationReadBudget(()=>db.$client.end({timeout:5})));
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
@@ -53,6 +54,8 @@ it('CB23:05 actual commercial-quote SQL failure preserves the operational card w
    const visible=await today(full),notice=visible.items.find(item=>item.key==='source-quote:'+orderId);
    expect(notice).toMatchObject({orderId,orderVersion:result.data.card.version,field:'action',title:'Preisbeleg zu Auftrag '+result.data.card.orderNumber+' ist nicht lesbar.',primaryActionLabel:'Auftrag öffnen'});
    expect((await today(actor)).items.some(item=>item.key==='source-quote:'+orderId)).toBe(false);
+   const started=Date.now();const home=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_SOURCE_AUTH');return loadOfficeHome(auth.data);});
+   expect(Date.now()-started).toBeLessThan(3000);expect(home.kind).toBe('data');
   }finally{log.mockRestore();}
  }});
 });
@@ -215,6 +218,11 @@ it('batches actual Today facts once and keeps the same qualified full-card value
   const broken=await readTodayOrderCards(authorization.data,ids);
   expect(broken.get(ids[0])?.code).toBe('UNAVAILABLE');
   expect(broken.get(ids[1])?.code).toBe('OK');
+  const start=Date.now();const home=await withSession(full,()=>loadOfficeHome(authorization.data));
+  expect(Date.now()-start).toBeLessThan(3000);expect(home.kind).toBe('data');
+  if(home.kind!=='data')throw Error('TEST_BETRIEB_PARTIAL_SOURCE');
+  expect(home.dashboard.items.find(item=>item.key==='source-order:'+ids[0])).toMatchObject({orderId:ids[0],primaryActionLabel:'Auftrag öffnen'});
+
   expect(await withSession(full,()=>getLiveOrderCardAction({orderId:ids[0]}))).toMatchObject({code:'UNAVAILABLE'});
  });
  expect((await readTodayOrderCards(authorization.data,ids)).get(ids[0])?.code).toBe('OK');
@@ -251,6 +259,30 @@ const native=postgres(url,{prepare:false,max:1});
 const client=withPageReadQueryLimits(native);
 const budgetDb=drizzle(client);
 afterAll(()=>native.end({timeout:5}));
+
+it('keeps the real canonical authorization read available while every ordinary data connection is occupied',async()=>{
+ const slots=db.$client.options.max;
+ let release:()=>void=()=>undefined;const gate=new Promise<void>(resolve=>{release=resolve;});
+ const entered:Array<()=>void>=[];const ready=Array.from({length:slots},()=>new Promise<void>(resolve=>entered.push(resolve)));
+ const held=Array.from({length:slots},(_,index)=>db.transaction(async tx=>{await tx.execute(drizzleSql`SELECT 1`);entered[index]();await gate;}));
+ try{
+  await Promise.all(ready);
+  const start=Date.now();const auth=await withSession(full,()=>resolveAuthorization());
+  expect(auth).toMatchObject({ok:true,data:{userId:full.actorId,tenantId:tenant}});
+  expect(Date.now()-start).toBeLessThan(500);
+ }finally{release();await Promise.all(held);}
+});
+it('enforces an actual read-only, one-second authorization connection and remains usable after its SQL deadline',async()=>{
+ const [read]=await withAuthorizationReadBudget(()=>db.execute<{read_only:string}>(drizzleSql`SELECT current_setting('transaction_read_only') AS read_only`));
+ expect(read.read_only).toBe('on');
+ await expect(withAuthorizationReadBudget(()=>db.execute(drizzleSql`UPDATE public.app_users SET full_name=full_name WHERE tenant_id=${tenant} AND false`))).rejects.toMatchObject({cause:{code:'25006'}});
+ const start=Date.now();
+ const error=await withAuthorizationReadBudget(()=>db.execute(drizzleSql`SELECT pg_sleep(2)`)).then(()=>null,error=>error);
+ expect(error instanceof PageReadTimeout||error?.cause instanceof PageReadTimeout||error?.cause?.code==='57014').toBe(true);
+ expect(Date.now()-start).toBeLessThan(1500);
+ expect(await withSession(full,()=>resolveAuthorization())).toMatchObject({ok:true,data:{userId:full.actorId}});
+});
+
 
 it('sets the actual PostgreSQL transaction timeout and restores the existing connection setting afterward',async()=>{
  const [before]=await budgetDb.execute<{milliseconds:number}>(drizzleSql`SELECT setting::integer AS milliseconds FROM pg_settings WHERE name='statement_timeout'`);

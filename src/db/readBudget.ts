@@ -4,9 +4,17 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 export const DEFAULT_PAGE_READ_SETTINGS={queryTimeoutMs:10_000,invoiceMailBatchLimit:101} as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
-type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>};
+type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>)};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
+export const AUTHORIZATION_READ_TIMEOUT_MS=1000;
+export const isAuthorizationRead=():boolean=>budgets.getStore()?.kind==='authorization';
+/** Separate short read scope; returning to a page restores its own deadline. */
+export function withAuthorizationReadBudget<T>(work:()=>Promise<T>):Promise<T>{
+ const startedAt=Date.now(),parent=budgets.getStore();
+ return budgets.run({startedAt,deadline:Math.min(startedAt+AUTHORIZATION_READ_TIMEOUT_MS,parent?.deadline??Infinity),cancel:new Set(),kind:'authorization'},async()=>await work());
+}
+
 export class PageReadTimeout extends Error {
   constructor(){super('PAGE_READ_TIMEOUT');this.name='PageReadTimeout';}
 }
@@ -55,7 +63,12 @@ type QueryLike=PromiseLike<unknown>&{cancel:()=>void};
 function boundedQuery<T extends QueryLike>(query:T):T{
   if(!budgets.getStore())return query;
   let pending:Promise<unknown>|undefined;
-  const start=()=>pending??=withinBudget(()=>query,()=>query.cancel());
+  const start=()=>pending??=(async()=>{
+    const prepare=budgets.getStore()?.prepareStatement;
+    if(!prepare)return withinBudget(()=>query,()=>query.cancel());
+    await prepare();
+    try{return await query;}catch(error){if(error&&typeof error==='object'&&'code'in error&&error.code==='57014')throw new PageReadTimeout();throw error;}
+  })();
   const wrapped:T=new Proxy(query,{
     get(target,key){
       if(key==='then')return start().then.bind(start());
@@ -107,9 +120,13 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
             const native=sql as {unsafe:(query:string,parameters:string[])=>QueryLike};
             const setting=native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining)]);
             await withinBudget(()=>setting,()=>setting.cancel());
-            return callback(withPageReadQueryLimits(sql));
+            const prepareStatement=async()=>{
+              const left=budget.deadline-Date.now();if(left<=0)throw new PageReadTimeout();
+              return withinBudget(()=>native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(left)]));
+            };
+            return budgets.run({...budget,prepareStatement},()=>callback(withPageReadQueryLimits(sql)));
           };
-          Promise.resolve(Reflect.apply(value,target,args)).then(result=>{clearTimeout(timer);resolve(result);},error=>{clearTimeout(timer);reject(error);});
+          Promise.resolve(Reflect.apply(value,target,args)).then(result=>{clearTimeout(timer);resolve(result);},error=>{clearTimeout(timer);reject(error&&typeof error==='object'&&'code'in error&&error.code==='57014'?new PageReadTimeout():error);});
         });
       };
       return (...args:unknown[])=>{
