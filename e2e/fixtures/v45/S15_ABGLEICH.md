@@ -180,7 +180,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.proposalMissing`: "…" → `work.sign_missing`
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 
-## Nur im Bestand (793)
+## Nur im Bestand (795)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -969,9 +969,11 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PENDING_UNDO_COPY.started`: "Übertragung gestartet"
 - `PENDING_UNDO_COPY.unknown`: "Deine wartenden Änderungen sind gerade nicht lesbar."
 - `PENDING_UNDO_COPY.unconfirmed`: "Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand."
+- `PAGE_READ_COPY.loading`: "Deine Arbeitsfläche wird geladen."
 - `PAGE_READ_COPY.sourceIncomplete`: "Diese Quelle ist gerade nicht erreichbar · Erneut laden."
 - `PAGE_READ_COPY.partial`: "Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar."
 - `PAGE_READ_COPY.reload`: "Erneut laden"
+- `PAGE_READ_COPY.settingsPending`: "Die neuen Abfragewerte sind noch nicht verfügbar."
 - `PAGE_READ_COPY.timeout`: "Abfragezeit in Millisekunden"
 - `PAGE_READ_COPY.mailBatch`: "Rechnungen je Versandtakt"
 - `PAGE_READ_COPY.invalid`: "Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."
