@@ -429,21 +429,22 @@ it('batches the actual shipping header once without changing zero, one, several,
  const customer=await customerFixture('TEST L1 shipping batch');
  const intake=await intakeOrderFixture('TEST L1 shipping batch intake',customer);
  const ready=await readyInvoiceOrder('TEST L1 shipping batch issued','pickup',false,customer);
- const inputs=[{orderId:intake.receipt.orderId,expectedVersion:intake.receipt.orderVersion},{orderId:ready.orderId,expectedVersion:ready.version}];
+ const secondReady=await readyInvoiceOrder('TEST L1 shipping batch second issued','pickup',false,customer);
+ const inputs=[{orderId:intake.receipt.orderId,expectedVersion:intake.receipt.orderVersion},{orderId:ready.orderId,expectedVersion:ready.version},{orderId:secondReady.orderId,expectedVersion:secondReady.version}];
  const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_SHIPPING_BATCH_AUTH');
  const expected=await Promise.all(inputs.map(input=>readInvoiceShippingConsequences(auth.data,input,readInvoiceVat,readShippingSettingsInTransaction)));
- const options=db.$client.options,previous=options.debug;let headers=0;
- options.debug=(_connection,statement)=>{if(statement.includes('AS invoice_exists')&&statement.includes('AS freeze_invalid'))headers++;};
+ const options=db.$client.options,previous=options.debug;let headers=0,issueSources=0;
+ options.debug=(_connection,statement)=>{if(statement.includes('AS invoice_exists')&&statement.includes('AS freeze_invalid'))headers++;if(statement.includes('FROM private.v_invoice_issue_source_v2 source'))issueSources++;};
  try{
-  expect(await readInvoiceShippingConsequencesBatch(auth.data,[],readInvoiceVat,readShippingSettingsInTransaction)).toEqual(new Map());expect(headers).toBe(0);
-  const one=await readInvoiceShippingConsequencesBatch(auth.data,inputs.slice(0,1),readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(1);expect(one.get(inputs[0].orderId)).toEqual(expected[0]);
-  headers=0;const many=await readInvoiceShippingConsequencesBatch(auth.data,inputs,readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(1);
+  expect(await readInvoiceShippingConsequencesBatch(auth.data,[],readInvoiceVat,readShippingSettingsInTransaction)).toEqual(new Map());expect(headers).toBe(0);expect(issueSources).toBe(0);
+  const one=await readInvoiceShippingConsequencesBatch(auth.data,inputs.slice(0,1),readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(1);expect(one.get(inputs[0].orderId)).toEqual(expected[0]);expect(issueSources).toBe(0);
+  headers=0;const many=await readInvoiceShippingConsequencesBatch(auth.data,inputs,readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(1);expect(issueSources).toBe(1);
   for(const [index,input] of inputs.entries())expect(many.get(input.orderId)).toEqual(expected[index]);
   expect(many.get(inputs[0].orderId)).toMatchObject({code:'NOT_APPLICABLE'});expect(many.get(ready.orderId)).toMatchObject({code:'OK'});
   const stale=await readInvoiceShippingConsequencesBatch(auth.data,[inputs[0],{...inputs[1],expectedVersion:inputs[1].expectedVersion+1}],readInvoiceVat,readShippingSettingsInTransaction);
   expect(stale.get(inputs[0].orderId)).toEqual(expected[0]);expect(stale.get(ready.orderId)).toMatchObject({code:'SOURCE_INCOMPLETE'});
   const deniedActor=await createFixture(['auftraege'],'werkstatt'),denied=await withSession(deniedActor,()=>resolveAuthorization());if(!denied.ok)throw Error('TEST_SHIPPING_BATCH_DENIED_AUTH');
-  headers=0;const hidden=await readInvoiceShippingConsequencesBatch(denied.data,inputs,readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(0);expect([...hidden.values()]).toEqual([undefined,undefined]);
+  headers=0;const hidden=await readInvoiceShippingConsequencesBatch(denied.data,inputs,readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(0);expect([...hidden.values()]).toEqual(inputs.map(()=>undefined));
   const retry=await readInvoiceShippingConsequencesBatch(auth.data,JSON.parse(JSON.stringify(inputs)),readInvoiceVat,readShippingSettingsInTransaction);expect(retry).toEqual(many);
  }finally{options.debug=previous;}
 });

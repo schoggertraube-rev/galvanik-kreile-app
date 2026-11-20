@@ -963,13 +963,22 @@ export async function readInvoiceReissueSource(tx:PrivilegedTenantTransaction,te
  return {receipt,intent,original,snapshot,goods,replacement,pending:replacement===null,current:manual.current_order_version>=intent.orderVersion&&manual.current_handover_mode==='pickup'};
 }
 
-async function readInvoiceIssueSource(tx:PrivilegedTenantTransaction,orderId:string){
-  return tx.execute<SourceRow>(sql`
+function invoiceIssueSourceQuery(orderId:string|ReturnType<typeof sql>){
+ return sql`
         SELECT source.*,EXISTS(SELECT 1 FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=source.tenant_id AND receipt.order_id=source.order_id) AS has_quote
         FROM private.v_invoice_issue_source_v2 source
         WHERE source.order_id = ${orderId}
         LIMIT 2
-      `);
+      `;
+}
+async function readInvoiceIssueSource(tx:PrivilegedTenantTransaction,orderId:string){
+ return tx.execute<SourceRow>(invoiceIssueSourceQuery(orderId));
+}
+async function readInvoiceIssueSourceRows(tx:PrivilegedTenantTransaction,orderIds:readonly string[]){
+ const rows=await tx.execute<SourceRow&{batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.*
+ FROM unnest(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]) requested(order_id)
+ CROSS JOIN LATERAL (${invoiceIssueSourceQuery(sql`requested.order_id`)}) source`);
+ return rows.map(({batch_order_id,...row})=>({id:batch_order_id,row}));
 }
 
 function cancellationReceiptMatchesIntent(
@@ -1144,7 +1153,8 @@ type InvoiceReissueProposal={originalInvoiceNumber:string;label:string;befehl:{d
 type ShippingProposalInput={orderId:string;expectedVersion:number;manualHandoverEventId?:string};
 type ShippingProposalSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>;
 type ShippingProposalOrder=Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>&{order_number:string;station:string;current_station:string;current_station_id:string;status:string;invoice_exists:boolean;freeze_active:boolean;freeze_invalid:boolean};
-type ShippingProposalHeader={code:'OK';rows:ShippingProposalOrder[]}|{code:'FAILED';cause:unknown};
+type ShippingProposalReadGroup<T>={code:'OK';rows:T[]}|{code:'FAILED';cause:unknown};
+type ShippingProposalHeader=ShippingProposalReadGroup<ShippingProposalOrder>;
 async function readInvoiceShippingHeaders(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderIds:readonly string[]){
  return tx.execute<ShippingProposalOrder>(sql`
    SELECT orders.id,orders.customer_id,orders.handover_mode,orders.version,orders.order_number,
@@ -1157,35 +1167,8 @@ async function readInvoiceShippingHeaders(tx:PrivilegedTenantTransaction,auth:Au
       AND NOT EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=event.tenant_id AND frozen.order_id=event.order_id AND frozen.event_id=event.id))) AS freeze_invalid
    FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id=ANY(ARRAY[${sql.join(orderIds.map(value=>sql`${value}`),sql`, `)}]::text[])`);
 }
-/** Same canonical proposal reader; batch only its repeated source header.
- * Failed groups are isolated after their native transaction has rolled back. */
-export async function readInvoiceShippingConsequencesBatch(auth:AuthorizationSnapshot,inputs:readonly ShippingProposalInput[],readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
- const headers=new Map<string,ShippingProposalHeader>();
- if(hasAuthorizationArea(auth,'preise')){
-  const load=async(ids:readonly string[]):Promise<void>=>{
-   if(!ids.length)return;
-   try{
-    const rows=await withPrivilegedTenantTransaction(auth,tx=>withTenantSavepoint(tx,nested=>readInvoiceShippingHeaders(nested,auth,ids)));
-    for(const id of ids)headers.set(id,{code:'OK',rows:rows.filter(row=>row.id===id)});
-   }catch(cause){
-    if(ids.length===1){headers.set(ids[0],{code:'FAILED',cause});return;}
-    const middle=Math.ceil(ids.length/2);await Promise.all([load(ids.slice(0,middle)),load(ids.slice(middle))]);
-   }
-  };
-  await load([...new Set(inputs.map(input=>input.orderId))]);
- }
- const rows=await Promise.all(inputs.map(async input=>[input.orderId,await readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings,headers.get(input.orderId))] as const));
- return new Map(rows);
-}
-export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
- return readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings);
-}
-async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader,header?:ShippingProposalHeader){
- if(!hasAuthorizationArea(auth,'preise'))return undefined;
- const identity:{orderNumber?:string;invoiceNumber?:string}={};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  if(header?.code==='FAILED')throw header.cause;
-  const rows=header?.code==='OK'?header.rows:await readInvoiceShippingHeaders(tx,auth,[input.orderId]);
+function qualifyShippingProposalOrder(rows:readonly ShippingProposalOrder[],input:ShippingProposalInput,identity:{orderNumber?:string}){
+ try{
   const order=rows[0];
   if(rows.length!==1||!order||order.version!==input.expectedVersion||!['pickup','shipping'].includes(order.handover_mode??''))throw Error('SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID');
   identity.orderNumber=order.order_number;
@@ -1194,7 +1177,51 @@ async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnaps
   // PL20.11.13:42: a proved unfinished order has no invoice follow-up yet.
   // Its absence is a named state, never an invented zero/empty proposal.
   if(['angenommen','galvanik'].includes(order.station)&&order.status===order.station&&!order.invoice_exists&&!order.freeze_active)
-   return {code:'NOT_APPLICABLE' as const,orderId:order.id,orderVersion:order.version};
+   return {kind:'NOT_APPLICABLE' as const,value:{code:'NOT_APPLICABLE' as const,orderId:order.id,orderVersion:order.version}};
+  return {kind:'PROCEED' as const,order};
+ }catch(cause){return {kind:'FAILED' as const,cause};}
+}
+/** Same canonical proposal reader; batch only its repeated source header.
+ * Failed groups are isolated after their native transaction has rolled back. */
+async function readShippingProposalGroups<T>(auth:AuthorizationSnapshot,orderIds:readonly string[],readRows:(tx:PrivilegedTenantTransaction,ids:readonly string[])=>Promise<readonly {id:string;row:T}[]>){
+ const groups=new Map<string,ShippingProposalReadGroup<T>>();
+ const load=async(ids:readonly string[]):Promise<void>=>{
+  if(!ids.length)return;
+  try{
+   const rows=await withPrivilegedTenantTransaction(auth,tx=>withTenantSavepoint(tx,nested=>readRows(nested,ids)));
+   for(const id of ids)groups.set(id,{code:'OK',rows:rows.filter(row=>row.id===id).map(row=>row.row)});
+  }catch(cause){
+   if(ids.length===1){groups.set(ids[0],{code:'FAILED',cause});return;}
+   const middle=Math.ceil(ids.length/2);await Promise.all([load(ids.slice(0,middle)),load(ids.slice(middle))]);
+  }
+ };
+ await load([...new Set(orderIds)]);return groups;
+}
+export async function readInvoiceShippingConsequencesBatch(auth:AuthorizationSnapshot,inputs:readonly ShippingProposalInput[],readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
+ const permitted=hasAuthorizationArea(auth,'preise');
+ const headers=permitted?await readShippingProposalGroups(auth,inputs.map(input=>input.orderId),async(tx,ids)=>(await readInvoiceShippingHeaders(tx,auth,ids)).map(row=>({id:row.id,row}))):new Map<string,ShippingProposalHeader>();
+ // This is the same canonical early gate used by the single reader. Missing,
+ // invalid and not-applicable orders retain their original result in the worker.
+ const sourceIds=inputs.flatMap(input=>{const header=headers.get(input.orderId);return header?.code==='OK'&&qualifyShippingProposalOrder(header.rows,input,{}).kind==='PROCEED'?[input.orderId]:[];});
+ const sources=await readShippingProposalGroups(auth,sourceIds,readInvoiceIssueSourceRows);
+ const readSource=async(orderId:string)=>{const source=sources.get(orderId);if(!source)throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING');if(source.code==='FAILED')throw source.cause;return source.rows;};
+ const rows=await Promise.all(inputs.map(async input=>[input.orderId,await readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings,headers.get(input.orderId),readSource)] as const));
+ return new Map(rows);
+}
+
+export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
+ return readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings);
+}
+async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader,header?:ShippingProposalHeader,readSource?:(orderId:string)=>Promise<SourceRow[]>){
+ if(!hasAuthorizationArea(auth,'preise'))return undefined;
+ const identity:{orderNumber?:string;invoiceNumber?:string}={};
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  if(header?.code==='FAILED')throw header.cause;
+  const rows=header?.code==='OK'?header.rows:await readInvoiceShippingHeaders(tx,auth,[input.orderId]);
+  const qualified=qualifyShippingProposalOrder(rows,input,identity);
+  if(qualified.kind==='FAILED')throw qualified.cause;
+  if(qualified.kind==='NOT_APPLICABLE')return qualified.value;
+  const order=qualified.order;
   const settings=await readSettings(tx,auth.tenantId);
   if(!settings||settings.shippingFeeCents===undefined)throw Error('SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING');
   const allocation=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):{lines:[],missingFee:false};
@@ -1205,7 +1232,7 @@ async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnaps
   const active=originals.map(row=>({row,receipt:mapInvoiceIssueReceipt(row,auth.tenantId,row.actor_id,readVat)})).filter(value=>value.row.current_status==='issued');
   const main=active.filter(value=>value.row.belegart==='auftrag');
   if(main.length===1)identity.invoiceNumber=main[0].receipt.invoiceNumber;
-  const sourceRows=await readInvoiceIssueSource(tx,order.id),source=sourceRows[0];
+  const sourceRows=readSource?await readSource(order.id):await readInvoiceIssueSource(tx,order.id),source=sourceRows[0];
   if(sourceRows.length===0)throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING');
   if(sourceRows.length!==1||!source||source.tenant_id!==auth.tenantId||source.order_id!==order.id||source.customer_id!==order.customer_id||source.current_order_version!==order.version||typeof source.no_active_invoice!=='boolean')throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_INVALID');
   if(main.length>1||active.length>0&&main.length!==1||source.no_active_invoice!==(main.length===0))throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');
