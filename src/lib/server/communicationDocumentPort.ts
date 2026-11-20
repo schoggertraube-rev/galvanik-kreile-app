@@ -50,6 +50,41 @@ function handedInvoiceOrder(tenantId:string){return sql`EXISTS(SELECT 1 FROM pri
  WHERE physical.tenant_id=${tenantId} AND physical.order_id=orders.id AND physical.order_version=orders.version
   AND physical.integrity_ok AND physical.goods_out_event_count=1 AND physical.goods_out_event_id IS NOT NULL
   AND orders.station='abgeholt' AND orders.current_station='abgeholt' AND orders.current_station_id='abgeholt' AND orders.status='abgeholt')`;}
+function invoiceOrderReadyForMail(tenantId:string){return sql`((orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig') OR ${handedInvoiceOrder(tenantId)})`;}
+
+export type UnsentInvoiceMailGroup={customerId:string;customerName:string;id:string;number:string;orderId:string|null;ids:string[];count:number};
+/** Same original/physical eligibility as the sender, in one query for all customers. */
+export async function readUnsentInvoiceMailGroups(tx:PrivilegedTenantTransaction,tenantId:string):Promise<{groups:UnsentInvoiceMailGroup[];missing:string[]}>{
+ type Row=UnsentInvoiceOriginal&{eligible:boolean|null};
+ const rows=await tx.execute<Row>(sql`WITH invoice_candidates AS MATERIALIZED (
+  SELECT invoice.id,invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.invoice_number,invoice.aggregate_version,invoice.issued_at,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot
+  FROM public.invoices invoice WHERE invoice.tenant_id=${tenantId} AND invoice.status='issued' AND invoice.contract_version=1 AND NOT ${invoiceAlreadySent(tenantId,sql`invoice.id`)}
+ ) SELECT invoice.id::text,invoice.invoice_number AS number,invoice.aggregate_version AS version,invoice.order_id AS "orderId",orders.handover_mode AS handover,invoice.customer_id AS "customerId",customer.name AS "customerName",
+  CASE WHEN invoice.order_id IS NULL THEN private.invoice_original_source_valid(invoice.tenant_id,invoice.customer_id,invoice.order_id,invoice.order_version,invoice.freeze_id,invoice.service_date,invoice.snapshot,invoice.issued_at)
+   WHEN frozen.order_id IS NULL THEN false ELSE ${invoiceOrderReadyForMail(tenantId)} END AS eligible
+  FROM invoice_candidates invoice JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
+  LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
+  LEFT JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
+  ORDER BY invoice.issued_at,invoice.id`);
+ const sources=new Map<string,Row[]>();
+ for(const row of rows){
+  if(typeof row.id!=='string'||typeof row.number!=='string'||typeof row.customerId!=='string'||typeof row.customerName!=='string'||!Number.isSafeInteger(row.version))throw Error('INVOICE_UNSENT_ORIGINAL_SOURCE_INVALID');
+  const key=JSON.stringify([row.customerId,row.orderId===null,row.handover]);
+  const group=sources.get(key);if(group)group.push(row);else sources.set(key,[row]);
+ }
+ const groups:UnsentInvoiceMailGroup[]=[],missing:string[]=[];
+ for(const [key,source] of sources){
+  const native=source[0].orderId===null;
+  // A damaged native collection blocks its group; an ineligible ordinary order
+  // is excluded just as by the sender's existing freeze/physical joins.
+  if(source.some(row=>typeof row.eligible!=='boolean'||(!native&&row.handover!=='pickup'&&row.handover!=='shipping'))||(native&&source.some(row=>row.eligible!==true))){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
+  const eligible=source.filter(row=>row.eligible===true);
+  if(!eligible.length){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
+  const selected=eligible.slice(0,101),first=selected[0];
+  groups.push({customerId:first.customerId,customerName:first.customerName,id:first.id,number:first.number,orderId:first.orderId,ids:selected.map(row=>row.id),count:eligible.length});
+ }
+ return {groups,missing};
+}
 async function readInvoiceOrderMailPhase(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
  if(await readReadyNotificationContext(tx,tenantId,orderId))return 'ready' as const;
  const physical=await tx.execute(sql`SELECT orders.id FROM public.orders orders WHERE orders.tenant_id=${tenantId} AND orders.id=${orderId} AND ${handedInvoiceOrder(tenantId)} FOR UPDATE OF orders`);
@@ -288,7 +323,7 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
   SELECT invoice.id::text,invoice.order_id,orders.order_number,invoice.invoice_number,invoice.aggregate_version,${invoiceMailUnresolved(tenantId,sql`invoice.id`)} AS mail_pending FROM invoice_candidates invoice
   JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
   JOIN private.v_order_freeze_state_v1 frozen ON frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active AND frozen.integrity_ok
-  WHERE ((orders.station='fertig' AND orders.current_station='fertig' AND orders.current_station_id='fertig' AND orders.status='fertig') OR ${handedInvoiceOrder(tenantId)}) AND orders.handover_mode=${handover}
+  WHERE ${invoiceOrderReadyForMail(tenantId)} AND orders.handover_mode=${handover}
   ORDER BY invoice.issued_at,invoice.id ${scope?.all?sql``:sql`LIMIT 102`}`);
  return scope?.all?rows:bindInvoiceMailGroup(tx,tenantId,customerId,rows);
 }

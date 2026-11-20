@@ -1,4 +1,4 @@
-import {readUnsentInvoiceOriginals,readInvoiceMailCohort} from './communicationDocumentPort';
+import {readUnsentInvoiceMailGroups} from './communicationDocumentPort';
 import {canTransportInvoiceDocument} from './authorization';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
@@ -215,18 +215,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND active=true
         `)) : {code:'OK' as const,data:[] as AssignmentRow[]};
       const assignments=assignmentSource.code==='OK'?assignmentSource.data:[];
-      const invoiceMailSource=canTransportInvoiceDocument(auth)?await readTodaySource(tx,async nested=>{
-       const originals=await readUnsentInvoiceOriginals(nested,auth.tenantId),seen=new Set<string>(),missing:string[]=[];
-       const groups:Array<{customerId:string;customerName:string;id:string;number:string;orderId:string|null;ids:string[];count:number}>=[];
-       for(const original of originals){
-        const key=JSON.stringify([original.customerId,original.orderId===null,original.handover]);
-        if(seen.has(key))continue;seen.add(key);
-        const cohort=await readTodaySource(nested,reader=>readInvoiceMailCohort(reader,auth.tenantId,original.customerId,original.handover,undefined,original.orderId===null,false,{all:true}));
-        if(cohort.code!=='OK'||!cohort.data.length){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
-        const group=cohort.data.slice(0,101),first=group[0];groups.push({customerId:original.customerId,customerName:original.customerName,id:first.id,number:first.invoice_number,orderId:first.order_id,ids:group.map(row=>row.id),count:cohort.data.length});
-       }
-       return {groups,missing};
-      }):{code:'OK' as const,data:{groups:[],missing:[]}};
+      const invoiceMailSource=canTransportInvoiceDocument(auth)?await readTodaySource(tx,nested=>readUnsentInvoiceMailGroups(nested,auth.tenantId)):{code:'OK' as const,data:{groups:[],missing:[]}};
       const supportMissing=[...(invoiceMailSource.code!=='OK'?['TODAY_UNSENT_INVOICE_SOURCE']:invoiceMailSource.data.missing),...(preferencesSource.code!=='OK'?['TODAY_PREFERENCES_SOURCE']:[]),...(remindersSource.code!=='OK'?['TODAY_REMINDERS_SOURCE']:[]),...(delegationSource.code!=='OK'?['TODAY_DELEGATION_SOURCE']:[])];
       return { supportMissing,invoiceMailSource,preferences:preferencesSource.code==='OK'?preferencesSource.data:[],reminders:remindersSource.code==='OK'?remindersSource.data:[],invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[],delegationTargets:delegationSource.code==='OK'?delegationSource.data:[],assignmentSourceIncomplete:assignmentSource.code!=='OK'||assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }),
