@@ -77,3 +77,21 @@ it('prepares actual TEST action originals for component inspection without a ten
  for(const actor of actors)expect(await request(actor,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{id:orderId}}});
  writeFileSync('.git/kreile-s19-source-fixture-current.json',JSON.stringify({at:new Date().toISOString(),canonicalTenant:KREILE_TENANT_SLUG,customerId,orderId,quoteId,itemId,sourceVersion:card.data.card.version,actualActionsAuthDB:true,syntheticInitialLogins:true,browserDone:false},null,2));
 });
+
+// PL20Nov14:47: these isolated real port runs replace employee access to the developer-only page.
+it.each(['meister','buero','werkstatt'] as const)('records a separate role proof for %s from actual Auth and repeated canonical reads',async role=>{
+ const actor=actors.find(candidate=>candidate.role===role);if(!actor)throw Error('S19_TEST_ROLE_REQUIRED');
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const first=await request(actor,()=>getLiveOrderCardAction({orderId}));
+ const reread=await request(actor,()=>getLiveOrderCardAction({orderId}));
+ expect(first).toMatchObject({code:'OK',data:{card:{id:orderId,customerId,items:[{name:'TEST S19 Flansch',quantity:2}]}}});
+ expect(reread.code).toBe('OK');if(first.code!=='OK'||reread.code!=='OK')throw Error('S19_ROLE_CANONICAL_READ_REQUIRED');
+ expect(reread.data.card.version).toBe(first.data.card.version);
+ expect(reread.data.card.items).toEqual(first.data.card.items);
+ expect(reread.data.card.dueDateChanges).toHaveLength(1);
+ if(role==='werkstatt'){
+  expect(first.data.card.items.every(item=>item.unitPriceCents===null&&item.vatRateBasisPoints===null)).toBe(true);
+  expect(first.data.card.commercialQuote).toBeUndefined();
+ }else expect(first.data.card.items[0].unitPriceCents).toBe(12500);
+ writeFileSync('.git/kreile-s19-port-role-'+role+'.json',JSON.stringify({at:new Date().toISOString(),role,orderId,customerId,sourceVersion:first.data.card.version,rereadVersion:reread.data.card.version,actualActionsAuthDB:true,syntheticInitialLogin:true,priceProtected:role==='werkstatt',previewPageAccessGranted:false},null,2));
+});
