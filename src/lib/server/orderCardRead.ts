@@ -807,22 +807,27 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
     // The parent transaction has finished before acquiring child connections.
     // Even one available pool slot must suffice; never hold it while awaiting
     // another transaction. The same SQL still has an order-local savepoint.
-    let next=0;
-    const readIsolated=async()=>{
-     while(next<orderIds.length){
-      const id=orderIds[next++];
-      try{
-       // Independent tenant transactions keep SQL failures isolated while the
-       // existing data-pool size bounds parallel reads. Each order still uses
-       // exactly the same snapshot SQL and its own native savepoint.
-       rows.push(...await withPageReadPhase('cards.one_snapshot',()=>withPrivilegedTenantTransaction(authorization,isolated=>withTenantSavepoint(isolated,nested=>readRows(nested,[id])))));
-      }catch(error){
+    const readIsolated=async(selectedIds:readonly string[]):Promise<void>=>{
+     try{
+      // Keep the identical SQL and native tenant/savepoint contract. A valid
+      // group stays one snapshot; only the failing group is divided further.
+      // This avoids re-planning every UNION/view for every unaffected order.
+      rows.push(...await withPageReadPhase(selectedIds.length===1?'cards.one_snapshot':'cards.snapshot',()=>withPrivilegedTenantTransaction(authorization,isolated=>withTenantSavepoint(isolated,nested=>readRows(nested,selectedIds)))));
+     }catch(error){
+      if(selectedIds.length===1){
+       const id=selectedIds[0];
        console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId:id,name:error instanceof Error?error.name:'UnknownError'});
        results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+       return;
       }
+      const middle=Math.ceil(selectedIds.length/2);
+      await Promise.all([readIsolated(selectedIds.slice(0,middle)),readIsolated(selectedIds.slice(middle))]);
      }
     };
-    await withPageReadPhase('cards.fallback',()=>Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>readIsolated())));
+    // The failed parent transaction is already released. The existing native
+    // pool remains the connection limit, including a single available slot.
+    const middle=Math.ceil(orderIds.length/2);
+    await withPageReadPhase('cards.fallback',async()=>{if(orderIds.length===1)await readIsolated(orderIds);else await Promise.all([readIsolated(orderIds.slice(0,middle)),readIsolated(orderIds.slice(middle))]);});
    }
    const byOrder=new Map<string,TodayCardRow[]>();
    for(const row of rows){const group=byOrder.get(row.order_id);if(group)group.push(row);else byOrder.set(row.order_id,[row]);}
