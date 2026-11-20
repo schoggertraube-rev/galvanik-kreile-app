@@ -7,6 +7,7 @@ const ports = vi.hoisted(() => ({
   openInvoice: vi.fn(),
   requestCreate: vi.fn(),
   listInbox: vi.fn(),
+  confirmHandover:vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
   permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
@@ -14,7 +15,7 @@ const ports = vi.hoisted(() => ({
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
 vi.mock('@/components/communication/CommunicationPanel',()=>({CommunicationPanel:({targetId,invoiceOriginal}:{targetId:string;invoiceOriginal?:{documentId:string}})=><div data-testid="TEST-canonical-composer" data-customer={targetId} data-original={invoiceOriginal?.documentId}/> }));
-vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox }));
+vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox,confirmInvoiceHandoverAction:ports.confirmHandover }));
 vi.mock("@/app/actions/eingang.actions",()=>({getIntakeDraftsAction:vi.fn(async()=>({code:"OK",drafts:[]})),discardIntakeDraftAction:vi.fn(async()=>({code:"OK",drafts:[]}))}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
@@ -320,13 +321,36 @@ it('opens a persisted KV follow-up through the existing task receiver instead of
  }finally{window.removeEventListener('kreile:oeffne',opened);}
 });
 
-it.each([1,2])('KORR S38a-2 opens the existing composer for %i actual projected originals instead of the unsupported invoice overlay',async count=>{
- const original={customerId:'TEST-customer',documentId:'TEST-replacement',number:'R-2026-1234',expectedInvoiceIds:count===1?['TEST-replacement']:['TEST-replacement','TEST-second-original'],count};
- const item={key:'invoice-mail:'+original.documentId,field:'action' as const,kind:'invoice' as const,invoiceId:original.documentId,title:original.number,meta:'TEST customer',urgency:'warning' as const,primaryActionLabel:count===1?'Rechnung R-2026-1234 senden' as const:`${count} Rechnungen senden` as const,invoiceMail:original};
- const model={kind:'data' as const,projection,role:'meister' as const,canCreateOrder:false,canWorkOrders:false,canDelegate:false,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[item]}};
+it.each([1,2])('H2 opens the existing composer from each of %i separate original rows',async count=>{
+ const items=Array.from({length:count},(_,index)=>{
+  const id='TEST-replacement-'+index,number='R-2026-'+index;
+  const original={customerId:'TEST-customer',customerName:'TEST customer',documentId:id,number,expectedInvoiceIds:[id],count:1,singleInvoice:true as const};
+  return {key:'invoice-mail:'+id,field:'action' as const,kind:'invoice' as const,invoiceId:id,title:number,meta:'TEST customer',urgency:'warning' as const,primaryActionLabel:`Rechnung ${number} an TEST customer senden`,invoiceMail:original};
+ });
+ const model={kind:'data' as const,projection,role:'meister' as const,canCreateOrder:false,canWorkOrders:false,canDelegate:false,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items}};
  render(<RolfHomeClient model={model} ports={actionPorts}/>);
- fireEvent.click(screen.getByRole('button',{name:count===1?'Rechnung R-2026-1234 senden':`${count} Rechnungen senden`}));
+ for(const item of items)expect(screen.getByRole('button',{name:item.primaryActionLabel})).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:items[0].primaryActionLabel}));
  const composer=await screen.findByTestId('TEST-canonical-composer');
- expect(composer).toHaveAttribute('data-customer',original.customerId);expect(composer).toHaveAttribute('data-original',original.documentId);
+ expect(composer).toHaveAttribute('data-customer',items[0].invoiceMail.customerId);expect(composer).toHaveAttribute('data-original',items[0].invoiceMail.documentId);
  expect(ports.openInvoice).not.toHaveBeenCalled();
+});
+
+
+it('H4 offers the real handover command beside each original and preserves its request after an unconfirmed reply',async()=>{
+ const original={customerId:'TEST-handover-customer',customerName:'TEST H4 Kunde',documentId:'TEST-paper-original',number:'TEST-R-H4',expectedInvoiceIds:['TEST-paper-original'],count:1,singleInvoice:true as const};
+ const item={key:'invoice-mail:'+original.documentId,field:'action' as const,kind:'invoice' as const,invoiceId:original.documentId,title:original.number,meta:original.customerName,urgency:'warning' as const,primaryActionLabel:'Rechnung TEST-R-H4 an TEST H4 Kunde senden',invoiceMail:original};
+ ports.confirmHandover.mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST H4 noch nicht bestätigt'}).mockResolvedValueOnce({code:'OK',message:'TEST H4 Beleg gespeichert'});
+ render(<RolfHomeClient ports={actionPorts} model={{kind:'data',projection,role:'meister',canCreateOrder:false,canWorkOrders:false,canDelegate:false,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[item]}}}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Weitere Aktionen'}));
+ const button=screen.getByRole('button',{name:'Schon übergeben'});
+ fireEvent.click(button);fireEvent.click(button);
+ await screen.findByText('TEST H4 noch nicht bestätigt');
+ expect(ports.confirmHandover).toHaveBeenCalledTimes(1);expect(ports.refresh).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'Weitere Aktionen'}));
+ fireEvent.click(screen.getByRole('button',{name:'Schon übergeben'}));await screen.findByText('TEST H4 Beleg gespeichert');
+ expect(ports.confirmHandover).toHaveBeenCalledTimes(2);
+ expect(ports.confirmHandover.mock.calls[0][0]).toEqual(ports.confirmHandover.mock.calls[1][0]);
+ expect(ports.confirmHandover.mock.calls[0][0]).toMatchObject({invoiceId:original.documentId});
+ expect(ports.refresh).toHaveBeenCalledTimes(1);expect(ports.openInvoice).not.toHaveBeenCalled();
 });

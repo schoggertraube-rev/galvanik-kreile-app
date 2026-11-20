@@ -1,6 +1,6 @@
-import {readUnsentInvoiceOriginals,readInvoiceMailCohort} from './communicationDocumentPort';
+import {readUnsentInvoiceMailGroups} from './communicationDocumentPort';
 import {canTransportInvoiceDocument} from './authorization';
-import {E_INVOICE_COPY,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
 import type {U2Read} from '@/lib/domain/u2ReadContract';
@@ -31,7 +31,7 @@ export type TodayItem = {
   orderId?: string;
   orderVersion?: number;
   invoiceId?: string;
-  invoiceMail?:{customerId:string;documentId:string;expectedInvoiceIds:string[];number:string;count:number};
+  invoiceMail?:{customerId:string;documentId:string;expectedInvoiceIds:string[];number:string;count:number;customerName:string;singleInvoice:true};
   graphMessageId?: string;
   target?:{screen:'reklamation'|'mail'|'aufgabe'|'kv';arg:string};
   bundleSurface?: string;
@@ -39,7 +39,7 @@ export type TodayItem = {
   snoozedUntil?: string;
   assignedToName?: string;
   assignmentVersion?: number;
-  primaryActionLabel?: ReturnType<typeof E_INVOICE_COPY.sendInvoice> | typeof SITUATION_COPY.quote.openOrder | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
+  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | typeof SITUATION_COPY.quote.openOrder | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
 };
 
 export type TodayCollectionNotice = {
@@ -215,18 +215,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
             AND active=true
         `)) : {code:'OK' as const,data:[] as AssignmentRow[]};
       const assignments=assignmentSource.code==='OK'?assignmentSource.data:[];
-      const invoiceMailSource=canTransportInvoiceDocument(auth)?await readTodaySource(tx,async nested=>{
-       const originals=await readUnsentInvoiceOriginals(nested,auth.tenantId),seen=new Set<string>(),missing:string[]=[];
-       const groups:Array<{customerId:string;customerName:string;id:string;number:string;orderId:string|null;ids:string[];count:number}>=[];
-       for(const original of originals){
-        const key=JSON.stringify([original.customerId,original.orderId===null,original.handover]);
-        if(seen.has(key))continue;seen.add(key);
-        const cohort=await readTodaySource(nested,reader=>readInvoiceMailCohort(reader,auth.tenantId,original.customerId,original.handover,undefined,original.orderId===null,false,{all:true}));
-        if(cohort.code!=='OK'||!cohort.data.length){missing.push('TODAY_UNSENT_INVOICE_GROUP:'+key);continue;}
-        const group=cohort.data.slice(0,101),first=group[0];groups.push({customerId:original.customerId,customerName:original.customerName,id:first.id,number:first.invoice_number,orderId:first.order_id,ids:group.map(row=>row.id),count:cohort.data.length});
-       }
-       return {groups,missing};
-      }):{code:'OK' as const,data:{groups:[],missing:[]}};
+      const invoiceMailSource=canTransportInvoiceDocument(auth)?await readTodaySource(tx,nested=>readUnsentInvoiceMailGroups(nested,auth.tenantId)):{code:'OK' as const,data:{groups:[],missing:[]}};
       const supportMissing=[...(invoiceMailSource.code!=='OK'?['TODAY_UNSENT_INVOICE_SOURCE']:invoiceMailSource.data.missing),...(preferencesSource.code!=='OK'?['TODAY_PREFERENCES_SOURCE']:[]),...(remindersSource.code!=='OK'?['TODAY_REMINDERS_SOURCE']:[]),...(delegationSource.code!=='OK'?['TODAY_DELEGATION_SOURCE']:[])];
       return { supportMissing,invoiceMailSource,preferences:preferencesSource.code==='OK'?preferencesSource.data:[],reminders:remindersSource.code==='OK'?remindersSource.data:[],invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[], prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[],delegationTargets:delegationSource.code==='OK'?delegationSource.data:[],assignmentSourceIncomplete:assignmentSource.code!=='OK'||assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok) };
     }).catch(error=>{
@@ -345,7 +334,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if(assignmentMessages)for(const mail of assignmentMessages.filter(row=>row.graphMessageId).slice(0,5))add({key:`mail:${mail.id}`,field:'assign',kind:'mail',title:mail.subject||'Mail ohne Betreff',meta:`${mail.senderName} · ${new Intl.DateTimeFormat('de-DE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Berlin'}).format(new Date(mail.at))}`,urgency:'decision',graphMessageId:mail.graphMessageId!});
 
   if(support.invoiceMailSource.code==='OK')for(const original of support.invoiceMailSource.data.groups){
-   add({key:'invoice-mail:'+original.id,field:'action',kind:'invoice',invoiceId:original.id,...(original.orderId?{orderId:original.orderId}:{}),title:original.number,meta:original.customerName,urgency:'warning',primaryActionLabel:E_INVOICE_COPY.sendInvoice(original.number,original.count),invoiceMail:{customerId:original.customerId,documentId:original.id,expectedInvoiceIds:original.ids,number:original.number,count:original.count}});
+   add({key:'invoice-mail:'+original.id,field:'action',kind:'invoice',invoiceId:original.id,...(original.orderId?{orderId:original.orderId}:{}),title:original.number,meta:original.customerName,urgency:'warning',primaryActionLabel:V45_TEXT.out$action$unsent({invoice:original.number,name:original.customerName}),invoiceMail:{customerId:original.customerId,documentId:original.id,expectedInvoiceIds:original.ids,number:original.number,count:original.count,customerName:original.customerName,singleInvoice:true}});
   }
 
   const invoiceMoney=projectTodayInvoiceMoney(support.invoiceSource,calendar);

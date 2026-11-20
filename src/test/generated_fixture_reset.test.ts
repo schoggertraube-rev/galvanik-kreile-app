@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets,settleFixtureReads } from "../../e2e/generated/_fixtureReset";
+import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets,settleFixtureReads,readFixtureResetBlockers } from "../../e2e/generated/_fixtureReset";
 
 describe("isolated replay fixture cleanup", () => {
+  it('observes actual server-lock identities without treating an unreadable lock source as clear',async()=>{
+    const unsafe=vi.fn().mockResolvedValue([{pid:17},{pid:null}]);
+    expect(await readFixtureResetBlockers({unsafe},[{schema:'private',name:'order_freeze_corrections'}])).toEqual([{pid:17},{pid:null}]);
+    expect(unsafe.mock.calls[0][0]).toContain('holder.pid IS DISTINCT FROM pg_backend_pid()');
+    expect(unsafe.mock.calls[0][0]).toContain('datname=current_database()');
+    expect(unsafe.mock.calls[0][0]).toContain("'\"private\".\"order_freeze_corrections\"'::regclass");
+    unsafe.mockResolvedValue([{pid:'unknown'}]);
+    await expect(readFixtureResetBlockers({unsafe},[{schema:'private',name:'order_freeze_corrections'}])).rejects.toThrow('FLOW_REPLAY_LOCK_SOURCE_INVALID');
+    await expect(readFixtureResetBlockers({unsafe},[{schema:'private',name:'broken;sql'}])).rejects.toThrow('FLOW_REPLAY_TABLE_NAME_INVALID');
+  });
   it('awaits the existing browser request drain before completing cleanup',async()=>{
     let release!:()=>void,done=false;
     const waitForLoadState=vi.fn(()=>new Promise<void>(resolve=>{release=resolve;}));

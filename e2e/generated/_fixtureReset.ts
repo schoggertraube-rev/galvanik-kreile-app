@@ -10,6 +10,20 @@ export function fixtureResetTargets(tables:readonly FixtureResetTable[]):string{
  const names=[...new Set(tables.map(table=>`"${table.schema}"."${table.name}"`))].sort();
  return names.join(', ');
 }
+/** A closed browser can leave its real server transaction finishing. Observe
+ * those existing relation locks before attempting the unchanged NOWAIT reset.
+ * This reads this database only; it neither cancels sessions nor changes locks. */
+export async function readFixtureResetBlockers(connection:{unsafe:(query:string)=>Promise<unknown>},tables:readonly FixtureResetTable[]):Promise<Array<{pid:number|null}>>{
+ fixtureResetTargets(tables);
+ const targets=[...new Set(tables.map(table=>`'"${table.schema}"."${table.name}"'::regclass`))].sort().join(', ');
+ const rows=await connection.unsafe(`SELECT DISTINCT holder.pid FROM pg_locks holder
+ WHERE holder.locktype='relation' AND holder.granted
+ AND holder.database=(SELECT oid FROM pg_database WHERE datname=current_database())
+ AND holder.relation IN (${targets}) AND holder.pid IS DISTINCT FROM pg_backend_pid()
+ ORDER BY holder.pid NULLS FIRST`);
+ if(!Array.isArray(rows)||rows.some(row=>!row||typeof row!=='object'||!('pid'in row)||row.pid!==null&&!Number.isInteger(row.pid)))throw Error('FLOW_REPLAY_LOCK_SOURCE_INVALID');
+ return rows as Array<{pid:number|null}>;
+}
 /** Acquire the complete FK-cascade closure before changing any fixture. NOWAIT
  * rolls back partial lock acquisition instead of deadlocking a reader that
  * already holds a later table. A later reader waits until this reset commits. */
