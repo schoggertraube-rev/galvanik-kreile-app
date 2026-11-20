@@ -17,7 +17,7 @@ export type CompanySettingsInput = {
 export type ProtocolSettings={retentionDays:number|null;slowMs:number;hangMs:number};
 export type CompanySettingsSnapshot = {
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
-}&{protocol?:ProtocolSettings|null};
+}&{protocol?:ProtocolSettings|null;pageReadsSchemaReady?:boolean};
 export type CompanyLetterSettings=Pick<CompanySettingsInput,'companyName'|'street'|'zip'|'city'|'country'>&{phone?:string|null;taxId?:string|null;logoUrl?:string|null};
 export type ShippingSettings = {
   shippingFeeCents?:number|null;

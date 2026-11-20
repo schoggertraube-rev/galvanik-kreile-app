@@ -1,6 +1,6 @@
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {parsePageReadSettings} from '@/lib/domain/pageReadSettings';
+import {parsePageReadSettings,pageReadSettingsFromCompany} from '@/lib/domain/pageReadSettings';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
@@ -51,16 +51,24 @@ export type SystemSettingsContext = {
   canManageStorageCharges?: boolean;
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean;includeDeliveryNoteIdentity?:boolean };
+// JSON-key presence lets a PR preview read the previous merged schema without
+// applying unmerged SQL to Dev. A malformed present value never defaults.
+const pageReadProjection=sql`jsonb_build_object(
+ 'hasQueryTimeout',to_jsonb(company_settings) ? 'seiten_abfrage_ms',
+ 'hasInvoiceBatchLimit',to_jsonb(company_settings) ? 'rechnung_mail_grenze',
+ 'queryTimeoutMs',to_jsonb(company_settings)->'seiten_abfrage_ms',
+ 'invoiceMailBatchLimit',to_jsonb(company_settings)->'rechnung_mail_grenze') AS page_read_source`;
 export async function readPageReadSettings(context:{tenantId:string}){
- const rows=await withPrivilegedTenantTransaction(context,tx=>tx.execute<{queryTimeoutMs:number;invoiceMailBatchLimit:number}>(sql`
-  SELECT seiten_abfrage_ms AS "queryTimeoutMs",rechnung_mail_grenze AS "invoiceMailBatchLimit"
+ const rows=await withPrivilegedTenantTransaction(context,tx=>tx.execute<{page_read_source:unknown}>(sql`
+  SELECT ${pageReadProjection}
   FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY id LIMIT 2`));
  if(rows.length!==1)throw Error('PAGE_READ_SETTINGS_SOURCE_INCOMPLETE');
- const settings=parsePageReadSettings(rows[0]);
- if(!settings)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');
- return settings;
+ const source=pageReadSettingsFromCompany(rows[0].page_read_source);
+ if(!source)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');
+ return source.settings;
 }
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;seiten_abfrage_ms?:number;rechnung_mail_grenze?:number };
+
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 export async function readCompanyLetterSettings(context:CompanyDocumentContext){
  if(!context.canRead)return {code:'FORBIDDEN' as const};
@@ -165,7 +173,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,seiten_abfrage_ms,rechnung_mail_grenze FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,${pageReadProjection} FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -192,7 +200,8 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           city: company.city, country: company.country, taxId: company.tax_id, taxNumber: company.tax_number ?? null,
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
-          pageReads:parsePageReadSettings({queryTimeoutMs:company.seiten_abfrage_ms,invoiceMailBatchLimit:company.rechnung_mail_grenze}),
+          pageReads:pageReadSettingsFromCompany(company.page_read_source)?.settings??null,
+          pageReadsSchemaReady:pageReadSettingsFromCompany(company.page_read_source)?.schemaReady===true,
           protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
         } : EMPTY_COMPANY,
         users: users.map((user): ManagedUser => {

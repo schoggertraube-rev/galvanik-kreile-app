@@ -521,4 +521,4 @@ export const PENDING_UNDO_COPY={title:'Wartende Aktionen',undo:'Rückgängig',
 } as const;
 
 /** PL20.11 L1: operating limits in the existing company settings. */
-export const PAGE_READ_COPY={sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."} as const;
+export const PAGE_READ_COPY={sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."} as const;

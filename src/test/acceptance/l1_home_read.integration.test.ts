@@ -10,6 +10,7 @@ import {readPageReadSettings} from '@/modules/fundament/server-public';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
 import {db} from '@/db';
+import {pageReadSettingsFromCompany,DEFAULT_PAGE_READ_SETTINGS} from '@/lib/domain/pageReadSettings';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {SALES_STAGE_FEATURES} from '@/modules/fundament/public';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
@@ -108,4 +109,21 @@ it('retains known Today sources when an unreadable TEST order makes the full ope
   expect(result.dashboard.datenluecken).toContain('ORDER_SOURCE');
   expect(result.dashboard.moneySources?.invoices).toMatchObject({code:'OK'});
  });
+});
+
+
+it('qualifies real company JSON before and after the additive schema, rejecting partial or invalid settings',async()=>{
+ const [row]=await sql`SELECT to_jsonb(company) AS source FROM public.company_settings company WHERE tenant_id=${tenant}`;
+ expect(row?.source).toBeDefined();
+ const source=row.source as Record<string,unknown>;
+ const project=(value:Record<string,unknown>)=>pageReadSettingsFromCompany({hasQueryTimeout:Object.hasOwn(value,'seiten_abfrage_ms'),hasInvoiceBatchLimit:Object.hasOwn(value,'rechnung_mail_grenze'),queryTimeoutMs:value.seiten_abfrage_ms,invoiceMailBatchLimit:value.rechnung_mail_grenze});
+ expect(project(source)).toEqual({settings:companyInput.pageReads,schemaReady:true});
+ // Only an explicitly labelled synthetic old-schema projection omits both
+ // new keys; no live column, row, migration or evidence is changed.
+ const oldSchemaProjection={...source};delete oldSchemaProjection.seiten_abfrage_ms;delete oldSchemaProjection.rechnung_mail_grenze;
+ expect(project(oldSchemaProjection)).toEqual({settings:DEFAULT_PAGE_READ_SETTINGS,schemaReady:false});
+ expect(project({...oldSchemaProjection,seiten_abfrage_ms:2000})).toBeNull();
+ expect(project({...source,seiten_abfrage_ms:null})).toBeNull();
+ expect(project({...source,rechnung_mail_grenze:0})).toBeNull();
+ expect(await withSession(full,()=>readSettingsAction())).toMatchObject({code:'OK',snapshot:{company:{pageReadsSchemaReady:true,pageReads:companyInput.pageReads}}});
 });
