@@ -775,48 +775,7 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
   const {db}=await withPageReadPhase('cards.import',()=>import('@/db'));
   const readRows=(nested:import('./privilegedDb').PrivilegedTenantTransaction,selectedIds:readonly string[])=>{
    const ids=sql`ARRAY[${sql.join(selectedIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
-   return nested.execute<TodayCardRow>(sql`
-    WITH selected AS MATERIALIZED (
-     SELECT queue.id,queue.tenant_id,queue.version,queue.order_number,queue.customer_id,queue.customer_name,
-      queue.title,queue.task,queue.station,queue.current_station,queue.current_station_id,queue.status,
-      queue.intake_date,queue.due_date::date::text AS due_date,queue.created_at,queue.tenant_integrity_ok,
-      orders.intake_source,orders.handover_mode,orders.source,orders.nacharbeit_zu,
-      EXISTS(SELECT 1 FROM private.quote_conversion_receipts quote WHERE quote.tenant_id=orders.tenant_id AND quote.order_id=orders.id) AS has_commercial_quote
-     FROM private.v_operational_station_queue_v1 queue JOIN public.orders orders ON orders.tenant_id=queue.tenant_id AND orders.id=queue.id
-     WHERE queue.tenant_id=${authorization.tenantId} AND queue.id=ANY(${ids})
-    ), latest_content AS (
-     SELECT DISTINCT ON(order_id) tenant_id,order_id,event_type,event_schema_version,aggregate_version,status,payload
-     FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=ANY(${ids}) AND event_type='ORDER_CONTENT_CHANGED_V1'
-     ORDER BY order_id,aggregate_version DESC,created_at DESC
-    ), latest_handover AS (
-     SELECT DISTINCT ON(order_id) order_id,id,event_type,payload FROM public.events
-     WHERE tenant_id=${authorization.tenantId} AND order_id=ANY(${ids}) AND event_type IN('ORDER_HANDOVER_MAIL_V1','ORDER_HANDOVER_CHANGED_V1') AND event_schema_version=1 AND status='success'
-     ORDER BY order_id,aggregate_version DESC,created_at DESC,id DESC
-    )
-    SELECT 'queue' AS kind,id AS order_id,0::bigint AS position,to_jsonb(selected) AS data FROM selected
-    UNION ALL
-    SELECT 'item',item.order_id,row_number() OVER(PARTITION BY item.order_id ORDER BY item.created_at,item.id),
-     jsonb_build_object('id',item.id,'name',item.name,'quantity',item.quantity,'material',item.material,'surface_requested',item.surface_requested,'execution_requested',item.execution_requested,
-      'catalog_service_id',item.catalog_service_id::text,'unit',item.unit,'unit_price_cents',CASE WHEN item.preis_netto IS NULL THEN NULL ELSE round(item.preis_netto*100)::bigint END,'vat_rate_basis_points',item.vat_rate_basis_points,'current_station_id',item.current_station_id)
-     FROM public.items item WHERE item.tenant_id=${authorization.tenantId} AND item.order_id=ANY(${ids})
-    UNION ALL
-    SELECT 'intake',receipt.order_id,row_number() OVER(PARTITION BY receipt.order_id ORDER BY receipt.recorded_at DESC),
-     jsonb_build_object('tenant_id',receipt.tenant_id,'order_id',receipt.order_id,'customer_id',receipt.customer_id,'items_snapshot',receipt.items_snapshot,'current_order_version',receipt.current_order_version,'current_station',receipt.current_station,'current_status',receipt.current_status,'integrity_ok',receipt.integrity_ok,'surface_mapping_readable',receipt.surface_mapping_readable)
-     FROM private.v_order_intake_receipts_v1 receipt WHERE receipt.tenant_id=${authorization.tenantId} AND receipt.order_id=ANY(${ids})
-    UNION ALL SELECT 'content',order_id,0,to_jsonb(latest_content) FROM latest_content
-    UNION ALL
-    SELECT 'price',event.order_id,row_number() OVER(PARTITION BY event.order_id ORDER BY event.aggregate_version,event.created_at,event.id),jsonb_build_object('aggregate_version',event.aggregate_version,'payload',event.payload)
-     FROM public.events event WHERE event.tenant_id=${authorization.tenantId} AND event.order_id=ANY(${ids}) AND event.event_type='ORDER_INVOICE_PRICES_SET_V1' AND event.status='success' AND event.event_schema_version=1 AND event.user_id IS NOT NULL
-    UNION ALL
-    SELECT 'extra',line.order_id,row_number() OVER(PARTITION BY line.order_id ORDER BY line.item_id,line.catalog_position_name,line.catalog_position_id),
-     jsonb_build_object('tenant_id',line.tenant_id,'order_id',line.order_id,'item_id',line.item_id,'line_id',line.line_id::text,'catalog_position_id',line.catalog_position_id::text,'catalog_position_name',line.catalog_position_name,'minutes',line.minutes,'hourly_rate_cents',line.hourly_rate_cents,'amount_cents',line.amount_cents,'frozen',line.frozen,'line_version',line.line_version,'frozen_at',line.frozen_at,'integrity_ok',line.integrity_ok)
-     FROM private.v_order_extra_work_live_v1 line WHERE line.tenant_id=${authorization.tenantId} AND line.order_id=ANY(${ids})
-    UNION ALL
-    SELECT 'freeze',frozen.order_id,row_number() OVER(PARTITION BY frozen.order_id ORDER BY frozen.occurred_at DESC),
-     jsonb_build_object('tenant_id',frozen.tenant_id,'order_id',frozen.order_id,'aggregate_version',frozen.aggregate_version,'freeze_id',frozen.freeze_id::text,'rate_id',frozen.rate_id::text,'hourly_rate_cents',frozen.hourly_rate_cents,'total_amount_cents',frozen.total_amount_cents,'line_count',frozen.line_count,'frozen_at',frozen.frozen_at,'integrity_ok',frozen.integrity_ok)
-     FROM private.v_order_frozen_receipts_v1 frozen WHERE frozen.tenant_id=${authorization.tenantId} AND frozen.order_id=ANY(${ids}) AND frozen.active=true
-    UNION ALL SELECT 'handover',order_id,0,to_jsonb(latest_handover) FROM latest_handover
-    ORDER BY kind,order_id,position`);
+   return nested.execute<TodayCardRow>(sql`SELECT * FROM private.read_today_card_snapshot_v1(${authorization.tenantId},${ids})`);
    };
    let rows:TodayCardRow[];
    try{rows=Array.from(await withPageReadPhase('cards.snapshot',()=>withPrivilegedTenantTransaction(authorization,tx=>withTenantSavepoint(tx,nested=>readRows(nested,orderIds)))));}

@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-21",
+    "pr": 254,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Nach der Anmeldung kannst du Dialoge früher öffnen."
+    ]
+  },
+  {
+    "datum": "2026-11-21",
     "pr": 253,
     "seite": "heute",
     "ziel": "/",

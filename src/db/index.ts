@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import {withPageReadQueryLimits,isAuthorizationRead,AUTHORIZATION_READ_TIMEOUT_MS,DEFAULT_PAGE_READ_SETTINGS} from './readBudget';
+import {withPageReadQueryLimits,isAuthorizationRead,AUTHORIZATION_READ_TIMEOUT_MS,DEFAULT_PAGE_READ_SETTINGS,observeNativePageReadQuery} from './readBudget';
 import * as baseSchema from './schema';
 import * as buchhaltungSchema from './schema_buchhaltung';
 import * as marketingSchema from './schema_marketing';
@@ -19,7 +19,7 @@ const globalForDb = globalThis as unknown as {
   authorizationReadConn: postgres.Sql | undefined;
 };
 
-const client = globalForDb.conn ?? postgres(connectionString, { prepare: false });
+const client = globalForDb.conn ?? postgres(connectionString, { prepare: false,debug:observeNativePageReadQuery });
 if (process.env.NODE_ENV !== "production") globalForDb.conn = client;
 
 const primaryDb=drizzle(withPageReadQueryLimits(client),{schema});
@@ -49,7 +49,7 @@ function authorizationDatabase():typeof primaryDb{
  if(authorizationDb)return authorizationDb;
  // Same configured database/provider, a maximum of two read connections.
  // No role, grant, credential, table or writer is introduced.
- const native=globalForDb.authorizationReadConn??postgres(connectionString,{prepare:false,max:DEFAULT_PAGE_READ_SETTINGS.authorizationPoolSize,connect_timeout:Math.ceil(AUTHORIZATION_READ_TIMEOUT_MS/1000),idle_timeout:DEFAULT_PAGE_READ_SETTINGS.authorizationIdleTimeoutSeconds});
+ const native=globalForDb.authorizationReadConn??postgres(connectionString,{prepare:false,max:DEFAULT_PAGE_READ_SETTINGS.authorizationPoolSize,connect_timeout:Math.ceil(AUTHORIZATION_READ_TIMEOUT_MS/1000),idle_timeout:DEFAULT_PAGE_READ_SETTINGS.authorizationIdleTimeoutSeconds,debug:observeNativePageReadQuery});
  if(process.env.NODE_ENV!=='production')globalForDb.authorizationReadConn=native;
  authorizationDb=drizzle(readOnlyQueries(withPageReadQueryLimits(native)),{schema});
  return authorizationDb;

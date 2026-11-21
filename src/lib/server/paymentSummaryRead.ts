@@ -2,7 +2,7 @@ import {formatEuro} from '@/lib/domain/formatEuro';
 import "server-only";
 import {readOpenOrderComplaint,readOpenOrderComplaintsBatch} from './orderReleaseRead';
 
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {
@@ -10,7 +10,6 @@ import {
   mapOrderPaymentStateRow,
   mapPaymentSummaryRow,
   readOrderPaymentSummaries,
-  classifyOverdue,
   type OrderPaymentState,
   type OrderPaymentStateRow,
   type PaymentSummary,
@@ -84,22 +83,7 @@ export async function readPaymentSummary(
 
 type PaymentStateSourceRow=OrderPaymentStateRow & {credit_customer_id:string;customer_overdue_invoice_ids:string[]};
 type CreditSourceRead=(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>;
-function orderPaymentStateQuery(orderId:string|SQL){return sql`
-        SELECT state.*, parent.customer_id AS credit_customer_id, ARRAY (
-          SELECT invoice.id::text FROM public.invoices invoice
-          JOIN public.orders orders
-            ON orders.tenant_id = invoice.tenant_id
-            AND orders.customer_id = invoice.customer_id
-          WHERE orders.tenant_id = state.tenant_id
-            AND orders.id = state.order_id
-            AND ${classifyOverdue()}
-          ORDER BY invoice.due_date,invoice.id
-        ) AS customer_overdue_invoice_ids
-        FROM private.v_goods_out_ui_state_v1 state
-        JOIN public.orders parent ON parent.tenant_id=state.tenant_id AND parent.id=state.order_id
-        WHERE state.order_id = ${orderId}
-        LIMIT 2
-      `;}
+
 async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,rows:PaymentStateSourceRow[],complaint:Awaited<ReturnType<typeof readOpenOrderComplaint>>,readCredit?:CreditSourceRead){
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
@@ -134,10 +118,9 @@ async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:
 async function readPaymentStateGroup(authorization:AuthorizationSnapshot,orderIds:string[],readCredit?:CreditSourceRead){
  return withPrivilegedTenantTransaction(authorization,async tx=>{
   const grouped=new Map<string,PaymentStateSourceRow[]>(orderIds.map(orderId=>[orderId,[]]));
-  if(orderIds.length===1){grouped.set(orderIds[0],await tx.execute<PaymentStateSourceRow>(orderPaymentStateQuery(orderIds[0])));}
-  else{
-   const requested=sql.join(orderIds.map(orderId=>sql`(${orderId})`),sql`,`);
-   const records=await tx.execute<PaymentStateSourceRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) LEFT JOIN LATERAL (${orderPaymentStateQuery(sql`requested.order_id`)}) source ON true`);
+  {
+   const requested=sql`ARRAY[${sql.join(orderIds.map(orderId=>sql`${orderId}`),sql`, `)}]::text[]`;
+   const records=await tx.execute<PaymentStateSourceRow & {batch_order_id:string}>(sql`SELECT * FROM private.read_order_payment_states_v1(${authorization.tenantId},${requested})`);
    const seen=new Set<string>();
    for(const record of records){
     const rows=grouped.get(record.batch_order_id);if(!rows)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");seen.add(record.batch_order_id);

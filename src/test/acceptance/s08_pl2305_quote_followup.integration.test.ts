@@ -437,7 +437,7 @@ it('batches the actual shipping header once without changing zero, one, several,
  const expected=await Promise.all(inputs.map(input=>readInvoiceShippingConsequences(auth.data,input,readInvoiceVat,readShippingSettingsInTransaction)));
  const options=db.$client.options,previous=options.debug;let headers=0,issueSources=0,settingsReads=0,receiptQueries=0;
  const countedSettings:typeof readShippingSettingsInTransaction=async(...args)=>{settingsReads++;return readShippingSettingsInTransaction(...args);};
- options.debug=(_connection,statement)=>{if(statement.includes('AS invoice_exists')&&statement.includes('AS freeze_invalid'))headers++;if(statement.includes('FROM private.v_invoice_issue_source_v2 source'))issueSources++;if(statement.includes('FROM private.v_invoice_receipt_v1')&&statement.includes("event.payload->'shippingCosts'"))receiptQueries++;};
+ options.debug=(_connection,statement)=>{if(statement.includes('private.read_invoice_shipping_headers_v1'))headers++;if(statement.includes('FROM private.v_invoice_issue_source_v2 source'))issueSources++;if(statement.includes('FROM private.v_invoice_receipt_v1')&&statement.includes("event.payload->'shippingCosts'"))receiptQueries++;};
  try{
   expect(await readInvoiceShippingConsequencesBatch(auth.data,[],readInvoiceVat,countedSettings)).toEqual(new Map());expect(headers).toBe(0);expect(issueSources).toBe(0);expect(settingsReads).toBe(0);expect(receiptQueries).toBe(0);
   const one=await readInvoiceShippingConsequencesBatch(auth.data,inputs.slice(0,1),readInvoiceVat,countedSettings);expect(headers).toBe(1);expect(one.get(inputs[0].orderId)).toEqual(expected[0]);expect(issueSources).toBe(0);

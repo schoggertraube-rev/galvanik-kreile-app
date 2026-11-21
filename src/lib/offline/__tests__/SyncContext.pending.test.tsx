@@ -1,6 +1,9 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {SyncProvider,useSync} from '../SyncContext';
+// Existing queue/receipt projection probes keep an immediate deterministic scheduler;
+// the new idle timing is exercised with the real scheduler in the timing probes.
+vi.mock('@/lib/client/scheduleIdleRead',()=>({scheduleIdleRead:(read:()=>void)=>{read();return()=>{};}}));
 const state=vi.hoisted(()=>({scope:'a'.repeat(64),status:'authenticated',offline24h:false}));
 const ports=vi.hoisted(()=>({read:vi.fn(),retain:vi.fn(),readStand:vi.fn(),refreshStand:vi.fn(async()=>({code:'DISABLED'})),sync:vi.fn(async(...args:unknown[])=>{void args;return {secured:0,acknowledged:0,blocked:1};})}));
 vi.mock('@/lib/auth/PermissionsContext',()=>({usePermissions:()=>({offlineScope:state.scope,status:state.status,offline24h:state.offline24h,hasArea:()=>false})}));
