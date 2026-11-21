@@ -82,7 +82,8 @@ export function createDeferredDialogEvents(load:()=>void){
 }
 /** Child effects install the actual receiver before this parent effect releases its events. */
 export function withDeferredDialogReady<P extends object>(Component:ComponentType<P>,group:DeferredDialogGroup){
- return function DeferredDialogReady({onReceiverReady,onReceiverFailed:_onReceiverFailed,...props}:P&{onReceiverReady:(group:DeferredDialogGroup)=>void;onReceiverFailed?:(group:DeferredDialogGroup)=>void}){
+ return function DeferredDialogReady({onReceiverReady,...props}:P&{onReceiverReady:(group:DeferredDialogGroup)=>void;onReceiverFailed?:(group:DeferredDialogGroup)=>void}){
+  Reflect.deleteProperty(props,'onReceiverFailed');
   useEffect(()=>{onReceiverReady(group);},[onReceiverReady]);
   return createElement(Component,props as P);
  };
