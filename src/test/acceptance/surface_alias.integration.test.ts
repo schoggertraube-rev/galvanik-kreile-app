@@ -10,7 +10,7 @@ import {ORDER_POSITION_SURFACES,ORDER_POSITION_SURFACE_ALIASES,normaliseOrderPos
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 const database=process.env.DATABASE_URL;
-if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||new URL(database).port!=='54342')throw Error('TEST_ALIAS_OWN_LOOPBACK_REQUIRED');
+if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'||!['54322','54342'].includes(new URL(database).port)||new URL(database).pathname!=='/postgres')throw Error('TEST_ALIAS_APPROVED_REPLAY_REQUIRED');
 
 it('251 one shared vocabulary maps zero/one/many legacy inputs identically in TypeScript and actual SQL, while unknown stays refused',async()=>{
  const cases:Array<{input:string;key:string}>=ORDER_POSITION_SURFACES.flatMap(option=>[{input:option.key,key:option.key},{input:option.label,key:option.key}]);
