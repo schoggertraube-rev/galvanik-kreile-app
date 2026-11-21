@@ -86,8 +86,9 @@ export function GlobalCreateAppAdapter() {
     return null;
   });
   const { canAction, hasArea, name, role, areas,offlineScope } = usePermissions();
-  const [dialogsRequested,setDialogsRequested]=useState(false);
-  const deferredDialogs=useMemo(()=>createDeferredDialogEvents(()=>setDialogsRequested(true)),[offlineScope,role]);
+  const [dialogRequest,setDialogRequest]=useState<{scope:typeof offlineScope}|null>(null);
+  const dialogsRequested=dialogRequest?.scope===offlineScope;
+  const deferredDialogs=useMemo(()=>createDeferredDialogEvents(()=>{if(role&&isAppRole(role))setDialogRequest({scope:offlineScope});}),[offlineScope,role]);
   const receiverReady=useCallback((group:DeferredDialogGroup)=>deferredDialogs.ready(group),[deferredDialogs]);
   useLayoutEffect(()=>{
     if(!role||!isAppRole(role))return;
@@ -96,11 +97,11 @@ export function GlobalCreateAppAdapter() {
   useEffect(()=>{
     if(!role||!isAppRole(role))return;
     const cancel=scheduleIdleRead(()=>{
-      setDialogsRequested(true);
+      setDialogRequest({scope:offlineScope});
       void Promise.all([loadCreate(),loadMessage(),loadObject(),loadInvoice(),loadComplaint(),loadCommunication()]).catch(()=>console.warn('[DIALOG_PRELOAD_FAILED]'));
     },1500);
     return cancel;
-  },[deferredDialogs,role]);
+  },[deferredDialogs,role,offlineScope]);
   const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,...(canAction('createQuote')?{createQuote:(source:{id:string;number:string;customerId:string})=>requestGlobalCreate({intent:'QUOTE',prefill:{sourceComplaint:source}})}:{}),read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,sendReminder:sendeNacharbeitBegleitscheinAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
     addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
