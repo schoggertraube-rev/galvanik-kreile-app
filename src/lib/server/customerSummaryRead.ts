@@ -542,6 +542,16 @@ export async function readCustomerSummary(
 }
 
 export async function readCustomerProfile(tx: PrivilegedTenantTransaction, tenantId: string, customerId: string, lock = false) {
+  const profiles=await readCustomerProfiles(tx,tenantId,[customerId],lock);
+  const profile=profiles.get(customerId);
+  if(profile===undefined)throw Error('CUSTOMER_PROFILE_SOURCE_INCOMPLETE');
+  return profile;
+}
+
+/** One stored profile projection and the same row locks for single/set consumers. */
+export async function readCustomerProfiles(tx:PrivilegedTenantTransaction,tenantId:string,customerIds:readonly string[],lock=false):Promise<Map<string,CustomerStoredProfile|null>>{
+  const ids=[...new Set(customerIds)],profiles=new Map<string,CustomerStoredProfile|null>(ids.map(id=>[id,null]));
+  if(!ids.length)return profiles;
   const rows = await tx.execute<Omit<CustomerStoredProfile,"contactPerson">>(sql`
     SELECT id,customer_number AS "customerNumber",name,type AS "customerType",company_name AS "companyName",
       salutation,first_name AS "firstName",last_name AS "lastName",contact_role AS "contactRole",phone,email,
@@ -550,8 +560,13 @@ export async function readCustomerProfile(tx: PrivilegedTenantTransaction, tenan
       iban,zahlungsziel_tage AS "paymentTermDays",auto_info AS "autoInfo",vorrang,
       address_status AS "addressStatus",
       ziel_freigeschaltet AS "invoiceTermsEnabled",ziel_tage AS "invoiceTermDays"
-    FROM public.customers WHERE tenant_id=${tenantId} AND id=${customerId} LIMIT 2 ${lock ? sql`FOR UPDATE` : sql`FOR SHARE`}
+    FROM public.customers WHERE tenant_id=${tenantId} AND id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[]) ORDER BY id ${lock ? sql`FOR UPDATE` : sql`FOR SHARE`}
   `);
-  if (rows.length !== 1 || !rows[0]) return null;
-  return {...rows[0],contactPerson:customerContactLabel(rows[0])};
+  const grouped=new Map<string,Array<Omit<CustomerStoredProfile,'contactPerson'>>>();
+  for(const row of rows){
+    if(!profiles.has(row.id))throw Error('CUSTOMER_PROFILE_SOURCE_INCOMPLETE');
+    const group=grouped.get(row.id);if(group)group.push(row);else grouped.set(row.id,[row]);
+  }
+  for(const id of ids){const group=grouped.get(id);if(group?.length===1)profiles.set(id,{...group[0],contactPerson:customerContactLabel(group[0])});}
+  return profiles;
 }

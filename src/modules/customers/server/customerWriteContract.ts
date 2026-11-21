@@ -122,4 +122,4 @@ export function customerDatabaseFields(value: CustomerFormValue) {
   };
 }
 
-export {readCustomerProfile} from "@/lib/server/customerSummaryRead";
+export {readCustomerProfile,readCustomerProfiles} from "@/lib/server/customerSummaryRead";

@@ -6,7 +6,7 @@ import {full,sql,withSession,createFixture,nativeFetch} from '../../../e2e/ablau
 import {readyOrderForInvoice,readyInvoiceOrder,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
-import {readCustomerProfile} from '@/modules/customers/server-public';
+import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {getPaymentStatesBatch} from '@/lib/server/paymentSummaryRead';
@@ -26,6 +26,7 @@ if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database
 type ManualShippingPorts=Parameters<typeof readManualShippingBatch>[2];
 const ports:ManualShippingPorts={
  readCustomer:readCustomerProfile,
+ readCustomers:readCustomerProfiles,
  readSettings:readShippingSettingsInTransaction,
  readAllocation:(tx,tenantId,customerId,input)=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat),
 };
@@ -43,7 +44,7 @@ it('250 manual shipping retains real zero/one/many sources, shared reads, rights
  expect(singles.every(row=>row.code==='OK')).toBe(true);
  let customers=0,settings=0;
  const counted:ManualShippingPorts={...ports,
-  readCustomer:async(...args)=>{customers++;return readCustomerProfile(...args);},
+  readCustomers:async(...args)=>{customers++;return readCustomerProfiles(...args);},
   readSettings:async(...args)=>{settings++;return readShippingSettingsInTransaction(...args);},
  };
  expect(await readManualShippingBatch(actor,[],counted)).toEqual(new Map());
@@ -81,28 +82,29 @@ it('250 a real SQL failure rolls back before isolating the bad shipping group an
  const b=await readyOrderForInvoice('TEST 250 isolated shipping B','shipping');
  const first=await manualTrackingFixture(a.orderId);await manualTrackingFixture(b.orderId);
  const actor=await authorization(),expected=await withSession(full,()=>getManualShippingAction({orderId:a.orderId}));
- const fault:ManualShippingPorts={...ports,readCustomer:async(tx,tenantId,customerId)=>{
-  const customer=await readCustomerProfile(tx,tenantId,customerId);
+ const fault:ManualShippingPorts={...ports,readCustomers:async(tx,tenantId,customerIds)=>{
+  const customers=await readCustomerProfiles(tx,tenantId,customerIds);
   // Explicit synthetic failure, executed by the real PostgreSQL transaction;
   // no authorization, source reader or successful result is doubled.
-  if(customerId===b.customerId)await tx.execute(query`SELECT 1 / 0 AS test_followup_failure`);
-  return customer;
+  if(customerIds.includes(b.customerId))await tx.execute(query`SELECT 1 / 0 AS test_followup_failure`);
+  return customers;
  }};
  const isolated=await readManualShippingBatch(actor,[a.orderId,b.orderId],fault);
  expect(isolated.get(a.orderId)).toEqual(expected);
  expect(isolated.get(a.orderId)).toMatchObject({code:'OK',data:{shipments:[{id:first.shipmentId,trackingNumber:first.trackingNumber}]}});
  expect(isolated.get(b.orderId)).toMatchObject({code:'UNAVAILABLE',reason:'MANUAL_SHIPPING_READ_FAILED'});
- const repaired=await readManualShippingBatch(actor,JSON.parse(JSON.stringify([a.orderId,b.orderId])),ports);
+ const repairedRead=await countSourceQueries(()=>readManualShippingBatch(actor,JSON.parse(JSON.stringify([a.orderId,b.orderId])),ports),/FROM public\.customers WHERE/);
+ const repaired=repairedRead.value;expect(repairedRead.reads).toBe(1);
  expect(repaired.get(a.orderId)).toEqual(expected);expect(repaired.get(b.orderId)).toMatchObject({code:'OK'});
  expect((await readManualShippingBatch(actor,['TEST-missing-order'],ports)).get('TEST-missing-order')).toMatchObject({code:'NOT_FOUND'});
 });
 
 const readCredit:NonNullable<Parameters<typeof getPaymentStatesBatch>[2]>=(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
-async function countComplaintQueries<T>(work:()=>Promise<T>){
+async function countSourceQueries<T>(work:()=>Promise<T>,source=/FROM public\.complaints\b/){
  const options=db.$client.options,previous=options.debug;let reads=0;
  options.debug=(connection,text,parameters,types)=>{
   if(typeof previous==='function')previous(connection,text,parameters,types);
-  if(/FROM public\.complaints\b/.test(text))reads++;
+  if(source.test(text))reads++;
  };
  try{return {value:await work(),get reads(){return reads;}};}finally{options.debug=previous;}
 }
@@ -116,7 +118,7 @@ it('250 payment batch preserves real zero/one/many originals and money rights, t
  expect(singles.every(row=>row.code==='OK')).toBe(true);
  expect(await getPaymentStatesBatch(actor,[],readCredit)).toEqual(new Map());
  let sourceCreditReads=0;
- const counted=await countComplaintQueries(()=>getPaymentStatesBatch(actor,[...ids,a.orderId],async(...args)=>{sourceCreditReads++;return readCredit(...args);}));
+ const counted=await countSourceQueries(()=>getPaymentStatesBatch(actor,[...ids,a.orderId],async(...args)=>{sourceCreditReads++;return readCredit(...args);}));
  const batch=counted.value;
  expect(sourceCreditReads).toBe(1);expect(counted.reads).toBe(1);
  expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(singles[0]);expect(batch.get(b.orderId)).toEqual(singles[1]);
@@ -167,7 +169,7 @@ it('250 informed zero/one/many reads preserve actual phone originals, freeze ver
  const deliveryRead=vi.spyOn(deliveryProofs,'readCommunicationDeliveryFailures');
  let batch:Awaited<ReturnType<typeof readOrdersInformed>>;
  try{
-  const counted=await countComplaintQueries(()=>readOrdersInformed(actor,[...ids,a.orderId]));batch=counted.value;
+  const counted=await countSourceQueries(()=>readOrdersInformed(actor,[...ids,a.orderId]));batch=counted.value;
   expect(counted.reads).toBe(1);expect(deliveryRead).toHaveBeenCalledTimes(1);
  }finally{deliveryRead.mockRestore();}
  expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(before[0]);expect(batch.get(b.orderId)).toEqual(before[1]);
