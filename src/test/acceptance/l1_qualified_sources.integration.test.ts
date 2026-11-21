@@ -38,10 +38,10 @@ it('batches actual Today facts once and keeps the same qualified full-card value
  const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_L1_BATCH_AUTH');
  expect(await readTodayOrderCards(authorization.data,[])).toEqual(new Map());
  expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toEqual({code:'OK',data:{rows:[]}});
- const options=db.$client.options,previous=options.debug;let batchQueries=0;
- options.debug=(_connection,statement)=>{if(statement.includes('WITH selected AS MATERIALIZED')&&statement.includes("'queue' AS kind"))batchQueries++;};
+ const options=db.$client.options,previous=options.debug;let batchQueries=0,transactions=0;
+ options.debug=(_connection,statement)=>{if(statement.includes('WITH selected AS MATERIALIZED')&&statement.includes("'queue' AS kind"))batchQueries++;if(statement.trim().toLowerCase()==='begin')transactions++;};
  let cards:Awaited<ReturnType<typeof readTodayOrderCards>>;
- try{cards=await readTodayOrderCards(authorization.data,ids);expect(batchQueries).toBe(1);}finally{options.debug=previous;}
+ try{cards=await readTodayOrderCards(authorization.data,ids);expect(batchQueries).toBe(1);expect(transactions).toBe(2);}finally{options.debug=previous;}
  const evidence=await readOrderEvidenceBatch(authorization.data,ids);
  for(const id of ids){
   const ordinary=await withSession(full,()=>getLiveOrderCardAction({orderId:id}));
@@ -120,5 +120,28 @@ it('B1 isolates a genuine unknown-unit SQL exception from two healthy Today orde
  expect(home.dashboard.items.filter(item=>item.key==='source-order:'+bad)).toHaveLength(1);
  expect(home.dashboard.items.find(item=>item.key==='source-order:'+bad)).toMatchObject({field:'action',kind:'order',orderId:bad,orderVersion:fixtures[0].receipt.orderVersion,primaryActionLabel:'Auftrag öffnen'});
  for(const id of ids.slice(1))expect(home.dashboard.orderActions?.rows.some(row=>row.orderId===id)).toBe(true);
+});
+
+it('M6 rolls back a real complaint SQL failure before splitting and preserves the other qualified card',async()=>{
+ const customer=await customerFixture('TEST M6 complaint SQL isolation');
+ const a=await intakeOrderFixture('TEST M6 complaint failure',customer),b=await intakeOrderFixture('TEST M6 healthy complaint source',customer);
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_M6_REAL_AUTH');
+ const ids=[a.receipt.orderId,b.receipt.orderId],before=await readTodayOrderCards(auth.data,ids);
+ expect([...before.values()].every(value=>value.code==='OK')).toBe(true);
+ const release=await import('@/lib/server/orderReleaseRead'),original=release.readOpenOrderComplaintsBatch;
+ const reads:string[][]=[];
+ const fault=vi.spyOn(release,'readOpenOrderComplaintsBatch').mockImplementation(async(tx,tenantId,orderIds)=>{
+  const result=await original(tx,tenantId,orderIds);reads.push([...orderIds]);
+  // Explicit synthetic failure only: canonical source rows and native PostgreSQL remain real.
+  if(orderIds.includes(a.receipt.orderId))await tx.execute(drizzleSql`SELECT 1 / 0 AS test_m6_complaint_failure`);
+  return result;
+ });
+ try{
+  const partial=await readTodayOrderCards(auth.data,ids);
+  expect(partial.get(a.receipt.orderId)).toMatchObject({code:'UNAVAILABLE'});
+  expect(partial.get(b.receipt.orderId)).toEqual(before.get(b.receipt.orderId));
+  expect(reads).toEqual([ids,[ids[0]],[ids[1]]]);
+ }finally{fault.mockRestore();}
+ expect(await readTodayOrderCards(auth.data,JSON.parse(JSON.stringify(ids)))).toEqual(before);
 });
 });

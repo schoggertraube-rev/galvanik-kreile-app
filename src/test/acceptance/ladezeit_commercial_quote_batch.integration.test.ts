@@ -10,6 +10,7 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readOrderCommercialQuote,readOrderCommercialQuotes,type OrderCommercialQuote} from '@/lib/server/orderQuoteReadPort';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {db} from '@/db';
 
 const url=process.env.DATABASE_URL;
@@ -55,6 +56,9 @@ it('reads zero/one/many immutable full and partial awards in two SQL statements,
  expect(affected).toMatchObject({code:'OK',data:{card:{operationalFacts:{pricesMissing:null}}}});
  const healthy=await withSession(full,()=>getLiveOrderCardAction({orderId:sources[1].orderId}));
  expect(healthy).toMatchObject({code:'OK',data:{card:{commercialQuote:sources[1].quote,operationalFacts:{pricesMissing:false}}}});
+ const cards=await readTodayOrderCards(auth.data,sources.map(source=>source.orderId));
+ expect(cards.get(sources[0].orderId)).toMatchObject({code:'OK',data:{operationalFacts:{pricesMissing:null}}});
+ expect(cards.get(sources[1].orderId)).toMatchObject({code:'OK',data:{operationalFacts:{pricesMissing:false}}});
  expect((await read(JSON.parse(JSON.stringify(sources.map(source=>source.orderId))))).get(sources[1].orderId)).toEqual(sources[1].quote);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${tenant}`).toEqual(before);
 });

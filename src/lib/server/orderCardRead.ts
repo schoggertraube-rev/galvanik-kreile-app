@@ -4,7 +4,7 @@ import "server-only";
 import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
 
 import { sql } from "drizzle-orm";
-import {readOrderCommercialQuote,type OrderCommercialQuote} from "./orderQuoteReadPort";
+import {readOrderCommercialQuote,readOrderCommercialQuotes,type OrderCommercialQuote} from "./orderQuoteReadPort";
 import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice, isOrderContentPrice } from "@/lib/orderPositionContract";
 import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel, normaliseOrderPositionSurface } from "@/lib/orderPositionContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -849,42 +849,71 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
    }
    const byOrder=new Map<string,TodayCardRow[]>();
    for(const row of rows){const group=byOrder.get(row.order_id);if(group)group.push(row);else byOrder.set(row.order_id,[row]);}
-   let nextCard=0;
-   const qualifyIsolated=async()=>{
-    while(nextCard<orderIds.length){
-     const orderId=orderIds[nextCard++];if(results.has(orderId))continue;
-     try{await withPageReadPhase('cards.qualify_one',()=>withPrivilegedTenantTransaction(authorization,async tx=>{
+   type PreparedCard={queue:ReturnType<typeof qualifyOrderQueue>;origin:ReturnType<typeof qualifyOrderOrigin>;items:OrderCardItem[];freeze:LiveOrderCard['freeze'];handover:CardHandoverEvent|undefined};
+   const prepared=new Map<string,PreparedCard>();
+   const failCard=(orderId:string,error:unknown)=>{
+    console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});
+    results.set(orderId,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+   };
+   for(const orderId of orderIds){
+    if(results.has(orderId))continue;
+    try{
      const group=byOrder.get(orderId)??[];
      const records=<T>(kind:string)=>group.filter(row=>row.kind===kind).map(row=>row.data as T);
      const queues=records<QueueRow&OrderOriginRow>('queue');
-     if(!queues.length){results.set(orderId,{code:'NOT_FOUND',message:'Auftrag nicht verfügbar.'});return;}
+     if(!queues.length){results.set(orderId,{code:'NOT_FOUND',message:'Auftrag nicht verfügbar.'});continue;}
      const queue=qualifyOrderQueue(authorization,queues),origin=qualifyOrderOrigin(authorization,queues),isReworkOrder=origin.source==='REKLAMATION_NACHARBEIT';
      const content=records<ContentEventRow>('content');if(content.length>1)throw Error('ORDER_CARD_CONTENT_EVENT_INVALID');
      const items=qualifyCurrentOrderItems(authorization,queue,isReworkOrder,records<IntakeRow>('intake'),records<CurrentItemRow>('item'),content[0]??null,records<OrderPriceEvent>('price'));
      const freeze=qualifyOrderFreeze(authorization,queue,items,records<ExtraWorkRow>('extra'),records<FreezeRow>('freeze'));
-     let awardedQuote:OrderCommercialQuote|undefined,awardedQuoteUnavailable=false;
-     if(origin.has_commercial_quote&&queue.status!=='storniert'){
-      try{awardedQuote=await withTenantSavepoint(tx,nested=>readOrderCommercialQuote(nested,authorization.tenantId,orderId));}
-      catch(error){awardedQuoteUnavailable=true;console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});}
-     }
      const handover=records<CardHandoverEvent>('handover');if(handover.length>1)throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
-     const {handoverNotice,activeComplaint}=await withTenantSavepoint(tx,async nested=>({
-      handoverNotice:await qualifyHandoverNotice(nested,authorization,queue,handover[0]),
-      activeComplaint:queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(nested,authorization.tenantId,orderId):undefined,
-     }));
-     const cardItems=qualifiedItemUnits(items,awardedQuote);
-     const money=authorization.permissions.includes('perm_view_prices');
-     results.set(orderId,{code:'OK',data:{id:queue.id,version:queue.version,orderNumber:queue.order_number,customerId:queue.customer_id,customerName:queue.customer_name,title:queue.title,station:queue.station,dueAt:toNullableIso(queue.due_date),handoverMode:queue.handover_mode,
-      items:money?cardItems:cardItems.map(item=>({...item,unitPriceCents:null,vatRateBasisPoints:null,extraWork:item.extraWork.map(line=>({...line,hourlyRateCents:null,amountCents:null}))})),
-      freeze:money||!freeze?freeze:{...freeze,hourlyRateCents:null,totalAmountCents:null},...(handoverNotice?{handoverNotice}:{}),
-      operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint)}});
-    }));}catch(error){
-     console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});
-     results.set(orderId,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+     prepared.set(orderId,{queue,origin,items,freeze,handover:handover[0]});
+    }catch(error){failCard(orderId,error);}
+   }
+   await withPageReadPhase('cards.qualify',()=>withPrivilegedTenantTransaction(authorization,async tx=>{
+    const quoteValues=new Map<string,OrderCommercialQuote|Error>();
+    type Complaint=Awaited<ReturnType<typeof import('./orderReleaseRead').readOpenOrderComplaint>>;
+    const complaintValues=new Map<string,Complaint|Error>();
+    const readQuotes=async(ids:string[]):Promise<void>=>{
+     if(!ids.length)return;
+     try{
+      const values=await withTenantSavepoint(tx,nested=>readOrderCommercialQuotes(nested,authorization.tenantId,ids));
+      for(const id of ids){const value=values.get(id);if(value===undefined)throw Error('ORDER_CARD_QUOTE_PRICE_INVALID');quoteValues.set(id,value);}
+     }catch(error){
+      if(ids.length===1){quoteValues.set(ids[0],error instanceof Error?error:new Error('ORDER_CARD_QUOTE_PRICE_INVALID',{cause:error}));return;}
+      const half=Math.ceil(ids.length/2);await readQuotes(ids.slice(0,half));await readQuotes(ids.slice(half));
+     }
+    };
+    const {readOpenOrderComplaintsBatch}=await import('./orderReleaseRead');
+    const readComplaints=async(ids:string[]):Promise<void>=>{
+     if(!ids.length)return;
+     try{
+      const values=await withTenantSavepoint(tx,nested=>readOpenOrderComplaintsBatch(nested,authorization.tenantId,ids));
+      for(const id of ids){const value=values.get(id);if(value===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');complaintValues.set(id,value);}
+     }catch(error){
+      if(ids.length===1){complaintValues.set(ids[0],error instanceof Error?error:new Error('ORDER_NOTIFICATION_PROOF_INVALID',{cause:error}));return;}
+      const half=Math.ceil(ids.length/2);await readComplaints(ids.slice(0,half));await readComplaints(ids.slice(half));
+     }
+    };
+    const entries=[...prepared.entries()];
+    await readQuotes(entries.filter(([,value])=>value.origin.has_commercial_quote&&value.queue.status!=='storniert').map(([id])=>id));
+    await readComplaints(entries.filter(([,value])=>value.queue.station!=='fertig').map(([id])=>id));
+    for(const [orderId,{queue,origin,items,freeze,handover}] of prepared){
+     try{
+      const quote=quoteValues.get(orderId),awardedQuote=quote instanceof Error?undefined:quote,awardedQuoteUnavailable=quote instanceof Error;
+      if(awardedQuoteUnavailable)console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId,name:quote.name});
+      const activeComplaint=complaintValues.get(orderId);
+      if(queue.station!=='fertig'&&activeComplaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+      if(activeComplaint instanceof Error)throw activeComplaint;
+      const handoverNotice=handover?await withTenantSavepoint(tx,nested=>qualifyHandoverNotice(nested,authorization,queue,handover)):undefined;
+      const cardItems=qualifiedItemUnits(items,awardedQuote),money=authorization.permissions.includes('perm_view_prices');
+      results.set(orderId,{code:'OK',data:{id:queue.id,version:queue.version,orderNumber:queue.order_number,customerId:queue.customer_id,customerName:queue.customer_name,title:queue.title,station:queue.station,dueAt:toNullableIso(queue.due_date),handoverMode:queue.handover_mode,
+       items:money?cardItems:cardItems.map(item=>({...item,unitPriceCents:null,vatRateBasisPoints:null,extraWork:item.extraWork.map(line=>({...line,hourlyRateCents:null,amountCents:null}))})),
+       freeze:money||!freeze?freeze:{...freeze,hourlyRateCents:null,totalAmountCents:null},...(handoverNotice?{handoverNotice}:{}),
+       operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint)}});
+     }catch(error){failCard(orderId,error);}
     }
-    }
-   };
-   await Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>qualifyIsolated()));
+   }));
    logPageReadPhase('cards.model',diagnosticStarted,{requested:orderIds.length,ok:[...results.values()].filter(value=>value.code==='OK').length,failed:[...results.values()].filter(value=>value.code!=='OK').length,pool_size:db.$client.options.max});
    return results;
  }catch(error){
