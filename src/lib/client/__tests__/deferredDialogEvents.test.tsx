@@ -34,3 +34,22 @@ it('detaches cleanly and can reattach during StrictMode without duplicating a cl
  const load=vi.fn(),bridge=createDeferredDialogEvents(load);const stop=bridge.attach();stop();stops.push(bridge.attach());
  window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'rechnungein',arg:'TEST-invoice'},cancelable:true}));expect(load).toHaveBeenCalledOnce();
 });
+it('retains the early N keystroke for the original keyboard receiver without inventing a create command',()=>{
+ const load=vi.fn(),bridge=createDeferredDialogEvents(load);stops.push(bridge.attach());
+ window.dispatchEvent(new KeyboardEvent('keydown',{key:'n',code:'KeyN',bubbles:true,cancelable:true}));
+ expect(load).toHaveBeenCalledOnce();const received=vi.fn(),command=vi.fn();
+ const read=(event:KeyboardEvent)=>received({key:event.key,code:event.code});
+ window.addEventListener('keydown',read);window.addEventListener('path1:global-create-open',command);
+ stops.push(()=>{window.removeEventListener('keydown',read);window.removeEventListener('path1:global-create-open',command);});
+ bridge.ready('create');expect(received).toHaveBeenCalledExactlyOnceWith({key:'n',code:'KeyN'});expect(command).not.toHaveBeenCalled();
+ window.dispatchEvent(new KeyboardEvent('keydown',{key:'n'}));expect(received).toHaveBeenCalledTimes(2);expect(load).toHaveBeenCalledOnce();
+});
+it('does not retain typing, modified or repeated N, or N above an already visible dialog',()=>{
+ const load=vi.fn(),bridge=createDeferredDialogEvents(load);stops.push(bridge.attach());
+ const input=document.createElement('input');document.body.append(input);
+ input.dispatchEvent(new KeyboardEvent('keydown',{key:'n',bubbles:true}));input.remove();
+ for(const modifier of ['ctrlKey','metaKey','altKey','repeat'])window.dispatchEvent(new KeyboardEvent('keydown',{key:'n',[modifier]:true}));
+ const dialog=document.createElement('section');dialog.setAttribute('role','dialog');dialog.getClientRects=()=>[{}] as unknown as DOMRectList;document.body.append(dialog);
+ window.dispatchEvent(new KeyboardEvent('keydown',{key:'n'}));dialog.remove();
+ expect(load).not.toHaveBeenCalled();
+});

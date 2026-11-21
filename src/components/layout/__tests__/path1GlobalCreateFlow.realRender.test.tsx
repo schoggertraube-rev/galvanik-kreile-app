@@ -6,6 +6,7 @@ import {
   type GlobalCreateIntent,
 } from "@/components/layout/GlobalCreateFlow";
 import {IntakeMessageDialogs,type IntakeCapture,type IntakeDraftPorts} from '@/modules/eingang/public';
+import {createDeferredDialogEvents,withDeferredDialogReady} from '@/lib/client/deferredDialogEvents';
 
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
 const QUOTE_ID = "1c32e174-8494-46f0-9f5f-1a45f2a60bd1";
@@ -443,6 +444,22 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={ports({ canCreateOrder: false, showPrimaryTrigger: false })} />);
     fireEvent.keyDown(window, { key: "n" });
     expect(screen.queryByRole("dialog", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+  });
+
+  it('replays early N into the actual deferred entry and preserves its original permission check',async()=>{
+    for(const allowed of [true,false]){
+      const bridge=createDeferredDialogEvents(vi.fn()),stop=bridge.attach();
+      try{
+        fireEvent.keyDown(window,{key:'n',code:'KeyN'});
+        const Ready=withDeferredDialogReady(GlobalCreateFlow,'create');
+        render(<Ready ports={ports({canCreateOrder:allowed,showPrimaryTrigger:false})} onReceiverReady={bridge.ready}/>);
+        if(allowed){
+          const entry=await screen.findByRole('dialog',{name:'Neuer Eingang'});
+          expect(entry.querySelector('[data-spec-id="rein"]')).toBeVisible();
+          expect(screen.getAllByRole('dialog')).toHaveLength(1);
+        }else expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      }finally{cleanup();stop();}
+    }
   });
 
   it("opens the shared capture above the same intake and keeps later mail integration separate", async () => {
