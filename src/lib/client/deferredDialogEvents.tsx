@@ -2,6 +2,18 @@
 import {createElement,useEffect,type ComponentType} from 'react';
 import {flushSync} from 'react-dom';
 export type DeferredDialogGroup='create'|'message'|'object'|'invoice'|'complaint';
+export type DeferredDialogCallbacks={onReceiverReady:(group:DeferredDialogGroup)=>void;onReceiverFailed:(group:DeferredDialogGroup)=>void};
+export async function importWithRetry<T>(load:()=>Promise<T>):Promise<T>{
+ for(let attempt=1;;attempt++){
+  try{return await load();}
+  catch(error){if(attempt===3)throw error;await new Promise(resolve=>setTimeout(resolve,1000));}
+ }
+}
+export function deferredDialogUnavailable(group:DeferredDialogGroup){
+ return function DeferredDialogUnavailable({onReceiverFailed}:{onReceiverFailed:(group:DeferredDialogGroup)=>void}){
+  useEffect(()=>{onReceiverFailed(group);},[onReceiverFailed]);return null;
+ };
+}
 /** Existing N shortcut eligibility, shared by the eager transport and original receiver. */
 export function isCreateShortcut(event:KeyboardEvent){
  if(event.key.toLowerCase()!=='n'||event.repeat||event.ctrlKey||event.metaKey||event.altKey)return false;
@@ -62,11 +74,15 @@ export function createDeferredDialogEvents(load:()=>void){
    if(stopped)return;ready.add(group);
    flush();
   },
+  drop(group:DeferredDialogGroup){
+   for(let index=pending.length-1;index>=0;index--)if(pending[index].group===group)pending.splice(index,1);
+   flush();
+  },
  };
 }
 /** Child effects install the actual receiver before this parent effect releases its events. */
 export function withDeferredDialogReady<P extends object>(Component:ComponentType<P>,group:DeferredDialogGroup){
- return function DeferredDialogReady({onReceiverReady,...props}:P&{onReceiverReady:(group:DeferredDialogGroup)=>void}){
+ return function DeferredDialogReady({onReceiverReady,onReceiverFailed:_onReceiverFailed,...props}:P&{onReceiverReady:(group:DeferredDialogGroup)=>void;onReceiverFailed?:(group:DeferredDialogGroup)=>void}){
   useEffect(()=>{onReceiverReady(group);},[onReceiverReady]);
   return createElement(Component,props as P);
  };

@@ -1,7 +1,7 @@
 "use client";
 
 import {hasQuoteFinancials} from '@/modules/eingang/public';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState,type ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import {getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,clarifyIncomingInvoiceAction,searchInvoiceSuppliersAction} from '@/app/actions/eingang.actions';
 import {type InvoicePorts} from '@/modules/eingang/public';
@@ -44,19 +44,25 @@ import {uploadDomainAttachment} from '@/components/attachments/DomainAttachmentP
 import {getDomainAttachmentOriginalAction,getDomainAttachmentsAction} from '@/app/actions/domainAttachments.actions';
 
 import dynamic from 'next/dynamic';
+import {Button,Hinweis,Toast} from '@/ui/kr';
+import {DIALOG_LOAD_COPY} from '@/ui/situationCatalog';
 import {scheduleIdleRead} from '@/lib/client/scheduleIdleRead';
-import {createDeferredDialogEvents,withDeferredDialogReady,type DeferredDialogGroup} from '@/lib/client/deferredDialogEvents';
-const loadCreate=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.GlobalCreateFlow,'create'));
-const loadMessage=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.IntakeMessageDialogs,'message'));
-const loadObject=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.IntakeObjectDialogs,'object'));
-const loadInvoice=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.IncomingInvoiceDialogs,'invoice'));
-const loadComplaint=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.ComplaintDialogs,'complaint'));
-const loadCommunication=()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel);
-const GlobalCreateFlow=dynamic(loadCreate,{ssr:false,loading:()=>null});
-const IntakeMessageDialogs=dynamic(loadMessage,{ssr:false,loading:()=>null});
-const IntakeObjectDialogs=dynamic(loadObject,{ssr:false,loading:()=>null});
-const IncomingInvoiceDialogs=dynamic(loadInvoice,{ssr:false,loading:()=>null});
-const ComplaintDialogs=dynamic(loadComplaint,{ssr:false,loading:()=>null});
+import {createDeferredDialogEvents,withDeferredDialogReady,importWithRetry,deferredDialogUnavailable,type DeferredDialogGroup,type DeferredDialogCallbacks} from '@/lib/client/deferredDialogEvents';
+const loadCreate=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.GlobalCreateFlow,'create'),()=>deferredDialogUnavailable('create'));
+const loadMessage=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IntakeMessageDialogs,'message'),()=>deferredDialogUnavailable('message'));
+const loadObject=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IntakeObjectDialogs,'object'),()=>deferredDialogUnavailable('object'));
+const loadInvoice=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IncomingInvoiceDialogs,'invoice'),()=>deferredDialogUnavailable('invoice'));
+const loadComplaint=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.ComplaintDialogs,'complaint'),()=>deferredDialogUnavailable('complaint'));
+function CommunicationUnavailable(){
+ useEffect(()=>{console.warn('[DIALOG_CHUNK_LOAD_FAILED]','communication');},[]);
+ return <Hinweis ton="warn">{DIALOG_LOAD_COPY.mailUnavailable}<Button text={DIALOG_LOAD_COPY.reload} onClick={()=>location.reload()}/></Hinweis>;
+}
+const loadCommunication=()=>importWithRetry(()=>import('@/components/communication/CommunicationPanel')).then(module=>module.CommunicationPanel,()=>CommunicationUnavailable);
+const GlobalCreateFlow=dynamic<ComponentProps<typeof import('@/modules/eingang/public').GlobalCreateFlow>&DeferredDialogCallbacks>(loadCreate,{ssr:false,loading:()=>null});
+const IntakeMessageDialogs=dynamic<ComponentProps<typeof import('@/modules/eingang/public').IntakeMessageDialogs>&DeferredDialogCallbacks>(loadMessage,{ssr:false,loading:()=>null});
+const IntakeObjectDialogs=dynamic<ComponentProps<typeof import('@/modules/eingang/public').IntakeObjectDialogs>&DeferredDialogCallbacks>(loadObject,{ssr:false,loading:()=>null});
+const IncomingInvoiceDialogs=dynamic<ComponentProps<typeof import('@/modules/eingang/public').IncomingInvoiceDialogs>&DeferredDialogCallbacks>(loadInvoice,{ssr:false,loading:()=>null});
+const ComplaintDialogs=dynamic<ComponentProps<typeof import('@/modules/eingang/public').ComplaintDialogs>&DeferredDialogCallbacks>(loadComplaint,{ssr:false,loading:()=>null});
 const CommunicationPanel=dynamic(loadCommunication,{ssr:false,loading:()=>null});
 
 type ChoiceSource={contactPerson?:string|null;id:string;customerNumber?:string|null;name:string;customerType:string;companyName?:string|null;salutation?:"frau"|"herr"|"ohne"|null;firstName?:string|null;lastName?:string|null;contactRole?:string|null;email?:string|null;phone?:string|null;street?:string|null;houseNumber?:string|null;zipCode?:string|null;city?:string|null;country?:string|null;paymentPreference?:string|null;vatId?:string|null;handoverPreference?:"pickup"|"shipping"|null;autoInfo?:boolean;vorrang?:boolean;invoiceTermsEnabled?:boolean;invoiceTermDays?:number|null;duplicateMatch?:{kind:"exact"|"possible";by:string}|null};
@@ -87,9 +93,11 @@ export function GlobalCreateAppAdapter() {
   });
   const { canAction, hasArea, name, role, areas,offlineScope } = usePermissions();
   const [dialogRequest,setDialogRequest]=useState<{scope:typeof offlineScope}|null>(null);
+  const [dialogLoadFailed,setDialogLoadFailed]=useState(false);
   const dialogsRequested=dialogRequest?.scope===offlineScope;
   const deferredDialogs=useMemo(()=>createDeferredDialogEvents(()=>{if(role&&isAppRole(role))setDialogRequest({scope:offlineScope});}),[offlineScope,role]);
   const receiverReady=useCallback((group:DeferredDialogGroup)=>deferredDialogs.ready(group),[deferredDialogs]);
+  const receiverFailed=useCallback((group:DeferredDialogGroup)=>{deferredDialogs.drop(group);console.warn('[DIALOG_CHUNK_LOAD_FAILED]',group);setDialogLoadFailed(true);},[deferredDialogs]);
   useLayoutEffect(()=>{
     if(!role||!isAppRole(role))return;
     return deferredDialogs.attach();
@@ -185,7 +193,7 @@ export function GlobalCreateAppAdapter() {
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <>{dialogsRequested?<><ComplaintDialogs onReceiverReady={receiverReady} ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs onReceiverReady={receiverReady} ports={invoicePorts} allowed={hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs onReceiverReady={receiverReady} ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs onReceiverReady={receiverReady} ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow onReceiverReady={receiverReady}
+    <>{dialogLoadFailed?<Toast text={DIALOG_LOAD_COPY.unavailable} aktion={{text:DIALOG_LOAD_COPY.reload,onClick:()=>location.reload()}}/>:null}{dialogsRequested?<><ComplaintDialogs onReceiverReady={receiverReady} onReceiverFailed={receiverFailed} ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs onReceiverReady={receiverReady} onReceiverFailed={receiverFailed} ports={invoicePorts} allowed={hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs onReceiverReady={receiverReady} onReceiverFailed={receiverFailed} ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs onReceiverReady={receiverReady} onReceiverFailed={receiverFailed} ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow onReceiverReady={receiverReady} onReceiverFailed={receiverFailed}
       key={offlineScope??'no-offline-actor'} ports={{
         offlineScope,
         readIntakeOrderSource: async (orderId) => {

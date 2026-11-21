@@ -1,8 +1,44 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {act,cleanup,render} from '@testing-library/react';
+import {act,cleanup,fireEvent,render} from '@testing-library/react';
 import {useEffect} from 'react';
-import {createDeferredDialogEvents,withDeferredDialogReady} from '../deferredDialogEvents';
+import {createDeferredDialogEvents,withDeferredDialogReady,importWithRetry,deferredDialogUnavailable} from '../deferredDialogEvents';
 const stops:Array<()=>void>=[];
+it('254 K1 drops the failed group and its Escape without blocking the next original receiver',async()=>{
+ const bridge=createDeferredDialogEvents(vi.fn());stops.push(bridge.attach());const received=vi.fn(),escape=vi.fn();
+ const read=(event:Event)=>received((event as CustomEvent).detail.ziel);
+ window.addEventListener('kreile:oeffne',read);window.addEventListener('keydown',escape);
+ stops.push(()=>{window.removeEventListener('kreile:oeffne',read);window.removeEventListener('keydown',escape);});
+ window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'original',arg:'TEST-failed'},cancelable:true}));
+ fireEvent.keyDown(window,{key:'Escape'});
+ window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'TEST-retained'},cancelable:true}));
+ bridge.drop('object');bridge.ready('complaint');await act(async()=>{});
+ expect(received).toHaveBeenCalledExactlyOnceWith('reklamation');expect(escape).not.toHaveBeenCalled();
+ fireEvent.keyDown(window,{key:'Escape'});expect(escape).toHaveBeenCalledOnce();
+});
+it('254 K1 retries two rejected imports at 1000ms intervals and returns the third actual result',async()=>{
+ vi.useFakeTimers();
+ try{
+  const start=Date.now(),calls:number[]=[];
+  const load=vi.fn(()=>{calls.push(Date.now()-start);return calls.length<3?Promise.reject(new Error('SYNTHETISCH import failure')):Promise.resolve('loaded');});
+  const pending=importWithRetry(load);expect(load).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(999);expect(load).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(1);expect(load).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1000);expect(await pending).toBe('loaded');expect(calls).toEqual([0,1000,2000]);
+ }finally{vi.useRealTimers();}
+});
+it('254 K1 forwards the third rejected import without a fourth attempt',async()=>{
+ vi.useFakeTimers();
+ try{
+  const failure=new Error('SYNTHETISCH permanent import failure'),load=vi.fn(()=>Promise.reject(failure));
+  const rejected=expect(importWithRetry(load)).rejects.toBe(failure);
+  await vi.advanceTimersByTimeAsync(2000);await rejected;
+  await vi.advanceTimersByTimeAsync(10000);expect(load).toHaveBeenCalledTimes(3);
+ }finally{vi.useRealTimers();}
+});
+it('254 K1 publishes the original failed group after mounting the unavailable component',()=>{
+ const failed=vi.fn(),Unavailable=deferredDialogUnavailable('object');
+ render(<Unavailable onReceiverFailed={failed}/>);expect(failed).toHaveBeenCalledExactlyOnceWith('object');
+});
 afterEach(()=>{cleanup();for(const stop of stops.splice(0))stop();});
 it('retains early real DOM events and original arguments until the mounted receiver effect is ready',async()=>{
  const load=vi.fn(),receive=vi.fn(),bridge=createDeferredDialogEvents(load);stops.push(bridge.attach());
