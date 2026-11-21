@@ -1,3 +1,4 @@
+import {cache} from 'react';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
@@ -59,28 +60,32 @@ const pageReadProjection=sql`jsonb_build_object(
  'hasInvoiceBatchLimit',to_jsonb(company_settings) ? 'rechnung_mail_grenze',
  'queryTimeoutMs',to_jsonb(company_settings)->'seiten_abfrage_ms',
  'invoiceMailBatchLimit',to_jsonb(company_settings)->'rechnung_mail_grenze') AS page_read_source`;
-export async function readPageReadSettings(context:{tenantId:string}){
- const rows=await withPrivilegedTenantTransaction(context,tx=>tx.execute<{page_read_source:unknown}>(sql`
+const readPageReadSettingsRow=cache(async(tenantId:string)=>{
+ const rows=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{page_read_source:unknown}>(sql`
   SELECT ${pageReadProjection}
-  FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY id LIMIT 2`));
+  FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`));
  if(rows.length!==1)throw Error('PAGE_READ_SETTINGS_SOURCE_INCOMPLETE');
  const source=pageReadSettingsFromCompany(rows[0].page_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!source)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');
  return source.settings;
+});
+export async function readPageReadSettings(context:{tenantId:string}){
+ return readPageReadSettingsRow(context.tenantId);
 }
 
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
-export async function readCompanyLetterSettings(context:CompanyDocumentContext){
- if(!context.canRead)return {code:'FORBIDDEN' as const};
- try{return await withPrivilegedTenantTransaction(context,async tx=>{
-  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${context.includeDeliveryNoteIdentity?sql`,phone,COALESCE(NULLIF(tax_id,''),NULLIF(tax_number,'')) AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+const readCompanyLetterSettingsRow=cache(async(tenantId:string,includeDeliveryNoteIdentity:boolean)=>withPrivilegedTenantTransaction({tenantId},async tx=>{
+  const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${includeDeliveryNoteIdentity?sql`,phone,COALESCE(NULLIF(tax_id,''),NULLIF(tax_number,'')) AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
   if(!rows.length)return {code:'NOT_FOUND' as const};
   if(rows.length!==1)return {code:'UNAVAILABLE' as const};
   const missingFields=(['companyName','street','zip','city','country'] as const).filter(key=>typeof rows[0][key]!=='string'||!rows[0][key].trim());
   if(missingFields.length)return {code:'VALIDATION_ERROR' as const,missingFields};
   return {code:'OK' as const,company:rows[0]};
- });}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
+ }));
+export async function readCompanyLetterSettings(context:CompanyDocumentContext){
+ if(!context.canRead)return {code:'FORBIDDEN' as const};
+ try{return await readCompanyLetterSettingsRow(context.tenantId,context.includeDeliveryNoteIdentity===true)}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
 }
 
 export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
