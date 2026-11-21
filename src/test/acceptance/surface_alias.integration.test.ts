@@ -90,6 +90,7 @@ it('251 actual intake alias, unchanged historical original, fresh retry and zero
   items:operationalCard.data.card.items.map(item=>({id:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,material:item.material,surface:'Verchromen',unit:item.unit,unitPriceCents:item.unitPriceCents,vatRateBasisPoints:item.vatRateBasisPoints}))};
  expect(await withSession(denied,()=>changeOrderContentAction(correction))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(worker,()=>changeOrderContentAction({...correction,items:correction.items.map(item=>({...item,unitPriceCents:99999,vatRateBasisPoints:1900 as const}))}))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(worker,()=>changeOrderContentAction({...correction,items:correction.items.map(item=>({...item,unitPriceCents:10000,vatRateBasisPoints:1900 as const}))}))).toMatchObject({code:'FORBIDDEN'});
  const fixed=await withSession(worker,()=>changeOrderContentAction(correction));
  expect(fixed,JSON.stringify(fixed)).toMatchObject({code:'OK',replayed:false,receipt:{actorId:worker.actorId}});
  expect(await withSession(worker,()=>changeOrderContentAction(JSON.parse(JSON.stringify(correction))))).toMatchObject({code:'OK',replayed:true});

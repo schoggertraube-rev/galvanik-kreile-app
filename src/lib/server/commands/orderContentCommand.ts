@@ -327,11 +327,9 @@ export async function changeOrderContent(input: ChangeOrderContentInput,readCust
       // A hidden price is not an instruction to erase it. Keep the stored
       // monetary columns under the existing order/item locks (R5).
       const canSetPrices=hasAuthorizationArea(auth.data,'preise');
-      if(!canSetPrices&&items.some(item=>{
-        const current=existing.find(row=>row.id===item.id);
-        return item.unitPriceCents!==null&&item.unitPriceCents!==Number(current?.unit_price_cents)
-          ||item.vatRateBasisPoints!==null&&item.vatRateBasisPoints!==current?.vat_rate_basis_points;
-      }))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
+      if(!canSetPrices&&items.some(item=>item.unitPriceCents!==null||item.vatRateBasisPoints!==null)) {
+        return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
+      }
       if (existing.some((row) => !items.some((item) => item.id === row.id))) return { code: "VALIDATION_ERROR" as const, message: "Positionen dürfen hier nicht gelöscht werden." };
       const catalogIds = [...new Set(items.flatMap((item) => item.catalogServiceId ? [item.catalogServiceId] : []))];
       const catalog = catalogIds.length ? await tx.execute<CatalogRow>(sql`SELECT id::text AS id, name, surface, unit, net_price_cents, vat_rate_basis_points, active FROM public.catalog_services WHERE tenant_id=${auth.data.tenantId} AND id = ANY(${catalogIds}::uuid[])`) : [];
