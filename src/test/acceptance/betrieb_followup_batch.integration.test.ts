@@ -170,6 +170,12 @@ it('250 informed zero/one/many reads preserve actual phone originals, freeze ver
  expect(card).toMatchObject({code:'OK',data:{card:{version:a.version},customerInformed:fresh.get(a.orderId)}});
  expect(await sql`SELECT id,user_id::text,payload FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid`).toEqual(original);
  expect(await sql`SELECT count(*)::integer AS n FROM public.communication_threads WHERE tenant_id=${tenant} AND order_id=${a.orderId}`).toEqual([{n:0}]);
+ const nextPhone=await withSession(operator,()=>markOrderInformedByPhoneAction({...input,clientEventId:randomUUID()}));
+ expect(nextPhone).toMatchObject({code:'OK'});if(nextPhone.code!=='OK')throw Error('TEST_NEXT_REAL_PHONE_REQUIRED');
+ const ordered=await readOrdersInformed(actor,[b.orderId,a.orderId]);
+ expect(ordered.get(a.orderId)).toMatchObject({code:'OK',firstInformed:saved.receipt,informed:nextPhone.receipt});
+ expect(ordered.get(b.orderId)).toEqual(before[1]);
+ expect(await readOrderInformed(actor,a.orderId)).toEqual(ordered.get(a.orderId));
  const denied=await authorization(await createFixture(['kunden']));
  expect([...(await readOrdersInformed(denied,ids)).values()]).toEqual([{code:'FORBIDDEN'},{code:'FORBIDDEN'}]);
  expect((await readOrdersInformed(actor,['TEST-no-informed-order'])).get('TEST-no-informed-order')).toEqual({code:'NOT_FOUND'});

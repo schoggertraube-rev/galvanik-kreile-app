@@ -119,13 +119,18 @@ async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string
    complaints.set(id,await readOpenOrderComplaint(tx,auth.tenantId,id));
   }else{
    const requested=sql.join(orderIds.map(id=>sql`(${id})`),sql`,`);
-   const receiptRecords=await tx.execute<InformedSourceRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) CROSS JOIN LATERAL (${informedReceiptQuery(auth,sql`requested.order_id`)}) source`);
+   // ARRAY preserves each canonical source's ORDER BY and per-object LIMIT.
+   const receiptRecords=await tx.execute<{batch_order_id:string;records:InformedSourceRow[]}>(sql`SELECT requested.order_id AS batch_order_id,ARRAY(SELECT to_jsonb(source) FROM (${informedReceiptQuery(auth,sql`requested.order_id`)}) source) AS records FROM (VALUES ${requested}) requested(order_id)`);
    const orderRecords=await tx.execute<InformedOrderRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) CROSS JOIN LATERAL (${informedOrderQuery(auth,sql`requested.order_id`)}) source`);
-   for(const {batch_order_id,...source} of receiptRecords){const rows=receipts.get(batch_order_id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');rows.push(source);}
+   const seenReceipts=new Set<string>();
+   for(const {batch_order_id,records} of receiptRecords){if(!receipts.has(batch_order_id)||seenReceipts.has(batch_order_id)||!Array.isArray(records))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');seenReceipts.add(batch_order_id);receipts.set(batch_order_id,records);}
+   if(seenReceipts.size!==orderIds.length)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
    for(const {batch_order_id,...source} of orderRecords){const rows=orders.get(batch_order_id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');rows.push(source);}
    const complaintGroups=new Map<string,OpenComplaintRow[]>(orderIds.map(id=>[id,[]]));
-   const complaintRecords=await tx.execute<OpenComplaintRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) CROSS JOIN LATERAL (${openComplaintQuery(auth.tenantId,sql`requested.order_id`)}) source`);
-   for(const {batch_order_id,...source} of complaintRecords){const rows=complaintGroups.get(batch_order_id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');rows.push(source);}
+   const complaintRecords=await tx.execute<{batch_order_id:string;records:OpenComplaintRow[]}>(sql`SELECT requested.order_id AS batch_order_id,ARRAY(SELECT to_jsonb(source) FROM (${openComplaintQuery(auth.tenantId,sql`requested.order_id`)}) source) AS records FROM (VALUES ${requested}) requested(order_id)`);
+   const seenComplaints=new Set<string>();
+   for(const {batch_order_id,records} of complaintRecords){if(!complaintGroups.has(batch_order_id)||seenComplaints.has(batch_order_id)||!Array.isArray(records))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');seenComplaints.add(batch_order_id);complaintGroups.set(batch_order_id,records);}
+   if(seenComplaints.size!==orderIds.length)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
    for(const id of orderIds){const rows=complaintGroups.get(id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');complaints.set(id,qualifyOpenComplaint(rows));}
   }
   const cohorts=new Map<string,InformedCohort>();
