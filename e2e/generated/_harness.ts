@@ -1156,9 +1156,23 @@ async function interruptNextServerAction(page: Page, state: FlowRunState, contro
 }
 
 async function interruptNextLoad(page: Page) {
-  const diagnostics=protocolDiagnosticActionIds(JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')));
+  const manifest=JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8'));
+  const diagnostics=protocolDiagnosticActionIds(manifest);
   const matcher = "**/*";
   let handled = false;
+  let interruptedRequest: import('@playwright/test').Request | undefined;
+  const metadata=(request:import('@playwright/test').Request)=>{
+    const reference=manifest.node[request.headers()['next-action']??''] as {exportedName?:string;workers?:Record<string,{exportedName?:string}>}|undefined;
+    const names=reference?[reference,...Object.values(reference.workers??{})].map(value=>value.exportedName).filter((name):name is string=>typeof name==='string'):[];
+    return {method:request.method(),path:new URL(request.url()).pathname,actionExports:names.length?[...new Set(names)]:null};
+  };
+  const failed=(request:import('@playwright/test').Request)=>{
+    if(request!==interruptedRequest)return;
+    console.info('FLOW_LOAD_REQUESTFAILED',JSON.stringify(metadata(request)));
+    page.off('requestfailed',failed);
+  };
+  page.on('requestfailed',failed);
+  page.once('close',()=>page.off('requestfailed',failed));
   const handler = async (route: import("@playwright/test").Route) => {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
@@ -1166,6 +1180,8 @@ async function interruptNextLoad(page: Page) {
     const isLoad = isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics);
     if (!handled && isLoad) {
       handled = true;
+      interruptedRequest=request;
+      console.info('FLOW_LOAD_INTERRUPTED',JSON.stringify(metadata(request)));
       await route.abort("failed");
       await page.unroute(matcher, handler);
       return;
