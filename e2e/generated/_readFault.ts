@@ -13,7 +13,8 @@ export function protocolDiagnosticActionIds(manifest:{node:Record<string,ActionR
 export function isApplicationServerAction(request:{method:string;nextAction?:string},diagnostics:ReadonlySet<string>,targetAction?:string):boolean{
  return request.method==='POST'&&!!request.nextAction&&!diagnostics.has(request.nextAction)&&(!targetAction||request.nextAction===targetAction);
 }
-export function isApplicationDataLoad(request:{method:string;nextAction?:string;resourceType:string;rsc?:string},diagnostics:ReadonlySet<string>):boolean{
+export function isApplicationDataLoad(request:{method:string;nextAction?:string;resourceType:string;rsc?:string},diagnostics:ReadonlySet<string>,targetAction?:string):boolean{
+ if(targetAction)return isApplicationServerAction(request,diagnostics,targetAction);
  return isApplicationServerAction(request,diagnostics)
   ||['fetch','xhr'].includes(request.resourceType)&&request.method==='GET'&&!request.rsc;
 }

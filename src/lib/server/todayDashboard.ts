@@ -1,7 +1,8 @@
 import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import {readUnsentInvoiceMailGroups} from './communicationDocumentPort';
 import {canTransportInvoiceDocument} from './authorization';
-import {V45_TEXT,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,SURFACE_ASSIGNMENT_COPY} from '@/ui/situationCatalog';
+import {suggestOrderPositionSurface,orderPositionSurfaceLabel} from '@/lib/orderPositionContract';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
 import type {U2Read} from '@/lib/domain/u2ReadContract';
@@ -31,6 +32,7 @@ export type TodayItem = {
   urgency: "conflict" | "decision" | "warning";
   orderId?: string;
   orderVersion?: number;
+  surfaceAssignments?:Array<{itemId:string;rawValue:string;proposals:Array<{key:string;label:string}>}>;
   invoiceId?: string;
   invoiceMail?:{customerId:string;documentId:string;expectedInvoiceIds:string[];number:string;count:number;customerName:string;companyName?:string;singleInvoice:true};
   graphMessageId?: string;
@@ -40,7 +42,7 @@ export type TodayItem = {
   snoozedUntil?: string;
   assignedToName?: string;
   assignmentVersion?: number;
-  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | typeof SITUATION_COPY.quote.openOrder | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
+  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | typeof SITUATION_COPY.quote.openOrder | typeof SURFACE_ASSIGNMENT_COPY.open | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
 };
 
 export type TodayCollectionNotice = {
@@ -249,6 +251,13 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     return {orderId:order.id,version:order.version,read:null};
    }
    const {card,handoverConsequences:shipping,pickupAppointment:appointment}=source.data;
+   const unresolved=card.items.filter(item=>item.surfaceAssignmentRequired);
+   if(unresolved.length){
+    sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,
+     title:SURFACE_ASSIGNMENT_COPY.title([...new Set(unresolved.map(item=>item.surfaceAssignmentRequired!))].join(', '),order.orderNumber),
+     meta:'',urgency:'warning',primaryActionLabel:SURFACE_ASSIGNMENT_COPY.open,
+     surfaceAssignments:unresolved.map(item=>{const key=suggestOrderPositionSurface(item.surfaceAssignmentRequired!);return {itemId:item.id,rawValue:item.surfaceAssignmentRequired!,proposals:key?[{key,label:SURFACE_ASSIGNMENT_COPY.proposal(orderPositionSurfaceLabel(key))}]:[]};})});
+   }
    if(shipping?.code==='SOURCE_INCOMPLETE')sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
    if(hasAuthorizationArea(auth,'preise')&&card.operationalFacts?.pricesMissing===null)sourceNotices.push({key:'source-quote:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:SHIPPING_FEE_COPY.orderQuoteMissing(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
    const row:TodayOrderScheduleRow={orderId:order.id,version:order.version,read:source.data.nextActionRule};

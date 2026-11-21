@@ -47,6 +47,29 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it('TEST PL09:37 existing position editor opens after loading, uniquely prefills from the central alias, and preserves stored line values',()=>{
+    const save=vi.fn(),ports={...actions,content:{visible:true,enabled:true,reason:null},onSaveContent:save};
+    const raw='TEST chrom Spezial';
+    const source={...card,items:[{...card.items[0],surface:raw,surfaceAssignmentRequired:raw,catalogServiceId:null,unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900 as const}]};
+    const view=render(<OrderCardView initialSurfaceAssignmentOpen state={{kind:'loading'}} actions={ports} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
+    expect(screen.queryByRole('dialog',{name:'Teil bearbeiten'})).not.toBeInTheDocument();
+    view.rerender(<OrderCardView initialSurfaceAssignmentOpen state={{kind:'data',card:source}} actions={ports} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
+    expect(screen.getByLabelText('Oberfläche')).toHaveValue('Verchromen');
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'Teil speichern'}));
+    expect(save).toHaveBeenCalledExactlyOnceWith({note:card.note,items:[expect.objectContaining({id:'item-1',surface:'Verchromen',quantity:2,material:'Stahl',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900})]});
+    expect(screen.queryByLabelText('Oberfläche')).not.toBeInTheDocument();
+  });
+  it('TEST PL09:37 absent or ambiguous matching never chooses an arbitrary surface; missing edit rights never open the editor',()=>{
+    const raw='TEST chrom verzinken',source={...card,items:[{...card.items[0],surface:raw,surfaceAssignmentRequired:raw}]};
+    const ports={...actions,content:{visible:true,enabled:true,reason:null},onSaveContent:vi.fn()};
+    const view=render(<OrderCardView initialSurfaceAssignmentOpen state={{kind:'data',card:source}} actions={ports} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
+    expect(screen.getByLabelText('Oberfläche')).toHaveValue('');
+    expect(screen.queryByRole('option',{name:raw})).not.toBeInTheDocument();
+    view.rerender(<OrderCardView initialSurfaceAssignmentOpen state={{kind:'data',card:source}} actions={{...ports,content:{visible:true,enabled:false,reason:'TEST kein Auftragsrecht'}}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
+    expect(screen.queryByLabelText('Oberfläche')).not.toBeInTheDocument();
+    expect(ports.onSaveContent).not.toHaveBeenCalled();
+  });
   it('PL01:02 renders the catalogued invoice queue status without a second send button',()=>{
     const text=INVOICE_DELIVERY_COPY.queued(card.customerName);
     const view=render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{kind:'data',card:{...card,invoiceMailWaiting:text}}}/>);

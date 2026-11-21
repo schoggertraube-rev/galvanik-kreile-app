@@ -241,7 +241,8 @@ export function getAuthorizationActionGrants(
       hasAuthorizationArea(authorization, "kassieren")
       && hasAuthorizationArea(authorization, "auftraege")
     ),
-    editOrderContent: canManageOrders,
+    // PL2026-11-21 09:37: existing position correction is also an order task.
+    editOrderContent: canManageOrders || hasAuthorizationArea(authorization, "auftraege"),
     createCustomer: hasAuthorizationArea(authorization, "eingang"),
     createQuote: canManageOrders && hasAuthorizationArea(authorization, "preise"),
   };

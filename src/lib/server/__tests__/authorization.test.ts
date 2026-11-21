@@ -513,7 +513,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       areas: ["auftraege", "kassieren"],
     })).toEqual({
       confirmPayment: true,
-      editOrderContent: false,
+      editOrderContent: true,
       createCustomer: false,
       createQuote: false,
     });

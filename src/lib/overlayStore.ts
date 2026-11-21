@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export type OverlayType =
   | { type: 'quote'; id: string }
-  | { type: 'order'; id: string;focus?:'photos' }
+  | { type: 'order'; id: string;focus?:'photos'|'surface' }
   | { type: 'customer'; id: string; prefill?: unknown }
   | { type: 'item'; orderId: string; itemId: string }
   | { type: 'invoice'; id: string }
@@ -12,7 +12,7 @@ interface OverlayState {
   stack: OverlayType[];
 
   openQuote: (id: string) => void;
-  openOrder: (id: string,focus?:'photos') => void;
+  openOrder: (id: string,focus?:'photos'|'surface') => void;
   openCustomer: (id: string,prefill?:unknown) => void;
   openItem: (orderId: string, itemId: string) => void;
   openInvoice: (id: string) => void;
