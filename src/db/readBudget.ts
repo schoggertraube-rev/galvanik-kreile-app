@@ -1,5 +1,4 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {createHash} from 'node:crypto';
 
 /** Canonical startup/old-schema defaults; qualified company values override them.
  * The native settings contract checks the additive SQL defaults against these. */
@@ -125,16 +124,12 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
             if(key==='begin'&&Date.now()-acquiringAt>=250){
               // Only non-secret transport metadata from the actual driver.
               // CLI env-run can prefer a local file; it cannot prove this port.
-              const options=Object.getOwnPropertyDescriptor(target,'options')?.value as {port?:unknown;host?:unknown;user?:unknown}|undefined;
+              const options=Object.getOwnPropertyDescriptor(target,'options')?.value as {port?:unknown;host?:unknown}|undefined;
               const ports=Array.isArray(options?.port)?options.port:[options?.port];
               const hosts=Array.isArray(options?.host)?options.host:[options?.host];
               const port=ports.length===1&&Number.isSafeInteger(ports[0])&&ports[0]>0&&ports[0]<=65535?ports[0]:undefined;
               const pooler=hosts.length>0&&hosts.every(host=>typeof host==='string')?hosts.every(host=>(host as string).endsWith('.pooler.supabase.com')):undefined;
-              // PL22:47 canonical-source acceptance comparison only. This
-              // digest neither chooses a host nor changes any connection.
-              const hostMatches=hosts.length===1&&typeof hosts[0]==='string'?createHash('sha256').update(hosts[0]).digest('hex')==='eb0d823953fe3850583b80753a529656991e2c14b361b421737545498c2da6b0':undefined;
-              const projectMatches=typeof options?.user==='string'?options.user.endsWith('.syhaigjhsbpjmtnggqka'):undefined;
-              logPageReadPhase('db.acquire',acquiringAt,{...(port===undefined?{driver_port_unknown:1}:{driver_port:port}),...(pooler===undefined?{driver_host_unknown:1}:{driver_pooler:pooler?1:0}),...(hostMatches===undefined?{host_comparison_unknown:1}:{host_matches_approved_source:hostMatches?1:0}),...(projectMatches===undefined?{project_comparison_unknown:1}:{project_matches_approved_source:projectMatches?1:0})});
+              logPageReadPhase('db.acquire',acquiringAt,{...(port===undefined?{driver_port_unknown:1}:{driver_port:port}),...(pooler===undefined?{driver_host_unknown:1}:{driver_pooler:pooler?1:0})});
             }
             const remaining=budget.deadline-Date.now();
             if(remaining<=0)throw new PageReadTimeout();
