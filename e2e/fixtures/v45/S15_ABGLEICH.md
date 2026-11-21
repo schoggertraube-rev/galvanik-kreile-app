@@ -76,7 +76,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COMPONENT_PREVIEW_COPY.names.kundenbild`: "Kundenbild" → `customer.tab.insights`, `settings.group.bewertung`
 - `PENDING_UNDO_COPY.undo`: "Rückgängig" → `bundle.undo`, `undo.action`
 
-## Ähnlicher Wortlaut (101)
+## Ähnlicher Wortlaut (102)
 
 - `INVOICE_VAT_COPY.groupNet`: "Netto (" → `collection.net`, `quote.net_short`, `ws.net`
 - `INVOICE_VAT_COPY.groupNet`: ")" → `work.sign_missing`
@@ -179,8 +179,9 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.proposalMissing`: "einstellungen" → `nav.einstellungen`, `settings.title`
 - `SHIPPING_FEE_COPY.proposalMissing`: "…" → `work.sign_missing`
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
+- `SURFACE_ASSIGNMENT_COPY.title`: "…" → `work.sign_missing`
 
-## Nur im Bestand (795)
+## Nur im Bestand (797)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -969,6 +970,8 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PENDING_UNDO_COPY.started`: "Übertragung gestartet"
 - `PENDING_UNDO_COPY.unknown`: "Deine wartenden Änderungen sind gerade nicht lesbar."
 - `PENDING_UNDO_COPY.unconfirmed`: "Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand."
+- `SURFACE_ASSIGNMENT_COPY.open`: "Oberfläche zuordnen"
+- `SURFACE_ASSIGNMENT_COPY.title`: "Oberfläche „"
 - `PAGE_READ_COPY.loading`: "Deine Arbeitsfläche wird geladen."
 - `PAGE_READ_COPY.sourceIncomplete`: "Diese Quelle ist gerade nicht erreichbar · Erneut laden."
 - `PAGE_READ_COPY.partial`: "Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar."
