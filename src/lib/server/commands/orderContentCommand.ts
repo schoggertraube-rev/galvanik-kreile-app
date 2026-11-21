@@ -340,7 +340,7 @@ export async function changeOrderContent(input: ChangeOrderContentInput,readCust
         if (item.catalogServiceId && (!service || (!service.active && !existing.some((row) => row.id === item.id && row.catalog_service_id === service.id)))) throw new Error("ORDER_CONTENT_CATALOG_INVALID");
         const normalized=service ? { ...item, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.net_price_cents, vatRateBasisPoints: service.vat_rate_basis_points as 0 | 700 | 1900 } : item;
         const current=existing.find(row=>row.id===item.id);
-        return !canSetPrices&&current&&current.catalog_service_id===item.catalogServiceId
+        return !canSetPrices&&current
           ? {...normalized,unitPriceCents:current.unit_price_cents===null?null:Number(current.unit_price_cents),vatRateBasisPoints:current.vat_rate_basis_points as 0|700|1900|null}:normalized;
       });
 

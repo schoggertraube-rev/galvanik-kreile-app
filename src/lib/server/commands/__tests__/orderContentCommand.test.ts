@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import {PgDialect} from 'drizzle-orm/pg-core';
 
 const { execute, resolveAuthorization } = vi.hoisted(() => ({ execute: vi.fn(), resolveAuthorization: vi.fn() }));
 
@@ -52,6 +53,20 @@ describe("order content command", () => {
     expect(execute).toHaveBeenCalledTimes(10);
   });
 
+  it('TEST B1 order-only surface correction preserves the hidden price when the different surface detaches the former catalog service',async()=>{
+    resolveAuthorization.mockResolvedValue({ok:true,data:{userId:actor,tenantId:KREILE_TENANT_SLUG,role:'werkstatt',areas:['auftraege'],permissions:['perm_data_orders'],active:true,displayName:'TEST Werkstatt'}});
+    execute.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{id:'order-1',customer_id:'customer-1',version:1,station:'angenommen',status:'in_progress',title:'TEST Kunde · Alt'}])
+      .mockResolvedValueOnce([{id:itemId,catalog_service_id:serviceId,unit_price_cents:10000,vat_rate_basis_points:1900}])
+      .mockResolvedValueOnce([]).mockResolvedValueOnce([{version:2}])
+      .mockResolvedValueOnce([{id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',user_id:actor,aggregate_version:2,created_at:'2026-10-27T04:00:00.000Z',payload:{},event_type:'ORDER_CONTENT_CHANGED_V1',order_id:'order-1'}])
+      .mockResolvedValueOnce([{has_quote:false}]).mockResolvedValueOnce([]);
+    const result=await changeOrderContent({orderId:'order-1',expectedVersion:1,clientEventId,note:null,items:[{id:itemId,catalogServiceId:null,name:'TEST Teil',quantity:2,material:'Stahl',surface:'Vernickeln',unit:'stueck',unitPriceCents:null,vatRateBasisPoints:null}]},async()=>({companyName:'TEST Kunde',name:'TEST Kunde'}));
+    expect(result).toMatchObject({code:'OK',replayed:false});
+    const updates=execute.mock.calls.map(([query])=>new PgDialect().sqlToQuery(query)).filter(query=>query.sql.startsWith('UPDATE public.items'));
+    expect(updates).toHaveLength(1);
+    expect(updates[0].params.slice(6,8)).toEqual([100,1900]);
+  });
   it("fails closed without order write permission", async () => {
     resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: KREILE_TENANT_SLUG, role: "readonly", permissions: [], active: true, displayName: "Leser" } });
     await expect(setOrderItemFinished({ orderId: "order-1", itemId, expectedVersion: 1, clientEventId, finished: true })).resolves.toEqual({ code: "FORBIDDEN", message: "Diese Rolle darf den Teilstatus nicht ändern." });
