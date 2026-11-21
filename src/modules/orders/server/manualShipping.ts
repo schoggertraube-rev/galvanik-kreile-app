@@ -143,7 +143,7 @@ export async function readManualShippingBatch(auth:AuthorizationSnapshot,orderId
   }catch(cause){
    // The failed transaction has completed its rollback before descending.
    if(ids.length>1){const middle=Math.floor(ids.length/2);await read(ids.slice(0,middle));await read(ids.slice(middle));return;}
-   console.error('MANUAL_SHIPPING_READ_FAILED',{name:cause instanceof Error?cause.name:'UnknownError'});
+   console.error('MANUAL_SHIPPING_READ_FAILED',cause);
    result.set(ids[0],error('UNAVAILABLE','MANUAL_SHIPPING_READ_FAILED'));
   }
  };
