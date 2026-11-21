@@ -1,7 +1,7 @@
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {sql} from 'drizzle-orm';
+import {sql,type SQL} from 'drizzle-orm';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -28,18 +28,24 @@ function trackingLink(settings:ShippingSettings,tracking:string|null){
  const url=settings.trackingUrl.replace('{nr}',encodeURIComponent(tracking));
  try{const parsed=new URL(url);return parsed.protocol==='https:'&&settings.trackingUrl.includes('{nr}')?url:null;}catch{return null;}
 }
-async function readOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,lock=false){
- const rows=await tx.execute<Order>(sql`SELECT id,customer_id,order_number,handover_mode,station,version,
+function manualShippingOrderQuery(auth:AuthorizationSnapshot,orderId:string|SQL,lock=false){
+ return sql`SELECT id,customer_id,order_number,handover_mode,station,version,
   private.order_release_allowed_v1(tenant_id,id,true,true) AS allowed FROM public.orders
-  WHERE tenant_id=${auth.tenantId} AND id=${orderId} ${lock?sql`FOR UPDATE`:sql``}`);
+  WHERE tenant_id=${auth.tenantId} AND id=${orderId} ${lock?sql`FOR UPDATE`:sql``}`;
+}
+async function readOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,lock=false){
+ const rows=await tx.execute<Order>(manualShippingOrderQuery(auth,orderId,lock));
  if(rows.length>1)throw Error('SHIPPING_ORDER_AMBIGUOUS');return rows[0]??null;
 }
-async function readShipments(tx:PrivilegedTenantTransaction,tenantId:string,filter:{orderId:string}|{shipmentId:string}|{orderIds:string[]},lock=false,includeGroup=false){
- const rows=await tx.execute<Shipment>(sql`SELECT shipment.id::text,shipment.order_id,linked.order_number AS "orderNumber",linked.version AS "orderVersion",shipment.sendung_id::text AS "sendungId",shipment.carrier,shipment.tracking_number AS "trackingNumber",shipment.status,shipment.shipped_at::text AS "shippedAt",shipment.label_url AS "labelUrl",
+function manualShipmentsQuery(tenantId:string,filter:{orderId:string|SQL}|{shipmentId:string}|{orderIds:string[]},lock=false,includeGroup=false){
+ return sql`SELECT shipment.id::text,shipment.order_id,linked.order_number AS "orderNumber",linked.version AS "orderVersion",shipment.sendung_id::text AS "sendungId",shipment.carrier,shipment.tracking_number AS "trackingNumber",shipment.status,shipment.shipped_at::text AS "shippedAt",shipment.label_url AS "labelUrl",
   shipment.weight_kg::text AS "weightKg",to_char(shipment.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
   FROM public.shipments shipment JOIN public.orders linked ON linked.tenant_id=shipment.tenant_id AND linked.id=shipment.order_id
   WHERE shipment.tenant_id=${tenantId} AND ${'orderIds'in filter?sql`shipment.order_id IN (${sql.join(filter.orderIds.map(value=>sql`${value}`),sql`,` )})`:'orderId'in filter?sql`(shipment.order_id=${filter.orderId} OR (${includeGroup} AND shipment.sendung_id IN (SELECT own.sendung_id FROM public.shipments own WHERE own.tenant_id=${tenantId} AND own.order_id=${filter.orderId} AND own.sendung_id IS NOT NULL)))`:sql`shipment.id=${filter.shipmentId}::uuid`}
-  ORDER BY shipment.created_at,shipment.id LIMIT 101 ${lock?sql`FOR UPDATE OF shipment`:sql``}`);
+  ORDER BY shipment.created_at,shipment.id LIMIT 101 ${lock?sql`FOR UPDATE OF shipment`:sql``}`;
+}
+async function readShipments(tx:PrivilegedTenantTransaction,tenantId:string,filter:{orderId:string}|{shipmentId:string}|{orderIds:string[]},lock=false,includeGroup=false){
+ const rows=await tx.execute<Shipment>(manualShipmentsQuery(tenantId,filter,lock,includeGroup));
  if(rows.length>100)throw Error('SHIPPING_LIMIT');return rows;
 }
 /** Version only of the real membership and row/order versions, no group table
@@ -66,17 +72,7 @@ export async function readManualShipmentGroup(tx:PrivilegedTenantTransaction,aut
  const ids=new Set(group.members.map(row=>row.shipmentId));
  return {group,remainingOrderIds:orderIds.filter(id=>all.some(row=>row.order_id===id&&!ids.has(row.id)&&row.status!=='cancelled'&&row.shippedAt===null))};
 }
-export type ManualShippingReadResult=Awaited<ReturnType<typeof readManualShipping>>;
-export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unknown,ports:ManualShippingPorts){
- if(!authorized(auth))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
- if(!id(orderId))return error('VALIDATION_ERROR','ORDER_ID_INVALID');
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const order=await readOrder(tx,auth,orderId);if(!order)return error('NOT_FOUND','ORDER_NOT_FOUND');
-  if(order.handover_mode!=='shipping')return error('VALIDATION_ERROR','ORDER_NOT_SHIPPING');
-  const customer=await ports.readCustomer(tx,auth.tenantId,order.customer_id);
-  if(!customer)throw Error('SHIPPING_CUSTOMER_MISSING');
-  const settings=await ports.readSettings(tx,auth.tenantId);
-  const shipments=await readShipments(tx,auth.tenantId,{orderId},false,true);
+function projectManualShipping(orderId:string,order:Order,customer:CustomerStoredProfile,settings:ShippingSettings|null,shipments:Shipment[]){
   const fields={name:customer.companyName??customer.name,street:customer.street,houseNumber:customer.houseNumber,
    zipCode:customer.zipCode,city:customer.city,country:customer.country,phone:customer.phone,email:customer.email,
    reference:customer.customerNumber};
@@ -87,7 +83,78 @@ export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unkn
    shipmentGroups:shipmentGroups(shipments),
    shipments:shipments.filter(shipment=>shipment.order_id===orderId).map(shipment=>({id:shipment.id,sendungId:shipment.sendungId,carrier:shipment.carrier,trackingNumber:shipment.trackingNumber,updatedAt:shipment.updatedAt,status:shipment.status,weightKg:shipment.weightKg,labelUrl:shipment.labelUrl,trackingUrl:settings&&shipment.carrier===settings.service?trackingLink(settings,shipment.trackingNumber):null})),
    gaps:[...(!settings?['SHIPPING_SETTINGS_MISSING']:[]),'SERVICE_BROWSER_URL_NOT_CONFIGURED','DIMENSIONS_NOT_RECORDED']}};
- });}catch(cause){console.error('MANUAL_SHIPPING_READ_FAILED',cause);return error('UNAVAILABLE','MANUAL_SHIPPING_READ_FAILED');}
+}
+export type ManualShippingReadResult=ReturnType<typeof projectManualShipping>|ReturnType<typeof error>;
+
+/** Set reads retain the original per-order shipment limit and
+ * ordering. No results survive the transaction or a subsequent read/retry. */
+async function readManualShippingGroup(auth:AuthorizationSnapshot,orderIds:string[],ports:ManualShippingPorts){
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const requested=sql.join(orderIds.map(orderId=>sql`(${orderId})`),sql`,`);
+  const rows=await tx.execute<{order_id:string;orders:Order[]}>(sql`
+   SELECT requested.order_id,ARRAY(SELECT to_jsonb(source) FROM (${manualShippingOrderQuery(auth,sql`requested.order_id`)}) source) AS orders
+   FROM (VALUES ${requested}) requested(order_id)`);
+  if(rows.length!==orderIds.length||new Set(rows.map(row=>row.order_id)).size!==orderIds.length)throw Error('SHIPPING_ORDER_AMBIGUOUS');
+  const result=new Map<string,ManualShippingReadResult>(),shipping=new Map<string,Order>();
+  for(const row of rows){
+   if(!orderIds.includes(row.order_id)||!Array.isArray(row.orders)||row.orders.length>1)throw Error('SHIPPING_ORDER_AMBIGUOUS');
+   const order=row.orders[0];
+   if(!order){result.set(row.order_id,error('NOT_FOUND','ORDER_NOT_FOUND'));continue;}
+   if(order.id!==row.order_id)throw Error('SHIPPING_ORDER_AMBIGUOUS');
+   if(order.handover_mode!=='shipping'){result.set(row.order_id,error('VALIDATION_ERROR','ORDER_NOT_SHIPPING'));continue;}
+   shipping.set(row.order_id,order);
+  }
+  if(!shipping.size)return result;
+  const customers=new Map<string,CustomerStoredProfile>();
+  for(const order of shipping.values()){
+   if(customers.has(order.customer_id))continue;
+   const customer=await ports.readCustomer(tx,auth.tenantId,order.customer_id);
+   if(!customer)throw Error('SHIPPING_CUSTOMER_MISSING');
+   customers.set(order.customer_id,customer);
+  }
+  const settings=await ports.readSettings(tx,auth.tenantId);
+  const shipmentRequests=sql.join([...shipping.keys()].map(orderId=>sql`(${orderId})`),sql`,`);
+  const shipmentRows=await tx.execute<{order_id:string;shipments:Shipment[]}>(sql`
+   SELECT requested.order_id,ARRAY(SELECT to_jsonb(source) FROM (${manualShipmentsQuery(auth.tenantId,{orderId:sql`requested.order_id`},false,true)}) source) AS shipments
+   FROM (VALUES ${shipmentRequests}) requested(order_id)`);
+  if(shipmentRows.length!==shipping.size||new Set(shipmentRows.map(row=>row.order_id)).size!==shipping.size)throw Error('SHIPPING_ORDER_AMBIGUOUS');
+  for(const row of shipmentRows){
+   const order=shipping.get(row.order_id),customer=order?customers.get(order.customer_id):undefined;
+   if(!order||!customer||!Array.isArray(row.shipments))throw Error('SHIPPING_CUSTOMER_MISSING');
+   if(row.shipments.length>100)throw Error('SHIPPING_LIMIT');
+   result.set(row.order_id,projectManualShipping(row.order_id,order,customer,settings,row.shipments));
+  }
+  return result;
+ });
+}
+
+export async function readManualShippingBatch(auth:AuthorizationSnapshot,orderIds:readonly string[],ports:ManualShippingPorts):Promise<Map<string,ManualShippingReadResult>>{
+ const result=new Map<string,ManualShippingReadResult>(),valid:string[]=[],allowed=authorized(auth);
+ for(const orderId of new Set(orderIds)){
+  if(!allowed){result.set(orderId,error('FORBIDDEN','SHIPPING_FORBIDDEN'));continue;}
+  if(!id(orderId)){result.set(orderId,error('VALIDATION_ERROR','ORDER_ID_INVALID'));continue;}
+  valid.push(orderId);
+ }
+ const read=async(ids:string[]):Promise<void>=>{
+  if(!ids.length)return;
+  try{
+   const rows=await readManualShippingGroup(auth,ids,ports);
+   for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error('SHIPPING_ORDER_AMBIGUOUS');result.set(orderId,value);}
+  }catch(cause){
+   // The failed transaction has completed its rollback before descending.
+   if(ids.length>1){const middle=Math.floor(ids.length/2);await read(ids.slice(0,middle));await read(ids.slice(middle));return;}
+   console.error('MANUAL_SHIPPING_READ_FAILED',{name:cause instanceof Error?cause.name:'UnknownError'});
+   result.set(ids[0],error('UNAVAILABLE','MANUAL_SHIPPING_READ_FAILED'));
+  }
+ };
+ await read(valid);
+ return result;
+}
+export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unknown,ports:ManualShippingPorts):Promise<ManualShippingReadResult>{
+ if(!authorized(auth))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
+ if(!id(orderId))return error('VALIDATION_ERROR','ORDER_ID_INVALID');
+ const result=await readManualShippingBatch(auth,[orderId],ports);
+ return result.get(orderId)??error('UNAVAILABLE','MANUAL_SHIPPING_READ_FAILED');
 }
 export async function saveManualTracking(auth:AuthorizationSnapshot,input:unknown,ports:ManualShippingPorts){
  if(!authorized(auth))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
