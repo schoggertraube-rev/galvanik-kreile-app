@@ -10,6 +10,15 @@
   },
   {
     "datum": "2026-11-21",
+    "pr": 255,
+    "seite": "kunden",
+    "ziel": "/customers",
+    "punkte": [
+      "Du kannst die Kundenanlage nach einer Zielfreigabe sicher wiederholen."
+    ]
+  },
+  {
+    "datum": "2026-11-21",
     "pr": 254,
     "seite": "heute",
     "ziel": "/",
