@@ -175,6 +175,7 @@ it('retains known Today sources when an unreadable TEST order makes the full ope
 
 
 it('qualifies real company JSON before and after the additive schema, rejecting partial or invalid settings',async()=>{
+ expect(await withSession(full,()=>saveCompanySettingsAction(companyInput))).toMatchObject({code:'OK'});
  const [row]=await sql`SELECT to_jsonb(company) AS source FROM public.company_settings company WHERE tenant_id=${tenant}`;
  expect(row?.source).toBeDefined();
  const defaults=await sql`SELECT attribute.attname,pg_get_expr(def.adbin,def.adrelid) AS value FROM pg_attribute attribute JOIN pg_attrdef def ON def.adrelid=attribute.attrelid AND def.adnum=attribute.attnum WHERE attribute.attrelid='public.company_settings'::regclass AND attribute.attname IN('seiten_abfrage_ms','rechnung_mail_grenze')`;
@@ -196,6 +197,7 @@ it('qualifies real company JSON before and after the additive schema, rejecting 
 
 
 it('PL15:43 sends the customer subject from the actual invoice/company source and retains original bytes on retry',async()=>{
+ expect(await withSession(full,()=>saveCompanySettingsAction(companyInput))).toMatchObject({code:'OK'});
  const customerId=await customerFixture('TEST L1 friendly subject');
  const issued=await readyInvoiceOrder('TEST L1 actual invoice mail','pickup',false,customerId);
  const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_L1_SUBJECT_AUTH');
