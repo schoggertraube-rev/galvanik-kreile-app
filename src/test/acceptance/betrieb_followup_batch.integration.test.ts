@@ -12,7 +12,7 @@ import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounti
 import {getPaymentStatesBatch} from '@/lib/server/paymentSummaryRead';
 import {getOrderPaymentStateAction,confirmPaymentAction} from '@/app/actions/payments.actions';
 import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
-import {getManualShippingAction,saveManualTrackingAction,markOrderInformedByPhoneAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {getManualShippingAction,saveManualTrackingAction,markOrderInformedByPhoneAction,getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {readOrderInformed,readOrdersInformed} from '@/lib/server/orderReleaseRead';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 
@@ -239,4 +239,34 @@ it('250 informed batch qualifies the actual two-original invoice mail and fresh 
   const hidden=await readOrdersInformed(await authorization(await createFixture(['auftraege'])),ids);
   for(const id of ids){const row=hidden.get(id);expect(row).toMatchObject({code:'OK',informed:{channel:'mail',threadId:sent.data.threadId}});if(row?.code!=='OK')throw Error('TEST_REDACTED_NOTICE_REQUIRED');expect(row.invoiceMailOriginals).toBeUndefined();expect(row.overdueInvoiceIds).toBeUndefined();}
  }finally{spy.mockRestore();}
+});
+
+it('250 Today caller preserves actual qualified card rules for zero/one/many, fresh notice retry and denied cards',async()=>{
+ const a=await readyInvoiceOrder('TEST 250 Today pickup');
+ const b=await readyInvoiceOrder('TEST 250 Today shipping','shipping');
+ const ids=[a.orderId,b.orderId];
+ expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toMatchObject({code:'OK',data:{rows:[]}});
+ async function check(orderIds:string[]){
+  const root=await withSession(full,()=>getTodayOrderReadAction(JSON.parse(JSON.stringify({orderIds}))));
+  expect(root,JSON.stringify(root)).toMatchObject({code:'OK'});if(root.code!=='OK')throw Error('TEST_REAL_TODAY_REQUIRED');
+  expect(root.data.rows).toHaveLength(orderIds.length);
+  for(const orderId of orderIds){
+   const row=root.data.rows.find(row=>row.orderId===orderId);
+   const card=await withSession(full,()=>getLiveOrderCardAction({orderId}));
+   expect(card).toMatchObject({code:'OK'});if(card.code!=='OK')throw Error('TEST_REAL_CARD_REQUIRED');
+   expect(row).toMatchObject({orderId,result:{code:'OK',data:{card:{id:orderId,version:card.data.card.version}}}});
+   if(row?.result.code!=='OK')throw Error('TEST_QUALIFIED_TODAY_ROW_REQUIRED');
+   expect(row.result.data.nextActionRule).toEqual(card.data.nextActionRule);
+  }
+  return root;
+ }
+ await check([a.orderId]);await check(ids);
+ const phone={orderId:a.orderId,expectedVersion:a.version,clientEventId:randomUUID()};
+ const saved=await withSession(full,()=>markOrderInformedByPhoneAction(phone));expect(saved).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction(JSON.parse(JSON.stringify(phone))))).toMatchObject({code:'OK',replayed:true});
+ await check(JSON.parse(JSON.stringify(ids)));
+ const denied=await createFixture(['kunden']);
+ const hidden=await withSession(denied,()=>getTodayOrderReadAction({orderIds:ids}));
+ expect(hidden).toMatchObject({code:'OK'});if(hidden.code!=='OK')throw Error('TEST_DENIED_ROWS_REQUIRED');
+ expect(hidden.data.rows.map(row=>row.result.code)).toEqual(['FORBIDDEN','FORBIDDEN']);
 });
