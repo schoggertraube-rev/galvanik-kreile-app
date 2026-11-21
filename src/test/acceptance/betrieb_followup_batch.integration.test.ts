@@ -316,7 +316,9 @@ it('250 Today caller preserves actual qualified card rules for zero/one/many, fr
  const ids=[a.orderId,b.orderId];
  expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toMatchObject({code:'OK',data:{rows:[]}});
  async function check(orderIds:string[]){
-  const root=await withSession(full,()=>getTodayOrderReadAction(JSON.parse(JSON.stringify({orderIds}))));
+  const counted=await countSourceQueries(()=>withSession(full,()=>getTodayOrderReadAction(JSON.parse(JSON.stringify({orderIds})))),/versand_dienst AS service/);
+  const root=counted.value;
+  expect(counted.reads).toBe(1);
   expect(root,JSON.stringify(root)).toMatchObject({code:'OK'});if(root.code!=='OK')throw Error('TEST_REAL_TODAY_REQUIRED');
   expect(root.data.rows).toHaveLength(orderIds.length);
   for(const orderId of orderIds){

@@ -1,5 +1,6 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {readFileSync} from 'node:fs';
 
 const { withTransaction, execute } = vi.hoisted(() => ({
   withTransaction: vi.fn(),
@@ -12,9 +13,15 @@ vi.mock("@/lib/server/orderReleaseRead", () => ({
   readOpenOrderComplaintsBatch:async(_tx:unknown,_tenant:string,ids:readonly string[])=>new Map(ids.map(id=>[id,null])),
 }));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
-vi.mock("drizzle-orm", () => ({
-  sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),
-}));
+vi.mock("drizzle-orm", () => {
+  type Query={text:string;values:unknown[]};
+  const fragment=(value:unknown):value is Query=>!!value&&typeof value==='object'&&'text'in value&&'values'in value;
+  const tag=(parts:TemplateStringsArray,...values:unknown[]):Query=>{
+    const query:Query={text:parts[0],values:[]};
+    values.forEach((value,index)=>{query.text+=fragment(value)?value.text:'?';query.values.push(...(fragment(value)?value.values:[value]));query.text+=parts[index+1];});return query;
+  };
+  return {sql:Object.assign(tag,{join:(parts:Query[],separator:Query):Query=>({text:parts.map(part=>part.text).join(separator.text),values:parts.flatMap(part=>part.values)})})};
+});
 
 const INVOICE = "33333333-3333-4333-8333-333333333333";
 const CORRELATION = "55555555-5555-4555-8555-555555555555";
@@ -144,7 +151,12 @@ describe("readPaymentSummary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     execute.mockResolvedValue([]); // The additional complaint reader has a genuine empty result.
-    withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
+    withTransaction.mockImplementation(async (_authorization, work) => work({execute:async(statement:{text:string;values:unknown[]})=>{
+      const rows=await execute(statement) as Array<Record<string,unknown>>;
+      if(!statement.text.includes('private.read_order_payment_states_v1'))return rows;
+      const requested=statement.values[1];
+      return rows.length?rows.map(row=>({...row,batch_order_id:requested})):[{batch_order_id:requested,order_id:null}];
+    }}));
   });
 
   it("returns the canonical paid summary through the tenant transaction and private view", async () => {
@@ -242,13 +254,16 @@ describe("readPaymentSummary", () => {
         goodsOutAllowed: true,
       },
     });
-    expect(execute.mock.calls[0]?.[0].text).toContain("private.v_goods_out_ui_state_v1");
-    // The shared debt predicate is a nested SQL fragment, not interpolated text.
+    expect(execute.mock.calls[0]?.[0].text).toContain("private.read_order_payment_states_v1");
+    // The same view/debt predicate now lives in the authorized native function.
     expect(execute.mock.calls[0]?.[0].values).toEqual([
-      expect.objectContaining({ text: expect.stringContaining("invoice.status") }),
+      KREILE_TENANT_SLUG,
       paidRow.order_id,
     ]);
-    expect(execute.mock.calls[0]?.[0].text).toContain("AS customer_overdue_invoice_ids");
+    const source=readFileSync('supabase/migrations/20261121165324_today_read_plan_cache.sql','utf8');
+    expect(source).toContain('FROM private.v_goods_out_ui_state_v1 state');
+    expect(source).toContain('private.invoice_is_overdue_v1(invoice.status');
+    expect(source).toContain("AS customer_overdue_invoice_ids");
   });
 
   it("returns Rechnung without an invoice and without inventing payment values", async () => {
