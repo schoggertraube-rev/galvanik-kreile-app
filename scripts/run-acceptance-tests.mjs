@@ -14,7 +14,7 @@ if(process.argv.includes('--bulk-only')&&process.argv.includes('--isolated-only'
 function execute(args,capture=false){
  const result=spawnSync(process.execPath,[cli,...args],{stdio:capture?['ignore','pipe','pipe']:'inherit',encoding:'utf8',maxBuffer:16*1024*1024});
  if(result.error)throw result.error;
- if(result.status!==0){if(capture)process.stderr.write(result.stderr??'');throw Error('ACCEPTANCE_CHILD_FAILED:'+result.status);}
+ if(result.status!==0){if(capture){process.stderr.write(result.stderr??'');process.stderr.write(result.stdout??'');}throw Error('ACCEPTANCE_CHILD_FAILED:'+result.status);}
  return result.stdout;
 }
 const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -33,10 +33,17 @@ if(!process.argv.includes('--bulk-only'))for(const file of isolated){
  const groupSize=file.endsWith('storage_letter.integration.test.ts')?6:1;
  for(let offset=0;offset<names.length;offset+=groupSize){
   const selected=names.slice(offset,offset+groupSize);
-  const pattern='^(?:'+selected.map(escape).join('|')+')$';
-  if(names.filter(name=>new RegExp(pattern).test(name)).length!==selected.length)throw Error('ACCEPTANCE_CASE_PARTITION_INVALID');
+  // Vitest list uses " > " for suite boundaries; its name filter joins suites
+  // with spaces. Verify the actual filtered inventory before running the group.
+  const pattern='^(?:'+selected.map(name=>escape(name.replaceAll(' > ',' '))).join('|')+')$';
+  const matched=JSON.parse(execute(['list',file,'--json','--testNamePattern',pattern],true));
+  if(!Array.isArray(matched)||matched.length!==selected.length||matched.some(row=>resolve(row.file)!==resolve(file)||!selected.includes(row.name))||new Set(matched.map(row=>row.name)).size!==selected.length)throw Error('ACCEPTANCE_CASE_PARTITION_INVALID');
   console.log(`ACCEPTANCE_GROUP ${file} ${offset+1}-${offset+selected.length}/${names.length}`);
-  try{execute(['run',file,'--testNamePattern',pattern,...flags]);}catch(error){failed=true;console.error(error.message);}
+  try{
+   const report=JSON.parse(execute(['run',file,'--testNamePattern',pattern,...flags,'--reporter=json'],true));
+   if(report.numPassedTests!==selected.length||report.numFailedTests!==0)throw Error('ACCEPTANCE_CASE_EXECUTION_INCOMPLETE');
+   console.log(`ACCEPTANCE_EXECUTED ${report.numPassedTests}/${selected.length}`);
+  }catch(error){failed=true;console.error(error.message);}
  }
 }
 console.log(`ACCEPTANCE_TOTAL_SECONDS=${((Date.now()-started)/1000).toFixed(2)}`);
