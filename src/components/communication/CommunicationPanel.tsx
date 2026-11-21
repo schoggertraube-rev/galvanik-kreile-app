@@ -1,5 +1,5 @@
 "use client";
-import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY,INVOICE_MAIL_COMPOSER_COPY,V45_TEXT} from "@/ui/situationCatalog";
+import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY,INVOICE_MAIL_COMPOSER_COPY} from "@/ui/situationCatalog";
 import type {MailImportFailure} from "@/modules/eingang/public";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +30,7 @@ type InboxMessage = {
   hasAttachments: boolean | null;
 };
 
-export function CommunicationPanel({ targetType, targetId,composer,invoiceOriginal }: Target & {composer?:Composer;invoiceOriginal?:{documentId:string;expectedInvoiceIds:string[];number?:string;customerName?:string;singleInvoice?:true}}) {
+export function CommunicationPanel({ targetType, targetId,composer,invoiceOriginal }: Target & {composer?:Composer;invoiceOriginal?:{documentId:string;expectedInvoiceIds:string[];number?:string;customerName?:string;companyName?:string;singleInvoice?:true}}) {
   const [state, setState] = useState<"loading" | "ready" | "in-klärung" | "error">("loading");
   const [message, setMessage] = useState("");
   const [inbox, setInbox] = useState<InboxMessage[]>([]);
@@ -133,7 +133,7 @@ export function CommunicationPanel({ targetType, targetId,composer,invoiceOrigin
         }catch(error){console.error('[COMMUNICATION_SEND_UNCONFIRMED]',error);setSendUnclear(true);setFeedback('Ausgang ungeklärt · Eingaben und Kennung bleiben erhalten. Mit gleicher Kennung erneut versuchen.');}
         finally{sendLock.current=false;setSendBusy(false);}
       }}>
-        <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} defaultValue={!composer&&invoiceOriginal?.number&&invoiceOriginal.customerName?V45_TEXT.mail$invoice({number:invoiceOriginal.number,name:invoiceOriginal.customerName}):undefined} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
+        <label>Betreff<input name="subject" required maxLength={500} value={composer?.subject} defaultValue={!composer&&invoiceOriginal?.number&&invoiceOriginal.companyName?INVOICE_MAIL_COMPOSER_COPY.subject(invoiceOriginal.number,invoiceOriginal.companyName):undefined} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onSubject(event.target.value):undefined} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} value={composer?.body} defaultValue={!composer&&invoiceOriginal?INVOICE_MAIL_COMPOSER_COPY.body:undefined} disabled={composer?.busy||sendBusy||sendUnclear} onChange={composer?event=>composer.onBody(event.target.value):undefined} /></label>
         {!composer&&!invoiceOriginal?<label>PDF-Anhang<select name="quoteId" defaultValue="" disabled={sendBusy||sendUnclear}><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>:null}
         {!composer?<button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}{confirmedRetry?.label??(newPrepareReady?"Versenden":sendUnclear?"Mit gleicher Kennung erneut versuchen":"Versenden")}</button>:null}

@@ -284,6 +284,8 @@ async function fillQuote() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Synthetic calendar for the fixed 2026-11-20 fixtures; timers stay real.
+  vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z"));
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -298,7 +300,7 @@ beforeEach(() => {
     })),
   });
 });
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 it('S54e keeps the structured supplier name in the existing creation flow without writing on open',async()=>{
   const createCustomer=vi.fn<GlobalCreatePorts['createCustomer']>();

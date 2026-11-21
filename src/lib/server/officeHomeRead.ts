@@ -11,6 +11,9 @@ import {
   type OrdersHomeSource,
 } from "@/modules/orders/public";
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
+import {withPageReadBudget,configurePageReadBudget,withPageReadPhase} from '@/db/readBudget';
+import {readPageReadSettingsAction} from '@/app/actions/orders.actions';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
 function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   return {
@@ -31,10 +34,20 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
 }
 
 export async function loadOfficeHome(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
+  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+}
+async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
-    const [orders, dashboard] = await Promise.all([getOperationalOrders(authorization), readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction)]);
+    let settingsIncomplete=false;
+    try{const source=await withPageReadPhase('home.settings',()=>readPageReadSettingsAction());if(source.code==='OK')configurePageReadBudget(source.settings.queryTimeoutMs);else settingsIncomplete=true;}
+    catch{settingsIncomplete=true;}
+    // One request, one operational source; the Today composition consumes this
+    // exact promise rather than issuing the same full-list query a second time.
+    const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'}));
+    const [orderSource, dashboard] = await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})), withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,new Date(),ordersRead))]);
+    if(settingsIncomplete)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
     const common = {
       cacheLoginScope:await readCacheLoginScope(),
       role: authorization.role,
@@ -43,11 +56,13 @@ export async function loadOfficeHome(authorization: AuthorizationSnapshot): Prom
       canDelegate: hasAuthorizationArea(authorization, "auftraege"),
       dashboard,
     } as const;
-    const projection = buildOrdersHomeProjection(orders.map(toHomeSource), new Date().toISOString());
-    return orders.length === 0
+    if(orderSource.code!=='OK')return {kind:'partial',projection:null,...common};
+    const projection = buildOrdersHomeProjection(orderSource.orders.map(toHomeSource), new Date().toISOString());
+    return orderSource.orders.length === 0
       ? { kind: "empty", ...common, projection }
       : { kind: "data", ...common, projection };
-  } catch {
+  } catch(error) {
+    console.error('[OFFICE_HOME_READ_FAILED]',{name:error instanceof Error?error.name:'UnknownError',at:error instanceof Error?error.stack?.split('\n').slice(1,4):undefined});
     return { kind: "error", message: "Die aktuellen Auftragsdaten konnten nicht sicher geladen werden." };
   }
 }

@@ -265,6 +265,28 @@ function mapRecord(
   };
 }
 
+/** Batch only the existing qualified order evidence projection; no originals
+ * are fetched from Storage and a corrupt order cannot erase another order. */
+export async function readOrderEvidenceBatch(authorization:AuthorizationSnapshot,orderIds:readonly string[]):Promise<Map<string,EvidenceReadResult<EvidenceReadRecord[]>>>{
+ const result=new Map<string,EvidenceReadResult<EvidenceReadRecord[]>>();
+ if(!authorization.permissions.includes('perm_view_leitstand')||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
+  for(const id of orderIds)result.set(id,{code:'FORBIDDEN',message:'Nachweise sind nicht erlaubt.'});return result;
+ }
+ if(orderIds.length===0)return result;
+ try{
+  const rows=await withPrivilegedTenantTransaction(authorization,tx=>tx.execute<EvidenceViewRow&{order_target:string}>(sql`
+   SELECT wanted.id AS order_target,evidence.* FROM unnest(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]) AS wanted(id)
+   JOIN private.v_evidence_records_v3 evidence ON evidence.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',wanted.id))
+   WHERE evidence.tenant_id=${authorization.tenantId} AND evidence.source_kind<>'INTAKE_FILE'
+   ORDER BY wanted.id,evidence.recorded_at DESC,evidence.evidence_key`));
+  for(const id of orderIds){
+   try{result.set(id,{code:'OK',data:rows.filter(row=>row.order_target===id).map(row=>mapRecord(row,authorization,{targetType:'ORDER',targetId:id}))});}
+   catch{result.set(id,{code:'UNAVAILABLE',message:EVIDENCE_READ_COPY.unavailable});}
+  }
+ }catch{for(const id of orderIds)result.set(id,{code:'UNAVAILABLE',message:EVIDENCE_READ_COPY.unavailable});}
+ return result;
+}
+
 export async function readEvidenceRecordsByTarget(
   authorization: AuthorizationSnapshot,
   input: ReadEvidenceTargetInput,

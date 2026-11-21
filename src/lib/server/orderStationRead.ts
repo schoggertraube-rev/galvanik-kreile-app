@@ -15,7 +15,7 @@ type Station = "wareneingang" | "angenommen" | "galvanik";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type QueueRow = {
-  ausgabe_frei:boolean;
+  ausgabe_frei?:boolean;
   id: string;
   tenant_id: string;
   version: number;
@@ -213,7 +213,7 @@ function mapOperationalQueueRow(row: QueueRow, tenantId: string): OperationalOrd
   return {
     id: row.id,
     version: row.version,
-    ausgabeFrei:row.ausgabe_frei,
+    ...(typeof row.ausgabe_frei==='boolean'?{ausgabeFrei:row.ausgabe_frei}:{}),
     orderNumber: row.order_number,
     customerId: row.customer_id,
     customerName: row.customer_name,
@@ -251,14 +251,21 @@ function parseSafeCount(value: number | string): number {
 /** Fresh per invocation, tenant-bound full operational read port. */
 export async function readTenantOperationalOrders(
   authorization: Pick<AuthorizationSnapshot, "tenantId">,
+  projection?:{purpose:'today'},
 ): Promise<OperationalOrder[]> {
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
+    // Same canonical view and mapper. Today does not display release authority
+    // or per-order change timestamps; selecting queue.* needlessly evaluates
+    // those correlated physical/financial proofs for every displayed row.
     const rows = await tx.execute<QueueRow>(sql`
-      SELECT queue.*, queue.due_date::date::text AS due_date_text,
+      SELECT ${projection?.purpose==='today'?sql`queue.id,queue.tenant_id,queue.version,queue.order_number,queue.customer_id,queue.customer_name,
+        queue.title,queue.task,queue.station,queue.current_station,queue.current_station_id,queue.status,queue.risk,
+        queue.intake_date,queue.due_date,queue.created_at,queue.tenant_integrity_ok,queue.parts`:sql`queue.*,
         (SELECT max(event.created_at) FROM public.events event
-         WHERE event.tenant_id = queue.tenant_id AND event.order_id = queue.id) AS server_changed_at
+         WHERE event.tenant_id = queue.tenant_id AND event.order_id = queue.id) AS server_changed_at`},
+        queue.due_date::date::text AS due_date_text
       FROM private.v_operational_station_queue_v1 queue
-      ORDER BY created_at DESC, id
+      ORDER BY created_at DESC,id
     `);
     return mapOperationalQueueRows(rows, authorization.tenantId);
   });

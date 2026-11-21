@@ -3,6 +3,7 @@ export {V45_TEXT,V45_TEXT_TEMPLATES} from './generated/v45Texte.generated';
 export type {V45TextKey} from './generated/v45Texte.generated';
 /** One editable invoice-mail draft for the existing customer/order composer. */
 export const INVOICE_MAIL_COMPOSER_COPY={
+ subject:(number:string,companyName:string)=>`Rechnung ${number} · ${companyName}`,
  body:'Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen',
 } as const;
 /** PL13.11.00:14 immutable invoice VAT display. */
@@ -437,6 +438,8 @@ export const CUSTOMER_CREDIT_COPY={
 } as const;
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
+ proposalMissing:(number:string,invoice:boolean,reason:'freigabe'|'einstellungen'|'original'|'quelle')=>`Versandvorschlag für ${invoice?'Rechnung':'Auftrag'} ${number.length>24?number.slice(0,23)+'…':number} fehlt: ${{freigabe:'Freigabebeleg fehlt',einstellungen:'Versandangaben fehlen',original:'Originalbeleg ist unklar',quelle:'Quelle nicht lesbar'}[reason]}.`,
+ orderQuoteMissing:(number:string)=>`Preisbeleg zu Auftrag ${number.length>24?number.slice(0,23)+'…':number} ist nicht lesbar.`,
  noAdditionalInvoiceNeeded:'Versandkosten sind 0 € – keine Zusatzrechnung nötig',
  groupAlreadyCharged:(number:string,other:string)=>`${number} und ${other} sind schon einzeln mit Versand berechnet – verschick sie getrennt.`,
  reissueReleaseBlocked:(number:string)=>`Stell zuerst die Rechnung zu ${number} ohne Versand neu aus – dann kann die Ware raus.`,
@@ -517,3 +520,6 @@ export const PENDING_UNDO_COPY={title:'Wartende Aktionen',undo:'Rückgängig',
  unknown:'Deine wartenden Änderungen sind gerade nicht lesbar.',
  unconfirmed:'Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand.',
 } as const;
+
+/** PL20.11 L1: operating limits in the existing company settings. */
+export const PAGE_READ_COPY={orderIncomplete:(number:string)=>`Auftrag ${number} ist gerade nicht lesbar · öffne den Auftrag.`,loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."} as const;

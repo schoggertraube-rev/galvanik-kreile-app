@@ -38,13 +38,16 @@ import {ProtocolClickCapture} from '@/components/ProtocolClickCapture';
 
 import { getAuthBootstrapAction } from "@/app/actions/auth.actions";
 import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
+import {withPageReadBudget} from '@/db/readBudget';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
+import {PAGE_READ_COPY} from '@/ui/situationCatalog';
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const authState = await getAuthBootstrapAction();
+  const authState = await withPageReadBudget(getAuthBootstrapAction,DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
   const rootStyle=readRootStyle(authState.status,authState.status==='authenticated'?authState.user.packageSwitches:undefined);
   const isAdmin =
     authState.status === "authenticated" &&
@@ -73,7 +76,7 @@ export default async function RootLayout({
               <DiagnosticsProvider>
                 <FeatureFlagProvider offline24hEnabled={authState.status === 'authenticated' && authState.user.offline24h === true}>
                   <KreileAppShell vorfinalStyle={rootStyle.enabled} loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
-                    {children}
+                    {authState.status==='authenticated'?<Suspense fallback={<p role="status">{PAGE_READ_COPY.loading}</p>}>{children}</Suspense>:children}
                   </KreileAppShell>
                 </FeatureFlagProvider>
                 {isAdmin && <DiagnosticsWidget />}
