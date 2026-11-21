@@ -8,7 +8,7 @@ const queryPhases=new AsyncLocalStorage<string>();
 export function pageReadQueryObservation(){return budgets.getStore()?.queries??requestQueryObservation();}
 function countNativeRead(statement:string,budget:ReadBudget,phase=queryPhases.getStore()){
  const counts=budget.queries;counts.total++;
- const station=phase&&diagnosticPhases.has(phase)?phase:budget.kind==='authorization'?'authorization':'other';
+ const station=budget.kind==='authorization'?'authorization':phase&&diagnosticPhases.has(phase)?phase:'other';
  counts.phases[station]=(counts.phases[station]??0)+1;
  const normalized=statement.replaceAll('"','').toLowerCase();
  if(budget.kind==='authorization'&&/\bfrom\s+(?:public\.)?app_users\b/.test(normalized)&&normalized.includes('app_user_rights'))counts.rights++;
@@ -274,7 +274,10 @@ export function logPageReadPhase(phase:string,startedAt:number,counts:Readonly<R
 }
 export async function withPageReadPhase<T>(phase:string,work:()=>PromiseLike<T>|T):Promise<T>{
  const started=Date.now();let value:T;
- try{value=await queryPhases.run(phase,work);}
+ // Technical savepoint timing belongs to its caller's SQL station. Assimilate
+ // lazy queries inside the diagnostic context without cloning their budget.
+ const station=phase==='today.source'?(queryPhases.getStore()??phase):phase;
+ try{value=await queryPhases.run(station,async()=>await work());}
  catch(error){logPageReadPhase(phase,started,{failed:1},error);throw error;}
  let counts:Record<string,number>={};
  try{

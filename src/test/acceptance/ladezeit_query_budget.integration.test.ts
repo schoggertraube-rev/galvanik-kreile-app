@@ -68,6 +68,16 @@ it('counts the canonical rights row in its existing authorization scope without 
  },2000);
 });
 
+it('attributes lazy and async native source queries to their real caller station',async()=>{
+ await native`SELECT 1`;
+ await withPageReadBudget(async()=>{
+  const observation=pageReadQueryObservation();
+  await withPageReadPhase('today.responsibility',()=>withPageReadPhase('today.source',()=>client`SELECT 42`));
+  await withPageReadPhase('today.responsibility',()=>withPageReadPhase('today.source',async()=>await client`SELECT 43`));
+  expect(observation.total).toBe(2);expect(observation.phases).toEqual({'today.responsibility':2});
+ },1000);
+});
+
 it('still cancels a real slow query at its page deadline and returns the native connection intact',async()=>{
  await client`SELECT 1`;configured.length=0;
  const failure=await withPageReadBudget(()=>client.begin(async tx=>{
