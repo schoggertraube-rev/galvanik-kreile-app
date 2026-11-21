@@ -54,7 +54,7 @@ export function configurePageReadBudget(timeoutMs:number):void{
   if(budget)budget.deadline=budget.startedAt+timeoutMs;
 }
 
-function withinBudget<T>(work:()=>PromiseLike<T>,cancel?:()=>void):Promise<T>{
+function withinBudget<T>(work:()=>PromiseLike<T>,cancel?:()=>unknown):Promise<T>{
   const budget=budgets.getStore();
   if(!budget)return Promise.resolve(work());
   const remaining=budget.deadline-Date.now();
@@ -66,7 +66,14 @@ function withinBudget<T>(work:()=>PromiseLike<T>,cancel?:()=>void):Promise<T>{
   }
   return new Promise<T>((resolve,reject)=>{
     let settled=false;
-    const stop=()=>{if(!settled){settled=true;cancel?.();reject(new PageReadTimeout());}};
+    const stop=()=>{if(!settled){
+      settled=true;
+      // Keep the native transaction reserved until its cancellation transport
+      // has drained. Otherwise a late CancelRequest can cancel ROLLBACK or the
+      // next BEGIN and leave the sole connection reserved indefinitely.
+      try{Promise.resolve(cancel?.()).then(()=>reject(new PageReadTimeout()),()=>reject(new PageReadTimeout()));}
+      catch{reject(new PageReadTimeout());}
+    }};
     const timer=setTimeout(stop,remaining);
     budget.cancel.add(stop);
     const finish=(callback:()=>void)=>{
@@ -79,19 +86,28 @@ function withinBudget<T>(work:()=>PromiseLike<T>,cancel?:()=>void):Promise<T>{
 }
 
 type QueryLike=PromiseLike<unknown>&{cancel:()=>void};
+/** postgres-js Query.cancel discards its canceller's acknowledgement promise.
+ * Invoke that same installed driver's canceller exactly once and retain it for
+ * cleanup; adapters exposing only cancel keep their existing boundary. */
+function cancelNativeQuery(query:QueryLike):unknown{
+ const native=query as QueryLike&{canceller?:((query:QueryLike)=>unknown)|null};
+ const cancel=native.canceller;
+ if(typeof cancel!=='function')return query.cancel();
+ const pending=cancel(query);native.canceller=null;return pending;
+}
 function boundedQuery<T extends QueryLike>(query:T):T{
   if(!budgets.getStore())return query;
   let pending:Promise<unknown>|undefined;
   const start=()=>pending??=(async()=>{
     await budgets.getStore()?.sourcesReady;
     const store=budgets.getStore(),prepare=store?.prepareStatement;
-    if(!store||!prepare)return withinBudget(()=>query,()=>query.cancel());
+    if(!store||!prepare)return withinBudget(()=>query,()=>cancelNativeQuery(query));
     if(store.timeoutSetAt===undefined||Date.now()-store.timeoutSetAt>=250){
       const preparedAt=Date.now();await prepare();store.timeoutSetAt=Date.now();
       if(Date.now()-preparedAt>=250)logPageReadPhase('db.prepare',preparedAt);
     }
     const queryAt=Date.now();
-    try{const result=await withinBudget(()=>query,()=>query.cancel());if(Date.now()-queryAt>=250)logPageReadPhase('db.query',queryAt);return result;}
+    try{const result=await withinBudget(()=>query,()=>cancelNativeQuery(query));if(Date.now()-queryAt>=250)logPageReadPhase('db.query',queryAt);return result;}
     catch(error){logPageReadPhase('db.query',queryAt,{failed:1},error);if(error&&typeof error==='object'&&'code'in error&&error.code==='57014')throw new PageReadTimeout();throw error;}
   })();
   const wrapped:T=new Proxy(query,{
@@ -160,7 +176,7 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
             // do not spend an extra roundtrip on an otherwise empty savepoint.
             if(key==='begin'){
               const setting=native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining)]);
-              await withinBudget(()=>setting,()=>setting.cancel());
+              await withinBudget(()=>setting,()=>cancelNativeQuery(setting));
             }
             const prepareStatement=async()=>{
               const left=budget.deadline-Date.now();if(left<=0)throw new PageReadTimeout();

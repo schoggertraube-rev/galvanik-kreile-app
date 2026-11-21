@@ -9,8 +9,10 @@ const url=process.env.DATABASE_URL;
 const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
 if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!==testPort)throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 const configured:number[]=[];
+let inspectRollback:((text:string)=>void)|undefined;
 const native=postgres(url,{prepare:false,max:1,debug:(_connection,text,parameters)=>{
  if(text.includes("set_config('statement_timeout'"))configured.push(Number(parameters[0]));
+ inspectRollback?.(text);
 }});
 const client=withPageReadQueryLimits(native);
 afterAll(()=>native.end({timeout:5}));
@@ -84,4 +86,29 @@ it('starts the real provider request only after the same settings promise',async
    });
   },2000);
  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});
+
+it('drains the actual native cancellation acknowledgement before rollback or connection reuse',async()=>{
+ await client`SELECT 1`;
+ let acknowledged=false,started=false,drained:Promise<unknown>|undefined;
+ const rollbacks:boolean[]=[];
+ inspectRollback=text=>{if(text.trim().toLowerCase()==='rollback'&&started)rollbacks.push(acknowledged);};
+ try{
+  const failure=await withPageReadBudget(()=>client.begin(async tx=>{
+   // Exercise client cancellation deterministically. PostgreSQL retains the
+   // initial transaction bound; the request's existing configurator makes its
+   // client deadline earlier. The independent server deadline cannot win first.
+   configurePageReadBudget(100);
+   const query=tx`SELECT pg_sleep(1)`;
+   const cancellable=query as unknown as {canceller:((query:unknown)=>Promise<unknown>)|null};
+   const cancel=cancellable.canceller;if(!cancel)throw Error('TEST_NATIVE_CANCELLER_REQUIRED');
+   // The native query and cancellation remain real. Only the observed transport
+   // acknowledgement is delayed, making the cleanup race deterministic.
+   cancellable.canceller=input=>{started=true;drained=Promise.resolve(cancel(input)).then(async()=>{await new Promise(resolve=>setTimeout(resolve,25));acknowledged=true;});return drained;};
+   return await query;
+  }),2000).then(()=>null,error=>error);
+  expect(failure).toBeInstanceOf(PageReadTimeout);expect(started).toBe(true);
+  expect(rollbacks).toEqual([true]);
+  expect(await withPageReadBudget(()=>client.begin(tx=>tx`SELECT 14 AS n`),1000)).toMatchObject([{n:14}]);
+ }finally{await drained;inspectRollback=undefined;}
 });
