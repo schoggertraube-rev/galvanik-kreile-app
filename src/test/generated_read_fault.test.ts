@@ -42,3 +42,9 @@ it('write interruption and its observed failure ignore diagnostics but retain th
  expect(isApplicationServerAction(request(metadata),diagnostics,metadata)).toBe(false);
  expect(isApplicationServerAction({method:'GET',nextAction:list},diagnostics)).toBe(false);
 });
+it('a declared message navigation keeps the fault pending through unrelated home reads and aborts only its message list',()=>{
+ const diagnostics=protocolDiagnosticActionIds(fixture());
+ const requests=[metadata,write,'getIntakeDraftsAction','getIntakeAssignmentAction',list].map(nextAction=>({method:'POST',resourceType:'fetch',nextAction}));
+ expect(requests.filter(request=>isApplicationDataLoad(request,diagnostics,list)).map(request=>request.nextAction)).toEqual([list]);
+ expect(isApplicationDataLoad({method:'GET',resourceType:'fetch'},diagnostics,list)).toBe(false);
+});

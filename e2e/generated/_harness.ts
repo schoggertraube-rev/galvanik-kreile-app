@@ -1117,6 +1117,7 @@ function choiceButton(locator: Locator, label: string): Locator {
 
 function interruptedActionId(controlId: string | undefined): string | undefined {
   const actions: Record<string, { exportedName: string; filename: string }> = {
+    "navigation.nachrichten": { exportedName: "getIntakeMessagesAction", filename: "src/app/actions/eingang.actions.ts" },
     "nachrichten.vorschlag-ja": { exportedName: "assignIntakeCustomerAction", filename: "src/app/actions/eingang.actions.ts" },
     "aufgabe.speichern": { exportedName: "saveIntakeTaskAction", filename: "src/app/actions/eingang.actions.ts" },
     "kundebearbeiten.speichern": { exportedName: "updateCustomerAction", filename: "src/app/actions/customers.actions.ts" },
@@ -1155,9 +1156,10 @@ async function interruptNextServerAction(page: Page, state: FlowRunState, contro
   await page.route(matcher,handler);
 }
 
-async function interruptNextLoad(page: Page) {
+async function interruptNextLoad(page: Page, controlId?: string) {
   const manifest=JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8'));
   const diagnostics=protocolDiagnosticActionIds(manifest);
+  const targetAction=interruptedActionId(controlId);
   const matcher = "**/*";
   let handled = false;
   let interruptedRequest: import('@playwright/test').Request | undefined;
@@ -1177,7 +1179,7 @@ async function interruptNextLoad(page: Page) {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
     // Keep App Router navigation/asset requests online; fail the actual data read.
-    const isLoad = isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics);
+    const isLoad = isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics,targetAction);
     if (!handled && isLoad) {
       handled = true;
       interruptedRequest=request;
@@ -1284,7 +1286,7 @@ async function executeServerCommand(page: Page, step: FlowStep, state: FlowRunSt
   state.serverResult = readFlightActionResult(response.text);
 }
 
-async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
+async function executeStep(page: Page, step: FlowStep, state: FlowRunState, nextControlId?: string) {
   if (!step.aktion && step.erwartung) {
     await assertExpectation(page, step, state);
     return;
@@ -1305,7 +1307,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     return;
   }
   if (step.aktion === "netz_laden") {
-    await interruptNextLoad(page);
+    await interruptNextLoad(page,nextControlId?.startsWith('navigation.')?nextControlId:undefined);
     return;
   }
   if (step.aktion === "db_setzen") {
@@ -1897,7 +1899,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
     await expect(page.getByRole('button',{name:'Foto 1',exact:true})).toBeVisible();
     await expect(dataSpec(page,'reklamation.fotos')).toBeEnabled();
   }
-  for (const step of flowCase.wenn ?? []) await executeStep(page, step, state);
+  for (const [index,step] of (flowCase.wenn ?? []).entries()) await executeStep(page, step, state,flowCase.wenn?.[index+1]?.id);
   await captureDbResults(dbExpectations, state);
   await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
   await assertDb(dbExpectations, state);

@@ -158,8 +158,10 @@ function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,
    else hauptaktion={elementId:rule.hauptaktion,textKey:rule.textKey,werte:parameters.werte,recht:rule.recht,befehl,...(rule.hauptaktion==='order.parts'?{ziel:{tab:'parts' as const}}:{})};
   }
  }
+ const surfaceUnresolved=card.items.some(item=>item.surfaceAssignmentRequired);
+ if(surfaceUnresolved)hauptaktion=null;
  const erstblick=hauptaktion||rule.hauptaktion===null?first.erstblick:first.erstblick.map(field=>field.key==='auftrag.hauptaktion'?{...field,werte:{elementId:null}}:field);
- const datenluecken=[...first.datenluecken,...(rule.datenluecken??[]),...bindingGaps,...(actions.code==='OK'?[]:actions.missing)];
+ const datenluecken=[...first.datenluecken,...(rule.datenluecken??[]),...bindingGaps,...(actions.code==='OK'?[]:actions.missing),...(surfaceUnresolved?['ORDER_SURFACE_ASSIGNMENT_REQUIRED']:[])];
  return {...rule,...(queued?{zustand:'invoice_mail_queued',versandhinweis:card.customerName?INVOICE_DELIVERY_COPY.queued(card.customerName):null}:{}),hauptaktion,erstblick,weitere:actions.code==='OK'?actions.weitere:null,...(datenluecken.length?{datenluecken}:{}),quelle:{...rule.quelle,elementeSha256:first.quelle.sha256,...(actions.code==='OK'?{erwartungSha256:actions.quelle.sha256}:{})},source};
 }
 

@@ -210,6 +210,7 @@ function mapCard(
       quantity: item.quantity,
       material: item.material,
       surface: item.surfaceRequested,
+      ...(item.surfaceAssignmentRequired?{surfaceAssignmentRequired:item.surfaceAssignmentRequired}:{}),
       catalogServiceId: item.catalogServiceId,
       unit: item.unit,
       unitPriceCents: item.unitPriceCents,
@@ -299,7 +300,7 @@ export function OrderCardAppAdapter({
   onOpenCustomer?: (id: string) => void;
   onClose?: () => void;
   fallbackHref?: "/orders";
-  initialFocus?:'photos';
+  initialFocus?:'photos'|'surface';
 }) {
   const router = useRouter();
   const storeCustomer = useOverlayStore((s) => s.openCustomer);
@@ -1093,6 +1094,7 @@ export function OrderCardAppAdapter({
   return <>
     <OrderCardView
       initialPhotosOpen={initialFocus==='photos'}
+      initialSurfaceAssignmentOpen={initialFocus==='surface'}
       photoPanel={state.kind==='data'?<div id={`order-documents-${state.card.id}`}><DomainAttachmentPanel targetType="ORDER" targetId={state.card.id}/></div>:null}
       complaintsPanel={state.kind==='data'?<ComplaintPanel filter={{orderId:state.card.id}} read={getComplaints}/>:null}
       state={state}
