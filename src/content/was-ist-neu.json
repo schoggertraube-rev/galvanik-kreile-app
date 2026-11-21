@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-21",
+    "pr": 256,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Heute lädt deine Auftragskarten früher."
+    ]
+  },
+  {
+    "datum": "2026-11-21",
     "pr": 254,
     "seite": "heute",
     "ziel": "/",
