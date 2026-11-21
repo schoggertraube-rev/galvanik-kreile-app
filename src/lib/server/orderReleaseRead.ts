@@ -5,7 +5,6 @@ import {withPrivilegedTenantTransaction} from './privilegedDb';
 import type {AuthorizationSnapshot} from './authorization';
 import {hasAuthorizationArea,canTransportInvoiceDocument} from '@/lib/auth/authorizationContract';
 import {createHash,randomUUID} from 'node:crypto';
-import {classifyOverdue} from './paymentContract';
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {invoiceAlreadySent} from './communicationDocumentPort';
 
@@ -59,27 +58,8 @@ async function readInformedCohort(tx:PrivilegedTenantTransaction,auth:Authorizat
  return (await import('./communicationDocumentPort')).readInvoiceMailCohort(tx,auth.tenantId,customerId,handover);
 }
 type InformedCohort=Awaited<ReturnType<typeof readInformedCohort>>;
-function informedReceiptQuery(auth:AuthorizationSnapshot,orderId:string|SQL){return sql`SELECT event.payload,
-    (event.payload->'receipt'->>'actorId'=event.user_id::text AND event.payload->'receipt'->>'orderId'=event.order_id
-    AND event.payload->'receipt'->>'eventId'=event.id::text AND event.event_schema_version=1
-    AND (event.payload->'receipt'->>'channel'='telefon' AND event.payload->'receipt'->'threadId'='null'::jsonb OR
-     event.payload->'receipt'->>'channel'='mail' AND EXISTS(SELECT 1 FROM public.communication_threads thread
-      JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email'
-      JOIN public.events sent ON sent.tenant_id=thread.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text
-      WHERE thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->'receipt'->>'threadId' AND thread.status='sent'
-       AND sent.payload->'document'->>'kind'='INVOICE'
-       AND (sent.payload->'document'->>'orderId'=event.order_id OR EXISTS(SELECT 1 FROM jsonb_array_elements(coalesce(sent.payload->'document'->'bundle','[]'::jsonb)) member WHERE member->>'orderId'=event.order_id))
-       AND sent.payload->>'intent'=event.payload->>'intent'))) AS proof_ok
-   FROM public.events event JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=event.tenant_id AND freeze_state.order_id=event.order_id
-   WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' AND event.status='success'
-    AND freeze_state.active AND freeze_state.integrity_ok AND event.payload->'receipt'->>'freezeId'=freeze_state.freeze_id::text
-   ORDER BY event.created_at ASC,event.id ASC LIMIT 1001`;}
-function informedOrderQuery(auth:AuthorizationSnapshot,orderId:string|SQL){return sql`SELECT orders.customer_id,orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
-   state.invoice_state,state.invoice_id::text,state.all_invoice_payments_allowed AS payment_allowed,freeze_state.frozen_at::text,freeze_state.freeze_id::text,state.goods_out_event_id::text,
-   ARRAY(SELECT invoice.id::text FROM public.invoices invoice WHERE invoice.tenant_id=orders.tenant_id AND invoice.customer_id=orders.customer_id AND ${classifyOverdue()} ORDER BY invoice.id) AS debt_ids
-   FROM public.orders orders JOIN private.v_goods_out_ui_state_v1 state ON state.tenant_id=orders.tenant_id AND state.order_id=orders.id AND state.integrity_ok
-   LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
-   WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`;}
+
+
 async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>,failures:Awaited<ReturnType<typeof readCommunicationDeliveryFailures>>,collectionState:Awaited<ReturnType<typeof import('./commands/recordGoodsOutCommand').readOrderCollectionStateInTransaction>>|undefined){
   if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   if(order.length!==1)return {code:'NOT_FOUND' as const};
@@ -111,14 +91,11 @@ async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string
   const receipts=new Map<string,InformedSourceRow[]>(orderIds.map(id=>[id,[]]));
   const orders=new Map<string,InformedOrderRow[]>(orderIds.map(id=>[id,[]]));
   const complaints=await readOpenOrderComplaintsBatch(tx,auth.tenantId,orderIds);
-  if(orderIds.length===1){
-   const id=orderIds[0];receipts.set(id,await tx.execute<InformedSourceRow>(informedReceiptQuery(auth,id)));
-   orders.set(id,await tx.execute<InformedOrderRow>(informedOrderQuery(auth,id)));
-  }else{
-   const requested=sql.join(orderIds.map(id=>sql`(${id})`),sql`,`);
+  {
+   const requested=sql`ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
    // ARRAY preserves each canonical source's ORDER BY and per-object LIMIT.
-   const receiptRecords=await tx.execute<{batch_order_id:string;records:InformedSourceRow[]}>(sql`SELECT requested.order_id AS batch_order_id,ARRAY(SELECT to_jsonb(source) FROM (${informedReceiptQuery(auth,sql`requested.order_id`)}) source) AS records FROM (VALUES ${requested}) requested(order_id)`);
-   const orderRecords=await tx.execute<InformedOrderRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) CROSS JOIN LATERAL (${informedOrderQuery(auth,sql`requested.order_id`)}) source`);
+   const receiptRecords=await tx.execute<{batch_order_id:string;records:InformedSourceRow[]}>(sql`SELECT * FROM private.read_order_informed_receipts_v1(${auth.tenantId},${requested})`);
+   const orderRecords=await tx.execute<InformedOrderRow & {batch_order_id:string}>(sql`SELECT * FROM private.read_order_informed_orders_v1(${auth.tenantId},${requested})`);
    const seenReceipts=new Set<string>();
    for(const {batch_order_id,records} of receiptRecords){if(!receipts.has(batch_order_id)||seenReceipts.has(batch_order_id)||!Array.isArray(records))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');seenReceipts.add(batch_order_id);receipts.set(batch_order_id,records);}
    if(seenReceipts.size!==orderIds.length)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');

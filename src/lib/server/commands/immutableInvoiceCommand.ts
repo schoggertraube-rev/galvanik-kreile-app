@@ -1170,16 +1170,7 @@ type ShippingProposalOrder=Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'
 type ShippingProposalReadGroup<T>={code:'OK';rows:T[]}|{code:'FAILED';cause:unknown};
 type ShippingProposalHeader=ShippingProposalReadGroup<ShippingProposalOrder>;
 async function readInvoiceShippingHeaders(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderIds:readonly string[]){
- return tx.execute<ShippingProposalOrder>(sql`
-   SELECT orders.id,orders.customer_id,orders.handover_mode,orders.version,orders.order_number,
-    orders.station,orders.current_station,orders.current_station_id,orders.status,
-    EXISTS(SELECT 1 FROM private.v_invoice_order_members_v1 member JOIN public.invoices invoice ON invoice.tenant_id=member.tenant_id AND invoice.id=member.invoice_id
-     WHERE member.tenant_id=orders.tenant_id AND member.order_id=orders.id AND invoice.status='issued') AS invoice_exists,
-    EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.active) AS freeze_active,
-    (EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=orders.tenant_id AND frozen.order_id=orders.id AND frozen.integrity_ok IS NOT TRUE)
-     OR EXISTS(SELECT 1 FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id AND event.event_type='ORDER_FROZEN_V1'
-      AND NOT EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 frozen WHERE frozen.tenant_id=event.tenant_id AND frozen.order_id=event.order_id AND frozen.event_id=event.id))) AS freeze_invalid
-   FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id=ANY(ARRAY[${sql.join(orderIds.map(value=>sql`${value}`),sql`, `)}]::text[])`);
+ return tx.execute<ShippingProposalOrder>(sql`SELECT * FROM private.read_invoice_shipping_headers_v1(${auth.tenantId},ARRAY[${sql.join(orderIds.map(value=>sql`${value}`),sql`, `)}]::text[])`);
 }
 function qualifyShippingProposalOrder(rows:readonly ShippingProposalOrder[],input:ShippingProposalInput,identity:{orderNumber?:string}){
  try{

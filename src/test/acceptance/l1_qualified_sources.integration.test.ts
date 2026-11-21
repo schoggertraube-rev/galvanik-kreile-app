@@ -39,7 +39,7 @@ it('batches actual Today facts once and keeps the same qualified full-card value
  expect(await readTodayOrderCards(authorization.data,[])).toEqual(new Map());
  expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toEqual({code:'OK',data:{rows:[]}});
  const options=db.$client.options,previous=options.debug;let batchQueries=0,transactions=0;
- options.debug=(_connection,statement)=>{if(statement.includes('WITH selected AS MATERIALIZED')&&statement.includes("'queue' AS kind"))batchQueries++;if(statement.trim().toLowerCase()==='begin')transactions++;};
+ options.debug=(_connection,statement)=>{if(statement.includes('private.read_today_card_snapshot_v1'))batchQueries++;if(statement.trim().toLowerCase()==='begin')transactions++;};
  let cards:Awaited<ReturnType<typeof readTodayOrderCards>>;
  try{cards=await readTodayOrderCards(authorization.data,ids);expect(batchQueries).toBe(1);expect(transactions).toBe(2);}finally{options.debug=previous;}
  const evidence=await readOrderEvidenceBatch(authorization.data,ids);

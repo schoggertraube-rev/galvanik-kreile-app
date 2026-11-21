@@ -70,6 +70,16 @@ it('253 K3 reads 1001 explicit synthetic IDs in one transaction and keeps a fail
   expect(recovered).toEqual(result);
  }finally{spy.mockRestore();options.debug=previous;}
 });
+it('Ladezeit M9 retains stable invoker-only native plan-cache functions without public execution rights',async()=>{
+ const names=['read_today_card_snapshot_v1','read_order_informed_receipts_v1','read_order_informed_orders_v1','read_invoice_shipping_headers_v1','read_order_payment_states_v1'];
+ const rows=await sql`SELECT p.proname,p.provolatile,p.prosecdef,p.proconfig,
+  has_function_privilege('anon',p.oid,'EXECUTE') AS anon,
+  has_function_privilege('authenticated',p.oid,'EXECUTE') AS authenticated,
+  has_function_privilege('service_role',p.oid,'EXECUTE') AS service_role
+  FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace WHERE ns.nspname='private' AND p.proname=ANY(${names}::text[])`;
+ expect(rows).toHaveLength(names.length);
+ for(const row of rows){expect(names).toContain(row.proname);expect(row).toMatchObject({provolatile:'s',prosecdef:false,anon:false,authenticated:false,service_role:false});expect(row.proconfig).toContain('plan_cache_mode=force_generic_plan');expect(row.proconfig).toContain('search_path=public, private');}
+});
 it('250 manual shipping retains real zero/one/many sources, shared reads, rights, versions and fresh tracking retry',async()=>{
  const a=await readyOrderForInvoice('TEST 250 shipping A','shipping');
  const b=await readyOrderForInvoice('TEST 250 shipping B','shipping',a.customerId);
