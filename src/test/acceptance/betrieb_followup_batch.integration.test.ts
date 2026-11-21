@@ -15,6 +15,8 @@ import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoic
 import {getManualShippingAction,saveManualTrackingAction,markOrderInformedByPhoneAction,getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {readOrderInformed,readOrdersInformed} from '@/lib/server/orderReleaseRead';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+import {db} from '@/db';
+import * as deliveryProofs from '@/lib/server/communicationDeliveryPort';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -96,6 +98,14 @@ it('250 a real SQL failure rolls back before isolating the bad shipping group an
 });
 
 const readCredit:NonNullable<Parameters<typeof getPaymentStatesBatch>[2]>=(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
+async function countComplaintQueries<T>(work:()=>Promise<T>){
+ const options=db.$client.options,previous=options.debug;let reads=0;
+ options.debug=(connection,text,parameters,types)=>{
+  if(typeof previous==='function')previous(connection,text,parameters,types);
+  if(/FROM public\.complaints\b/.test(text))reads++;
+ };
+ try{return {value:await work(),get reads(){return reads;}};}finally{options.debug=previous;}
+}
 it('250 payment batch preserves real zero/one/many originals and money rights, then rereads the actual one-cent payment and original retry',async()=>{
  const a=await readyInvoiceOrder('TEST 250 payment A');
  const b=await readyInvoiceOrder('TEST 250 payment B','pickup',false,a.customerId);
@@ -105,7 +115,10 @@ it('250 payment batch preserves real zero/one/many originals and money rights, t
  const singles=await Promise.all(ids.map(orderId=>withSession(full,()=>getOrderPaymentStateAction({orderId}))));
  expect(singles.every(row=>row.code==='OK')).toBe(true);
  expect(await getPaymentStatesBatch(actor,[],readCredit)).toEqual(new Map());
- const batch=await getPaymentStatesBatch(actor,[...ids,a.orderId],readCredit);
+ let sourceCreditReads=0;
+ const counted=await countComplaintQueries(()=>getPaymentStatesBatch(actor,[...ids,a.orderId],async(...args)=>{sourceCreditReads++;return readCredit(...args);}));
+ const batch=counted.value;
+ expect(sourceCreditReads).toBe(1);expect(counted.reads).toBe(1);
  expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(singles[0]);expect(batch.get(b.orderId)).toEqual(singles[1]);
  const first=batch.get(a.orderId);if(first?.code!=='OK'||!first.data.payment)throw Error('TEST_REAL_INVOICE_PAYMENT_REQUIRED');
  expect(first.data.payment).toMatchObject({invoiceId:a.invoice.invoiceId,totalAmountCents:a.invoice.grossAmountCents,openAmountCents:a.invoice.grossAmountCents,currency:'EUR'});
@@ -151,7 +164,12 @@ it('250 informed zero/one/many reads preserve actual phone originals, freeze ver
  const before=await Promise.all(ids.map(id=>readOrderInformed(actor,id)));
  expect(before).toEqual([expect.objectContaining({code:'OK',informed:null,ampel:'rot'}),expect.objectContaining({code:'OK',informed:null,ampel:'rot'})]);
  expect(await readOrdersInformed(actor,[])).toEqual(new Map());
- const batch=await readOrdersInformed(actor,[...ids,a.orderId]);
+ const deliveryRead=vi.spyOn(deliveryProofs,'readCommunicationDeliveryFailures');
+ let batch:Awaited<ReturnType<typeof readOrdersInformed>>;
+ try{
+  const counted=await countComplaintQueries(()=>readOrdersInformed(actor,[...ids,a.orderId]));batch=counted.value;
+  expect(counted.reads).toBe(1);expect(deliveryRead).toHaveBeenCalledTimes(1);
+ }finally{deliveryRead.mockRestore();}
  expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(before[0]);expect(batch.get(b.orderId)).toEqual(before[1]);
  const operator=await createFixture(['auftraege'],'werkstatt');
  const input={orderId:a.orderId,expectedVersion:a.version,clientEventId:randomUUID()};

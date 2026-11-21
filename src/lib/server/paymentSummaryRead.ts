@@ -1,6 +1,6 @@
 import {formatEuro} from '@/lib/domain/formatEuro';
 import "server-only";
-import {readOpenOrderComplaint} from './orderReleaseRead';
+import {readOpenOrderComplaint,readOpenOrderComplaintsBatch} from './orderReleaseRead';
 
 import { sql, type SQL } from "drizzle-orm";
 import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
@@ -100,7 +100,7 @@ function orderPaymentStateQuery(orderId:string|SQL){return sql`
         WHERE state.order_id = ${orderId}
         LIMIT 2
       `;}
-async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,rows:PaymentStateSourceRow[],readCredit?:CreditSourceRead){
+async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,rows:PaymentStateSourceRow[],complaint:Awaited<ReturnType<typeof readOpenOrderComplaint>>,readCredit?:CreditSourceRead){
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
       if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
@@ -122,13 +122,12 @@ async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:
             ursprungRechnungNummer:source[0].ursprung_rechnung_nummer,label:SHIPPING_FEE_COPY.relatedInvoice(source[0].ursprung_rechnung_nummer)});
         }
       }
-      const complaint=await readOpenOrderComplaint(tx,authorization.tenantId,mapped.orderId);
       let creditApplication:CustomerCreditApplicationRead|undefined;
       if(readCredit){
-        try{creditApplication=await withTenantSavepoint(tx,async nested=>{
-          const source=await readCredit(nested,authorization.tenantId,rows[0].credit_customer_id);
-          return buildCustomerCreditApplication(source,mapped.payment);
-        });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
+        try{
+          const source=await readCredit(tx,authorization.tenantId,rows[0].credit_customer_id);
+          creditApplication=buildCustomerCreditApplication(source,mapped.payment);
+        }catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
       }
       return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
 }
@@ -148,10 +147,21 @@ async function readPaymentStateGroup(authorization:AuthorizationSnapshot,orderId
    }
    if(seen.size!==orderIds.length)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
   }
+  const eligible=orderIds.filter(id=>{const rows=grouped.get(id);return rows?.length===1&&canReadPaymentSummary(authorization,{orderId:rows[0].order_id,mode:rows[0].payment_mode,station:rows[0].station});});
+  const eligibleIds=new Set(eligible);
+  const complaints=await readOpenOrderComplaintsBatch(tx,authorization.tenantId,eligible);
+  const credits=new Map<string,Promise<CustomerCreditResult>>();
+  const readGroupCredit:CreditSourceRead|undefined=readCredit?(_nested,tenantId,customerId)=>{
+   const prior=credits.get(customerId);if(prior)return prior;
+   const source=withTenantSavepoint(tx,nested=>readCredit(nested,tenantId,customerId));
+   credits.set(customerId,source);return source;
+  }:undefined;
   const result=new Map<string,OrderPaymentStateReadResult>();
   for(const orderId of orderIds){
    const rows=grouped.get(orderId);if(!rows)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
-   const data=await qualifyPaymentState(tx,authorization,rows,readCredit);
+   if(eligibleIds.has(orderId)&&!complaints.has(orderId))throw Error('ORDER_PAYMENT_STATE_AMBIGUOUS');
+   // Only absent/denied rows lack a complaint read; their qualifier exits before using it.
+   const data=await qualifyPaymentState(tx,authorization,rows,complaints.get(orderId)??null,readGroupCredit);
    result.set(orderId,data&&"code" in data?{code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."}:data?{code:"OK",data}:{code:"NOT_FOUND",message:"Zahlungs- und Warenausgangsdaten sind nicht verfügbar."});
   }
   return result;
