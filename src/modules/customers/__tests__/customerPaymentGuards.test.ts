@@ -9,7 +9,9 @@ const { execute, withTransaction } = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({
-  sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),
+  sql: Object.assign((parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),{
+    join:(values:unknown[],separator:unknown)=>({text:'join',values,separator}),
+  }),
 }));
 
 const context = {
