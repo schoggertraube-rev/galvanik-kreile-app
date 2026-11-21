@@ -3,19 +3,39 @@
 import {afterAll,expect,it} from 'vitest';
 import postgres from 'postgres';
 import {createServer} from 'node:http';
-import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort} from '@/db/readBudget';
+import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort,observeNativePageReadQuery,pageReadQueryObservation,withPageReadPhase} from '@/db/readBudget';
 
 const url=process.env.DATABASE_URL;
 const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
 if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!==testPort)throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 const configured:number[]=[];
 let inspectRollback:((text:string)=>void)|undefined;
+let inspectWire:((text:string)=>void)|undefined;
 const native=postgres(url,{prepare:false,max:1,debug:(_connection,text,parameters)=>{
+ observeNativePageReadQuery(_connection,text);inspectWire?.(text);
  if(text.includes("set_config('statement_timeout'"))configured.push(Number(parameters[0]));
  inspectRollback?.(text);
 }});
 const client=withPageReadQueryLimits(native);
 afterAll(()=>native.end({timeout:5}));
+
+it('counts actual native roundtrips including SET and queued BEGIN without mixing two request scopes',async()=>{
+ await native`SELECT 1`;const wire:string[]=[];inspectWire=text=>wire.push(text);
+ const observed:Array<ReturnType<typeof pageReadQueryObservation>>=[];
+ try{
+  await Promise.all(['today.orders','today.tasks'].map((phase,index)=>withPageReadBudget(()=>withPageReadPhase(phase,async()=>{
+   const observation=pageReadQueryObservation();observed[index]=observation;
+   await client.begin(async tx=>{
+    if(index===0)await tx.savepoint(nested=>nested`SELECT 31`);
+    else await tx`SELECT 32`;
+   });
+  }),2000)));
+  expect(observed[0]).not.toBe(observed[1]);expect(observed[0].total).toBe(5);expect(observed[1].total).toBe(4);
+  expect(observed.map(value=>value.total).reduce((sum,value)=>sum+value,0)).toBe(wire.length);
+  expect(wire.filter(text=>text.includes("set_config('statement_timeout'")).length).toBe(2);
+  expect(observed[0].phases).toEqual({'today.orders':5});expect(observed[1].phases).toEqual({'today.tasks':4});
+ }finally{inspectWire=undefined;}
+});
 
 it('sets one native timeout for four fast statements and refreshes it only after 250ms',async()=>{
  await client`SELECT 1`;configured.length=0;

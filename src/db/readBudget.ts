@@ -1,4 +1,29 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {cache} from 'react';
+
+type PageReadQueryObservation={total:number;rights:number;pageSettings:number;shippingSettings:number;phases:Record<string,number>};
+const requestQueryObservation=cache(():PageReadQueryObservation=>({total:0,rights:0,pageSettings:0,shippingSettings:0,phases:{}}));
+const queryPhases=new AsyncLocalStorage<string>();
+/** Same RSC request only; contains counts, never SQL, parameters or identities. */
+export function pageReadQueryObservation(){return budgets.getStore()?.queries??requestQueryObservation();}
+function countNativeRead(statement:string,budget:ReadBudget,phase=queryPhases.getStore()){
+ const counts=budget.queries;counts.total++;
+ const station=phase&&diagnosticPhases.has(phase)?phase:budget.kind==='authorization'?'authorization':'other';
+ counts.phases[station]=(counts.phases[station]??0)+1;
+ const normalized=statement.replaceAll('"','').toLowerCase();
+ if(/\bfrom\s+(?:public\.)?app_users\b/.test(normalized)&&normalized.includes('app_user_rights'))counts.rights++;
+ if(normalized.includes('as page_read_source')&&normalized.includes('company_settings'))counts.pageSettings++;
+ if(normalized.includes('versand_dienst as service')&&normalized.includes('company_settings'))counts.shippingSettings++;
+}
+/** Native driver execution boundary. BEGIN is attributed after acquisition below:
+ * a queued BEGIN's debug callback can still carry the previous borrower's context. */
+export function observeNativePageReadQuery(_connection:number,statement:string){
+ const budget=budgets.getStore();if(!budget||/^begin\b/i.test(statement.trim()))return;
+ countNativeRead(statement,budget);
+}
+export function logPageReadQueryObservation(observation:PageReadQueryObservation){
+ console.info('[PAGE_READ_SQL]',{route:'/',total:observation.total,rights:observation.rights,page_settings:observation.pageSettings,shipping_settings:observation.shippingSettings,phases:{...observation.phases}});
+}
 
 /** Canonical startup/old-schema defaults; qualified company values override them.
  * The native settings contract checks the additive SQL defaults against these. */
@@ -9,7 +34,7 @@ export const DEFAULT_PAGE_READ_SETTINGS={
 } as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
-type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
+type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;queries:PageReadQueryObservation;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
 export const AUTHORIZATION_READ_TIMEOUT_MS=DEFAULT_PAGE_READ_SETTINGS.authorizationTimeoutMs;
@@ -31,7 +56,7 @@ export function withPageReadSettingsSource<T>(work:()=>Promise<T>):Promise<T>{
 /** Separate short read scope; returning to a page restores its own deadline. */
 export function withAuthorizationReadBudget<T>(work:()=>Promise<T>):Promise<T>{
  const startedAt=Date.now(),parent=budgets.getStore();
- return budgets.run({startedAt,deadline:Math.min(startedAt+AUTHORIZATION_READ_TIMEOUT_MS,parent?.deadline??Infinity),cancel:new Set(),kind:'authorization'},async()=>await work());
+ return budgets.run({startedAt,deadline:Math.min(startedAt+AUTHORIZATION_READ_TIMEOUT_MS,parent?.deadline??Infinity),cancel:new Set(),queries:parent?.queries??requestQueryObservation(),kind:'authorization'},async()=>await work());
 }
 
 export class PageReadTimeout extends Error {
@@ -44,7 +69,7 @@ export function withPageReadBudget<T>(work:()=>Promise<T>,timeoutMs:number):Prom
   const startedAt=Date.now();
   // Drizzle queries are lazy thenables. Assimilate them inside the scope, not
   // later in the caller's await, or their SQL would miss the request budget.
-  return budgets.run({startedAt,deadline:startedAt+timeoutMs,cancel:new Set()},async()=>await work());
+  return budgets.run({startedAt,deadline:startedAt+timeoutMs,cancel:new Set(),queries:requestQueryObservation()},async()=>await work());
 }
 
 /** The trusted company setting changes only this read, never another request. */
@@ -146,6 +171,7 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
         const run=()=>{
         const acquiringAt=Date.now();
         const budget=budgets.getStore();
+        const acquiringPhase=queryPhases.getStore();
         if(!budget)return Reflect.apply(value,target,args);
         if(Date.now()>=budget.deadline)return Promise.reject(new PageReadTimeout());
         return new Promise((resolve,reject)=>{
@@ -155,6 +181,7 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
           const timer=setTimeout(()=>reject(new PageReadTimeout()),budget.deadline-Date.now());
           args[callbackIndex]=async(sql:object)=>{
             clearTimeout(timer);
+            if(key==='begin')countNativeRead('BEGIN',budget,acquiringPhase);
             if(key==='begin'&&Date.now()-acquiringAt>=250){
               // Only non-secret transport metadata from the actual driver.
               // CLI env-run can prefer a local file; it cannot prove this port.
@@ -247,7 +274,7 @@ export function logPageReadPhase(phase:string,startedAt:number,counts:Readonly<R
 }
 export async function withPageReadPhase<T>(phase:string,work:()=>PromiseLike<T>|T):Promise<T>{
  const started=Date.now();let value:T;
- try{value=await work();}
+ try{value=await queryPhases.run(phase,work);}
  catch(error){logPageReadPhase(phase,started,{failed:1},error);throw error;}
  let counts:Record<string,number>={};
  try{
