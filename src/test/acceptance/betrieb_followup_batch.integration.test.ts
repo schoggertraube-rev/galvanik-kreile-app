@@ -2,7 +2,7 @@
 import {expect,it,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {sql as query} from 'drizzle-orm';
-import {full,sql,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {full,sql,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {readyOrderForInvoice,readyInvoiceOrder,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
@@ -14,6 +14,7 @@ import {getOrderPaymentStateAction,confirmPaymentAction} from '@/app/actions/pay
 import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
 import {getManualShippingAction,saveManualTrackingAction,markOrderInformedByPhoneAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {readOrderInformed,readOrdersInformed} from '@/lib/server/orderReleaseRead';
+import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -193,4 +194,43 @@ it('250 a damaged original notification isolates its group after rollback while 
  const reread=await readOrdersInformed(actor,JSON.parse(JSON.stringify([good.orderId,bad.orderId])));
  expect(reread.get(good.orderId)).toEqual(expected);expect(reread.get(bad.orderId)).toEqual({code:'UNAVAILABLE'});
  expect(await sql`SELECT payload->'receipt' AS receipt FROM public.events WHERE tenant_id=${tenant} AND id=${saved.receipt.eventId}`).toEqual([{receipt:saved.receipt}]);
+});
+
+it('250 informed batch qualifies the actual two-original invoice mail and fresh retry, never a generic outgoing mail',async()=>{
+ const a=await readyInvoiceOrder('TEST 250 bundled notice A');
+ const b=await readyInvoiceOrder('TEST 250 bundled notice B','pickup',false,a.customerId);
+ const actor=await authorization(),ids=[a.orderId,b.orderId];
+ const initial=await readOrdersInformed(actor,ids),first=initial.get(a.orderId);
+ if(first?.code!=='OK'||!first.invoiceMailOriginals)throw Error('TEST_REAL_INVOICE_COHORT_REQUIRED');
+ const invoiceIds=first.invoiceMailOriginals.map(row=>row.id);
+ expect(new Set(invoiceIds)).toEqual(new Set([a.invoice.invoiceId,b.invoice.invoiceId]));
+ const originals=await sql`SELECT id,payload FROM public.events WHERE tenant_id=${tenant} AND order_id IN (${a.orderId},${b.orderId}) AND event_type IN ('INVOICE_CREATED_V1','INVOICE_CREATED_V2','INVOICE_CREATED_V3') ORDER BY id`;
+ const payloads:Array<{message:{attachments?:Array<{contentType:string;contentBytes:string}>}}> = [];
+ const spy=vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-250-provider-token'.repeat(3),expires_in:3600});
+  if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail')){payloads.push(JSON.parse(String(init?.body)));return new Response(null,{status:202});}
+  return nativeFetch(input,init);
+ });
+ try{
+  const generic={targetType:'ORDER' as const,targetId:a.orderId,subject:'TEST 250 allgemeine Nachricht',body:'TEST allgemeiner Text ohne Fertigbeleg',clientRequestId:randomUUID()};
+  expect(await withSession(full,()=>sendCustomerMailAction(generic))).toMatchObject({code:'OK'});
+  const unqualified=await readOrdersInformed(actor,ids);
+  expect(unqualified.get(a.orderId)).toMatchObject({code:'OK',informed:null,ampel:'rot'});
+  const input={...generic,subject:'TEST 250 Fertigmeldung',expectedInvoiceIds:invoiceIds,attachment:{kind:'INVOICE' as const,documentId:invoiceIds[0]},clientRequestId:randomUUID()};
+  const sent=await withSession(full,()=>sendCustomerMailAction(input));expect(sent,JSON.stringify(sent)).toMatchObject({code:'OK'});
+  if(sent.code!=='OK')throw Error('TEST_REAL_BUNDLE_NOTICE_REQUIRED');
+  expect(payloads).toHaveLength(2);expect(payloads[1].message.attachments).toHaveLength(2);
+  for(const attachment of payloads[1].message.attachments!){expect(attachment.contentType).toBe('application/pdf');expect(Buffer.from(attachment.contentBytes,'base64').subarray(0,5).toString()).toBe('%PDF-');}
+  const fresh=await readOrdersInformed(actor,JSON.parse(JSON.stringify(ids)));
+  for(const order of [a,b]){
+   expect(fresh.get(order.orderId)).toMatchObject({code:'OK',orderVersion:order.version,informed:{actorId:full.actorId,channel:'mail',threadId:sent.data.threadId},mailThreadIds:[sent.data.threadId],invoiceMailOriginals:[]});
+   expect(await readOrderInformed(actor,order.orderId)).toEqual(fresh.get(order.orderId));
+  }
+  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{threadId:sent.data.threadId,replayed:true}});
+  expect(payloads).toHaveLength(2);
+  expect(await sql`SELECT id,payload FROM public.events WHERE tenant_id=${tenant} AND order_id IN (${a.orderId},${b.orderId}) AND event_type IN ('INVOICE_CREATED_V1','INVOICE_CREATED_V2','INVOICE_CREATED_V3') ORDER BY id`).toEqual(originals);
+  const hidden=await readOrdersInformed(await authorization(await createFixture(['auftraege'])),ids);
+  for(const id of ids){const row=hidden.get(id);expect(row).toMatchObject({code:'OK',informed:{channel:'mail',threadId:sent.data.threadId}});if(row?.code!=='OK')throw Error('TEST_REDACTED_NOTICE_REQUIRED');expect(row.invoiceMailOriginals).toBeUndefined();expect(row.overdueInvoiceIds).toBeUndefined();}
+ }finally{spy.mockRestore();}
 });
