@@ -11,7 +11,7 @@ function countNativeRead(statement:string,budget:ReadBudget,phase=queryPhases.ge
  const station=phase&&diagnosticPhases.has(phase)?phase:budget.kind==='authorization'?'authorization':'other';
  counts.phases[station]=(counts.phases[station]??0)+1;
  const normalized=statement.replaceAll('"','').toLowerCase();
- if(/\bfrom\s+(?:public\.)?app_users\b/.test(normalized)&&normalized.includes('app_user_rights'))counts.rights++;
+ if(budget.kind==='authorization'&&/\bfrom\s+(?:public\.)?app_users\b/.test(normalized)&&normalized.includes('app_user_rights'))counts.rights++;
  if(normalized.includes('as page_read_source')&&normalized.includes('company_settings'))counts.pageSettings++;
  if(normalized.includes('versand_dienst as service')&&normalized.includes('company_settings'))counts.shippingSettings++;
 }

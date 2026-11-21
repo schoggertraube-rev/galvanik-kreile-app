@@ -57,6 +57,17 @@ it('sets one native timeout for four fast statements and refreshes it only after
  }),2000);
 });
 
+it('counts the canonical rights row in its existing authorization scope without conflating a roster read',async()=>{
+ await native`SELECT 1`;
+ await withPageReadBudget(async()=>{
+  const observation=pageReadQueryObservation();
+  const read=()=>client.begin(tx=>tx`SELECT app_user.id,(SELECT count(*) FROM public.app_user_rights rights WHERE rights.user_id=app_user.id) AS rights FROM public.app_users app_user WHERE false`);
+  await withAuthorizationReadBudget(read);
+  expect(observation.rights).toBe(1);
+  await read();expect(observation.rights).toBe(1);expect(observation.total).toBe(8);
+ },2000);
+});
+
 it('still cancels a real slow query at its page deadline and returns the native connection intact',async()=>{
  await client`SELECT 1`;configured.length=0;
  const failure=await withPageReadBudget(()=>client.begin(async tx=>{
