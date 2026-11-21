@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (68)
+## Gleicher Wortlaut (70)
 
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
@@ -63,6 +63,8 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `OFFLINE_ITEM_FINISHED_COPY.networkRequired`: "Geht nur mit Netz" → `offline.only`
 - `CUSTOMER_CREDIT_COPY.payoutChanged`: "Der Erstattungsbetrag oder sein Zahlungsbeleg hat sich geändert. Lade den aktuellen Stand; dein Nachweis bleibt erhalten." → `credit.refund_changed`
 - `CUSTOMER_CREDIT_COPY.changed`: "Das Guthaben oder der Rechnungsrest hat sich geändert. Lade die aktuelle Verrechnung; deine Angaben bleiben erhalten." → `balance.changed`
+- `SHIPPING_FEE_COPY.proposalMissing`: "Rechnung" → `document.invoice_kind`, `invoice.title`
+- `SHIPPING_FEE_COPY.proposalMissing`: "Auftrag" → `customer.order_singular`
 - `SHIPPING_FEE_COPY.line`: "Versand" → `order.shipping`, `settings.group.versand`, `ws.shipped`
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays`: "Zahlungsziel in Tagen" → `customer.terms_days`
 - `E_INVOICE_CORRECTION_COPY.cancel`: "Abbrechen" → `common.cancel`
@@ -74,7 +76,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COMPONENT_PREVIEW_COPY.names.kundenbild`: "Kundenbild" → `customer.tab.insights`, `settings.group.bewertung`
 - `PENDING_UNDO_COPY.undo`: "Rückgängig" → `bundle.undo`, `undo.action`
 
-## Ähnlicher Wortlaut (98)
+## Ähnlicher Wortlaut (101)
 
 - `INVOICE_VAT_COPY.groupNet`: "Netto (" → `collection.net`, `quote.net_short`, `ws.net`
 - `INVOICE_VAT_COPY.groupNet`: ")" → `work.sign_missing`
@@ -174,8 +176,11 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
 - `CUSTOMER_CREDIT_COPY.payoutLabel`: "bar" → `payment.method_cash`
+- `SHIPPING_FEE_COPY.proposalMissing`: "einstellungen" → `nav.einstellungen`, `settings.title`
+- `SHIPPING_FEE_COPY.proposalMissing`: "…" → `work.sign_missing`
+- `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 
-## Nur im Bestand (780)
+## Nur im Bestand (795)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -886,6 +891,13 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `CUSTOMER_CREDIT_COPY.notFound`: "Für diesen Kunden gibt es dieses Guthaben nicht mehr. Lade den aktuellen Stand."
 - `CUSTOMER_CREDIT_COPY.pending`: "Der Storno ist noch nicht übertragen. Er wird gesendet, sobald die Verbindung steht."
 - `CUSTOMER_CREDIT_COPY.paymentUnknown`: "Die Zahlung zu dieser Rechnung ist nicht vollständig belegt. Erfass zuerst Betrag und Datum der Zahlung, dann storniere die Rechnung erneut."
+- `SHIPPING_FEE_COPY.proposalMissing`: "freigabe"
+- `SHIPPING_FEE_COPY.proposalMissing`: "original"
+- `SHIPPING_FEE_COPY.proposalMissing`: "quelle"
+- `SHIPPING_FEE_COPY.proposalMissing.freigabe`: "Freigabebeleg fehlt"
+- `SHIPPING_FEE_COPY.proposalMissing.einstellungen`: "Versandangaben fehlen"
+- `SHIPPING_FEE_COPY.proposalMissing.original`: "Originalbeleg ist unklar"
+- `SHIPPING_FEE_COPY.proposalMissing.quelle`: "Quelle nicht lesbar"
 - `SHIPPING_FEE_COPY.noAdditionalInvoiceNeeded`: "Versandkosten sind 0 € – keine Zusatzrechnung nötig"
 - `SHIPPING_FEE_COPY.reissueReason`: "Übergabeart Versand → Abholung"
 - `SHIPPING_FEE_COPY.reissuePending`: "Der Storno ist gespeichert, das Guthaben steht. Die neue Rechnung ohne Versand fehlt noch – dafür liegt eine Aufgabe am Auftrag."
@@ -957,3 +969,11 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PENDING_UNDO_COPY.started`: "Übertragung gestartet"
 - `PENDING_UNDO_COPY.unknown`: "Deine wartenden Änderungen sind gerade nicht lesbar."
 - `PENDING_UNDO_COPY.unconfirmed`: "Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand."
+- `PAGE_READ_COPY.loading`: "Deine Arbeitsfläche wird geladen."
+- `PAGE_READ_COPY.sourceIncomplete`: "Diese Quelle ist gerade nicht erreichbar · Erneut laden."
+- `PAGE_READ_COPY.partial`: "Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar."
+- `PAGE_READ_COPY.reload`: "Erneut laden"
+- `PAGE_READ_COPY.settingsPending`: "Die neuen Abfragewerte sind noch nicht verfügbar."
+- `PAGE_READ_COPY.timeout`: "Abfragezeit in Millisekunden"
+- `PAGE_READ_COPY.mailBatch`: "Rechnungen je Versandtakt"
+- `PAGE_READ_COPY.invalid`: "Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."

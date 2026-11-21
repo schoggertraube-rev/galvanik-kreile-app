@@ -1,8 +1,24 @@
 "use server";
+import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget,withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
+import {canTransportInvoiceDocument} from '@/lib/server/authorization';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
+
+/** Existing settings read; invoice transport may also request its sender name. */
+export async function readPageReadSettingsAction(input?:{includeCompanyName:true}){
+ if(input!==undefined&&(!input||Object.keys(input).join(',')!=='includeCompanyName'||input.includeCompanyName!==true))return {code:'SOURCE_INCOMPLETE' as const};
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:'FORBIDDEN' as const};
+ try{
+  const settings=await withPageReadPhase('action.settings',()=>readPageReadSettings(authorization.data));
+  const company=input?.includeCompanyName&&canTransportInvoiceDocument(authorization.data)?await withPageReadPhase('action.company',()=>readCompanyLetterSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true})):null;
+  return {code:'OK' as const,settings,...(company?.code==='OK'?{companyName:company.company.companyName}:{})};
+ }
+ catch{return {code:'SOURCE_INCOMPLETE' as const};}
+}
 
 export async function getProductionWeekAction(input?:{onDate?:string}){
  return observeAction('getProductionWeekAction',subjectForAction('getProductionWeekAction',input),async()=>{
@@ -276,7 +292,61 @@ async function resolveOrderCardAuthorization(): Promise<
   return { ok: true, data: authorization.data };
 }
 
-export async function getLiveOrderCardAction(
+type TodayOrderReadData={card:import('@/lib/server/orderCardRead').TodayOrderCard;nextActionRule:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>;handoverConsequences?:Awaited<ReturnType<typeof import('@/lib/server/commands/immutableInvoiceCommand').readInvoiceShippingConsequences>>;pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>>};
+/** Existing order/U2 composition, projected in bulk for Today. The original
+ * card/evidence gates run before any financial or transport source. */
+export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise<OrderCardActionResult<{rows:Array<{orderId:string;result:OrderCardReadResult<TodayOrderReadData>}>}>>{
+ const inherited=hasPageReadBudget();
+ return withPageReadBudget(async()=>{
+  const diagnosticStarted=Date.now();
+  noStore();
+  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).join(',')!=='orderIds'||!Array.isArray(input.orderIds))return {code:'VALIDATION_ERROR',message:'Ungültige Auftragskennung.'};
+  if(!inherited){const settings=await readPageReadSettingsAction();if(settings.code==='OK')configurePageReadBudget(settings.settings.queryTimeoutMs);}
+  const authorization=await withPageReadPhase('action.auth',()=>resolveOrderCardAuthorization());if(!authorization.ok)return authorization.result;
+  const auth=authorization.data;
+  const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
+  const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,input.orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,input.orderIds))]);
+  const [{readInvoiceShippingConsequencesBatch},{readInvoiceVat},fundament,{readOrderInformed},{readOrderPickupAppointment},{readV45OrderRule},{getPaymentState}]=await Promise.all([
+   import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead')]);
+  const readCredit=hasAuthorizationArea(auth,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
+   const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
+   return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
+  }:undefined;
+  const shippingReads=withPageReadPhase('action.shipping',()=>readInvoiceShippingConsequencesBatch(auth,input.orderIds.flatMap(orderId=>{const card=cards.get(orderId),proof=evidence.get(orderId);return card?.code==='OK'&&proof?.code==='OK'?[{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId}]:[];}),readInvoiceVat,fundament.readShippingSettingsInTransaction));
+  const rows=await Promise.all(input.orderIds.map(async orderId=>{
+   const source=cards.get(orderId),proof=evidence.get(orderId);
+   if(!source||source.code!=='OK')return {orderId,result:source??{code:'UNAVAILABLE' as const,message:'Auftrag nicht verfügbar.'}};
+   if(!proof||proof.code!=='OK')return {orderId,result:proof??{code:'UNAVAILABLE' as const,message:'Nachweise konnten nicht sicher geladen werden.'}};
+   const card=source.data;
+   try{
+    const [shipping,informed,payment,shipment,appointment]=await Promise.all([
+     shippingReads.then(rows=>{if(!rows.has(card.id))throw Error('SHIPPING_PROPOSAL_BATCH_SOURCE_MISSING');return rows.get(card.id);}),
+     card.station==='fertig'?withPageReadPhase('action.informed',()=>readOrderInformed(auth,card.id)):Promise.resolve(undefined),
+     card.station==='fertig'?withPageReadPhase('action.payment',()=>getPaymentState(auth,card.id,readCredit)):Promise.resolve(undefined),
+     card.handoverMode==='shipping'?withPageReadPhase('action.shipment',()=>readManualShippingForOrder(auth,card.id)):Promise.resolve(undefined),
+     card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
+    ]);
+    if(informed?.code==='OK'&&informed.orderVersion!==card.version)return {orderId,result:{code:'UNAVAILABLE' as const,message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'}};
+    return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:appointment,nextActionRule:readV45OrderRule(auth,card,informed?{orderId:card.id,value:informed}:undefined,{orderId:card.id,records:proof.data},{shipping,payment,shipment})}}};
+   }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
+  }));
+  logPageReadPhase('action.model',diagnosticStarted,{requested:input.orderIds.length,ok:rows.filter(row=>row.result.code==='OK').length,failed:rows.filter(row=>row.result.code!=='OK').length});
+  return {code:'OK',data:{rows}};
+ },DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+}
+
+export async function getLiveOrderCardAction(input:{orderId:string}):ReturnType<typeof readLiveOrderCardForPage>{
+ const inherited=hasPageReadBudget();
+ return withPageReadBudget(async()=>{
+  if(!inherited){
+   const settings=await readPageReadSettingsAction();
+   if(settings.code==='OK')configurePageReadBudget(settings.settings.queryTimeoutMs);
+  }
+  return readLiveOrderCardForPage(input);
+ },DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+}
+
+async function readLiveOrderCardForPage(
   input: { orderId: string },
 ): Promise<OrderCardActionResult<{ serverReadAt?:string; cacheLoginScope?:string; handoverConsequences?:Awaited<ReturnType<typeof import('@/lib/server/commands/immutableInvoiceCommand').readInvoiceShippingConsequences>>; nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
   noStore();
@@ -289,42 +359,37 @@ export async function getLiveOrderCardAction(
     ]);
     const card = await readLiveOrderCard(authorization.data, input);
     if (card.code !== "OK") return card;
-    if(card.data.handoverNotice?.taskId){
-      const [{readOrderHandoverTaskState},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/lib/server/privilegedDb')]);
-      const task=await withPrivilegedTenantTransaction(authorization.data,tx=>readOrderHandoverTaskState(tx,authorization.data,{orderId:card.data.id,taskId:card.data.handoverNotice!.taskId!}));
-      card.data.handoverNotice.taskState=task?.status??'nicht_verfuegbar';
-    }
-    if(card.data.handoverMode==='shipping'){
-      const {readShippingSettings}=await import('@/modules/fundament/server-public');
-      const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
-      card.data.shippingService=settings.code==='OK'?settings.settings.service:null;
-      if(settings.code!=='OK')card.data.shippingServiceError=settings.message;
-    }
-    const [{readInvoiceShippingConsequences},{readInvoiceVat},{readShippingSettingsInTransaction}]=await Promise.all([import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public')]);
-    const handoverConsequences=await readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId},readInvoiceVat,readShippingSettingsInTransaction);
-    const evidence = await readEvidenceRecordsByTarget(authorization.data, {
-      targetType: "ORDER",
-      targetId: input.orderId,
-    });
-    if (evidence.code !== "OK") return evidence;
-    const {readOrderActors}=await import('@/modules/orders/server-public');
-    const actors=await readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version});
-    const manualShipping=card.data.handoverMode==='shipping'?await readManualShippingForOrder(authorization.data,input.orderId):undefined;
-    const {readOrderInformed}=await import('@/lib/server/orderReleaseRead');
-    const customerInformed=await readOrderInformed(authorization.data,input.orderId);
-    if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
-    const {readOrderPrintQueue}=await import('@/modules/orders/server-public');
-    const printQueue=await readOrderPrintQueue(authorization.data,input.orderId);
-    const {readOrderPickupAppointment}=await import('@/lib/server/pickupAppointmentPort');
-    const pickupAppointment=await readOrderPickupAppointment(authorization.data,input.orderId);
-    const {readV45OrderRule}=await import('@/lib/server/v45OrderRead');
-    const {getPaymentState}=await import('@/lib/server/paymentSummaryRead');
+    // These qualified sources depend on the card identity/version, not on
+    // each other. Keep one read budget and preserve every source's own guard.
+    const [{readInvoiceShippingConsequences},{readInvoiceVat},fundament,orders,tasks,{readOrderInformed},{readOrderPickupAppointment},{readV45OrderRule},{getPaymentState}]=await Promise.all([
+      import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),
+      import('@/modules/fundament/server-public'),import('@/modules/orders/server-public'),import('@/modules/tasks/server-public'),
+      import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead'),
+    ]);
     const readCredit=hasAuthorizationArea(authorization.data,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
       const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
       return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
     }:undefined;
-    const payment=card.data.station==='fertig'?await getPaymentState(authorization.data,input.orderId,readCredit):undefined;
-    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope(),nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    const [handoverTask,shippingSettings,handoverConsequences,evidence,actors,manualShipping,customerInformed,printQueue,pickupAppointment,payment,cacheLoginScope]=await Promise.all([
+      card.data.handoverNotice?.taskId?(async()=>{const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');return withPrivilegedTenantTransaction(authorization.data,tx=>tasks.readOrderHandoverTaskState(tx,authorization.data,{orderId:card.data.id,taskId:card.data.handoverNotice!.taskId!}));})():Promise.resolve(undefined),
+      card.data.handoverMode==='shipping'?fundament.readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true}):Promise.resolve(undefined),
+      readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId},readInvoiceVat,fundament.readShippingSettingsInTransaction),
+      readEvidenceRecordsByTarget(authorization.data,{targetType:'ORDER',targetId:input.orderId}),
+      orders.readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version}),
+      card.data.handoverMode==='shipping'?readManualShippingForOrder(authorization.data,input.orderId):Promise.resolve(undefined),
+      readOrderInformed(authorization.data,input.orderId),orders.readOrderPrintQueue(authorization.data,input.orderId),
+      readOrderPickupAppointment(authorization.data,input.orderId),
+      card.data.station==='fertig'?getPaymentState(authorization.data,input.orderId,readCredit):Promise.resolve(undefined),
+      readCacheLoginScope(),
+    ]);
+    if(card.data.handoverNotice?.taskId)card.data.handoverNotice.taskState=handoverTask?.status??'nicht_verfuegbar';
+    if(shippingSettings){
+      card.data.shippingService=shippingSettings.code==='OK'?shippingSettings.settings.service:null;
+      if(shippingSettings.code!=='OK')card.data.shippingServiceError=shippingSettings.message;
+    }
+    if(evidence.code!=='OK')return evidence;
+    if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
+    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope,nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,

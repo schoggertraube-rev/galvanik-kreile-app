@@ -1,3 +1,4 @@
+import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
 import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
@@ -568,87 +569,8 @@ function canView(authorization: AuthorizationSnapshot): boolean {
   return authorization.permissions.includes("perm_view_leitstand");
 }
 
-export async function readLiveOrderCard(
-  authorization: AuthorizationSnapshot,
-  input: { orderId: string },
-): Promise<OrderCardReadResult<LiveOrderCard>> {
-  if (!hasExactKeys(input, ["orderId"]) || !validId(input.orderId)) {
-    return { code: "VALIDATION_ERROR", message: "Ungültige Auftragskennung." };
-  }
-  if (!canView(authorization)) {
-    return { code: "FORBIDDEN", message: "Auftragskarte ist nicht erlaubt." };
-  }
-
-  try {
-    const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const queueRows = await tx.execute<QueueRow>(sql`
-        SELECT id, tenant_id, version, order_number, customer_id, customer_name,
-               title, task, station, current_station, current_station_id, status,
-               intake_date, due_date::date::text AS due_date, created_at, tenant_integrity_ok,
-               (SELECT source.intake_source FROM public.orders source
-                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS intake_source,
-               (SELECT source.handover_mode FROM public.orders source
-                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS handover_mode
-        FROM private.v_operational_station_queue_v1 queue
-        WHERE id = ${input.orderId}
-        LIMIT 2
-      `);
-      const queue = queueRows[0];
-      if (queueRows.length === 0) return null;
-      if (
-        queueRows.length !== 1
-        || !queue
-        || queue.tenant_id !== authorization.tenantId
-        || queue.tenant_integrity_ok !== true
-        || queue.station !== queue.current_station
-        || queue.station !== queue.current_station_id
-        || !validId(queue.customer_id)
-        || typeof queue.customer_name !== "string"
-        || queue.customer_name.trim().length === 0
-        || !Number.isSafeInteger(queue.version)
-        || queue.version < 1
-        || (queue.handover_mode !== null
-          && queue.handover_mode !== "pickup"
-          && queue.handover_mode !== "shipping")
-      ) throw new Error("ORDER_CARD_QUEUE_INVALID");
-
-      const originRows = await tx.execute<OrderOriginRow>(sql`
-        SELECT tenant_id, source, nacharbeit_zu,EXISTS(SELECT 1 FROM private.quote_conversion_receipts quote WHERE quote.tenant_id=orders.tenant_id AND quote.order_id=orders.id) AS has_commercial_quote
-        FROM public.orders orders
-        WHERE tenant_id = ${authorization.tenantId}
-          AND id = ${input.orderId}
-        LIMIT 2
-      `);
-      const origin = originRows[0];
-      if (
-        originRows.length !== 1
-        || !origin
-        || origin.tenant_id !== authorization.tenantId||typeof origin.has_commercial_quote!=="boolean"
-      ) throw new Error("ORDER_CARD_ORIGIN_INVALID");
-      const isReworkOrder = origin.source === "REKLAMATION_NACHARBEIT";
-      if (isReworkOrder && !validId(origin.nacharbeit_zu)) {
-        throw new Error("ORDER_CARD_REWORK_LINK_INVALID");
-      }
-
-      const currentRows = await tx.execute<CurrentItemRow>(sql`
-        SELECT id, name, quantity, material, surface_requested, execution_requested,
-               catalog_service_id::text AS catalog_service_id, unit,
-               CASE WHEN preis_netto IS NULL THEN NULL ELSE round(preis_netto * 100)::bigint END AS unit_price_cents,
-               vat_rate_basis_points, current_station_id
-        FROM public.items
-        WHERE tenant_id = ${authorization.tenantId}
-          AND order_id = ${input.orderId}
-        ORDER BY created_at, id
-      `);
-
-      const intakeRows = await tx.execute<IntakeRow>(sql`
-        SELECT tenant_id, order_id, customer_id, items_snapshot,
-               current_order_version, current_station, current_status, integrity_ok
-        FROM private.v_order_intake_receipts_v1
-        WHERE order_id = ${input.orderId}
-        ORDER BY recorded_at DESC
-        LIMIT 2
-      `);
+type OrderPriceEvent={aggregate_version:number;payload:{prices:unknown}};
+function qualifyCurrentOrderItems(authorization:AuthorizationSnapshot,queue:QueueRow,isReworkOrder:boolean,intakeRows:IntakeRow[],currentRows:CurrentItemRow[],contentEvent:ContentEventRow|null,priceEvents:OrderPriceEvent[]){
       const intake = intakeRows[0];
       if (
         (isReworkOrder && intakeRows.length !== 0)
@@ -664,17 +586,6 @@ export async function readLiveOrderCard(
         ))
       ) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
       const intakeItems = isReworkOrder ? null : mapOrderCardIntakeItems(intake!.items_snapshot);
-      const contentEvents = await tx.execute<ContentEventRow>(sql`
-        SELECT tenant_id, order_id, event_type, event_schema_version,
-               aggregate_version, status, payload
-        FROM public.events
-        WHERE tenant_id = ${authorization.tenantId}
-          AND order_id = ${input.orderId}
-          AND event_type = 'ORDER_CONTENT_CHANGED_V1'
-        ORDER BY aggregate_version DESC, created_at DESC
-        LIMIT 1
-      `);
-      const contentEvent = contentEvents[0] ?? null;
       const eventPayload = contentEvent?.payload as { note?: unknown; items?: unknown } | null;
       const eventItems = contentEvent ? mapOrderCardIntakeItems(eventPayload?.items,'content') : null;
       if (contentEvent && (
@@ -701,10 +612,8 @@ export async function readLiveOrderCard(
         // The existing invoice-price command may fill an unpriced position
         // after this content receipt. Only its real later receipt can explain
         // that price change; copying the current value would hide corruption.
-        const priceEvents=await tx.execute<{payload:{prices:unknown}}>(sql`SELECT payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId}
-          AND event_type='ORDER_INVOICE_PRICES_SET_V1' AND status='success' AND event_schema_version=1 AND user_id IS NOT NULL
-          AND aggregate_version>${contentEvent!.aggregate_version} AND aggregate_version<=${queue.version} ORDER BY aggregate_version,created_at,id`);
-        for(const priceEvent of priceEvents){
+
+        for(const priceEvent of priceEvents.filter(event=>event.aggregate_version>contentEvent!.aggregate_version&&event.aggregate_version<=queue.version)){
           const prices=priceEvent.payload?.prices;
           if(!Array.isArray(prices)||!prices.length||new Set(prices.map(price=>price?.itemId)).size!==prices.length)throw Error('ORDER_CARD_INVOICE_PRICE_RECEIPT_INVALID');
           for(const price of prices){
@@ -718,6 +627,331 @@ export async function readLiveOrderCard(
           throw new Error("ORDER_CARD_CONTENT_READBACK_INVALID");
         }
       }
+
+ return items;
+}
+
+function qualifyOrderFreeze(authorization:AuthorizationSnapshot,queue:QueueRow,items:OrderCardItem[],extraRows:ExtraWorkRow[],freezeRows:FreezeRow[]){
+      const itemById = new Map(items.map((item) => [item.id, item]));
+      const extraLines = extraRows.map((row) => {
+        if (row.order_id !== queue.id) throw new Error("ORDER_CARD_EXTRA_WORK_ORDER_INVALID");
+        const item = itemById.get(row.item_id);
+        if (!item) throw new Error("ORDER_CARD_EXTRA_WORK_ITEM_INVALID");
+        const line = mapExtraWork(row, authorization.tenantId);
+        item.extraWork.push(line);
+        return line;
+      });
+
+      if (freezeRows.length > 1) throw new Error("ORDER_CARD_FREEZE_AMBIGUOUS");
+      const freeze = freezeRows[0] ?? null;
+      // The immutable completion freeze remains active after goods-out. A
+      // collected/shipped order must therefore still carry the same freeze.
+      const frozenFlag = queue.status === "fertig" || queue.station === "abgeholt";
+      if ((freeze !== null) !== frozenFlag) throw new Error("ORDER_CARD_FREEZE_STATE_INVALID");
+
+      let mappedFreeze: LiveOrderCard["freeze"] = null;
+      if (freeze) {
+        const hourlyRateCents = toSafeInteger(freeze.hourly_rate_cents, "ORDER_CARD_FREEZE_RATE_INVALID");
+        const totalAmountCents = toSafeInteger(freeze.total_amount_cents, "ORDER_CARD_FREEZE_TOTAL_INVALID");
+        const lineCount = toSafeInteger(freeze.line_count, "ORDER_CARD_FREEZE_COUNT_INVALID");
+        const actualLines = extraLines;
+        if (
+          freeze.integrity_ok !== true
+          || freeze.tenant_id !== authorization.tenantId
+          || freeze.order_id !== queue.id
+          || freeze.aggregate_version > queue.version
+          || !UUID_PATTERN.test(freeze.freeze_id)
+          || !UUID_PATTERN.test(freeze.rate_id)
+          || hourlyRateCents < 1
+          || lineCount !== actualLines.length
+          || totalAmountCents !== actualLines.reduce((sum, line) => sum + line.amountCents, 0)
+          || actualLines.some((line) => !line.frozen || line.hourlyRateCents !== hourlyRateCents)
+        ) throw new Error("ORDER_CARD_FREEZE_INVALID");
+        mappedFreeze = {
+          freezeId: freeze.freeze_id,
+          rateId: freeze.rate_id,
+          hourlyRateCents,
+          totalAmountCents,
+          lineCount,
+          frozenAt: toIso(freeze.frozen_at),
+        };
+      }
+
+ return mappedFreeze;
+}
+
+function qualifyOrderQueue(authorization:AuthorizationSnapshot,queueRows:QueueRow[]){
+ const queue=queueRows[0];
+      if (
+        queueRows.length !== 1
+        || !queue
+        || queue.tenant_id !== authorization.tenantId
+        || queue.tenant_integrity_ok !== true
+        || queue.station !== queue.current_station
+        || queue.station !== queue.current_station_id
+        || !validId(queue.customer_id)
+        || typeof queue.customer_name !== "string"
+        || queue.customer_name.trim().length === 0
+        || !Number.isSafeInteger(queue.version)
+        || queue.version < 1
+        || (queue.handover_mode !== null
+          && queue.handover_mode !== "pickup"
+          && queue.handover_mode !== "shipping")
+      ) throw new Error("ORDER_CARD_QUEUE_INVALID");
+ return {...queue,customer_name:queue.customer_name};
+}
+
+function qualifyOrderOrigin(authorization:AuthorizationSnapshot,originRows:OrderOriginRow[]){
+      const origin = originRows[0];
+      if (
+        originRows.length !== 1
+        || !origin
+        || origin.tenant_id !== authorization.tenantId||typeof origin.has_commercial_quote!=="boolean"
+      ) throw new Error("ORDER_CARD_ORIGIN_INVALID");
+      const isReworkOrder = origin.source === "REKLAMATION_NACHARBEIT";
+      if (isReworkOrder && !validId(origin.nacharbeit_zu)) {
+        throw new Error("ORDER_CARD_REWORK_LINK_INVALID");
+      }
+ return origin;
+}
+
+type CardHandoverEvent={id:string;event_type:string;payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}};
+async function qualifyHandoverNotice(tx:import('./privilegedDb').PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,queue:QueueRow,handoverEvent:CardHandoverEvent|undefined){
+      let handoverNotice:LiveOrderCard['handoverNotice'];
+      if(handoverEvent?.event_type==='ORDER_HANDOVER_CHANGED_V1'){
+        const source=await readManualHandoverReceipt(tx,authorization.tenantId,handoverEvent.id);
+        if(source.orderId!==queue.id||source.orderVersion>queue.version)throw Error('ORDER_CARD_MANUAL_HANDOVER_INVALID');
+        handoverNotice={message:source.message,taskId:source.taskId,originalItemId:null,manualEventId:source.eventId};
+      }else if(handoverEvent){
+        await readInvoiceHandoverSource(tx,authorization.tenantId,handoverEvent.id);
+        const handover=handoverEvent.payload?.receipt;
+        if(handoverEvent.event_type!=='ORDER_HANDOVER_MAIL_V1'||!handover||handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
+        handoverNotice={message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId,manualEventId:handoverEvent.id};
+      }
+ return handoverNotice;
+}
+
+function qualifiedOperationalFacts(origin:OrderOriginRow,items:OrderCardItem[],awardedQuote:OrderCommercialQuote|undefined,awardedQuoteUnavailable:boolean,activeComplaint:{id:string}|null|undefined):NonNullable<LiveOrderCard['operationalFacts']>{
+ const isReworkOrder=origin.source==='REKLAMATION_NACHARBEIT';
+ return {rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:awardedQuoteUnavailable?null:!isReworkOrder&&items.some(item=>item.unitPriceCents===null&&!awardedQuote?.positions.some(position=>position.itemId===item.id)),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})};
+}
+function qualifiedItemUnits(items:OrderCardItem[],awardedQuote:OrderCommercialQuote|undefined){
+ return items.map(item=>{const awarded=awardedQuote?.positions.find(position=>position.itemId===item.id);return awarded?{...item,unit:awarded.unit==null?null:orderPositionUnitLabel(awarded.unit)}:item;});
+}
+
+export type TodayOrderCard=Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'customerName'|'title'|'station'|'dueAt'|'handoverMode'|'items'|'freeze'|'handoverNotice'|'operationalFacts'>;
+type TodayCardRow={kind:string;order_id:string;position:number;data:unknown};
+/** One snapshot query for the displayed order facts. Both projections use
+ * the same current-item, intake/content/price, freeze and handover validators.
+ * No actor list, agreement hints, timeline, print queue or assignment menu. */
+export async function readTodayOrderCards(authorization:AuthorizationSnapshot,orderIds:readonly string[]):Promise<Map<string,OrderCardReadResult<TodayOrderCard>>>{
+ const diagnosticStarted=Date.now();
+ const results=new Map<string,OrderCardReadResult<TodayOrderCard>>();
+ if(!canView(authorization)||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
+  logPageReadPhase('cards.denied',diagnosticStarted,{requested:orderIds.length,failed:1});
+  for(const id of orderIds)results.set(id,{code:'FORBIDDEN',message:'Auftragskarte ist nicht erlaubt.'});
+  return results;
+ }
+ if(orderIds.length===0)return results;
+ try{
+  const {db}=await withPageReadPhase('cards.import',()=>import('@/db'));
+  const readRows=(nested:import('./privilegedDb').PrivilegedTenantTransaction,selectedIds:readonly string[])=>{
+   const ids=sql`ARRAY[${sql.join(selectedIds.map(id=>sql`${id}`),sql`, `)}]::text[]`;
+   return nested.execute<TodayCardRow>(sql`
+    WITH selected AS MATERIALIZED (
+     SELECT queue.id,queue.tenant_id,queue.version,queue.order_number,queue.customer_id,queue.customer_name,
+      queue.title,queue.task,queue.station,queue.current_station,queue.current_station_id,queue.status,
+      queue.intake_date,queue.due_date::date::text AS due_date,queue.created_at,queue.tenant_integrity_ok,
+      orders.intake_source,orders.handover_mode,orders.source,orders.nacharbeit_zu,
+      EXISTS(SELECT 1 FROM private.quote_conversion_receipts quote WHERE quote.tenant_id=orders.tenant_id AND quote.order_id=orders.id) AS has_commercial_quote
+     FROM private.v_operational_station_queue_v1 queue JOIN public.orders orders ON orders.tenant_id=queue.tenant_id AND orders.id=queue.id
+     WHERE queue.tenant_id=${authorization.tenantId} AND queue.id=ANY(${ids})
+    ), latest_content AS (
+     SELECT DISTINCT ON(order_id) tenant_id,order_id,event_type,event_schema_version,aggregate_version,status,payload
+     FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=ANY(${ids}) AND event_type='ORDER_CONTENT_CHANGED_V1'
+     ORDER BY order_id,aggregate_version DESC,created_at DESC
+    ), latest_handover AS (
+     SELECT DISTINCT ON(order_id) order_id,id,event_type,payload FROM public.events
+     WHERE tenant_id=${authorization.tenantId} AND order_id=ANY(${ids}) AND event_type IN('ORDER_HANDOVER_MAIL_V1','ORDER_HANDOVER_CHANGED_V1') AND event_schema_version=1 AND status='success'
+     ORDER BY order_id,aggregate_version DESC,created_at DESC,id DESC
+    )
+    SELECT 'queue' AS kind,id AS order_id,0::bigint AS position,to_jsonb(selected) AS data FROM selected
+    UNION ALL
+    SELECT 'item',item.order_id,row_number() OVER(PARTITION BY item.order_id ORDER BY item.created_at,item.id),
+     jsonb_build_object('id',item.id,'name',item.name,'quantity',item.quantity,'material',item.material,'surface_requested',item.surface_requested,'execution_requested',item.execution_requested,
+      'catalog_service_id',item.catalog_service_id::text,'unit',item.unit,'unit_price_cents',CASE WHEN item.preis_netto IS NULL THEN NULL ELSE round(item.preis_netto*100)::bigint END,'vat_rate_basis_points',item.vat_rate_basis_points,'current_station_id',item.current_station_id)
+     FROM public.items item WHERE item.tenant_id=${authorization.tenantId} AND item.order_id=ANY(${ids})
+    UNION ALL
+    SELECT 'intake',receipt.order_id,row_number() OVER(PARTITION BY receipt.order_id ORDER BY receipt.recorded_at DESC),
+     jsonb_build_object('tenant_id',receipt.tenant_id,'order_id',receipt.order_id,'customer_id',receipt.customer_id,'items_snapshot',receipt.items_snapshot,'current_order_version',receipt.current_order_version,'current_station',receipt.current_station,'current_status',receipt.current_status,'integrity_ok',receipt.integrity_ok)
+     FROM private.v_order_intake_receipts_v1 receipt WHERE receipt.tenant_id=${authorization.tenantId} AND receipt.order_id=ANY(${ids})
+    UNION ALL SELECT 'content',order_id,0,to_jsonb(latest_content) FROM latest_content
+    UNION ALL
+    SELECT 'price',event.order_id,row_number() OVER(PARTITION BY event.order_id ORDER BY event.aggregate_version,event.created_at,event.id),jsonb_build_object('aggregate_version',event.aggregate_version,'payload',event.payload)
+     FROM public.events event WHERE event.tenant_id=${authorization.tenantId} AND event.order_id=ANY(${ids}) AND event.event_type='ORDER_INVOICE_PRICES_SET_V1' AND event.status='success' AND event.event_schema_version=1 AND event.user_id IS NOT NULL
+    UNION ALL
+    SELECT 'extra',line.order_id,row_number() OVER(PARTITION BY line.order_id ORDER BY line.item_id,line.catalog_position_name,line.catalog_position_id),
+     jsonb_build_object('tenant_id',line.tenant_id,'order_id',line.order_id,'item_id',line.item_id,'line_id',line.line_id::text,'catalog_position_id',line.catalog_position_id::text,'catalog_position_name',line.catalog_position_name,'minutes',line.minutes,'hourly_rate_cents',line.hourly_rate_cents,'amount_cents',line.amount_cents,'frozen',line.frozen,'line_version',line.line_version,'frozen_at',line.frozen_at,'integrity_ok',line.integrity_ok)
+     FROM private.v_order_extra_work_live_v1 line WHERE line.tenant_id=${authorization.tenantId} AND line.order_id=ANY(${ids})
+    UNION ALL
+    SELECT 'freeze',frozen.order_id,row_number() OVER(PARTITION BY frozen.order_id ORDER BY frozen.occurred_at DESC),
+     jsonb_build_object('tenant_id',frozen.tenant_id,'order_id',frozen.order_id,'aggregate_version',frozen.aggregate_version,'freeze_id',frozen.freeze_id::text,'rate_id',frozen.rate_id::text,'hourly_rate_cents',frozen.hourly_rate_cents,'total_amount_cents',frozen.total_amount_cents,'line_count',frozen.line_count,'frozen_at',frozen.frozen_at,'integrity_ok',frozen.integrity_ok)
+     FROM private.v_order_frozen_receipts_v1 frozen WHERE frozen.tenant_id=${authorization.tenantId} AND frozen.order_id=ANY(${ids}) AND frozen.active=true
+    UNION ALL SELECT 'handover',order_id,0,to_jsonb(latest_handover) FROM latest_handover
+    ORDER BY kind,order_id,position`);
+   };
+   let rows:TodayCardRow[];
+   try{rows=Array.from(await withPageReadPhase('cards.snapshot',()=>withPrivilegedTenantTransaction(authorization,tx=>withTenantSavepoint(tx,nested=>readRows(nested,orderIds)))));}
+   catch{
+    rows=[];
+    // The parent transaction has finished before acquiring child connections.
+    // Even one available pool slot must suffice; never hold it while awaiting
+    // another transaction. The same SQL still has an order-local savepoint.
+    const readIsolated=async(selectedIds:readonly string[]):Promise<void>=>{
+     try{
+      // Keep the identical SQL and native tenant/savepoint contract. A valid
+      // group stays one snapshot; only the failing group is divided further.
+      // This avoids re-planning every UNION/view for every unaffected order.
+      rows.push(...await withPageReadPhase(selectedIds.length===1?'cards.one_snapshot':'cards.snapshot',()=>withPrivilegedTenantTransaction(authorization,isolated=>withTenantSavepoint(isolated,nested=>readRows(nested,selectedIds)))));
+     }catch(error){
+      if(selectedIds.length===1){
+       const id=selectedIds[0];
+       console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId:id,name:error instanceof Error?error.name:'UnknownError'});
+       results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+       return;
+      }
+      const middle=Math.ceil(selectedIds.length/2);
+      await Promise.all([readIsolated(selectedIds.slice(0,middle)),readIsolated(selectedIds.slice(middle))]);
+     }
+    };
+    // The failed parent transaction is already released. The existing native
+    // pool remains the connection limit, including a single available slot.
+    const middle=Math.ceil(orderIds.length/2);
+    await withPageReadPhase('cards.fallback',async()=>{if(orderIds.length===1)await readIsolated(orderIds);else await Promise.all([readIsolated(orderIds.slice(0,middle)),readIsolated(orderIds.slice(middle))]);});
+   }
+   const byOrder=new Map<string,TodayCardRow[]>();
+   for(const row of rows){const group=byOrder.get(row.order_id);if(group)group.push(row);else byOrder.set(row.order_id,[row]);}
+   let nextCard=0;
+   const qualifyIsolated=async()=>{
+    while(nextCard<orderIds.length){
+     const orderId=orderIds[nextCard++];if(results.has(orderId))continue;
+     try{await withPageReadPhase('cards.qualify_one',()=>withPrivilegedTenantTransaction(authorization,async tx=>{
+     const group=byOrder.get(orderId)??[];
+     const records=<T>(kind:string)=>group.filter(row=>row.kind===kind).map(row=>row.data as T);
+     const queues=records<QueueRow&OrderOriginRow>('queue');
+     if(!queues.length){results.set(orderId,{code:'NOT_FOUND',message:'Auftrag nicht verfügbar.'});return;}
+     const queue=qualifyOrderQueue(authorization,queues),origin=qualifyOrderOrigin(authorization,queues),isReworkOrder=origin.source==='REKLAMATION_NACHARBEIT';
+     const content=records<ContentEventRow>('content');if(content.length>1)throw Error('ORDER_CARD_CONTENT_EVENT_INVALID');
+     const items=qualifyCurrentOrderItems(authorization,queue,isReworkOrder,records<IntakeRow>('intake'),records<CurrentItemRow>('item'),content[0]??null,records<OrderPriceEvent>('price'));
+     const freeze=qualifyOrderFreeze(authorization,queue,items,records<ExtraWorkRow>('extra'),records<FreezeRow>('freeze'));
+     let awardedQuote:OrderCommercialQuote|undefined,awardedQuoteUnavailable=false;
+     if(origin.has_commercial_quote&&queue.status!=='storniert'){
+      try{awardedQuote=await withTenantSavepoint(tx,nested=>readOrderCommercialQuote(nested,authorization.tenantId,orderId));}
+      catch(error){awardedQuoteUnavailable=true;console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});}
+     }
+     const handover=records<CardHandoverEvent>('handover');if(handover.length>1)throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
+     const {handoverNotice,activeComplaint}=await withTenantSavepoint(tx,async nested=>({
+      handoverNotice:await qualifyHandoverNotice(nested,authorization,queue,handover[0]),
+      activeComplaint:queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(nested,authorization.tenantId,orderId):undefined,
+     }));
+     const cardItems=qualifiedItemUnits(items,awardedQuote);
+     const money=authorization.permissions.includes('perm_view_prices');
+     results.set(orderId,{code:'OK',data:{id:queue.id,version:queue.version,orderNumber:queue.order_number,customerId:queue.customer_id,customerName:queue.customer_name,title:queue.title,station:queue.station,dueAt:toNullableIso(queue.due_date),handoverMode:queue.handover_mode,
+      items:money?cardItems:cardItems.map(item=>({...item,unitPriceCents:null,vatRateBasisPoints:null,extraWork:item.extraWork.map(line=>({...line,hourlyRateCents:null,amountCents:null}))})),
+      freeze:money||!freeze?freeze:{...freeze,hourlyRateCents:null,totalAmountCents:null},...(handoverNotice?{handoverNotice}:{}),
+      operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint)}});
+    }));}catch(error){
+     console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});
+     results.set(orderId,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+    }
+    }
+   };
+   await Promise.all(Array.from({length:Math.min(orderIds.length,db.$client.options.max)},()=>qualifyIsolated()));
+   logPageReadPhase('cards.model',diagnosticStarted,{requested:orderIds.length,ok:[...results.values()].filter(value=>value.code==='OK').length,failed:[...results.values()].filter(value=>value.code!=='OK').length,pool_size:db.$client.options.max});
+   return results;
+ }catch(error){
+  logPageReadPhase('cards.outer_error',diagnosticStarted,{failed:1,requested:orderIds.length},error);
+  console.error('[TODAY_ORDER_BATCH_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});
+  for(const id of orderIds)results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+  return results;
+ }
+}
+
+export async function readLiveOrderCard(
+  authorization: AuthorizationSnapshot,
+  input: { orderId: string },
+): Promise<OrderCardReadResult<LiveOrderCard>> {
+  if (!hasExactKeys(input, ["orderId"]) || !validId(input.orderId)) {
+    return { code: "VALIDATION_ERROR", message: "Ungültige Auftragskennung." };
+  }
+  if (!canView(authorization)) {
+    return { code: "FORBIDDEN", message: "Auftragskarte ist nicht erlaubt." };
+  }
+
+  try {
+    const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const queueRows = await tx.execute<QueueRow>(sql`
+        SELECT id, tenant_id, version, order_number, customer_id, customer_name,
+               title, task, station, current_station, current_station_id, status,
+               intake_date, due_date::date::text AS due_date, created_at, tenant_integrity_ok,
+               (SELECT source.intake_source FROM public.orders source
+                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS intake_source,
+               (SELECT source.handover_mode FROM public.orders source
+                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS handover_mode
+        FROM private.v_operational_station_queue_v1 queue
+        WHERE id = ${input.orderId}
+        LIMIT 2
+      `);
+      if (queueRows.length === 0) return null;
+      const queue=qualifyOrderQueue(authorization,queueRows);
+
+      const originRows = await tx.execute<OrderOriginRow>(sql`
+        SELECT tenant_id, source, nacharbeit_zu,EXISTS(SELECT 1 FROM private.quote_conversion_receipts quote WHERE quote.tenant_id=orders.tenant_id AND quote.order_id=orders.id) AS has_commercial_quote
+        FROM public.orders orders
+        WHERE tenant_id = ${authorization.tenantId}
+          AND id = ${input.orderId}
+        LIMIT 2
+      `);
+      const origin=qualifyOrderOrigin(authorization,originRows);
+      const isReworkOrder=origin.source==='REKLAMATION_NACHARBEIT';
+
+      const currentRows = await tx.execute<CurrentItemRow>(sql`
+        SELECT id, name, quantity, material, surface_requested, execution_requested,
+               catalog_service_id::text AS catalog_service_id, unit,
+               CASE WHEN preis_netto IS NULL THEN NULL ELSE round(preis_netto * 100)::bigint END AS unit_price_cents,
+               vat_rate_basis_points, current_station_id
+        FROM public.items
+        WHERE tenant_id = ${authorization.tenantId}
+          AND order_id = ${input.orderId}
+        ORDER BY created_at, id
+      `);
+
+      const intakeRows = await tx.execute<IntakeRow>(sql`
+        SELECT tenant_id, order_id, customer_id, items_snapshot,
+               current_order_version, current_station, current_status, integrity_ok
+        FROM private.v_order_intake_receipts_v1
+        WHERE order_id = ${input.orderId}
+        ORDER BY recorded_at DESC
+        LIMIT 2
+      `);
+      const contentEvents = await tx.execute<ContentEventRow>(sql`
+        SELECT tenant_id, order_id, event_type, event_schema_version,
+               aggregate_version, status, payload
+        FROM public.events
+        WHERE tenant_id = ${authorization.tenantId}
+          AND order_id = ${input.orderId}
+          AND event_type = 'ORDER_CONTENT_CHANGED_V1'
+        ORDER BY aggregate_version DESC, created_at DESC
+        LIMIT 1
+      `);
+      const contentEvent=contentEvents[0]??null;
+      let priceEvents:OrderPriceEvent[]=[];
+      if(contentEvent){
+        priceEvents=await tx.execute<OrderPriceEvent>(sql`SELECT aggregate_version,payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId}
+          AND event_type='ORDER_INVOICE_PRICES_SET_V1' AND status='success' AND event_schema_version=1 AND user_id IS NOT NULL
+          AND aggregate_version>${contentEvent!.aggregate_version} AND aggregate_version<=${queue.version} ORDER BY aggregate_version,created_at,id`);
+      }
+      const items=qualifyCurrentOrderItems(authorization,queue,isReworkOrder,intakeRows,currentRows,contentEvent,priceEvents);
 
       const customerRows = await tx.execute<{ phone: string | null; customer_number: string | null }>(sql`
         SELECT phone, customer_number FROM public.customers
@@ -815,16 +1049,6 @@ export async function readLiveOrderCard(
         WHERE order_id = ${input.orderId}
         ORDER BY item_id, catalog_position_name, catalog_position_id
       `);
-      const itemById = new Map(items.map((item) => [item.id, item]));
-      const extraLines = extraRows.map((row) => {
-        if (row.order_id !== queue.id) throw new Error("ORDER_CARD_EXTRA_WORK_ORDER_INVALID");
-        const item = itemById.get(row.item_id);
-        if (!item) throw new Error("ORDER_CARD_EXTRA_WORK_ITEM_INVALID");
-        const line = mapExtraWork(row, authorization.tenantId);
-        item.extraWork.push(line);
-        return line;
-      });
-
       const freezeRows = await tx.execute<FreezeRow>(sql`
         SELECT tenant_id, order_id, aggregate_version, freeze_id::text AS freeze_id,
                rate_id::text AS rate_id, hourly_rate_cents, total_amount_cents,
@@ -835,40 +1059,7 @@ export async function readLiveOrderCard(
         ORDER BY occurred_at DESC
         LIMIT 2
       `);
-      if (freezeRows.length > 1) throw new Error("ORDER_CARD_FREEZE_AMBIGUOUS");
-      const freeze = freezeRows[0] ?? null;
-      // The immutable completion freeze remains active after goods-out. A
-      // collected/shipped order must therefore still carry the same freeze.
-      const frozenFlag = queue.status === "fertig" || queue.station === "abgeholt";
-      if ((freeze !== null) !== frozenFlag) throw new Error("ORDER_CARD_FREEZE_STATE_INVALID");
-
-      let mappedFreeze: LiveOrderCard["freeze"] = null;
-      if (freeze) {
-        const hourlyRateCents = toSafeInteger(freeze.hourly_rate_cents, "ORDER_CARD_FREEZE_RATE_INVALID");
-        const totalAmountCents = toSafeInteger(freeze.total_amount_cents, "ORDER_CARD_FREEZE_TOTAL_INVALID");
-        const lineCount = toSafeInteger(freeze.line_count, "ORDER_CARD_FREEZE_COUNT_INVALID");
-        const actualLines = extraLines;
-        if (
-          freeze.integrity_ok !== true
-          || freeze.tenant_id !== authorization.tenantId
-          || freeze.order_id !== queue.id
-          || freeze.aggregate_version > queue.version
-          || !UUID_PATTERN.test(freeze.freeze_id)
-          || !UUID_PATTERN.test(freeze.rate_id)
-          || hourlyRateCents < 1
-          || lineCount !== actualLines.length
-          || totalAmountCents !== actualLines.reduce((sum, line) => sum + line.amountCents, 0)
-          || actualLines.some((line) => !line.frozen || line.hourlyRateCents !== hourlyRateCents)
-        ) throw new Error("ORDER_CARD_FREEZE_INVALID");
-        mappedFreeze = {
-          freezeId: freeze.freeze_id,
-          rateId: freeze.rate_id,
-          hourlyRateCents,
-          totalAmountCents,
-          lineCount,
-          frozenAt: toIso(freeze.frozen_at),
-        };
-      }
+      const mappedFreeze=qualifyOrderFreeze(authorization,queue,items,extraRows,freezeRows);
 
       const canReadMoney = authorization.permissions.includes("perm_view_prices");
       const cancellationRows=queue.status==='storniert'?await tx.execute<{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null}>(sql`SELECT event.notes AS reason,event.created_at::text AS at,coalesce(actor.full_name,'Name fehlt') AS actor,event.payload->>'quoteId' AS "quoteId",quote.quote_number AS "quoteNumber" FROM public.events event LEFT JOIN public.app_users actor ON actor.tenant_id=event.tenant_id AND actor.id=event.user_id LEFT JOIN private.quotes quote ON quote.tenant_id=event.tenant_id AND quote.id::text=event.payload->>'quoteId' WHERE event.tenant_id=${authorization.tenantId} AND event.order_id=${input.orderId} AND event.event_type='ORDER_CANCELLED_V1' AND event.status='success' ORDER BY event.created_at DESC,event.id DESC LIMIT 1`):[];
@@ -880,28 +1071,15 @@ export async function readLiveOrderCard(
         catch(error){awardedQuoteUnavailable=true;console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId:queue.id,name:error instanceof Error?error.name:'UnknownError'});}
       }
       const commercialQuote=canReadMoney?awardedQuote:undefined;
-      const cardItems=items.map(item=>{
-        const awarded=awardedQuote?.positions.find(position=>position.itemId===item.id);
-        return awarded?{...item,unit:awarded.unit==null?null:orderPositionUnitLabel(awarded.unit)}:item;
-      });
+      const cardItems=qualifiedItemUnits(items,awardedQuote);
       const [handoverEvent]=await tx.execute<{id:string;event_type:string;payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}}>(sql`SELECT id,event_type,payload FROM public.events WHERE tenant_id=${authorization.tenantId} AND order_id=${input.orderId} AND event_type IN ('ORDER_HANDOVER_MAIL_V1','ORDER_HANDOVER_CHANGED_V1') AND event_schema_version=1 AND status='success' ORDER BY aggregate_version DESC,created_at DESC,id DESC LIMIT 1`);
-      let handoverNotice:LiveOrderCard['handoverNotice'];
-      if(handoverEvent?.event_type==='ORDER_HANDOVER_CHANGED_V1'){
-        const source=await readManualHandoverReceipt(tx,authorization.tenantId,handoverEvent.id);
-        if(source.orderId!==queue.id||source.orderVersion>queue.version)throw Error('ORDER_CARD_MANUAL_HANDOVER_INVALID');
-        handoverNotice={message:source.message,taskId:source.taskId,originalItemId:null,manualEventId:source.eventId};
-      }else if(handoverEvent){
-        await readInvoiceHandoverSource(tx,authorization.tenantId,handoverEvent.id);
-        const handover=handoverEvent.payload?.receipt;
-        if(handoverEvent.event_type!=='ORDER_HANDOVER_MAIL_V1'||!handover||handover.orderId!==queue.id||!Number.isSafeInteger(handover.orderVersion)||handover.orderVersion>queue.version||typeof handover.message!=='string'||!handover.message.trim()||!UUID_PATTERN.test(handover.mailActor?.originalItemId)||handover.taskId!==null&&!UUID_PATTERN.test(handover.taskId))throw Error('ORDER_CARD_HANDOVER_EVENT_INVALID');
-        handoverNotice={message:handover.message,taskId:handover.taskId,originalItemId:handover.mailActor.originalItemId,manualEventId:handoverEvent.id};
-      }
+      const handoverNotice=await qualifyHandoverNotice(tx,authorization,queue,handoverEvent);
       const activeComplaint=queue.station!=='fertig'?await (await import('./orderReleaseRead')).readOpenOrderComplaint(tx,authorization.tenantId,input.orderId):undefined;
       return {
         ...(handoverNotice?{handoverNotice}:{}),
         ...(commercialQuote?{commercialQuote}:{}),
         ...(cancellationRows[0]?{cancellation:cancellationRows[0]}:{}),
-        operationalFacts:{rework:isReworkOrder,...(isReworkOrder?{reworkComplaintId:origin.nacharbeit_zu!}:{}),pricesMissing:awardedQuoteUnavailable?null:!isReworkOrder&&items.some(item=>item.unitPriceCents===null&&!awardedQuote?.positions.some(position=>position.itemId===item.id)),...(activeComplaint!==undefined?{complaint:activeComplaint!==null}:{})},
+        operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint),
         id: queue.id,
         version: queue.version,
         orderNumber: queue.order_number,
