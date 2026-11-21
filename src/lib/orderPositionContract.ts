@@ -17,6 +17,11 @@ export const ORDER_POSITION_SURFACES = [
 
 export type OrderPositionUnit = typeof ORDER_POSITION_UNITS[number]["key"];
 export type OrderPositionSurface = typeof ORDER_POSITION_SURFACES[number]["key"];
+/** Shared legacy vocabulary for writes, labels and the future HC9 reader.
+ * The SQL parser is generated from this list; originals keep their own bytes. */
+export const ORDER_POSITION_SURFACE_ALIASES = [
+  { alias: "chrom", key: "verchromen" },
+] as const satisfies readonly { alias: string; key: OrderPositionSurface }[];
 export type OrderIntakeFreeTextUnit = OrderPositionUnit | typeof ORDER_POSITION_UNITS[number]["label"];
 export const ORDER_INTAKE_FREE_TEXT_UNITS = ORDER_POSITION_UNITS.map(option => option.key);
 
@@ -27,7 +32,8 @@ export function normaliseOrderPositionUnit(value: unknown): OrderPositionUnit | 
 
 export function normaliseOrderPositionSurface(value: unknown): OrderPositionSurface | null {
   if (typeof value !== "string") return null;
-  return ORDER_POSITION_SURFACES.find(option => option.key === value || option.label === value)?.key ?? null;
+  return ORDER_POSITION_SURFACES.find(option => option.key === value || option.label === value)?.key
+    ?? ORDER_POSITION_SURFACE_ALIASES.find(option => option.alias === value)?.key ?? null;
 }
 
 export function orderPositionUnitLabel(value: string | null | undefined): string {
@@ -39,7 +45,8 @@ export function orderPositionUnitLabel(value: string | null | undefined): string
 
 export function orderPositionSurfaceLabel(value: string | null | undefined): string {
   if (!value) return "fehlt";
-  const option = ORDER_POSITION_SURFACES.find(option => option.key === value || option.label === value);
+  const key = normaliseOrderPositionSurface(value);
+  const option = ORDER_POSITION_SURFACES.find(option => option.key === key);
   if (!option) throw new Error("ORDER_POSITION_SURFACE_UNKNOWN");
   return option.label;
 }
