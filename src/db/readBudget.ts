@@ -4,12 +4,12 @@ import {AsyncLocalStorage} from 'node:async_hooks';
  * The native settings contract checks the additive SQL defaults against these. */
 export const DEFAULT_PAGE_READ_SETTINGS={
  queryTimeoutMs:10_000,invoiceMailBatchLimit:101,
- authorizationTimeoutMs:1000,authorizationPoolSize:2,authorizationIdleTimeoutSeconds:20,
+ authorizationTimeoutMs:1000,authorizationPoolSize:2,authorizationIdleTimeoutSeconds:300,
  get graphTimeoutMs(){return this.queryTimeoutMs;},
 } as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
-type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>)};
+type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
 export const AUTHORIZATION_READ_TIMEOUT_MS=DEFAULT_PAGE_READ_SETTINGS.authorizationTimeoutMs;
@@ -69,12 +69,14 @@ function boundedQuery<T extends QueryLike>(query:T):T{
   if(!budgets.getStore())return query;
   let pending:Promise<unknown>|undefined;
   const start=()=>pending??=(async()=>{
-    const prepare=budgets.getStore()?.prepareStatement;
-    if(!prepare)return withinBudget(()=>query,()=>query.cancel());
-    const preparedAt=Date.now();await prepare();
-    if(Date.now()-preparedAt>=250)logPageReadPhase('db.prepare',preparedAt);
+    const store=budgets.getStore(),prepare=store?.prepareStatement;
+    if(!store||!prepare)return withinBudget(()=>query,()=>query.cancel());
+    if(store.timeoutSetAt===undefined||Date.now()-store.timeoutSetAt>=250){
+      const preparedAt=Date.now();await prepare();store.timeoutSetAt=Date.now();
+      if(Date.now()-preparedAt>=250)logPageReadPhase('db.prepare',preparedAt);
+    }
     const queryAt=Date.now();
-    try{const result=await query;if(Date.now()-queryAt>=250)logPageReadPhase('db.query',queryAt);return result;}
+    try{const result=await withinBudget(()=>query,()=>query.cancel());if(Date.now()-queryAt>=250)logPageReadPhase('db.query',queryAt);return result;}
     catch(error){logPageReadPhase('db.query',queryAt,{failed:1},error);if(error&&typeof error==='object'&&'code'in error&&error.code==='57014')throw new PageReadTimeout();throw error;}
   })();
   const wrapped:T=new Proxy(query,{
@@ -148,7 +150,8 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
               const left=budget.deadline-Date.now();if(left<=0)throw new PageReadTimeout();
               return withinBudget(()=>native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(left)]));
             };
-            return budgets.run({...budget,prepareStatement},()=>callback(withPageReadQueryLimits(sql)));
+            const timeoutSetAt=key==='begin'?Date.now():budget.timeoutSetAt;
+            return budgets.run({...budget,prepareStatement,timeoutSetAt},()=>callback(withPageReadQueryLimits(sql)));
           };
           Promise.resolve(Reflect.apply(value,target,args)).then(result=>{clearTimeout(timer);resolve(result);},error=>{clearTimeout(timer);reject(error&&typeof error==='object'&&'code'in error&&error.code==='57014'?new PageReadTimeout():error);});
         });

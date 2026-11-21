@@ -6,13 +6,15 @@ import { signAppSession, type AppSession } from "@/lib/server/appSession";
 
 const TEST_SECRET = "proxy-regression-test-secret";
 
-const { mockGetUser } = vi.hoisted(() => ({
+const { mockGetSession, mockGetUser } = vi.hoisted(() => ({
+  mockGetSession: vi.fn(),
   mockGetUser: vi.fn(),
 }));
 
 vi.mock("@supabase/ssr", () => ({
   createServerClient: vi.fn(() => ({
     auth: {
+      getSession: mockGetSession,
       getUser: mockGetUser,
     },
   })),
@@ -48,8 +50,9 @@ describe("proxy auth boundary", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-test-key");
     vi.stubEnv("APP_SESSION_SECRET", TEST_SECRET);
+    mockGetSession.mockReset();
     mockGetUser.mockReset();
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+    mockGetSession.mockResolvedValue({ data: { session: null } });
   });
 
   it("redirects an anonymous protected request to /start", async () => {
@@ -59,13 +62,13 @@ describe("proxy auth boundary", () => {
 
   it('lets only the data-free heartbeat bypass a failing session provider',async()=>{
     const {proxy}=await import('@/proxy');
-    mockGetUser.mockRejectedValue(new Error('TEST session provider unavailable'));
+    mockGetSession.mockRejectedValue(new Error('TEST session provider unavailable'));
     const cookie='sb-TEST-auth-token=TEST-expired-session';
     expect((await proxy(request('/api/offline/heartbeat',cookie))).status).toBe(200);
-    expect(mockGetUser).not.toHaveBeenCalled();
+    expect(mockGetSession).not.toHaveBeenCalled();
     const denied=await proxy(request('/api/offline/replay',cookie));
     expect(denied.status).toBe(401);expect(await denied.json()).toEqual({error:'UNAUTHORIZED'});
-    expect(mockGetUser).toHaveBeenCalledOnce();
+    expect(mockGetSession).toHaveBeenCalledOnce();
   });
 
   it("matches protected pages and API routes", async () => {
@@ -174,8 +177,8 @@ describe("proxy auth boundary", () => {
   });
 
   it("does not treat a Supabase identity as the canonical app session", async () => {
-    mockGetUser.mockResolvedValueOnce({
-      data: { user: { id: "supabase-user-1" } },
+    mockGetSession.mockResolvedValueOnce({
+      data: { session: { user: { id: "supabase-user-1" } } },
     });
     const { proxy } = await import("@/proxy");
     const response = await proxy(
@@ -183,6 +186,18 @@ describe("proxy auth boundary", () => {
     );
 
     expectRedirectToStart(response);
-    expect(mockGetUser).toHaveBeenCalledTimes(1);
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(mockGetUser).not.toHaveBeenCalled();
+  });
+
+  it('preserves the signed app session when the external session refresh fails',async()=>{
+    mockGetSession.mockRejectedValue(new Error('TEST external refresh unavailable'));
+    const {proxy}=await import('@/proxy');
+    const token=signAppSession(validSession(),TEST_SECRET);
+    const response=await proxy(request('/',`kreile_app_session=${token}; sb-project-auth-token=TEST-session`));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(mockGetUser).not.toHaveBeenCalled();
   });
 });
