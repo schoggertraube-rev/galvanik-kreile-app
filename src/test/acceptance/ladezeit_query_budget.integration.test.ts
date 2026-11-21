@@ -6,7 +6,8 @@ import {createServer} from 'node:http';
 import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort} from '@/db/readBudget';
 
 const url=process.env.DATABASE_URL;
-if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!=='54342')throw Error('TEST_OWN_LOOPBACK_REQUIRED');
+const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
+if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!==testPort)throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 const configured:number[]=[];
 const native=postgres(url,{prepare:false,max:1,debug:(_connection,text,parameters)=>{
  if(text.includes("set_config('statement_timeout'"))configured.push(Number(parameters[0]));

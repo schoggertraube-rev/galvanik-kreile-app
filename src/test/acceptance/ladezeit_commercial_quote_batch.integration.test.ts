@@ -14,7 +14,8 @@ import {readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {db} from '@/db';
 
 const url=process.env.DATABASE_URL;
-if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!=='54342')throw Error('TEST_OWN_LOOPBACK_REQUIRED');
+const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
+if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!==testPort)throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 
 it('reads zero/one/many immutable full and partial awards in two SQL statements, with per-order ambiguous VAT isolation',async()=>{
  const sources:Array<{orderId:string;quoteId:string;quote:OrderCommercialQuote}>=[];
