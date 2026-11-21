@@ -167,11 +167,15 @@ it('250 informed zero/one/many reads preserve actual phone originals, freeze ver
  expect(before).toEqual([expect.objectContaining({code:'OK',informed:null,ampel:'rot'}),expect.objectContaining({code:'OK',informed:null,ampel:'rot'})]);
  expect(await readOrdersInformed(actor,[])).toEqual(new Map());
  const deliveryRead=vi.spyOn(deliveryProofs,'readCommunicationDeliveryFailures');
+ const collectionPort=await import('@/lib/server/commands/recordGoodsOutCommand');
+ const collectionRead=vi.spyOn(collectionPort,'readOrderCollectionStatesInTransaction');
  let batch:Awaited<ReturnType<typeof readOrdersInformed>>;
  try{
   const counted=await countSourceQueries(()=>readOrdersInformed(actor,[...ids,a.orderId]));batch=counted.value;
   expect(counted.reads).toBe(1);expect(deliveryRead).toHaveBeenCalledTimes(1);
- }finally{deliveryRead.mockRestore();}
+  expect(collectionRead).toHaveBeenCalledTimes(1);
+  expect(collectionRead.mock.calls[0][2]).toHaveLength(2);
+ }finally{deliveryRead.mockRestore();collectionRead.mockRestore();}
  expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(before[0]);expect(batch.get(b.orderId)).toEqual(before[1]);
  const operator=await createFixture(['auftraege'],'werkstatt');
  const input={orderId:a.orderId,expectedVersion:a.version,clientEventId:randomUUID()};

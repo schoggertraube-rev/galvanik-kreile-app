@@ -80,7 +80,7 @@ function informedOrderQuery(auth:AuthorizationSnapshot,orderId:string|SQL){retur
    FROM public.orders orders JOIN private.v_goods_out_ui_state_v1 state ON state.tenant_id=orders.tenant_id AND state.order_id=orders.id AND state.integrity_ok
    LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
    WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`;}
-async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>,failures:Awaited<ReturnType<typeof readCommunicationDeliveryFailures>>){
+async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>,failures:Awaited<ReturnType<typeof readCommunicationDeliveryFailures>>,collectionState:Awaited<ReturnType<typeof import('./commands/recordGoodsOutCommand').readOrderCollectionStateInTransaction>>|undefined){
   if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   if(order.length!==1)return {code:'NOT_FOUND' as const};
   const failedThreads=new Set(failures.map(proof=>proof.threadId));
@@ -89,8 +89,7 @@ async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:Authoriz
   const latest=rows.at(-1)?.payload.receipt;
   const failedDelivery=latest?.threadId?failures.find(proof=>proof.threadId===latest.threadId)??null:null;
   const current=order[0];
-  const {readOrderCollectionStateInTransaction}=await import('./commands/recordGoodsOutCommand');
-  const collectionState=await readOrderCollectionStateInTransaction(tx,auth,{orderId,orderVersion:current.version,customerId:current.customer_id,freezeId:current.freeze_id,goodsOutEventId:current.goods_out_event_id});
+  if(collectionState===undefined)throw Error('COLLECTION_PLAN_SOURCE_MISSING');
   const invoiceMailOriginals=canTransportInvoiceDocument(auth)&&current.station==='fertig'?(await readCohort(current.customer_id,current.handover_mode)).map(row=>({id:row.id,orderId:row.order_id,version:row.aggregate_version})):undefined;
   let invoiceMailQueued=invoiceMailOriginals===undefined?undefined:false;
   if(invoiceMailOriginals?.length===101&&current.invoice_id!==null&&!invoiceMailOriginals.some(row=>row.id===current.invoice_id)){
@@ -133,12 +132,19 @@ async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string
   };
   const threadIds=[...new Set([...receipts.values()].flatMap(rows=>rows.flatMap(row=>row.payload.receipt.threadId?[row.payload.receipt.threadId]:[])))];
   const failures=await readCommunicationDeliveryFailures(tx,auth,threadIds);
+  const {readOrderCollectionStatesInTransaction}=await import('./commands/recordGoodsOutCommand');
+  const collectionInputs=orderIds.flatMap(orderId=>{
+   const source=orders.get(orderId);if(!source)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+   if(source.length!==1)return []; // same per-order NOT_FOUND result below
+   const current=source[0];return [{orderId,orderVersion:current.version,customerId:current.customer_id,freezeId:current.freeze_id,goodsOutEventId:current.goods_out_event_id}];
+  });
+  const collections=await readOrderCollectionStatesInTransaction(tx,auth,collectionInputs);
   const result=new Map<string,InformedRead>();
   for(const id of orderIds){
    const rows=receipts.get(id),order=orders.get(id),complaint=complaints.get(id);
    if(!rows||!order||complaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
    const ownThreads=new Set(rows.flatMap(row=>row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]));
-   result.set(id,await qualifyOrderInformed(tx,auth,id,rows,order,complaint,readCohort,failures.filter(proof=>ownThreads.has(proof.threadId))));
+   result.set(id,await qualifyOrderInformed(tx,auth,id,rows,order,complaint,readCohort,failures.filter(proof=>ownThreads.has(proof.threadId)),collections.get(id)));
   }
   return result;
  });
