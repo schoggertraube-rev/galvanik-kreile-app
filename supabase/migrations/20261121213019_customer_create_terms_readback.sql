@@ -57,7 +57,7 @@ LEFT JOIN LATERAL (
     AND terms.payload->>'customerId'=receipt.customer_id
     AND terms.status='success' AND terms.event_schema_version=1 AND terms.aggregate_version=1
     AND terms.client_event_id IS NOT NULL AND terms.correlation_id IS NOT NULL
-    AND terms.created_at>=receipt.created_at
+    AND receipt.created_at<=terms.created_at AT TIME ZONE 'UTC'
     AND (latest_update.id IS NULL OR terms.created_at>=latest_update.created_at)
     AND customer.ziel_freigeschaltet IS TRUE AND customer.payment_preference='rechnung'
     AND terms.payload->'targetDays'=to_jsonb(customer.ziel_tage)

@@ -36,6 +36,11 @@ it('PL19:53 customer creation retries keep the same immutable original after a r
  expect(await withSession(full,()=>readCustomerCreateReceiptAction(structuredClone(request)))).toMatchObject({code:'OK',receipt:created.receipt});
  expect(await sql`SELECT count(*)::int AS n FROM public.customers WHERE tenant_id=${tenant} AND id=${created.receipt.customerId}`).toEqual([{n:1}]);
  expect(await sql`SELECT count(*)::int AS n FROM private.customer_create_receipts WHERE tenant_id=${tenant} AND customer_id=${created.receipt.customerId}`).toEqual([{n:1}]);
+ await sql.begin(async tx=>{
+  await tx`SET LOCAL TIME ZONE 'Pacific/Kiritimati'`;
+  await tx`SELECT set_config('app.tenant_id',${tenant},true)`;
+  expect(await tx`SELECT integrity_ok FROM private.v_customer_create_receipts_v1 WHERE customer_id=${created.receipt.customerId}`).toEqual([{integrity_ok:true}]);
+ });
  expect(await withSession(full,()=>createCustomerAction({...request,phone:'+49 711 5550199'}))).toMatchObject({code:'CONFLICT'});
  await preserve(created.receipt.customerId,async()=>{
   await sql`UPDATE public.customers SET email='TEST-unbelegter-kontakt@example.invalid' WHERE tenant_id=${tenant} AND id=${created.receipt.customerId}`;
