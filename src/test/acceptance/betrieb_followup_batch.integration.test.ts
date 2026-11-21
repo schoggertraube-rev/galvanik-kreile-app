@@ -3,7 +3,7 @@ import {expect,it,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {sql as query} from 'drizzle-orm';
 import {full,sql,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
-import {readyOrderForInvoice,readyInvoiceOrder,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
+import {readyOrderForInvoice,readyInvoiceOrder,manualTrackingFixture,customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
@@ -17,6 +17,8 @@ import {readOrderInformed,readOrdersInformed} from '@/lib/server/orderReleaseRea
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {db} from '@/db';
 import * as deliveryProofs from '@/lib/server/communicationDeliveryPort';
+import * as responsibilitySource from '@/lib/server/orderTaskAssignmentRead';
+import {readTodayResponsibilities} from '@/lib/server/todayDashboard';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -35,6 +37,39 @@ async function authorization(actor=full){
  if(!result.ok)throw Error('TEST_REAL_AUTHORIZATION_REQUIRED');
  return result.data;
 }
+it('253 K3 reads 1001 explicit synthetic IDs in one transaction and keeps a failed block unknown',async()=>{
+ const customerId=await customerFixture('253 K3 responsibility');
+ const first=await intakeOrderFixture('253 K3 first',customerId);
+ const last=await intakeOrderFixture('253 K3 last',customerId);
+ const ids=[first.receipt.orderId,...Array.from({length:999},(_,index)=>`TEST-K3-absent-${index}`),last.receipt.orderId];
+ const actor=await authorization(),blocks:number[]=[];
+ const original=responsibilitySource.readOrderResponsibilityForToday;
+ let failLast=false,begins=0;
+ const options=db.$client.options,previous=options.debug;
+ options.debug=(connection,text,parameters,types)=>{
+  if(/^begin\b/i.test(text.trim()))begins++;
+  if(typeof previous==='function')previous(connection,text,parameters,types);
+ };
+ const spy=vi.spyOn(responsibilitySource,'readOrderResponsibilityForToday').mockImplementation(async(tx,auth,block)=>{
+  blocks.push(block.length);
+  const result=await original(tx,auth,block);
+  if(failLast&&block.includes(last.receipt.orderId))await tx.execute(query`SELECT 1/0`);
+  return result;
+ });
+ try{
+  const result=await readTodayResponsibilities(actor,ids);
+  expect(blocks).toEqual([1000,1]);expect(begins).toBe(1);
+  expect(result.code).toBe('OK');if(result.code!=='OK')throw Error('TEST_K3_COMPLETE_SOURCE_REQUIRED');
+  expect([...result.data]).toEqual([[first.receipt.orderId,null],[last.receipt.orderId,null]]);
+  expect(result.data.unavailableOrderIds).toEqual([]);
+  failLast=true;blocks.length=0;begins=0;
+  expect(await readTodayResponsibilities(actor,JSON.parse(JSON.stringify(ids)))).toEqual({code:'SOURCE_INCOMPLETE'});
+  expect(blocks).toEqual([1000,1]);expect(begins).toBe(1);
+  failLast=false;
+  const recovered=await readTodayResponsibilities(actor,ids);
+  expect(recovered).toEqual(result);
+ }finally{spy.mockRestore();options.debug=previous;}
+});
 it('250 manual shipping retains real zero/one/many sources, shared reads, rights, versions and fresh tracking retry',async()=>{
  const a=await readyOrderForInvoice('TEST 250 shipping A','shipping');
  const b=await readyOrderForInvoice('TEST 250 shipping B','shipping',a.customerId);

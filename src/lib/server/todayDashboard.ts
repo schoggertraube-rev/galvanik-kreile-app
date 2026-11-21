@@ -136,6 +136,20 @@ export async function readTodaySource<T>(tx:PrivilegedTenantTransaction,read:(ne
   catch(error){console.error('[TODAY_SOURCE_FAILED]',{quelle:'query',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE'};}
 }
 
+/** Keep the canonical reader's limit while retaining one transaction for the whole source. */
+export async function readTodayResponsibilities(auth:AuthorizationSnapshot,ids:readonly string[]){
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const result=Object.assign(new Map<string,string|null>(),{unavailableOrderIds:[] as string[]});
+  for(let offset=0;offset<ids.length;offset+=1000){
+   const block=await readTodaySource(tx,nested=>readOrderResponsibilityForToday(nested,auth,ids.slice(offset,offset+1000)));
+   if(block.code!=='OK')return {code:'SOURCE_INCOMPLETE' as const};
+   for(const [id,userId] of block.data)result.set(id,userId);
+   result.unavailableOrderIds.push(...block.data.unavailableOrderIds);
+  }
+  return {code:'OK' as const,data:result};
+ }).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
+}
+
 async function readTodaySupport(auth:AuthorizationSnapshot,today:string,ordersAllowed:boolean,moneyAllowed:boolean){
  const [money,person,orders]=await Promise.all([
   withPrivilegedTenantTransaction(auth,async tx=>{
@@ -272,7 +286,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     ...(complaints.code==='OK'?complaintAttention(complaints.complaints,auth.areas??[]).flatMap(row=>row.orderId?[row.orderId]:[]):[]),
     ...(support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.flatMap(row=>row.orderId?[row.orderId]:[]):[]),
   ])];
-  const responsibilityRead=withPageReadPhase('today.responsibility',()=>withPrivilegedTenantTransaction(auth,tx=>readTodaySource(tx,nested=>readOrderResponsibilityForToday(nested,auth,responsibilityIds)))).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
+  const responsibilityRead=withPageReadPhase('today.responsibility',()=>readTodayResponsibilities(auth,responsibilityIds));
   logPageReadPhase('today.initial',diagnosticStarted,{rows:orders.length});
   const sourceNotices:TodayItem[]=[];
   const retainOrderSourceNotice=(order:{id:string;version:number;orderNumber:string})=>{if(!sourceNotices.some(item=>item.key==='source-order:'+order.id))sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});};
