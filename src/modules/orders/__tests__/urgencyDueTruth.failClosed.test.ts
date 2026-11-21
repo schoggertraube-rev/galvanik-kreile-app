@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUrgency } from "../domain/getUrgency";
 
 describe("W2C-B2M5U urgency date truth", () => {
+  // Explicit synthetic calendar; assertions and real timers remain unchanged.
+  beforeEach(() => { vi.setSystemTime(new Date("2026-11-20T12:00:00.000Z")); });
+  afterEach(() => { vi.useRealTimers(); });
   it("returns unknown for no usable date", () => {
     for (const dueDate of [null, "", "  ", "invalid"]) expect(getUrgency(dueDate)).toBe("unknown");
   });

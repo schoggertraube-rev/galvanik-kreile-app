@@ -2,7 +2,7 @@ import {formatEuro} from '@/lib/domain/formatEuro';
 import "server-only";
 import {readOpenOrderComplaint} from './orderReleaseRead';
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {
@@ -82,24 +82,9 @@ export async function readPaymentSummary(
   }
 }
 
-export async function getPaymentState(
-  authorization: AuthorizationSnapshot,
-  orderId: unknown,
-  readCredit?:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>,
-): Promise<OrderPaymentStateReadResult> {
-  if (
-    typeof orderId !== "string"
-    || !ORDER_ID_PATTERN.test(orderId)
-  ) {
-    return { code: "VALIDATION_ERROR", message: "Ungültige Zahlungsabfrage." };
-  }
-  if (!canReadPaymentSummary(authorization)&&!getAuthorizationActionGrants(authorization).confirmPayment) {
-    return { code: "FORBIDDEN", message: "Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt." };
-  }
-
-  try {
-    const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<OrderPaymentStateRow & { credit_customer_id:string;customer_overdue_invoice_ids: string[] }>(sql`
+type PaymentStateSourceRow=OrderPaymentStateRow & {credit_customer_id:string;customer_overdue_invoice_ids:string[]};
+type CreditSourceRead=(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>;
+function orderPaymentStateQuery(orderId:string|SQL){return sql`
         SELECT state.*, parent.customer_id AS credit_customer_id, ARRAY (
           SELECT invoice.id::text FROM public.invoices invoice
           JOIN public.orders orders
@@ -114,7 +99,8 @@ export async function getPaymentState(
         JOIN public.orders parent ON parent.tenant_id=state.tenant_id AND parent.id=state.order_id
         WHERE state.order_id = ${orderId}
         LIMIT 2
-      `);
+      `;}
+async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,rows:PaymentStateSourceRow[],readCredit?:CreditSourceRead){
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
       if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
@@ -145,13 +131,51 @@ export async function getPaymentState(
         });}catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
       }
       return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
-    });
-    if(data&&"code" in data)return {code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."};
-    return data
-      ? { code: "OK", data }
-      : { code: "NOT_FOUND", message: "Zahlungs- und Warenausgangsdaten sind nicht verfügbar." };
-  } catch (error) {
-    logReadFailure("getPaymentState database error", error);
-    return { code: "UNAVAILABLE", message: "Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden." };
+}
+async function readPaymentStateGroup(authorization:AuthorizationSnapshot,orderIds:string[],readCredit?:CreditSourceRead){
+ return withPrivilegedTenantTransaction(authorization,async tx=>{
+  const grouped=new Map<string,PaymentStateSourceRow[]>(orderIds.map(orderId=>[orderId,[]]));
+  if(orderIds.length===1){grouped.set(orderIds[0],await tx.execute<PaymentStateSourceRow>(orderPaymentStateQuery(orderIds[0])));}
+  else{
+   const requested=sql.join(orderIds.map(orderId=>sql`(${orderId})`),sql`,`);
+   const records=await tx.execute<PaymentStateSourceRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) LEFT JOIN LATERAL (${orderPaymentStateQuery(sql`requested.order_id`)}) source ON true`);
+   const seen=new Set<string>();
+   for(const record of records){
+    const rows=grouped.get(record.batch_order_id);if(!rows)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");seen.add(record.batch_order_id);
+    if(record.order_id===null)continue; // explicit empty LEFT JOIN, not an unreadable source
+    if(record.order_id!==record.batch_order_id)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
+    const {batch_order_id,...source}=record;void batch_order_id;rows.push(source);
+   }
+   if(seen.size!==orderIds.length)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
   }
+  const result=new Map<string,OrderPaymentStateReadResult>();
+  for(const orderId of orderIds){
+   const rows=grouped.get(orderId);if(!rows)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
+   const data=await qualifyPaymentState(tx,authorization,rows,readCredit);
+   result.set(orderId,data&&"code" in data?{code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."}:data?{code:"OK",data}:{code:"NOT_FOUND",message:"Zahlungs- und Warenausgangsdaten sind nicht verfügbar."});
+  }
+  return result;
+ });
+}
+export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot,orderIds:readonly string[],readCredit?:CreditSourceRead):Promise<Map<string,OrderPaymentStateReadResult>>{
+ const result=new Map<string,OrderPaymentStateReadResult>(),valid:string[]=[],allowed=canReadPaymentSummary(authorization)||getAuthorizationActionGrants(authorization).confirmPayment;
+ for(const orderId of new Set(orderIds)){
+  if(typeof orderId!=="string"||!ORDER_ID_PATTERN.test(orderId)){result.set(orderId,{code:"VALIDATION_ERROR",message:"Ungültige Zahlungsabfrage."});continue;}
+  if(!allowed){result.set(orderId,{code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."});continue;}
+  valid.push(orderId);
+ }
+ const read=async(ids:string[]):Promise<void>=>{
+  if(!ids.length)return;
+  try{const rows=await readPaymentStateGroup(authorization,ids,readCredit);for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");result.set(orderId,value);}}
+  catch(error){
+   if(ids.length>1){const middle=Math.floor(ids.length/2);await read(ids.slice(0,middle));await read(ids.slice(middle));return;}
+   logReadFailure("getPaymentState database error",error);result.set(ids[0],{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."});
+  }
+ };
+ await read(valid);return result;
+}
+export async function getPaymentState(authorization:AuthorizationSnapshot,orderId:unknown,readCredit?:CreditSourceRead):Promise<OrderPaymentStateReadResult>{
+ if(typeof orderId!=="string"||!ORDER_ID_PATTERN.test(orderId))return {code:"VALIDATION_ERROR",message:"Ungültige Zahlungsabfrage."};
+ const rows=await getPaymentStatesBatch(authorization,[orderId],readCredit);
+ return rows.get(orderId)??{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."};
 }

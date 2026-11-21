@@ -306,13 +306,19 @@ export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise
   const auth=authorization.data;
   const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
   const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,input.orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,input.orderIds))]);
-  const [{readInvoiceShippingConsequencesBatch},{readInvoiceVat},fundament,{readOrderInformed},{readOrderPickupAppointment},{readV45OrderRule},{getPaymentState}]=await Promise.all([
-   import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead')]);
+  const [{readInvoiceShippingConsequencesBatch},{readInvoiceVat},fundament,{readOrdersInformed},{readOrderPickupAppointment},{readV45OrderRule},{getPaymentStatesBatch},orders]=await Promise.all([
+   import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead'),import('@/modules/orders/server-public')]);
   const readCredit=hasAuthorizationArea(auth,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
    const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
    return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
   }:undefined;
   const shippingReads=withPageReadPhase('action.shipping',()=>readInvoiceShippingConsequencesBatch(auth,input.orderIds.flatMap(orderId=>{const card=cards.get(orderId),proof=evidence.get(orderId);return card?.code==='OK'&&proof?.code==='OK'?[{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId}]:[];}),readInvoiceVat,fundament.readShippingSettingsInTransaction));
+  const qualifiedCards=input.orderIds.flatMap(orderId=>{const source=cards.get(orderId),proof=evidence.get(orderId);return source?.code==='OK'&&proof?.code==='OK'?[source.data]:[];});
+  const finishedIds=qualifiedCards.filter(card=>card.station==='fertig').map(card=>card.id);
+  const shipmentIds=qualifiedCards.filter(card=>card.handoverMode==='shipping').map(card=>card.id);
+  const informedReads=withPageReadPhase('action.informed',()=>readOrdersInformed(auth,finishedIds));
+  const paymentReads=withPageReadPhase('action.payment',()=>getPaymentStatesBatch(auth,finishedIds,readCredit));
+  const shipmentReads=shipmentIds.length?withPageReadPhase('action.shipment',async()=>orders.readManualShippingBatch(auth,shipmentIds,await manualShippingPorts())):Promise.resolve(new Map<string,Awaited<ReturnType<typeof orders.readManualShipping>>>());
   const rows=await Promise.all(input.orderIds.map(async orderId=>{
    const source=cards.get(orderId),proof=evidence.get(orderId);
    if(!source||source.code!=='OK')return {orderId,result:source??{code:'UNAVAILABLE' as const,message:'Auftrag nicht verfügbar.'}};
@@ -321,9 +327,9 @@ export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise
    try{
     const [shipping,informed,payment,shipment,appointment]=await Promise.all([
      shippingReads.then(rows=>{if(!rows.has(card.id))throw Error('SHIPPING_PROPOSAL_BATCH_SOURCE_MISSING');return rows.get(card.id);}),
-     card.station==='fertig'?withPageReadPhase('action.informed',()=>readOrderInformed(auth,card.id)):Promise.resolve(undefined),
-     card.station==='fertig'?withPageReadPhase('action.payment',()=>getPaymentState(auth,card.id,readCredit)):Promise.resolve(undefined),
-     card.handoverMode==='shipping'?withPageReadPhase('action.shipment',()=>readManualShippingForOrder(auth,card.id)):Promise.resolve(undefined),
+     card.station==='fertig'?informedReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_NOTIFICATION_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
+     card.station==='fertig'?paymentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_PAYMENT_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
+     card.handoverMode==='shipping'?shipmentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('MANUAL_SHIPPING_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
      card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
     ]);
     if(informed?.code==='OK'&&informed.orderVersion!==card.version)return {orderId,result:{code:'UNAVAILABLE' as const,message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'}};
