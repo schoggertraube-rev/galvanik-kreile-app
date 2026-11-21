@@ -2,7 +2,7 @@ import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import {readUnsentInvoiceMailGroups} from './communicationDocumentPort';
 import {canTransportInvoiceDocument} from './authorization';
 import {V45_TEXT,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,SURFACE_ASSIGNMENT_COPY} from '@/ui/situationCatalog';
-import {ORDER_POSITION_SURFACES,ORDER_POSITION_SURFACE_ALIASES} from '@/lib/orderPositionContract';
+import {suggestOrderPositionSurface,orderPositionSurfaceLabel} from '@/lib/orderPositionContract';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
 import type {U2Read} from '@/lib/domain/u2ReadContract';
@@ -253,11 +253,10 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
    const {card,handoverConsequences:shipping,pickupAppointment:appointment}=source.data;
    const unresolved=card.items.filter(item=>item.surfaceAssignmentRequired);
    if(unresolved.length){
-    const proposals=ORDER_POSITION_SURFACES.filter(option=>ORDER_POSITION_SURFACE_ALIASES.some(alias=>alias.key===option.key)).map(option=>({key:option.key,label:SURFACE_ASSIGNMENT_COPY.proposal(option.label)}));
     sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,
      title:SURFACE_ASSIGNMENT_COPY.title([...new Set(unresolved.map(item=>item.surfaceAssignmentRequired!))].join(', '),order.orderNumber),
      meta:'',urgency:'warning',primaryActionLabel:SURFACE_ASSIGNMENT_COPY.open,
-     surfaceAssignments:unresolved.map(item=>({itemId:item.id,rawValue:item.surfaceAssignmentRequired!,proposals}))});
+     surfaceAssignments:unresolved.map(item=>{const key=suggestOrderPositionSurface(item.surfaceAssignmentRequired!);return {itemId:item.id,rawValue:item.surfaceAssignmentRequired!,proposals:key?[{key,label:SURFACE_ASSIGNMENT_COPY.proposal(orderPositionSurfaceLabel(key))}]:[]};})});
    }
    if(shipping?.code==='SOURCE_INCOMPLETE')sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
    if(hasAuthorizationArea(auth,'preise')&&card.operationalFacts?.pricesMissing===null)sourceNotices.push({key:'source-quote:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:SHIPPING_FEE_COPY.orderQuoteMissing(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});
