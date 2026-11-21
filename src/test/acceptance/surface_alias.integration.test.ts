@@ -1,11 +1,11 @@
 // @vitest-environment node
 import {expect,it,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
-import {full,sql,withSession} from '../../../e2e/ablauf/replayHarness';
+import {full,sql,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {createOrderIntakeAction} from '@/app/actions/eingang.actions';
-import {getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
-import {ORDER_POSITION_SURFACES,ORDER_POSITION_SURFACE_ALIASES,normaliseOrderPositionSurface,orderPositionSurfaceLabel} from '@/lib/orderPositionContract';
+import {getLiveOrderCardAction,getTodayOrderReadAction,changeOrderContentAction} from '@/app/actions/orders.actions';
+import {ORDER_POSITION_SURFACES,ORDER_POSITION_SURFACE_ALIASES,normaliseOrderPositionSurface,orderPositionSurfaceLabel,suggestOrderPositionSurface} from '@/lib/orderPositionContract';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
 
@@ -25,6 +25,10 @@ it('251 one shared vocabulary maps zero/one/many legacy inputs identically in Ty
  expect(normaliseOrderPositionSurface('chrom')).toBe('verchromen');
  expect(orderPositionSurfaceLabel('chrom')).toBe('Verchromen');
  expect(normaliseOrderPositionSurface('TEST_unbekannte_Oberflaeche')).toBeNull();
+ expect(suggestOrderPositionSurface('TEST_unbekannte_Oberflaeche')).toBeNull();
+ expect(suggestOrderPositionSurface('TEST chrom Spezial')).toBe('verchromen');
+ expect(suggestOrderPositionSurface('TEST chrom verzinken')).toBeNull();
+ expect(suggestOrderPositionSurface('TEST chrombad')).toBeNull();
  expect(()=>orderPositionSurfaceLabel('TEST_unbekannte_Oberflaeche')).toThrow('ORDER_POSITION_SURFACE_UNKNOWN');
  await expect(sql`SELECT private.order_position_surface_key('TEST_unbekannte_Oberflaeche')`).rejects.toMatchObject({code:'22023'});
  const [grants]=await sql`SELECT has_function_privilege('anon','private.order_position_surface_key(text)','EXECUTE') AS anon,has_function_privilege('authenticated','private.order_position_surface_key(text)','EXECUTE') AS authenticated,has_function_privilege('service_role','private.order_position_surface_key(text)','EXECUTE') AS service`;
@@ -75,9 +79,26 @@ it('251 actual intake alias, unchanged historical original, fresh retry and zero
  const rows=home.dashboard.items.filter(item=>item.key==='source-order:'+unknown);
  expect(rows).toHaveLength(1);
  if(unknownCard.code!=='OK')throw Error('TEST_UNKNOWN_SURFACE_CARD');
- expect(rows[0]).toMatchObject({title:`Oberfläche „TEST_unbekannte_Oberflaeche“ in Auftrag ${unknownCard.data.card.orderNumber} zuordnen`,orderId:unknown,orderVersion:unknownCard.data.card.version,surfaceAssignments:[{itemId:unknownItem,rawValue:'TEST_unbekannte_Oberflaeche',proposals:[{key:'verchromen',label:'Als Verchromen zuordnen'}]}]});
+ expect(rows[0]).toMatchObject({title:`Oberfläche „TEST_unbekannte_Oberflaeche“ in Auftrag ${unknownCard.data.card.orderNumber} zuordnen`,primaryActionLabel:'Oberfläche zuordnen',orderId:unknown,orderVersion:unknownCard.data.card.version,surfaceAssignments:[{itemId:unknownItem,rawValue:'TEST_unbekannte_Oberflaeche',proposals:[{key:'verchromen',label:'Als Verchromen zuordnen'}]}]});
  expect(await unknownHashes()).toEqual(unknownBefore);
  expect(await sql.begin(async tx=>{await tx`SELECT set_config('app.tenant_id',${tenant},true)`;return tx`SELECT integrity_ok,surface_mapping_readable FROM private.v_order_intake_receipts_v1 WHERE tenant_id=${tenant} AND order_id=${unknown}`;})).toEqual([{integrity_ok:false,surface_mapping_readable:true}]);
+ const worker=await createFixture(['auftraege']),denied=await createFixture(['kunden']);
+ const operationalCard=await withSession(worker,()=>getLiveOrderCardAction({orderId:unknown}));
+ expect(operationalCard).toMatchObject({code:'OK',data:{card:{items:[{unitPriceCents:null,vatRateBasisPoints:null}]}}});
+ if(operationalCard.code!=='OK')throw Error('TEST_SURFACE_WORKER_CARD');
+ const correction={orderId:unknown,expectedVersion:operationalCard.data.card.version,clientEventId:randomUUID(),note:operationalCard.data.card.note,
+  items:operationalCard.data.card.items.map(item=>({id:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,material:item.material,surface:'Verchromen',unit:item.unit,unitPriceCents:item.unitPriceCents,vatRateBasisPoints:item.vatRateBasisPoints}))};
+ expect(await withSession(denied,()=>changeOrderContentAction(correction))).toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(worker,()=>changeOrderContentAction({...correction,items:correction.items.map(item=>({...item,unitPriceCents:99999,vatRateBasisPoints:1900 as const}))}))).toMatchObject({code:'FORBIDDEN'});
+ const fixed=await withSession(worker,()=>changeOrderContentAction(correction));
+ expect(fixed,JSON.stringify(fixed)).toMatchObject({code:'OK',replayed:false,receipt:{actorId:worker.actorId}});
+ expect(await withSession(worker,()=>changeOrderContentAction(JSON.parse(JSON.stringify(correction))))).toMatchObject({code:'OK',replayed:true});
+ const fresh=await withSession(worker,()=>getLiveOrderCardAction({orderId:unknown}));
+ expect(fresh,JSON.stringify(fresh)).toMatchObject({code:'OK',data:{card:{items:[{surfaceRequested:'Verchromen',unitPriceCents:null}]}}});
+ if(fresh.code!=='OK')throw Error('TEST_SURFACE_FRESH_CARD');
+ expect(fresh.data.card.items[0].surfaceAssignmentRequired).toBeUndefined();
+ expect(await sql`SELECT round(preis_netto*100)::integer AS cents,vat_rate_basis_points FROM public.items WHERE tenant_id=${tenant} AND id=${unknownItem}`).toEqual([{cents:10000,vat_rate_basis_points:1900}]);
+ expect(await unknownHashes()).toEqual(unknownBefore);
  expect(await sql`SELECT items_snapshot#>>'{0,surfaceRequested}' AS original FROM private.order_intake_receipts WHERE tenant_id=${tenant} AND order_id=${legacy}`).toEqual([{original:'chrom'}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid AND event_type='ORDER_INTAKE_CREATED_V1'`).toEqual([{n:1}]);
 });

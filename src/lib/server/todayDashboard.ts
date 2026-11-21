@@ -42,7 +42,7 @@ export type TodayItem = {
   snoozedUntil?: string;
   assignedToName?: string;
   assignmentVersion?: number;
-  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | typeof SITUATION_COPY.quote.openOrder | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
+  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | typeof SITUATION_COPY.quote.openOrder | typeof SURFACE_ASSIGNMENT_COPY.open | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
 };
 
 export type TodayCollectionNotice = {
@@ -256,7 +256,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     const proposals=ORDER_POSITION_SURFACES.filter(option=>ORDER_POSITION_SURFACE_ALIASES.some(alias=>alias.key===option.key)).map(option=>({key:option.key,label:SURFACE_ASSIGNMENT_COPY.proposal(option.label)}));
     sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,
      title:SURFACE_ASSIGNMENT_COPY.title([...new Set(unresolved.map(item=>item.surfaceAssignmentRequired!))].join(', '),order.orderNumber),
-     meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder,
+     meta:'',urgency:'warning',primaryActionLabel:SURFACE_ASSIGNMENT_COPY.open,
      surfaceAssignments:unresolved.map(item=>({itemId:item.id,rawValue:item.surfaceAssignmentRequired!,proposals}))});
    }
    if(shipping?.code==='SOURCE_INCOMPLETE')sourceNotices.push({key:'source-shipping:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:shipping.orderId===order.id&&shipping.orderVersion===order.version&&shipping.message?shipping.message:SHIPPING_FEE_COPY.proposalMissing(order.orderNumber,false,'quelle'),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});

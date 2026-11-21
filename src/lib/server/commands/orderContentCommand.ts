@@ -1,5 +1,6 @@
 import {isOrderCommandBase as validBase,isManualHandoverInput} from '@/lib/domain/orderHandoverContract';
 import {orderTitleSource} from '@/lib/domain/orderTitle';
+import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import "server-only";
 import {recordObservedFailure} from "@/lib/server/actionObservation";
 
@@ -55,7 +56,7 @@ export type OrderContentResult =
   | { code: "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
 
 type OrderRow = { id: string; customer_id: string; version: number; station: string; status: string;title:string };
-type ItemRow = { id: string; catalog_service_id: string | null };
+type ItemRow = { id: string; catalog_service_id: string | null;unit_price_cents:number|null;vat_rate_basis_points:number|null };
 type CatalogRow = { id: string; name: string; surface: string; unit: string; net_price_cents: number; vat_rate_basis_points: number; active: boolean };
 type EventRow = { id: string; user_id: string; aggregate_version: number; created_at: Date | string; payload: unknown; event_type: string; order_id: string };
 
@@ -322,7 +323,15 @@ export async function changeOrderContent(input: ChangeOrderContentInput,readCust
       if (order.version !== input.expectedVersion) return { code: "CONFLICT" as const, message: "Auftrag wurde bereits geändert." };
       if (order.status === "fertig" || order.station === "abgeholt") return { code: "CONFLICT" as const, message: "Ein abgeschlossener Auftrag kann nicht inhaltlich geändert werden." };
 
-      const existing = await tx.execute<ItemRow>(sql`SELECT id, catalog_service_id::text AS catalog_service_id FROM public.items WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} FOR UPDATE`);
+      const existing = await tx.execute<ItemRow>(sql`SELECT id, catalog_service_id::text AS catalog_service_id,CASE WHEN preis_netto IS NULL THEN NULL ELSE round(preis_netto*100)::bigint END AS unit_price_cents,vat_rate_basis_points FROM public.items WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} FOR UPDATE`);
+      // A hidden price is not an instruction to erase it. Keep the stored
+      // monetary columns under the existing order/item locks (R5).
+      const canSetPrices=hasAuthorizationArea(auth.data,'preise');
+      if(!canSetPrices&&items.some(item=>{
+        const current=existing.find(row=>row.id===item.id);
+        return item.unitPriceCents!==null&&item.unitPriceCents!==Number(current?.unit_price_cents)
+          ||item.vatRateBasisPoints!==null&&item.vatRateBasisPoints!==current?.vat_rate_basis_points;
+      }))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.pricesMissing};
       if (existing.some((row) => !items.some((item) => item.id === row.id))) return { code: "VALIDATION_ERROR" as const, message: "Positionen dürfen hier nicht gelöscht werden." };
       const catalogIds = [...new Set(items.flatMap((item) => item.catalogServiceId ? [item.catalogServiceId] : []))];
       const catalog = catalogIds.length ? await tx.execute<CatalogRow>(sql`SELECT id::text AS id, name, surface, unit, net_price_cents, vat_rate_basis_points, active FROM public.catalog_services WHERE tenant_id=${auth.data.tenantId} AND id = ANY(${catalogIds}::uuid[])`) : [];
@@ -331,7 +340,10 @@ export async function changeOrderContent(input: ChangeOrderContentInput,readCust
       const normalized = items.map((item) => {
         const service = item.catalogServiceId ? services.get(item.catalogServiceId) : null;
         if (item.catalogServiceId && (!service || (!service.active && !existing.some((row) => row.id === item.id && row.catalog_service_id === service.id)))) throw new Error("ORDER_CONTENT_CATALOG_INVALID");
-        return service ? { ...item, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.net_price_cents, vatRateBasisPoints: service.vat_rate_basis_points as 0 | 700 | 1900 } : item;
+        const normalized=service ? { ...item, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.net_price_cents, vatRateBasisPoints: service.vat_rate_basis_points as 0 | 700 | 1900 } : item;
+        const current=existing.find(row=>row.id===item.id);
+        return !canSetPrices&&current&&current.catalog_service_id===item.catalogServiceId
+          ? {...normalized,unitPriceCents:current.unit_price_cents===null?null:Number(current.unit_price_cents),vatRateBasisPoints:current.vat_rate_basis_points as 0|700|1900|null}:normalized;
       });
 
       if(!readCustomer)throw Error('ORDER_CONTENT_CUSTOMER_PORT_REQUIRED');

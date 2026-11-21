@@ -3,7 +3,8 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const { execute, resolveAuthorization } = vi.hoisted(() => ({ execute: vi.fn(), resolveAuthorization: vi.fn() }));
 
-vi.mock("@/lib/server/authorization", () => ({
+vi.mock("@/lib/server/authorization", async () => ({
+  ...(await import('@/lib/auth/authorizationContract')),
   resolveAuthorization,
   getAuthorizationActionGrants: (authorization: { permissions: readonly string[] }) => ({
     confirmPayment: false,
@@ -26,7 +27,7 @@ const clientEventId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 describe("order content command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: KREILE_TENANT_SLUG, role: "meister", permissions: ["perm_data_orders"], active: true, displayName: "Rolf" } });
+    resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: KREILE_TENANT_SLUG, role: "meister", permissions: ["perm_data_orders"],areas:['eingang','preise'], active: true, displayName: "Rolf" } });
   });
 
   it("writes a version-bound catalog-backed content change and an event receipt", async () => {

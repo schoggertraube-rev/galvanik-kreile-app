@@ -36,6 +36,18 @@ export function normaliseOrderPositionSurface(value: unknown): OrderPositionSurf
     ?? ORDER_POSITION_SURFACE_ALIASES.find(option => option.alias === value)?.key ?? null;
 }
 
+/** HC9's approved whole-word rule, using only the existing central vocabulary.
+ * No fuzzy/default assignment: two different matching surfaces remain a choice. */
+export function suggestOrderPositionSurface(value:string):OrderPositionSurface|null {
+  const words=value.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const variants=[...ORDER_POSITION_SURFACES.flatMap(option=>[{alias:option.key,key:option.key},{alias:option.label,key:option.key}]),...ORDER_POSITION_SURFACE_ALIASES];
+  const keys=new Set(variants.filter(option=>{
+    const candidate=option.alias.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return words.some((_,offset)=>candidate.every((word,index)=>words[offset+index]===word));
+  }).map(option=>option.key));
+  return keys.size===1?[...keys][0]:null;
+}
+
 export function orderPositionUnitLabel(value: string | null | undefined): string {
   if (!value) return "fehlt";
   const option = ORDER_POSITION_UNITS.find(option => option.key === value || option.label === value);

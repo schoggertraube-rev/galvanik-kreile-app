@@ -72,6 +72,7 @@ export type OrderCardItem = {
   quantity: number;
   material: string | null;
   surface: string;
+  surfaceAssignmentRequired?:string;
   catalogServiceId?: string | null;
   unit?: string | null;
   unitPriceCents?: number | null;

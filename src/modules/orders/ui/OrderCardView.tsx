@@ -1,5 +1,6 @@
 "use client";
 import {formatEuro} from '@/lib/domain/formatEuro';
+import {ORDER_POSITION_SURFACES,orderPositionSurfaceLabel,suggestOrderPositionSurface} from '@/lib/orderPositionContract';
 import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY,E_INVOICE_COPY,E_INVOICE_CORRECTION_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
@@ -50,7 +51,7 @@ export function InvoiceSourceCorrectionDialog({orderNumber,busy,error,onCancel,o
 }
 
 const STATIONS = ["angenommen", "galvanik", "fertig", "zahlung", "abgeholt"] as const;
-const SURFACE_OPTIONS = ["Verchromen", "Vernickeln", "Verzinken", "Entchromen / prüfen", "noch zu klären"] as const;
+const SURFACE_OPTIONS = ORDER_POSITION_SURFACES.map(option=>option.label);
 
 function money(cents: number | null) {
   return cents === null ? "Nicht belegt" : formatEuro(cents);
@@ -171,6 +172,7 @@ export function OrderCardView({
   documentsPanel,
   photoPanel,
   initialPhotosOpen=false,
+  initialSurfaceAssignmentOpen=false,
   complaintsPanel,
   agreementMessage,
   onOpenCustomer,
@@ -182,6 +184,7 @@ export function OrderCardView({
   documentsPanel?: ReactNode;
   photoPanel?:ReactNode;
   initialPhotosOpen?:boolean;
+  initialSurfaceAssignmentOpen?:boolean;
   complaintsPanel?: ReactNode;
   agreementMessage?: string | null;
   onOpenCustomer: (id: string) => void;
@@ -194,6 +197,7 @@ export function OrderCardView({
   const [dueOpen, setDueOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [itemOpen, setItemOpen] = useState<string | "new" | null>(null);
+  const [surfaceAssignmentDismissed,setSurfaceAssignmentDismissed]=useState(false);
   const [invoicePriceOpen, setInvoicePriceOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [goodsOutOpen, setGoodsOutOpen] = useState(false);
@@ -229,6 +233,9 @@ export function OrderCardView({
   const paymentFree = payment?.status === "bezahlt" || payment?.mode === "rechnung" || payment?.mode === "keiner";
   const missingInvoicePrices = card.items.filter((item) => item.unitPriceCents === null || item.unitPriceCents === undefined);
   const contentEnabled = Boolean(actions.content?.enabled && actions.onSaveContent);
+  const activeItemEditor=itemOpen??(initialSurfaceAssignmentOpen&&!surfaceAssignmentDismissed&&contentEnabled
+    ? card.items.find(item=>item.surfaceAssignmentRequired)?.id??null:null);
+  const closeItemEditor=()=>{setItemOpen(null);setSurfaceAssignmentDismissed(true);};
   const contentItems = card.items.map((item) => ({
     id: item.id,
     catalogServiceId: item.catalogServiceId ?? null,
@@ -400,7 +407,7 @@ export function OrderCardView({
     {invoicePriceOpen ? <Dialog titel="Preise für die Rechnung" icon="receipt" groesse="schmal" onSchliessen={() => setInvoicePriceOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const prices = missingInvoicePrices.map((item) => ({ itemId: item.id, unitPriceCents: Math.round(Number(form.get(`price-${item.id}`)) * 100) })); if (prices.some((price) => !Number.isSafeInteger(price.unitPriceCents) || price.unitPriceCents < 1)) return; void actions.onIssueInvoice(prices); setInvoicePriceOpen(false); }}>{missingInvoicePrices.map((item) => <Feld key={item.id} label={`${item.name} · Einzelpreis netto`}><Eingabe name={`price-${item.id}`} type="number" min="0.01" step="0.01" inputMode="decimal" required /></Feld>)}<Hinweis>Die Preise werden am Auftrag gespeichert und direkt in die unveränderliche Rechnung übernommen.</Hinweis><Button art="primaer" icon="receipt" text="Preise speichern & Rechnung ausstellen" type="submit" /></form></Dialog> : null}
     {dueOpen ? <Dialog titel="Liefertermin ändern" icon="calendar" groesse="schmal" onSchliessen={() => setDueOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void actions.onChangeDueDate?.(String(form.get("dueDate") ?? ""), String(form.get("reason") ?? "")); setDueOpen(false); }}><Feld label="Neuer Liefertermin"><Eingabe type="date" name="dueDate" defaultValue={card.dueAt?.slice(0, 10) ?? ""} required /></Feld><Feld label="Grund der Änderung"><Textfeld name="reason" minLength={3} maxLength={500} required /></Feld><Button art="primaer" icon="calendar" text="Termin mit Grund speichern" type="submit" /></form></Dialog> : null}
     {noteOpen ? <Dialog titel="Auftragsnotiz bearbeiten" icon="edit" groesse="schmal" onSchliessen={() => setNoteOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const value = String(form.get("note") ?? "").trim(); void actions.onSaveContent?.({ note: value || null, items: contentItems }); setNoteOpen(false); }}><Feld label="Notiz"><Textfeld name="note" defaultValue={card.note ?? ""} maxLength={2000} /></Feld><Button art="primaer" icon="check" text="Notiz speichern" type="submit" /></form></Dialog> : null}
-    {itemOpen ? <OrderItemDialog card={card} itemId={itemOpen} onClose={() => setItemOpen(null)} onSave={(items) => { void actions.onSaveContent?.({ note: card.note, items }); setItemOpen(null); }} /> : null}
+    {activeItemEditor ? <OrderItemDialog card={card} itemId={activeItemEditor} onClose={closeItemEditor} onSave={(items) => { void actions.onSaveContent?.({ note: card.note, items }); closeItemEditor(); }} /> : null}
     {moreOpen ? <Dialog titel="Mehr zum Auftrag" icon="more" groesse="schmal" onSchliessen={() => setMoreOpen(false)}><div className="kr-stapel">{device !== "desktop" && actions.label.visible ? <Button art="sekundaer" icon="file" text="Laufzettel drucken" disabled={!actions.label.enabled} onClick={() => { void actions.onPrintLabel(); setMoreOpen(false); }} /> : null}<Button art="sekundaer" icon="file" text="KV anlegen" onClick={() => { actions.onOpenQuote?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="copy" text="Duplizieren" onClick={() => { void actions.onDuplicate?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="upload" text="Dokument hinzufügen" onClick={() => { actions.onOpenDocument?.(); setMoreOpen(false); }} />{actions.onRecordComplaint?<Button data-spec-id="auftrag.reklamation" art="sekundaer" icon="alert" text="Reklamation" onClick={()=>{setMoreOpen(false);actions.onRecordComplaint?.();}}/>:null}</div></Dialog> : null}
   </>;
 }
@@ -526,7 +533,9 @@ function OrderItemDialog({ card, itemId, onClose, onSave }: { card: Extract<Orde
   const existing = itemId === "new" ? null : card.items.find((item) => item.id === itemId) ?? null;
   const [serviceId, setServiceId] = useState(existing?.catalogServiceId ?? "");
   const [name, setName] = useState(existing?.name ?? "");
-  const [surface, setSurface] = useState(existing?.surface ?? "");
+  const suggestion=existing?.surfaceAssignmentRequired?suggestOrderPositionSurface(existing.surfaceAssignmentRequired):null;
+  const [surface, setSurface] = useState(existing?.surfaceAssignmentRequired
+    ? suggestion?orderPositionSurfaceLabel(suggestion):"" :existing?.surface??"");
   const service = card.catalog?.find((entry) => entry.id === serviceId);
   const surfaces = [...new Set([...SURFACE_OPTIONS, ...(existing?.surface ? [existing.surface] : []), ...(card.catalog ?? []).map((entry) => entry.surface)])];
   const selectName = (value: string) => {
@@ -538,7 +547,7 @@ function OrderItemDialog({ card, itemId, onClose, onSave }: { card: Extract<Orde
   };
   return <Dialog titel={existing ? "Teil bearbeiten" : "Teil hinzufügen"} icon={existing ? "edit" : "plus"} groesse="schmal" onSchliessen={onClose}><form className="kr-stapel" onSubmit={(event) => {
     event.preventDefault(); const form = new FormData(event.currentTarget);
-    const base = service ? { catalogServiceId: service.id, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : { catalogServiceId: null, name: String(form.get("name") ?? ""), surface: String(form.get("surface") ?? ""), unit: null, unitPriceCents: null, vatRateBasisPoints: null };
+    const base = service ? { catalogServiceId: service.id, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : { catalogServiceId: null, name: String(form.get("name") ?? ""), surface: String(form.get("surface") ?? ""), unit: existing?.surfaceAssignmentRequired?existing.unit??null:null, unitPriceCents: existing?.surfaceAssignmentRequired?existing.unitPriceCents??null:null, vatRateBasisPoints: existing?.surfaceAssignmentRequired?existing.vatRateBasisPoints??null:null };
     const changed = { id: existing?.id ?? crypto.randomUUID(), ...base, quantity: Number(form.get("quantity")), material: String(form.get("material") ?? "").trim() || null };
     const current = card.items.map((item) => ({ id: item.id, catalogServiceId: item.catalogServiceId ?? null, name: item.name, quantity: item.quantity, material: item.material, surface: item.surface, unit: item.unit ?? null, unitPriceCents: item.unitPriceCents ?? null, vatRateBasisPoints: item.vatRateBasisPoints ?? null }));
     onSave(existing ? current.map((item) => item.id === existing.id ? changed : item) : [...current, changed]);

@@ -523,7 +523,11 @@ export const PENDING_UNDO_COPY={title:'Wartende Aktionen',undo:'Rückgängig',
 
 /** PL20.11 L1: operating limits in the existing company settings. */
 export const SURFACE_ASSIGNMENT_COPY={
- title:(value:string,number:string)=>`Oberfläche „${value}“ in Auftrag ${number} zuordnen`,
+ open:'Oberfläche zuordnen',
+ title:(value:string,number:string)=>{
+  const suffix=`“ in Auftrag ${number} zuordnen`,limit=90-'Oberfläche „'.length-suffix.length;
+  return `Oberfläche „${value.length>limit?value.slice(0,Math.max(0,limit-1))+'…':value}${suffix}`;
+ },
  proposal:(label:string)=>`Als ${label} zuordnen`,
 } as const;
 export const PAGE_READ_COPY={orderIncomplete:(number:string)=>`Auftrag ${number} ist gerade nicht lesbar · öffne den Auftrag.`,loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."} as const;

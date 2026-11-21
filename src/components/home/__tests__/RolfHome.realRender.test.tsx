@@ -99,6 +99,14 @@ const dashboard = {
 };
 
 describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
+  it('TEST PL09:37 surface assignment opens the existing order overlay in position-edit focus',()=>{
+    const item={key:'source-order:order-1',field:'action' as const,kind:'order' as const,title:'Oberfläche „TEST chrom Spezial“ in Auftrag A-2026-0001 zuordnen',meta:'',urgency:'warning' as const,orderId:'order-1',orderVersion:1,primaryActionLabel:'Oberfläche zuordnen' as const,
+      surfaceAssignments:[{itemId:'TEST-item',rawValue:'TEST chrom Spezial',proposals:[{key:'verchromen',label:'Als Verchromen zuordnen'}]}]};
+    render(<RolfHomeClient ports={actionPorts} model={{kind:'data',role:'meister',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[item]}}}/>);
+    expect(screen.getAllByText(item.title).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button',{name:'Oberfläche zuordnen'}));
+    expect(ports.openOrder).toHaveBeenCalledExactlyOnceWith('order-1','surface');
+  });
   it("zeigt den V1.1-Aufbau und öffnet Ware raus für den heute fälligen Auftrag", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
