@@ -10,6 +10,7 @@ const isolated=['src/test/acceptance/storage_letter.integration.test.ts','src/te
 const flags=['--maxWorkers=1','--no-file-parallelism'];
 const started=Date.now();
 let failed=false;
+if(process.argv.includes('--bulk-only')&&process.argv.includes('--isolated-only'))throw Error('ACCEPTANCE_PARTITION_FLAGS_CONFLICT');
 function execute(args,capture=false){
  const result=spawnSync(process.execPath,[cli,...args],{stdio:capture?['ignore','pipe','pipe']:'inherit',encoding:'utf8',maxBuffer:16*1024*1024});
  if(result.error)throw result.error;
@@ -20,7 +21,7 @@ const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 if(!process.argv.includes('--isolated-only')){
  try{execute(['run','src/test/acceptance/',...isolated.flatMap(file=>['--exclude',file]),...flags]);}catch(error){failed=true;console.error(error.message);}
 }
-for(const file of isolated){
+if(!process.argv.includes('--bulk-only'))for(const file of isolated){
  const rows=JSON.parse(execute(['list',file,'--json'],true));
  if(!Array.isArray(rows)||!rows.length||rows.some(row=>typeof row.name!=='string'||resolve(row.file)!==resolve(file)))throw Error('ACCEPTANCE_CASE_INVENTORY_INVALID');
  const names=rows.map(row=>row.name);
