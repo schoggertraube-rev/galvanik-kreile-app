@@ -12,7 +12,8 @@ import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounti
 import {getPaymentStatesBatch} from '@/lib/server/paymentSummaryRead';
 import {getOrderPaymentStateAction,confirmPaymentAction} from '@/app/actions/payments.actions';
 import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
-import {getManualShippingAction,saveManualTrackingAction} from '@/app/actions/orders.actions';
+import {getManualShippingAction,saveManualTrackingAction,markOrderInformedByPhoneAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {readOrderInformed,readOrdersInformed} from '@/lib/server/orderReleaseRead';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -140,4 +141,56 @@ it('250 payment credit SQL failure uses the original savepoint and keeps actual 
  const recovered=await getPaymentStatesBatch(actor,JSON.parse(JSON.stringify([b.orderId,a.orderId])),readCredit);
  expect(recovered.get(a.orderId)).toEqual(good);expect(recovered.get(b.orderId)).toEqual(badBaseline);
  expect((await getPaymentStatesBatch(actor,['TEST-no-payment'],readCredit)).get('TEST-no-payment')).toMatchObject({code:'NOT_FOUND'});
+});
+
+it('250 informed zero/one/many reads preserve actual phone originals, freeze version, actor retry, permissions and fresh card state',async()=>{
+ const a=await readyInvoiceOrder('TEST 250 informed A');
+ const b=await readyInvoiceOrder('TEST 250 informed B','pickup',false,a.customerId);
+ const actor=await authorization(),ids=[a.orderId,b.orderId];
+ const before=await Promise.all(ids.map(id=>readOrderInformed(actor,id)));
+ expect(before).toEqual([expect.objectContaining({code:'OK',informed:null,ampel:'rot'}),expect.objectContaining({code:'OK',informed:null,ampel:'rot'})]);
+ expect(await readOrdersInformed(actor,[])).toEqual(new Map());
+ const batch=await readOrdersInformed(actor,[...ids,a.orderId]);
+ expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(before[0]);expect(batch.get(b.orderId)).toEqual(before[1]);
+ const operator=await createFixture(['auftraege'],'werkstatt');
+ const input={orderId:a.orderId,expectedVersion:a.version,clientEventId:randomUUID()};
+ const saved=await withSession(operator,()=>markOrderInformedByPhoneAction(input));expect(saved,JSON.stringify(saved)).toMatchObject({code:'OK'});
+ if(saved.code!=='OK')throw Error('TEST_PHONE_ORIGINAL_REQUIRED');
+ const replayed=await withSession(operator,()=>markOrderInformedByPhoneAction(JSON.parse(JSON.stringify(input))));
+ expect(replayed).toMatchObject({code:'OK',receipt:saved.receipt,replayed:true});
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(operator,()=>markOrderInformedByPhoneAction({...input,expectedVersion:a.version+1,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ const original=await sql`SELECT id,user_id::text,payload FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid`;
+ expect(original).toHaveLength(1);expect(original[0].user_id).toBe(operator.actorId);expect(original[0].payload.receipt).toEqual(saved.receipt);
+ const fresh=await readOrdersInformed(actor,JSON.parse(JSON.stringify(ids)));
+ expect(fresh.get(a.orderId)).toMatchObject({code:'OK',orderVersion:a.version,informed:saved.receipt,firstInformed:saved.receipt,ampel:'gruen'});
+ expect(fresh.get(b.orderId)).toEqual(before[1]);
+ const card=await withSession(full,()=>getLiveOrderCardAction({orderId:a.orderId}));
+ expect(card).toMatchObject({code:'OK',data:{card:{version:a.version},customerInformed:fresh.get(a.orderId)}});
+ expect(await sql`SELECT id,user_id::text,payload FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid`).toEqual(original);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.communication_threads WHERE tenant_id=${tenant} AND order_id=${a.orderId}`).toEqual([{n:0}]);
+ const denied=await authorization(await createFixture(['kunden']));
+ expect([...(await readOrdersInformed(denied,ids)).values()]).toEqual([{code:'FORBIDDEN'},{code:'FORBIDDEN'}]);
+ expect((await readOrdersInformed(actor,['TEST-no-informed-order'])).get('TEST-no-informed-order')).toEqual({code:'NOT_FOUND'});
+});
+
+it('250 a damaged original notification isolates its group after rollback while another qualified original stays readable',async()=>{
+ const good=await readyInvoiceOrder('TEST 250 informed intact');
+ const bad=await readyInvoiceOrder('TEST 250 informed damaged');
+ const actor=await authorization();
+ const saved=await withSession(full,()=>markOrderInformedByPhoneAction({orderId:bad.orderId,expectedVersion:bad.version,clientEventId:randomUUID()}));
+ expect(saved).toMatchObject({code:'OK'});if(saved.code!=='OK')throw Error('TEST_REAL_DAMAGED_SOURCE_REQUIRED');
+ const expected=await readOrderInformed(actor,good.orderId);
+ const [original]=await sql`SELECT payload->>'intent' AS intent FROM public.events WHERE tenant_id=${tenant} AND id=${saved.receipt.eventId}`;
+ const eventId=randomUUID(),key=randomUUID();
+ // Explicitly synthetic corrupt history in this file's isolated fixed TEST tenant;
+ // the actual writer original is retained byte-for-byte, no guard is bypassed.
+ const payload={intent:original.intent,receipt:{...saved.receipt,eventId,actorId:randomUUID()}};
+ await sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
+ VALUES(${eventId},${tenant},${bad.orderId},'ORDER_CUSTOMER_INFORMED_V1','TEST damaged batch original',${sql.json(payload)}::jsonb,'success',${full.actorId}::uuid,${key}::uuid,${key}::uuid,1,statement_timestamp())`;
+ const batch=await readOrdersInformed(actor,[bad.orderId,good.orderId]);
+ expect(batch.get(bad.orderId)).toEqual({code:'UNAVAILABLE'});expect(batch.get(good.orderId)).toEqual(expected);
+ const reread=await readOrdersInformed(actor,JSON.parse(JSON.stringify([good.orderId,bad.orderId])));
+ expect(reread.get(good.orderId)).toEqual(expected);expect(reread.get(bad.orderId)).toEqual({code:'UNAVAILABLE'});
+ expect(await sql`SELECT payload->'receipt' AS receipt FROM public.events WHERE tenant_id=${tenant} AND id=${saved.receipt.eventId}`).toEqual([{receipt:saved.receipt}]);
 });

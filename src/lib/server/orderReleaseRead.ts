@@ -1,5 +1,5 @@
 import 'server-only';
-import {sql} from 'drizzle-orm';
+import {sql,type SQL} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 import type {AuthorizationSnapshot} from './authorization';
@@ -52,10 +52,14 @@ export async function markOrderInformedByPhone(auth:AuthorizationSnapshot,input:
  });}catch(error){console.error('[ORDER_PHONE_NOTIFICATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Telefonbescheid konnte nicht sicher gespeichert werden.'};}
 }
 
-export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:string){
- if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<{payload:{receipt:InformedReceipt};proof_ok:boolean}>(sql`SELECT event.payload,
+type InformedSourceRow={payload:{receipt:InformedReceipt};proof_ok:boolean};
+type InformedOrderRow={customer_id:string;station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;invoice_id:string|null;payment_allowed:boolean|null;frozen_at:string|null;freeze_id:string|null;goods_out_event_id:string|null;debt_ids:string[]};
+type InformedComplaint=Awaited<ReturnType<typeof readOpenOrderComplaint>>;
+async function readInformedCohort(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping'|null){
+ return (await import('./communicationDocumentPort')).readInvoiceMailCohort(tx,auth.tenantId,customerId,handover);
+}
+type InformedCohort=Awaited<ReturnType<typeof readInformedCohort>>;
+function informedReceiptQuery(auth:AuthorizationSnapshot,orderId:string|SQL){return sql`SELECT event.payload,
     (event.payload->'receipt'->>'actorId'=event.user_id::text AND event.payload->'receipt'->>'orderId'=event.order_id
     AND event.payload->'receipt'->>'eventId'=event.id::text AND event.event_schema_version=1
     AND (event.payload->'receipt'->>'channel'='telefon' AND event.payload->'receipt'->'threadId'='null'::jsonb OR
@@ -69,14 +73,15 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
    FROM public.events event JOIN private.v_order_freeze_state_v1 freeze_state ON freeze_state.tenant_id=event.tenant_id AND freeze_state.order_id=event.order_id
    WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${orderId} AND event.event_type='ORDER_CUSTOMER_INFORMED_V1' AND event.status='success'
     AND freeze_state.active AND freeze_state.integrity_ok AND event.payload->'receipt'->>'freezeId'=freeze_state.freeze_id::text
-   ORDER BY event.created_at ASC,event.id ASC LIMIT 1001`);
-  if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
-  const order=await tx.execute<{customer_id:string;station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;invoice_id:string|null;payment_allowed:boolean|null;frozen_at:string|null;freeze_id:string|null;goods_out_event_id:string|null;debt_ids:string[]}>(sql`SELECT orders.customer_id,orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
+   ORDER BY event.created_at ASC,event.id ASC LIMIT 1001`;}
+function informedOrderQuery(auth:AuthorizationSnapshot,orderId:string|SQL){return sql`SELECT orders.customer_id,orders.station,orders.version,orders.handover_mode,private.order_release_allowed_v1(orders.tenant_id,orders.id) AS allowed,
    state.invoice_state,state.invoice_id::text,state.all_invoice_payments_allowed AS payment_allowed,freeze_state.frozen_at::text,freeze_state.freeze_id::text,state.goods_out_event_id::text,
    ARRAY(SELECT invoice.id::text FROM public.invoices invoice WHERE invoice.tenant_id=orders.tenant_id AND invoice.customer_id=orders.customer_id AND ${classifyOverdue()} ORDER BY invoice.id) AS debt_ids
    FROM public.orders orders JOIN private.v_goods_out_ui_state_v1 state ON state.tenant_id=orders.tenant_id AND state.order_id=orders.id AND state.integrity_ok
    LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
-   WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`);
+   WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`;}
+async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>){
+  if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   if(order.length!==1)return {code:'NOT_FOUND' as const};
   const failures=await readCommunicationDeliveryFailures(tx,auth,rows.flatMap(row=>row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]));
   const failedThreads=new Set(failures.map(proof=>proof.threadId));
@@ -84,10 +89,10 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
   const informed=delivered.at(-1)?.payload.receipt??null,firstInformed=delivered[0]?.payload.receipt??null;
   const latest=rows.at(-1)?.payload.receipt;
   const failedDelivery=latest?.threadId?failures.find(proof=>proof.threadId===latest.threadId)??null:null;
-  const current=order[0],complaint=await readOpenOrderComplaint(tx,auth.tenantId,orderId);
+  const current=order[0];
   const {readOrderCollectionStateInTransaction}=await import('./commands/recordGoodsOutCommand');
   const collectionState=await readOrderCollectionStateInTransaction(tx,auth,{orderId,orderVersion:current.version,customerId:current.customer_id,freezeId:current.freeze_id,goodsOutEventId:current.goods_out_event_id});
-  const invoiceMailOriginals=canTransportInvoiceDocument(auth)&&current.station==='fertig'?(await (await import('./communicationDocumentPort')).readInvoiceMailCohort(tx,auth.tenantId,current.customer_id,current.handover_mode)).map(row=>({id:row.id,orderId:row.order_id,version:row.aggregate_version})):undefined;
+  const invoiceMailOriginals=canTransportInvoiceDocument(auth)&&current.station==='fertig'?(await readCohort(current.customer_id,current.handover_mode)).map(row=>({id:row.id,orderId:row.order_id,version:row.aggregate_version})):undefined;
   let invoiceMailQueued=invoiceMailOriginals===undefined?undefined:false;
   if(invoiceMailOriginals?.length===101&&current.invoice_id!==null&&!invoiceMailOriginals.some(row=>row.id===current.invoice_id)){
    const proof=await tx.execute<{unsent:boolean}>(sql`SELECT NOT ${invoiceAlreadySent(auth.tenantId,sql`${current.invoice_id}::uuid`)} AS unsent`);
@@ -99,16 +104,64 @@ export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:strin
   return {code:'OK' as const,informed,firstInformed,mailThreadIds:[...new Set(rows.flatMap(row=>row.payload.receipt.channel==='mail'&&row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]))],ampel,
    orderVersion:current.version,collectionState,invoiceMailOriginals,invoiceMailQueued,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,freezeId:current.freeze_id,invoiceState:current.invoice_state,paymentReady:typeof current.payment_allowed==='boolean'?current.payment_allowed:undefined,responseSince:rows[0]?.payload.receipt.recordedAt??null,failedDelivery:failedDelivery?{threadId:failedDelivery.threadId,recordedAt:failedDelivery.recordedAt}:null,
    blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'zahlungen')?current.debt_ids:undefined};
- });}catch(error){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);return {code:'UNAVAILABLE' as const};}
+
+}
+type InformedRead=Awaited<ReturnType<typeof qualifyOrderInformed>>|{code:'UNAVAILABLE'}|{code:'FORBIDDEN'};
+/** One native transaction for a qualified set. A SQL error is rolled back before isolating that set. */
+async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string[]){
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const receipts=new Map<string,InformedSourceRow[]>(orderIds.map(id=>[id,[]]));
+  const orders=new Map<string,InformedOrderRow[]>(orderIds.map(id=>[id,[]]));
+  const complaints=new Map<string,InformedComplaint>();
+  if(orderIds.length===1){
+   const id=orderIds[0];receipts.set(id,await tx.execute<InformedSourceRow>(informedReceiptQuery(auth,id)));
+   orders.set(id,await tx.execute<InformedOrderRow>(informedOrderQuery(auth,id)));
+   complaints.set(id,await readOpenOrderComplaint(tx,auth.tenantId,id));
+  }else{
+   const requested=sql.join(orderIds.map(id=>sql`(${id})`),sql`,`);
+   const receiptRecords=await tx.execute<InformedSourceRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) CROSS JOIN LATERAL (${informedReceiptQuery(auth,sql`requested.order_id`)}) source`);
+   const orderRecords=await tx.execute<InformedOrderRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) CROSS JOIN LATERAL (${informedOrderQuery(auth,sql`requested.order_id`)}) source`);
+   for(const {batch_order_id,...source} of receiptRecords){const rows=receipts.get(batch_order_id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');rows.push(source);}
+   for(const {batch_order_id,...source} of orderRecords){const rows=orders.get(batch_order_id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');rows.push(source);}
+   const complaintGroups=new Map<string,OpenComplaintRow[]>(orderIds.map(id=>[id,[]]));
+   const complaintRecords=await tx.execute<OpenComplaintRow & {batch_order_id:string}>(sql`SELECT requested.order_id AS batch_order_id,source.* FROM (VALUES ${requested}) requested(order_id) CROSS JOIN LATERAL (${openComplaintQuery(auth.tenantId,sql`requested.order_id`)}) source`);
+   for(const {batch_order_id,...source} of complaintRecords){const rows=complaintGroups.get(batch_order_id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');rows.push(source);}
+   for(const id of orderIds){const rows=complaintGroups.get(id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');complaints.set(id,qualifyOpenComplaint(rows));}
+  }
+  const cohorts=new Map<string,InformedCohort>();
+  const readCohort=async(customerId:string,handover:'pickup'|'shipping'|null)=>{
+   const key=JSON.stringify([customerId,handover]);const prior=cohorts.get(key);if(prior)return prior;
+   const value=await readInformedCohort(tx,auth,customerId,handover);cohorts.set(key,value);return value;
+  };
+  const result=new Map<string,InformedRead>();
+  for(const id of orderIds){const rows=receipts.get(id),order=orders.get(id),complaint=complaints.get(id);if(!rows||!order||complaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');result.set(id,await qualifyOrderInformed(tx,auth,id,rows,order,complaint,readCohort));}
+  return result;
+ });
+}
+export async function readOrdersInformed(auth:AuthorizationSnapshot,orderIds:readonly string[]):Promise<Map<string,InformedRead>>{
+ const result=new Map<string,InformedRead>(),ids=[...new Set(orderIds)];
+ if(!hasAuthorizationArea(auth,'auftraege')){for(const id of ids)result.set(id,{code:'FORBIDDEN'});return result;}
+ const read=async(group:string[]):Promise<void>=>{
+  if(!group.length)return;
+  try{const rows=await readOrderInformedGroup(auth,group);for(const id of group){const value=rows.get(id);if(!value)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');result.set(id,value);}}
+  catch(error){if(group.length===1){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);result.set(group[0],{code:'UNAVAILABLE'});return;}const half=Math.ceil(group.length/2);await read(group.slice(0,half));await read(group.slice(half));}
+ };
+ await read(ids);return result;
+}
+export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:string){
+ const result=await readOrdersInformed(auth,[orderId]);return result.get(orderId)??{code:'UNAVAILABLE' as const};
 }
 
+
 /** Existing complaint rows are the release block; no stored second flag. */
-export async function readOpenOrderComplaint(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
- const rows=await tx.execute<{id:string;number:string|null}>(sql`
+type OpenComplaintRow={id:string;number:string|null};
+function openComplaintQuery(tenantId:string,orderId:string|SQL){return sql`
   SELECT id,nummer AS number FROM public.complaints
   WHERE tenant_id=${tenantId} AND order_id=${orderId}
     AND stand IS DISTINCT FROM 'abgeschlossen'
   ORDER BY created_at,id
- `);
- return rows[0]?{...rows[0],complaintIds:rows.map(row=>row.id)}:null;
+ `;}
+function qualifyOpenComplaint(rows:OpenComplaintRow[]){return rows[0]?{...rows[0],complaintIds:rows.map(row=>row.id)}:null;}
+export async function readOpenOrderComplaint(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
+ return qualifyOpenComplaint(await tx.execute<OpenComplaintRow>(openComplaintQuery(tenantId,orderId)));
 }
