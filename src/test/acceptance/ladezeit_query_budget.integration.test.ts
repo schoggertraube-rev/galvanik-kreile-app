@@ -38,10 +38,35 @@ it('counts executed native SQL including SET and queued BEGIN without mixing two
   try{
    logPageReadQueryObservation(observed[0]);expect(output).toHaveBeenCalledOnce();
    const [marker,serialized]=output.mock.calls[0];expect(marker).toBe('[PAGE_READ_SQL]');
-   expect(typeof serialized).toBe('string');expect(JSON.parse(String(serialized))).toEqual({route:'/',total:5,rights:0,page_settings:0,shipping_settings:0,phases:{'today.orders':5}});
+   expect(typeof serialized).toBe('string');expect(JSON.parse(String(serialized))).toEqual({route:'/',total:5,rights:0,page_settings:0,shipping_settings:0,phases:{'today.orders':5},db_ms:expect.any(Number),acquire_ms:expect.any(Number),tx:1,stations:{'today.orders':{db_ms:expect.any(Number),acquire_ms:expect.any(Number),tx:1}}});
    expect(String(serialized)).not.toContain('SELECT');
   }finally{output.mockRestore();}
  }finally{inspectWire=undefined;}
+});
+
+it('N0 records three real delayed queries in two native transactions and the request phase offset',async()=>{
+ const output=vi.spyOn(console,'info').mockImplementation(()=>{});
+ try{await withPageReadBudget(async()=>{
+  const observation=pageReadQueryObservation();await new Promise(resolve=>setTimeout(resolve,15));
+  await withPageReadPhase('action.shipping',async()=>{
+   await client.begin(async tx=>{await tx`SELECT pg_sleep(0.02)`;await tx`SELECT 71 AS n`;});
+   await client.begin(tx=>tx`SELECT pg_sleep(0.02)`);
+  });
+  expect(observation.tx).toBe(2);expect(observation.total).toBe(9);expect(observation.db_ms).toBeGreaterThanOrEqual(40);
+  expect(observation.stations['action.shipping']).toEqual({tx:2,db_ms:observation.db_ms,acquire_ms:observation.acquire_ms});
+  const phase=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1]))).find(value=>value.phase==='action.shipping');
+  expect(phase.offsetMs).toBeGreaterThanOrEqual(10);expect(phase.counts).toEqual({});
+ },2000);}finally{output.mockRestore();}
+});
+
+it('N0 observes actual waiting for the sole native connection without sharing another request timing',async()=>{
+ let entered!:()=>void,release!:()=>void;const acquired=new Promise<void>(resolve=>{entered=resolve;}),held=new Promise<void>(resolve=>{release=resolve;});
+ const holder=native.begin(async()=>{entered();await held;});await acquired;
+ try{await withPageReadBudget(()=>withPageReadPhase('today.orders',async()=>{
+  const observation=pageReadQueryObservation(),read=client.begin(tx=>tx`SELECT 72 AS n`);
+  await new Promise(resolve=>setTimeout(resolve,40));release();expect(await read).toMatchObject([{n:72}]);
+  expect(observation.tx).toBe(1);expect(observation.acquire_ms).toBeGreaterThanOrEqual(30);expect(observation.stations['today.orders'].acquire_ms).toBe(observation.acquire_ms);
+ }),2000);}finally{release();await holder;}
 });
 
 it('sets one native timeout for four fast statements and refreshes it only after 250ms',async()=>{

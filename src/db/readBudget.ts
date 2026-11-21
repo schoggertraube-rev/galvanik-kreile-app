@@ -1,15 +1,30 @@
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {cache} from 'react';
 
-type PageReadQueryObservation={total:number;rights:number;pageSettings:number;shippingSettings:number;phases:Record<string,number>};
-const requestQueryObservation=cache(():PageReadQueryObservation=>({total:0,rights:0,pageSettings:0,shippingSettings:0,phases:{}}));
+type PageReadStationTiming={db_ms:number;acquire_ms:number;tx:number};
+type PageReadQueryObservation={total:number;rights:number;pageSettings:number;shippingSettings:number;phases:Record<string,number>;db_ms:number;acquire_ms:number;tx:number;stations:Record<string,PageReadStationTiming>};
+const requestQueryObservation=cache(():PageReadQueryObservation=>({total:0,rights:0,pageSettings:0,shippingSettings:0,phases:{},db_ms:0,acquire_ms:0,tx:0,stations:{}}));
 const queryPhases=new AsyncLocalStorage<string>();
 /** Same RSC request only; contains counts, never SQL, parameters or identities. */
 export function pageReadQueryObservation(){return budgets.getStore()?.queries??requestQueryObservation();}
+function observationStation(budget:ReadBudget,phase=queryPhases.getStore()){
+ return budget.kind==='authorization'?'authorization':phase&&diagnosticPhases.has(phase)?phase:'other';
+}
+/** Client-side elapsed SQL and native BEGIN acquisition, not DB-server CPU.
+ * Diagnostics never change a query result, error, cancellation or deadline. */
+function addReadTiming(budget:ReadBudget|undefined,key:keyof PageReadStationTiming,value:number,phase=queryPhases.getStore()){
+ try{
+  if(!budget||!Number.isFinite(value)||value<0)return;
+  const observation=budget.queries,station=observationStation(budget,phase);
+  const timings=observation.stations[station]??=( {db_ms:0,acquire_ms:0,tx:0} );
+  observation[key]+=value;timings[key]+=value;
+ }catch{console.error('[PAGE_READ_DIAGNOSTIC_FAILED]');}
+}
 function countNativeRead(statement:string,budget:ReadBudget,phase=queryPhases.getStore()){
  const counts=budget.queries;counts.total++;
- const station=budget.kind==='authorization'?'authorization':phase&&diagnosticPhases.has(phase)?phase:'other';
+ const station=observationStation(budget,phase);
  counts.phases[station]=(counts.phases[station]??0)+1;
+ if(/^begin\b/i.test(statement.trim()))addReadTiming(budget,'tx',1,phase);
  const normalized=statement.replaceAll('"','').toLowerCase();
  if(budget.kind==='authorization'&&/\bfrom\s+(?:public\.)?app_users\b/.test(normalized)&&normalized.includes('app_user_rights'))counts.rights++;
  if(normalized.includes('as page_read_source')&&normalized.includes('company_settings'))counts.pageSettings++;
@@ -22,7 +37,10 @@ export function observeNativePageReadQuery(_connection:number,statement:string){
  countNativeRead(statement,budget);
 }
 export function logPageReadQueryObservation(observation:PageReadQueryObservation){
- console.info('[PAGE_READ_SQL]',JSON.stringify({route:'/',total:observation.total,rights:observation.rights,page_settings:observation.pageSettings,shipping_settings:observation.shippingSettings,phases:{...observation.phases}}));
+ try{
+  const stations=Object.fromEntries(Object.entries(observation.stations).map(([name,values])=>[name,{...values}]));
+  console.info('[PAGE_READ_SQL]',JSON.stringify({route:'/',total:observation.total,rights:observation.rights,page_settings:observation.pageSettings,shipping_settings:observation.shippingSettings,phases:{...observation.phases},db_ms:observation.db_ms,acquire_ms:observation.acquire_ms,tx:observation.tx,stations}));
+ }catch{console.error('[PAGE_READ_DIAGNOSTIC_FAILED]');}
 }
 
 /** Canonical startup/old-schema defaults; qualified company values override them.
@@ -126,14 +144,19 @@ function boundedQuery<T extends QueryLike>(query:T):T{
   const start=()=>pending??=(async()=>{
     await budgets.getStore()?.sourcesReady;
     const store=budgets.getStore(),prepare=store?.prepareStatement;
-    if(!store||!prepare)return withinBudget(()=>query,()=>cancelNativeQuery(query));
+    if(!store||!prepare){
+      const at=Date.now(),phase=queryPhases.getStore();
+      try{return await withinBudget(()=>query,()=>cancelNativeQuery(query));}
+      finally{addReadTiming(store,'db_ms',Math.max(0,Date.now()-at),phase);}
+    }
     if(store.timeoutSetAt===undefined||Date.now()-store.timeoutSetAt>=250){
       const preparedAt=Date.now();await prepare();store.timeoutSetAt=Date.now();
       if(Date.now()-preparedAt>=250)logPageReadPhase('db.prepare',preparedAt);
     }
-    const queryAt=Date.now();
+    const queryAt=Date.now(),phase=queryPhases.getStore();
     try{const result=await withinBudget(()=>query,()=>cancelNativeQuery(query));if(Date.now()-queryAt>=250)logPageReadPhase('db.query',queryAt);return result;}
     catch(error){logPageReadPhase('db.query',queryAt,{failed:1},error);if(error&&typeof error==='object'&&'code'in error&&error.code==='57014')throw new PageReadTimeout();throw error;}
+    finally{addReadTiming(store,'db_ms',Math.max(0,Date.now()-queryAt),phase);}
   })();
   const wrapped:T=new Proxy(query,{
     get(target,key){
@@ -181,7 +204,10 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
           const timer=setTimeout(()=>reject(new PageReadTimeout()),budget.deadline-Date.now());
           args[callbackIndex]=async(sql:object)=>{
             clearTimeout(timer);
-            if(key==='begin')countNativeRead('BEGIN',budget,acquiringPhase);
+            if(key==='begin'){
+              countNativeRead('BEGIN',budget,acquiringPhase);
+              addReadTiming(budget,'acquire_ms',Math.max(0,Date.now()-acquiringAt),acquiringPhase);
+            }
             if(key==='begin'&&Date.now()-acquiringAt>=250){
               // Only non-secret transport metadata from the actual driver.
               // CLI env-run can prefer a local file; it cannot prove this port.
@@ -203,11 +229,15 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
             // do not spend an extra roundtrip on an otherwise empty savepoint.
             if(key==='begin'){
               const setting=native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(remaining)]);
-              await withinBudget(()=>setting,()=>cancelNativeQuery(setting));
+              const at=Date.now();
+              try{await withinBudget(()=>setting,()=>cancelNativeQuery(setting));}
+              finally{addReadTiming(budget,'db_ms',Math.max(0,Date.now()-at),acquiringPhase);}
             }
             const prepareStatement=async()=>{
               const left=budget.deadline-Date.now();if(left<=0)throw new PageReadTimeout();
-              return withinBudget(()=>native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(left)]));
+              const at=Date.now(),phase=queryPhases.getStore();
+              try{return await withinBudget(()=>native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(left)]));}
+              finally{addReadTiming(budget,'db_ms',Math.max(0,Date.now()-at),phase);}
             };
             const timeoutSetAt=key==='begin'?Date.now():budget.timeoutSetAt;
             return budgets.run({...budget,prepareStatement,timeoutSetAt},()=>callback(withPageReadQueryLimits(sql)));
@@ -269,7 +299,7 @@ export function logPageReadPhase(phase:string,startedAt:number,counts:Readonly<R
    current=Object.getOwnPropertyDescriptor(current,'cause')?.value;
   }
   const budget=budgets.getStore(),now=Date.now();
-  console.info('[PAGE_READ_PHASE]',JSON.stringify({phase,durationMs:Math.max(0,now-startedAt),counts:safeCounts,codes:[...codes],reasons:[...reasons],names:[...names],budgetKind:budget?.kind??(budget?'page':'unscoped'),remainingMs:budget?Math.max(0,budget.deadline-now):null}));
+  console.info('[PAGE_READ_PHASE]',JSON.stringify({phase,durationMs:Math.max(0,now-startedAt),offsetMs:budget?startedAt-budget.startedAt:null,counts:safeCounts,codes:[...codes],reasons:[...reasons],names:[...names],budgetKind:budget?.kind??(budget?'page':'unscoped'),remainingMs:budget?Math.max(0,budget.deadline-now):null}));
  }catch{console.error('[PAGE_READ_DIAGNOSTIC_FAILED]');}
 }
 export async function withPageReadPhase<T>(phase:string,work:()=>PromiseLike<T>|T):Promise<T>{
