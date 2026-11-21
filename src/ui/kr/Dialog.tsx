@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useId, useRef, useState, type CSSProperties,type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useId, useRef, useState, type CSSProperties,type ReactNode } from 'react';
 import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
 import {dialog as dialogMoment} from '@/ui/motion';
 import {V45_TEXT} from '@/ui/situationCatalog';
@@ -44,7 +44,7 @@ export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', o
     setZu(true);
     setTimeout(sofort,190);
   };
-  useEffect(() => { const h = (e: KeyboardEvent) => {
+  useLayoutEffect(() => { const h = (e: KeyboardEvent) => {
     if (e.key !== 'Escape') return;
     if (!isTopDialog(dialogRef.current)) return;
     e.preventDefault(); e.stopImmediatePropagation(); onSchliessen();

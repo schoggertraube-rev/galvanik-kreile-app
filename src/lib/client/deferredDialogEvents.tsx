@@ -1,5 +1,6 @@
 'use client';
 import {createElement,useEffect,type ComponentType} from 'react';
+import {flushSync} from 'react-dom';
 export type DeferredDialogGroup='create'|'message'|'object'|'invoice'|'complaint';
 /** Existing N shortcut eligibility, shared by the eager transport and original receiver. */
 export function isCreateShortcut(event:KeyboardEvent){
@@ -23,15 +24,20 @@ function receiver(event:Event):DeferredDialogGroup|null{
 }
 export function createDeferredDialogEvents(load:()=>void){
  const ready=new Set<DeferredDialogGroup>();
- let stopped=false,flushing=false;
+ let stopped=false,flushing=false,flushScheduled=false;
  const replayed=new WeakSet<Event>();
  const pending:Array<{group:DeferredDialogGroup;event:()=>Event;target:EventTarget}>=[];
  const flush=()=>{
-  if(flushing)return;flushing=true;
-  try{while(!stopped&&pending.length&&ready.has(pending[0].group)){
-   const saved=pending.shift()!,event=saved.event();
-   replayed.add(event);saved.target.dispatchEvent(event);
-  }}finally{flushing=false;}
+  if(flushing||flushScheduled)return;flushScheduled=true;
+  // Receiver readiness is published from an effect. Replay outside that effect,
+  // committing each original navigation before its queued keyboard continuation.
+  queueMicrotask(()=>{
+   flushScheduled=false;if(stopped)return;flushing=true;
+   try{while(!stopped&&pending.length&&ready.has(pending[0].group)){
+    const saved=pending.shift()!,event=saved.event();
+    flushSync(()=>{replayed.add(event);saved.target.dispatchEvent(event);});
+   }}finally{flushing=false;}
+  });
  };
  const capture=(event:Event)=>{
   const group=receiver(event);if(stopped||replayed.has(event)||!group||ready.has(group)&&pending.length===0||event.defaultPrevented)return;
@@ -39,9 +45,10 @@ export function createDeferredDialogEvents(load:()=>void){
   pending.push({group,event:()=>new CustomEvent(event.type,{detail:(event as CustomEvent).detail,cancelable:event.cancelable}),target:window});load();flush();
  };
  const captureKey=(event:KeyboardEvent)=>{
-  if(stopped||replayed.has(event)||ready.has('create')||!isCreateShortcut(event)||event.defaultPrevented)return;
+  const continuation=event.key==='Escape'?pending.at(-1)?.group:undefined;
+  if(stopped||replayed.has(event)||event.defaultPrevented||!continuation&&(ready.has('create')||!isCreateShortcut(event)))return;
   event.preventDefault();event.stopImmediatePropagation();
-  pending.push({group:'create',event:()=>new KeyboardEvent('keydown',{key:event.key,code:event.code,shiftKey:event.shiftKey,bubbles:true,cancelable:true}),target:event.target??window});
+  pending.push({group:continuation??'create',event:()=>new KeyboardEvent('keydown',{key:event.key,code:event.code,shiftKey:event.shiftKey,bubbles:true,cancelable:true}),target:event.target??window});
   load();flush();
  };
  return {
