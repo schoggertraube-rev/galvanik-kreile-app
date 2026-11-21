@@ -84,7 +84,11 @@ jobs:
         run: npm run test:unit
 
   h16-native:
-    name: h16-native
+    name: h16-native (${{ matrix.part }})
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [bulk, isolated]
     needs: berlin-clock
     if: needs.berlin-clock.outputs.run == 'yes'
     runs-on: ubuntu-24.04
@@ -111,6 +115,7 @@ jobs:
           ./node_modules/.bin/supabase db reset --local --no-seed
 
       - name: Run the named H12 F0/F2 SQL contracts
+        if: matrix.part == 'bulk'
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
@@ -118,6 +123,7 @@ jobs:
           npm run quality:f0-f2-schema:selftest
 
       - name: H18 real Server Actions against replay DB
+        if: matrix.part == 'bulk'
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -129,7 +135,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: node scripts/run-acceptance-tests.mjs
+        run: node scripts/run-acceptance-tests.mjs --${{ matrix.part }}-only
 
       - name: Stop local database
         if: always()
