@@ -22,7 +22,7 @@ export function observeNativePageReadQuery(_connection:number,statement:string){
  countNativeRead(statement,budget);
 }
 export function logPageReadQueryObservation(observation:PageReadQueryObservation){
- console.info('[PAGE_READ_SQL]',{route:'/',total:observation.total,rights:observation.rights,page_settings:observation.pageSettings,shipping_settings:observation.shippingSettings,phases:{...observation.phases}});
+ console.info('[PAGE_READ_SQL]',JSON.stringify({route:'/',total:observation.total,rights:observation.rights,page_settings:observation.pageSettings,shipping_settings:observation.shippingSettings,phases:{...observation.phases}}));
 }
 
 /** Canonical startup/old-schema defaults; qualified company values override them.

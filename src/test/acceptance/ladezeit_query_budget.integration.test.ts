@@ -1,9 +1,9 @@
 // @vitest-environment node
 // Native Loopback PostgreSQL; read-only TEST probes, no source/provider doubles.
-import {afterAll,expect,it} from 'vitest';
+import {afterAll,expect,it,vi} from 'vitest';
 import postgres from 'postgres';
 import {createServer} from 'node:http';
-import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort,observeNativePageReadQuery,pageReadQueryObservation,withPageReadPhase} from '@/db/readBudget';
+import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort,observeNativePageReadQuery,pageReadQueryObservation,withPageReadPhase,logPageReadQueryObservation} from '@/db/readBudget';
 
 const url=process.env.DATABASE_URL;
 const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
@@ -19,7 +19,7 @@ const native=postgres(url,{prepare:false,max:1,debug:(_connection,text,parameter
 const client=withPageReadQueryLimits(native);
 afterAll(()=>native.end({timeout:5}));
 
-it('counts actual native roundtrips including SET and queued BEGIN without mixing two request scopes',async()=>{
+it('counts executed native SQL including SET and queued BEGIN without mixing two request scopes',async()=>{
  await native`SELECT 1`;const wire:string[]=[];inspectWire=text=>wire.push(text);
  const observed:Array<ReturnType<typeof pageReadQueryObservation>>=[];
  try{
@@ -34,6 +34,13 @@ it('counts actual native roundtrips including SET and queued BEGIN without mixin
   expect(observed.map(value=>value.total).reduce((sum,value)=>sum+value,0)).toBe(wire.length);
   expect(wire.filter(text=>text.includes("set_config('statement_timeout'")).length).toBe(2);
   expect(observed[0].phases).toEqual({'today.orders':5});expect(observed[1].phases).toEqual({'today.tasks':4});
+  const output=vi.spyOn(console,'info').mockImplementation(()=>{});
+  try{
+   logPageReadQueryObservation(observed[0]);expect(output).toHaveBeenCalledOnce();
+   const [marker,serialized]=output.mock.calls[0];expect(marker).toBe('[PAGE_READ_SQL]');
+   expect(typeof serialized).toBe('string');expect(JSON.parse(String(serialized))).toEqual({route:'/',total:5,rights:0,page_settings:0,shipping_settings:0,phases:{'today.orders':5}});
+   expect(String(serialized)).not.toContain('SELECT');
+  }finally{output.mockRestore();}
  }finally{inspectWire=undefined;}
 });
 
