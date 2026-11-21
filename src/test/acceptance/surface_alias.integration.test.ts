@@ -6,6 +6,8 @@ import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {createOrderIntakeAction} from '@/app/actions/eingang.actions';
 import {getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {ORDER_POSITION_SURFACES,ORDER_POSITION_SURFACE_ALIASES,normaliseOrderPositionSurface,orderPositionSurfaceLabel} from '@/lib/orderPositionContract';
+import {resolveAuthorization} from '@/lib/server/authorization';
+import {loadOfficeHome} from '@/lib/server/officeHomeRead';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -41,11 +43,13 @@ it('251 actual intake alias, unchanged historical original, fresh retry and zero
  const sourceId=created.receipt.orderId,oldItem=created.receipt.items[0].id,legacy=randomUUID(),newItem=randomUUID(),eventId=randomUUID(),requestId=randomUUID();
  // Explicit synthetic append-only historical foundation, as in the existing B1
  // test. No immutable original, trigger, permission or product writer is edited.
- await sql.begin(async seed=>{
-  await seed`INSERT INTO public.orders SELECT (jsonb_populate_record(NULL::public.orders,to_jsonb(source.*)||jsonb_build_object('id',${legacy}::text,'order_number',regexp_replace(source.order_number,'^A-[0-9]{4}-','A-1900-'),'print_symbol_slot',NULL,'print_symbol_generation',NULL,'print_symbol_active',false))).* FROM public.orders source WHERE tenant_id=${tenant} AND id=${sourceId}`;
+ const unknown=randomUUID(),unknownItem=randomUUID(),unknownEvent=randomUUID();
+ for(const fixture of [{id:legacy,item:newItem,event:eventId,request:requestId,raw:'chrom'},{id:unknown,item:unknownItem,event:unknownEvent,request:randomUUID(),raw:'TEST_unbekannte_Oberflaeche'}])await sql.begin(async seed=>{
+  const legacy=fixture.id,newItem=fixture.item,eventId=fixture.event,requestId=fixture.request;
+  await seed`INSERT INTO public.orders SELECT (jsonb_populate_record(NULL::public.orders,to_jsonb(source.*)||jsonb_build_object('id',${legacy}::text,'order_number',regexp_replace(source.order_number,'^A-[0-9]{4}-',${fixture.raw==='chrom'?'A-1900-':'A-1901-'}),'print_symbol_slot',NULL,'print_symbol_generation',NULL,'print_symbol_active',false))).* FROM public.orders source WHERE tenant_id=${tenant} AND id=${sourceId}`;
   await seed`INSERT INTO public.items SELECT (jsonb_populate_record(NULL::public.items,to_jsonb(source.*)||jsonb_build_object('id',${newItem}::text,'order_id',${legacy}::text))).* FROM public.items source WHERE tenant_id=${tenant} AND order_id=${sourceId}`;
-  await seed`INSERT INTO public.events SELECT (jsonb_populate_record(NULL::public.events,replace(replace(replace(to_jsonb(event)::text,${sourceId},${legacy}),${oldItem},${newItem}),receipt.order_number,regexp_replace(receipt.order_number,'^A-[0-9]{4}-','A-1900-'))::jsonb||jsonb_build_object('id',${eventId}::text,'client_event_id',${requestId}::text,'correlation_id',${requestId}::text))).* FROM public.events event JOIN private.order_intake_receipts receipt ON receipt.event_id=event.id WHERE receipt.tenant_id=${tenant} AND receipt.order_id=${sourceId}`;
-  await seed`INSERT INTO private.order_intake_receipts SELECT (jsonb_populate_record(NULL::private.order_intake_receipts,to_jsonb(receipt)||jsonb_build_object('id',${randomUUID()}::text,'order_id',${legacy}::text,'order_number',regexp_replace(receipt.order_number,'^A-[0-9]{4}-','A-1900-'),'event_id',${eventId}::text,'client_event_id',${requestId}::text,'correlation_id',${requestId}::text,'items_snapshot',jsonb_set(jsonb_set(receipt.items_snapshot,'{0,id}',to_jsonb(${newItem}::text)),'{0,surfaceRequested}','"chrom"'::jsonb)))).* FROM private.order_intake_receipts receipt WHERE receipt.tenant_id=${tenant} AND receipt.order_id=${sourceId}`;
+  await seed`INSERT INTO public.events SELECT (jsonb_populate_record(NULL::public.events,replace(replace(replace(to_jsonb(event)::text,${sourceId},${legacy}),${oldItem},${newItem}),receipt.order_number,regexp_replace(receipt.order_number,'^A-[0-9]{4}-',${fixture.raw==='chrom'?'A-1900-':'A-1901-'}))::jsonb||jsonb_build_object('id',${eventId}::text,'client_event_id',${requestId}::text,'correlation_id',${requestId}::text))).* FROM public.events event JOIN private.order_intake_receipts receipt ON receipt.event_id=event.id WHERE receipt.tenant_id=${tenant} AND receipt.order_id=${sourceId}`;
+  await seed`INSERT INTO private.order_intake_receipts SELECT (jsonb_populate_record(NULL::private.order_intake_receipts,to_jsonb(receipt)||jsonb_build_object('id',${randomUUID()}::text,'order_id',${legacy}::text,'order_number',regexp_replace(receipt.order_number,'^A-[0-9]{4}-',${fixture.raw==='chrom'?'A-1900-':'A-1901-'}),'event_id',${eventId}::text,'client_event_id',${requestId}::text,'correlation_id',${requestId}::text,'items_snapshot',jsonb_set(jsonb_set(receipt.items_snapshot,'{0,id}',to_jsonb(${newItem}::text)),'{0,surfaceRequested}',to_jsonb(${fixture.raw}::text))))).* FROM private.order_intake_receipts receipt WHERE receipt.tenant_id=${tenant} AND receipt.order_id=${sourceId}`;
  });
  const originals=async()=>({receipt:await sql`SELECT md5(to_jsonb(receipt)::text) AS hash FROM private.order_intake_receipts receipt WHERE tenant_id=${tenant} AND order_id=${legacy}`,event:await sql`SELECT md5(to_jsonb(event)::text) AS hash FROM public.events event WHERE tenant_id=${tenant} AND id=${eventId}`});
  const before=await originals();
@@ -61,6 +65,19 @@ it('251 actual intake alias, unchanged historical original, fresh retry and zero
   expect(root.data.rows.map(row=>row.result.code)).toEqual(orderIds.map(()=>'OK'));
  }
  expect(await originals()).toEqual(before);
+ const unknownHashes=async()=>({receipt:await sql`SELECT md5(to_jsonb(receipt)::text) AS hash FROM private.order_intake_receipts receipt WHERE tenant_id=${tenant} AND order_id=${unknown}`,event:await sql`SELECT md5(to_jsonb(event)::text) AS hash FROM public.events event WHERE tenant_id=${tenant} AND id=${unknownEvent}`});
+ const unknownBefore=await unknownHashes();
+ const unknownCard=await withSession(full,()=>getLiveOrderCardAction({orderId:unknown}));
+ expect(unknownCard,JSON.stringify(unknownCard)).toMatchObject({code:'OK',data:{card:{items:[{id:unknownItem,surfaceRequested:'TEST_unbekannte_Oberflaeche',surfaceAssignmentRequired:'TEST_unbekannte_Oberflaeche'}]},nextActionRule:{hauptaktion:null,datenluecken:expect.arrayContaining(['ORDER_SURFACE_ASSIGNMENT_REQUIRED'])}}});
+ const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_UNKNOWN_SURFACE_AUTH');
+ const home=await withSession(full,()=>loadOfficeHome(authorization.data));
+ expect(home.kind).toBe('data');if(home.kind!=='data')throw Error('TEST_UNKNOWN_SURFACE_HOME');
+ const rows=home.dashboard.items.filter(item=>item.key==='source-order:'+unknown);
+ expect(rows).toHaveLength(1);
+ if(unknownCard.code!=='OK')throw Error('TEST_UNKNOWN_SURFACE_CARD');
+ expect(rows[0]).toMatchObject({title:`Oberfläche „TEST_unbekannte_Oberflaeche“ in Auftrag ${unknownCard.data.card.orderNumber} zuordnen`,orderId:unknown,orderVersion:unknownCard.data.card.version,surfaceAssignments:[{itemId:unknownItem,rawValue:'TEST_unbekannte_Oberflaeche',proposals:[{key:'verchromen',label:'Als Verchromen zuordnen'}]}]});
+ expect(await unknownHashes()).toEqual(unknownBefore);
+ expect(await sql.begin(async tx=>{await tx`SELECT set_config('app.tenant_id',${tenant},true)`;return tx`SELECT integrity_ok,surface_mapping_readable FROM private.v_order_intake_receipts_v1 WHERE tenant_id=${tenant} AND order_id=${unknown}`;})).toEqual([{integrity_ok:false,surface_mapping_readable:true}]);
  expect(await sql`SELECT items_snapshot#>>'{0,surfaceRequested}' AS original FROM private.order_intake_receipts WHERE tenant_id=${tenant} AND order_id=${legacy}`).toEqual([{original:'chrom'}]);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid AND event_type='ORDER_INTAKE_CREATED_V1'`).toEqual([{n:1}]);
 });

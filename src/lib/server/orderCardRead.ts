@@ -6,7 +6,7 @@ import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandov
 import { sql } from "drizzle-orm";
 import {readOrderCommercialQuote,type OrderCommercialQuote} from "./orderQuoteReadPort";
 import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice, isOrderContentPrice } from "@/lib/orderPositionContract";
-import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
+import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel, normaliseOrderPositionSurface } from "@/lib/orderPositionContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeExecutionRequested, OrderIntakeSource } from "@/lib/server/commands/orderIntakeCommand";
 import type {
@@ -47,6 +47,8 @@ export type OrderCardItem = {
   quantity: number;
   material: string | null;
   surfaceRequested: string;
+  /** Unresolved original vocabulary, not a canonical surface or a corrected receipt. */
+  surfaceAssignmentRequired?: string;
   executionRequested?: OrderIntakeExecutionRequested | null;
   catalogServiceId: string | null;
   unit: string | null;
@@ -161,6 +163,7 @@ type IntakeRow = {
   current_station: string;
   current_status: string;
   integrity_ok: boolean;
+  surface_mapping_readable?: boolean;
 };
 
 type OrderOriginRow = {
@@ -393,7 +396,10 @@ export function mapOrderCardIntakeItems(value: unknown,source:'intake'|'content'
       name: entry.name,
       quantity,
       material: entry.material,
-      surfaceRequested: orderPositionSurfaceLabel(entry.surfaceRequested),
+      surfaceRequested: normaliseOrderPositionSurface(entry.surfaceRequested) === null
+        ? entry.surfaceRequested : orderPositionSurfaceLabel(entry.surfaceRequested),
+      ...(normaliseOrderPositionSurface(entry.surfaceRequested) === null
+        ? {surfaceAssignmentRequired:entry.surfaceRequested} : {}),
       ...(currentShapeWithExecution ? { executionRequested: entry.executionRequested as OrderIntakeExecutionRequested } : {}),
       catalogServiceId: currentCatalogItem ? entry.catalogServiceId as string : null,
       unit: currentCatalogItem || currentFreeTextItem ? entry.unit===null?null:orderPositionUnitLabel(entry.unit as string) : null,
@@ -596,7 +602,12 @@ function qualifyCurrentOrderItems(authorization:AuthorizationSnapshot,queue:Queu
         || contentEvent.aggregate_version > queue.version
         || !(eventPayload?.note === null || typeof eventPayload?.note === "string")
       )) throw new Error("ORDER_CARD_CONTENT_EVENT_INVALID");
-      if (!isReworkOrder && !contentEvent && intake!.integrity_ok !== true) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
+      // A PL-approved vocabulary gap is visible, but never excuses any other
+      // broken receipt predicate. Other consumers still see integrity_ok=false.
+      if (!isReworkOrder && !contentEvent && intake!.integrity_ok !== true
+        && !(intake!.surface_mapping_readable === true && intakeItems!.some(item=>item.surfaceAssignmentRequired))) {
+        throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
+      }
       const sourcePositions = eventItems ?? intakeItems ?? currentRows.map((item, index) => ({ id: item.id, position: index + 1 }));
       const positions = new Map(sourcePositions.map((item) => [item.id, item.position]));
       const items = mapCurrentOrderItems(currentRows, positions);
@@ -628,6 +639,13 @@ function qualifyCurrentOrderItems(authorization:AuthorizationSnapshot,queue:Queu
         }
       }
 
+ if (!contentEvent && intakeItems) for (const original of intakeItems) {
+  if (!original.surfaceAssignmentRequired) continue;
+  const current=items.find(item=>item.id===original.id);
+  if (!current) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
+  current.surfaceRequested=original.surfaceAssignmentRequired;
+  current.surfaceAssignmentRequired=original.surfaceAssignmentRequired;
+ }
  return items;
 }
 
@@ -783,7 +801,7 @@ export async function readTodayOrderCards(authorization:AuthorizationSnapshot,or
      FROM public.items item WHERE item.tenant_id=${authorization.tenantId} AND item.order_id=ANY(${ids})
     UNION ALL
     SELECT 'intake',receipt.order_id,row_number() OVER(PARTITION BY receipt.order_id ORDER BY receipt.recorded_at DESC),
-     jsonb_build_object('tenant_id',receipt.tenant_id,'order_id',receipt.order_id,'customer_id',receipt.customer_id,'items_snapshot',receipt.items_snapshot,'current_order_version',receipt.current_order_version,'current_station',receipt.current_station,'current_status',receipt.current_status,'integrity_ok',receipt.integrity_ok)
+     jsonb_build_object('tenant_id',receipt.tenant_id,'order_id',receipt.order_id,'customer_id',receipt.customer_id,'items_snapshot',receipt.items_snapshot,'current_order_version',receipt.current_order_version,'current_station',receipt.current_station,'current_status',receipt.current_status,'integrity_ok',receipt.integrity_ok,'surface_mapping_readable',receipt.surface_mapping_readable)
      FROM private.v_order_intake_receipts_v1 receipt WHERE receipt.tenant_id=${authorization.tenantId} AND receipt.order_id=ANY(${ids})
     UNION ALL SELECT 'content',order_id,0,to_jsonb(latest_content) FROM latest_content
     UNION ALL
@@ -928,7 +946,7 @@ export async function readLiveOrderCard(
 
       const intakeRows = await tx.execute<IntakeRow>(sql`
         SELECT tenant_id, order_id, customer_id, items_snapshot,
-               current_order_version, current_station, current_status, integrity_ok
+               current_order_version, current_station, current_status, integrity_ok, surface_mapping_readable
         FROM private.v_order_intake_receipts_v1
         WHERE order_id = ${input.orderId}
         ORDER BY recorded_at DESC
