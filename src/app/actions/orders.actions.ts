@@ -406,10 +406,10 @@ async function readLiveOrderCardForPage(
 }
 
 async function manualShippingPorts(){
- const [{readCustomerProfile},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
+ const [{readCustomerProfile,readCustomerProfiles},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
  const {readShippingMergeAllocation}=await import('@/lib/server/commands/immutableInvoiceCommand');
  const {readInvoiceVat}=await import('@/modules/accounting/server-public');
- return {readCustomer:readCustomerProfile,readSettings:readShippingSettingsInTransaction,readAllocation:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string,input:Parameters<typeof readShippingMergeAllocation>[3])=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
+ return {readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,readSettings:readShippingSettingsInTransaction,readAllocation:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string,input:Parameters<typeof readShippingMergeAllocation>[3])=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
 }
 export async function markOrderInformedByPhoneAction(input:{orderId:string;expectedVersion:number;clientEventId:string}){
  return observeAction('markOrderInformedByPhoneAction',subjectForAction('markOrderInformedByPhoneAction',input),async()=>{

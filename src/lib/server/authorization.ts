@@ -1,3 +1,4 @@
+import {cache} from 'react';
 import {withAuthorizationReadBudget} from '@/db/readBudget';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {PACKAGE_SWITCHES,mapPackageSwitchRows} from '@/modules/fundament/public';
@@ -81,6 +82,31 @@ export type LoginIdentityResult =
 /**
  * Kanonischer serverseitiger Resolver zur Abfrage und Validierung der Rollen und Berechtigungen aus der DB.
  */
+const readAuthorizationRow = cache(async (userId:string,sessionTenantId:string) =>
+  withAuthorizationReadBudget(async()=>await db
+      .select({
+        id: appUsers.id,
+        tenantId: appUsers.tenantId,
+        fullName: appUsers.fullName,
+        role: appUsers.role,
+        active: appUsers.active,
+        // Same rights query and pure package catalogue; no server-action facade.
+        packageFlags: sql<unknown>`(SELECT jsonb_agg(jsonb_build_object('id',flag.id,'enabled',
+          CASE WHEN flag.id='offline_24h' THEN flag.enabled AND
+            coalesce(cardinality(flag.roles_allowed)=0 OR ${appUsers.role}=ANY(flag.roles_allowed),false)
+          ELSE flag.enabled END,'roles',flag.roles_allowed))
+          FROM public.feature_flags flag WHERE flag.id IN (${sql.join(PACKAGE_SWITCHES.map(({id})=>sql`${id}`),sql`,`)}))`,
+        updatedAt: appUsers.updatedAt,
+        areas: sql<string[]>`(
+          SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
+          FROM public.app_user_rights rights
+          WHERE rights.tenant_id = ${appUsers.tenantId}
+            AND rights.user_id = ${appUsers.id}
+        )`,
+      })
+      .from(appUsers)
+      .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, sessionTenantId)))));
+
 export async function resolveAuthorization(): Promise<AuthorizationResult> {
   observeAuthorizationAttempt();
   let sessionResult;
@@ -139,29 +165,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
   let dbUser;
   let areas: AccessArea[] = [];
   try {
-    const rows = await withAuthorizationReadBudget(async()=>await db
-      .select({
-        id: appUsers.id,
-        tenantId: appUsers.tenantId,
-        fullName: appUsers.fullName,
-        role: appUsers.role,
-        active: appUsers.active,
-        // Same rights query and pure package catalogue; no server-action facade.
-        packageFlags: sql<unknown>`(SELECT jsonb_agg(jsonb_build_object('id',flag.id,'enabled',
-          CASE WHEN flag.id='offline_24h' THEN flag.enabled AND
-            coalesce(cardinality(flag.roles_allowed)=0 OR ${appUsers.role}=ANY(flag.roles_allowed),false)
-          ELSE flag.enabled END,'roles',flag.roles_allowed))
-          FROM public.feature_flags flag WHERE flag.id IN (${sql.join(PACKAGE_SWITCHES.map(({id})=>sql`${id}`),sql`,`)}))`,
-        updatedAt: appUsers.updatedAt,
-        areas: sql<string[]>`(
-          SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
-          FROM public.app_user_rights rights
-          WHERE rights.tenant_id = ${appUsers.tenantId}
-            AND rights.user_id = ${appUsers.id}
-        )`,
-      })
-      .from(appUsers)
-      .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, sessionTenantId))));
+    const rows = await readAuthorizationRow(userId,sessionTenantId);
     dbUser = rows[0];
     const rawAreas = dbUser?.areas ?? (process.env.NODE_ENV === "test" && dbUser && isAppRole(dbUser.role)
       ? [...ROLE_ACCESS_AREA_TEMPLATES[dbUser.role]]

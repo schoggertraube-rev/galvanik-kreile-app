@@ -7,7 +7,10 @@ const { withTransaction, execute } = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server/orderReleaseRead", () => ({readOpenOrderComplaint:async()=>null}));
+vi.mock("@/lib/server/orderReleaseRead", () => ({
+  readOpenOrderComplaint:async()=>null,
+  readOpenOrderComplaintsBatch:async(_tx:unknown,_tenant:string,ids:readonly string[])=>new Map(ids.map(id=>[id,null])),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({
   sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),

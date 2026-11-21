@@ -152,7 +152,7 @@ export async function proxy(request: NextRequest) {
 
   if (hasSupabaseAuthCookie) {
     try {
-      await supabase.auth.getUser()
+      await supabase.auth.getSession()
     } catch {
       // The signed app session remains authoritative when refresh is unavailable.
     }

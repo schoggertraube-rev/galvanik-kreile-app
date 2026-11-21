@@ -15,8 +15,8 @@ import {COMPLAINT_ORDER_COPY,MANUAL_SHIPPING_COPY,MANUAL_SHIPPING_HANDOVER_LABEL
 
 import { createHash, randomUUID } from "node:crypto";
 import { GOODS_OUT_DEBT_COPY } from "@/ui/situationCatalog";
-import { sql } from "drizzle-orm";
-import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
+import { sql,type SQL } from "drizzle-orm";
+import { readEffectiveCustomerAgreement,readEffectiveCustomerAgreements } from "@/lib/server/effectiveCustomerAgreementRead";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import {
   PAYMENT_CONTRACT_VERSION,
@@ -563,28 +563,54 @@ function collectionPlanReceipt(row:GoodsOutEventRow,tenantId:string):InvoiceColl
 
 /** Read-only projection of the same immutable preparation and actual membership.
  * PL22:11 / N-Fakt-01: agreement plans; only a real receipt/member prepares. */
-export async function readOrderCollectionStateInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;orderVersion:number;customerId:string;freezeId:string|null;goodsOutEventId:string|null}){
- const agreement=await readEffectiveCustomerAgreement(tx,{tenantId:auth.tenantId,customerId:input.customerId,orderId:input.orderId});
- const rows=await tx.execute<GoodsOutEventRow>(sql`SELECT ${GOODS_OUT_EVENT_COLUMNS} FROM public.events
-  WHERE tenant_id=${auth.tenantId} AND order_id=${input.orderId} AND event_type=${COLLECTION_PLAN_EVENT}
-  ORDER BY created_at,id LIMIT 1001`);
- if(rows.length>1000)throw Error('COLLECTION_PLAN_READ_LIMIT');
- const plans=rows.map(row=>collectionPlanReceipt(row,auth.tenantId));
- if(plans.some(plan=>plan.orderId!==input.orderId||plan.orderVersion>input.orderVersion))throw Error('COLLECTION_PLAN_ORDER_VERSION_INVALID');
- const active=plans.filter(plan=>plan.freezeId===input.freezeId);
- if(active.length>1||active.some(plan=>plan.customerId!==input.customerId))throw Error('COLLECTION_PLAN_ACTIVE_SOURCE_INVALID');
- const members=await tx.execute<{collection_id:string;customer_id:string;source_valid:boolean}>(sql`
+type OrderCollectionReadInput={orderId:string;orderVersion:number;customerId:string;freezeId:string|null;goodsOutEventId:string|null};
+type CollectionMemberReadRow={collection_id:string;customer_id:string;source_valid:boolean};
+function collectionPlansQuery(tenantId:string,orderId:string|SQL){return sql`SELECT ${GOODS_OUT_EVENT_COLUMNS} FROM public.events
+  WHERE tenant_id=${tenantId} AND order_id=${orderId} AND event_type=${COLLECTION_PLAN_EVENT}
+  ORDER BY created_at,id LIMIT 1001`;}
+function collectionMembersQuery(tenantId:string,orderId:string|SQL,goodsOutEventId:string|SQL|null){return sql`
   SELECT member.collection_id::text,collection.customer_id,
    EXISTS(SELECT 1 FROM public.events physical WHERE physical.tenant_id=member.tenant_id AND physical.order_id=member.order_id
-    AND physical.id=${input.goodsOutEventId} AND physical.event_type='ORDER_PICKED_UP_V3' AND physical.event_schema_version=3
+    AND physical.id=${goodsOutEventId} AND physical.event_type='ORDER_PICKED_UP_V3' AND physical.event_schema_version=3
     AND physical.status='success' AND physical.payload->>'settlement'='collection'
     AND to_char(physical.created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin','YYYY-MM-01')=to_char(collection.monat,'YYYY-MM-01')) AS source_valid
   FROM public.invoice_collection_orders member JOIN public.invoice_collections collection ON collection.tenant_id=member.tenant_id AND collection.id=member.collection_id
-  WHERE member.tenant_id=${auth.tenantId} AND member.order_id=${input.orderId} LIMIT 2`);
+  WHERE member.tenant_id=${tenantId} AND member.order_id=${orderId} LIMIT 2`;}
+function qualifyCollectionState(tenantId:string,input:OrderCollectionReadInput,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,rows:GoodsOutEventRow[],members:CollectionMemberReadRow[]){
+ if(rows.length>1000)throw Error('COLLECTION_PLAN_READ_LIMIT');
+ const plans=rows.map(row=>collectionPlanReceipt(row,tenantId));
+ if(plans.some(plan=>plan.orderId!==input.orderId||plan.orderVersion>input.orderVersion))throw Error('COLLECTION_PLAN_ORDER_VERSION_INVALID');
+ const active=plans.filter(plan=>plan.freezeId===input.freezeId);
+ if(active.length>1||active.some(plan=>plan.customerId!==input.customerId))throw Error('COLLECTION_PLAN_ACTIVE_SOURCE_INVALID');
  if(members.length>1||members.some(member=>member.customer_id!==input.customerId||member.source_valid!==true))throw Error('COLLECTION_MEMBER_READ_SOURCE_INVALID');
  const prepared=active.length===1||members.length===1;
  return {orderId:input.orderId,orderVersion:input.orderVersion,collectionPlanned:agreement?.type==='sammelrechnung'||prepared,
   collectionPrepared:prepared,preparationEventId:active[0]?.eventId??null,collectionId:members[0]?.collection_id??null};
+}
+export async function readOrderCollectionStateInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:OrderCollectionReadInput){
+ const states=await readOrderCollectionStatesInTransaction(tx,auth,[input]);
+ const state=states.get(input.orderId);if(state===undefined)throw Error("COLLECTION_PLAN_SOURCE_MISSING");return state;
+}
+
+/** Every receipt, freeze and physical member is qualified by the same single/set reader. */
+export async function readOrderCollectionStatesInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,inputs:readonly OrderCollectionReadInput[]):Promise<Map<string,ReturnType<typeof qualifyCollectionState>>>{
+ const requested=new Map<string,OrderCollectionReadInput>(),result=new Map<string,ReturnType<typeof qualifyCollectionState>>();
+ for(const input of inputs){const prior=requested.get(input.orderId);if(prior&&canonicalJson(prior)!==canonicalJson(input))throw Error('COLLECTION_PLAN_ORDER_VERSION_INVALID');requested.set(input.orderId,input);}
+ if(!requested.size)return result;
+ const values=[...requested.values()],agreements=await readEffectiveCustomerAgreements(tx,auth.tenantId,values);
+ const plans=await tx.execute<{order_id:string;records:GoodsOutEventRow[]}>(sql`SELECT requested.order_id,ARRAY(SELECT to_jsonb(source) FROM (${collectionPlansQuery(auth.tenantId,sql`requested.order_id`)}) source) AS records
+  FROM unnest(ARRAY[${sql.join(values.map(input=>sql`${input.orderId}`),sql`, `)}]::text[]) requested(order_id)`);
+ const members=await tx.execute<{order_id:string;records:CollectionMemberReadRow[]}>(sql`SELECT requested.order_id,ARRAY(SELECT to_jsonb(source) FROM (${collectionMembersQuery(auth.tenantId,sql`requested.order_id`,sql`requested.goods_out_event_id`)}) source) AS records
+  FROM unnest(ARRAY[${sql.join(values.map(input=>sql`${input.orderId}`),sql`, `)}]::text[],ARRAY[${sql.join(values.map(input=>sql`${input.goodsOutEventId}`),sql`, `)}]::text[]) requested(order_id,goods_out_event_id)`);
+ const planRows=new Map<string,GoodsOutEventRow[]>(),memberRows=new Map<string,CollectionMemberReadRow[]>();
+ for(const row of plans){if(!requested.has(row.order_id)||planRows.has(row.order_id)||!Array.isArray(row.records))throw Error('COLLECTION_PLAN_SOURCE_MISSING');planRows.set(row.order_id,row.records);}
+ for(const row of members){if(!requested.has(row.order_id)||memberRows.has(row.order_id)||!Array.isArray(row.records))throw Error('COLLECTION_MEMBER_READ_SOURCE_INVALID');memberRows.set(row.order_id,row.records);}
+ for(const input of values){
+  const agreement=agreements.get(input.orderId),plans=planRows.get(input.orderId),members=memberRows.get(input.orderId);
+  if(agreement===undefined||!plans||!members)throw Error('COLLECTION_PLAN_SOURCE_MISSING');
+  result.set(input.orderId,qualifyCollectionState(auth.tenantId,input,agreement,plans,members));
+ }
+ return result;
 }
 
 /** Same collection writer, preparation phase only; actual attachment stays in physical completion. */

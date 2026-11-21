@@ -3,10 +3,10 @@ import {expect,it,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {sql as query} from 'drizzle-orm';
 import {full,sql,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
-import {readyOrderForInvoice,readyInvoiceOrder,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
+import {readyOrderForInvoice,readyInvoiceOrder,manualTrackingFixture,customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
-import {readCustomerProfile} from '@/modules/customers/server-public';
+import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {getPaymentStatesBatch} from '@/lib/server/paymentSummaryRead';
@@ -15,6 +15,10 @@ import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoic
 import {getManualShippingAction,saveManualTrackingAction,markOrderInformedByPhoneAction,getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {readOrderInformed,readOrdersInformed} from '@/lib/server/orderReleaseRead';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
+import {db} from '@/db';
+import * as deliveryProofs from '@/lib/server/communicationDeliveryPort';
+import * as responsibilitySource from '@/lib/server/orderTaskAssignmentRead';
+import {readTodayResponsibilities} from '@/lib/server/todayDashboard';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -24,6 +28,7 @@ if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database
 type ManualShippingPorts=Parameters<typeof readManualShippingBatch>[2];
 const ports:ManualShippingPorts={
  readCustomer:readCustomerProfile,
+ readCustomers:readCustomerProfiles,
  readSettings:readShippingSettingsInTransaction,
  readAllocation:(tx,tenantId,customerId,input)=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat),
 };
@@ -32,6 +37,39 @@ async function authorization(actor=full){
  if(!result.ok)throw Error('TEST_REAL_AUTHORIZATION_REQUIRED');
  return result.data;
 }
+it('253 K3 reads 1001 explicit synthetic IDs in one transaction and keeps a failed block unknown',async()=>{
+ const customerId=await customerFixture('253 K3 responsibility');
+ const first=await intakeOrderFixture('253 K3 first',customerId);
+ const last=await intakeOrderFixture('253 K3 last',customerId);
+ const ids=[first.receipt.orderId,...Array.from({length:999},(_,index)=>`TEST-K3-absent-${index}`),last.receipt.orderId];
+ const actor=await authorization(),blocks:number[]=[];
+ const original=responsibilitySource.readOrderResponsibilityForToday;
+ let failLast=false,begins=0;
+ const options=db.$client.options,previous=options.debug;
+ options.debug=(connection,text,parameters,types)=>{
+  if(/^begin\b/i.test(text.trim()))begins++;
+  if(typeof previous==='function')previous(connection,text,parameters,types);
+ };
+ const spy=vi.spyOn(responsibilitySource,'readOrderResponsibilityForToday').mockImplementation(async(tx,auth,block)=>{
+  blocks.push(block.length);
+  const result=await original(tx,auth,block);
+  if(failLast&&block.includes(last.receipt.orderId))await tx.execute(query`SELECT 1/0`);
+  return result;
+ });
+ try{
+  const result=await readTodayResponsibilities(actor,ids);
+  expect(blocks).toEqual([1000,1]);expect(begins).toBe(1);
+  expect(result.code).toBe('OK');if(result.code!=='OK')throw Error('TEST_K3_COMPLETE_SOURCE_REQUIRED');
+  expect([...result.data]).toEqual([[first.receipt.orderId,null],[last.receipt.orderId,null]]);
+  expect(result.data.unavailableOrderIds).toEqual([]);
+  failLast=true;blocks.length=0;begins=0;
+  expect(await readTodayResponsibilities(actor,JSON.parse(JSON.stringify(ids)))).toEqual({code:'SOURCE_INCOMPLETE'});
+  expect(blocks).toEqual([1000,1]);expect(begins).toBe(1);
+  failLast=false;
+  const recovered=await readTodayResponsibilities(actor,ids);
+  expect(recovered).toEqual(result);
+ }finally{spy.mockRestore();options.debug=previous;}
+});
 it('250 manual shipping retains real zero/one/many sources, shared reads, rights, versions and fresh tracking retry',async()=>{
  const a=await readyOrderForInvoice('TEST 250 shipping A','shipping');
  const b=await readyOrderForInvoice('TEST 250 shipping B','shipping',a.customerId);
@@ -41,7 +79,7 @@ it('250 manual shipping retains real zero/one/many sources, shared reads, rights
  expect(singles.every(row=>row.code==='OK')).toBe(true);
  let customers=0,settings=0;
  const counted:ManualShippingPorts={...ports,
-  readCustomer:async(...args)=>{customers++;return readCustomerProfile(...args);},
+  readCustomers:async(...args)=>{customers++;return readCustomerProfiles(...args);},
   readSettings:async(...args)=>{settings++;return readShippingSettingsInTransaction(...args);},
  };
  expect(await readManualShippingBatch(actor,[],counted)).toEqual(new Map());
@@ -79,23 +117,32 @@ it('250 a real SQL failure rolls back before isolating the bad shipping group an
  const b=await readyOrderForInvoice('TEST 250 isolated shipping B','shipping');
  const first=await manualTrackingFixture(a.orderId);await manualTrackingFixture(b.orderId);
  const actor=await authorization(),expected=await withSession(full,()=>getManualShippingAction({orderId:a.orderId}));
- const fault:ManualShippingPorts={...ports,readCustomer:async(tx,tenantId,customerId)=>{
-  const customer=await readCustomerProfile(tx,tenantId,customerId);
+ const fault:ManualShippingPorts={...ports,readCustomers:async(tx,tenantId,customerIds)=>{
+  const customers=await readCustomerProfiles(tx,tenantId,customerIds);
   // Explicit synthetic failure, executed by the real PostgreSQL transaction;
   // no authorization, source reader or successful result is doubled.
-  if(customerId===b.customerId)await tx.execute(query`SELECT 1 / 0 AS test_followup_failure`);
-  return customer;
+  if(customerIds.includes(b.customerId))await tx.execute(query`SELECT 1 / 0 AS test_followup_failure`);
+  return customers;
  }};
  const isolated=await readManualShippingBatch(actor,[a.orderId,b.orderId],fault);
  expect(isolated.get(a.orderId)).toEqual(expected);
  expect(isolated.get(a.orderId)).toMatchObject({code:'OK',data:{shipments:[{id:first.shipmentId,trackingNumber:first.trackingNumber}]}});
  expect(isolated.get(b.orderId)).toMatchObject({code:'UNAVAILABLE',reason:'MANUAL_SHIPPING_READ_FAILED'});
- const repaired=await readManualShippingBatch(actor,JSON.parse(JSON.stringify([a.orderId,b.orderId])),ports);
+ const repairedRead=await countSourceQueries(()=>readManualShippingBatch(actor,JSON.parse(JSON.stringify([a.orderId,b.orderId])),ports),/FROM public\.customers WHERE/);
+ const repaired=repairedRead.value;expect(repairedRead.reads).toBe(1);
  expect(repaired.get(a.orderId)).toEqual(expected);expect(repaired.get(b.orderId)).toMatchObject({code:'OK'});
  expect((await readManualShippingBatch(actor,['TEST-missing-order'],ports)).get('TEST-missing-order')).toMatchObject({code:'NOT_FOUND'});
 });
 
 const readCredit:NonNullable<Parameters<typeof getPaymentStatesBatch>[2]>=(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
+async function countSourceQueries<T>(work:()=>Promise<T>,source=/FROM public\.complaints\b/){
+ const options=db.$client.options,previous=options.debug;let reads=0;
+ options.debug=(connection,text,parameters,types)=>{
+  if(typeof previous==='function')previous(connection,text,parameters,types);
+  if(source.test(text))reads++;
+ };
+ try{return {value:await work(),get reads(){return reads;}};}finally{options.debug=previous;}
+}
 it('250 payment batch preserves real zero/one/many originals and money rights, then rereads the actual one-cent payment and original retry',async()=>{
  const a=await readyInvoiceOrder('TEST 250 payment A');
  const b=await readyInvoiceOrder('TEST 250 payment B','pickup',false,a.customerId);
@@ -105,7 +152,10 @@ it('250 payment batch preserves real zero/one/many originals and money rights, t
  const singles=await Promise.all(ids.map(orderId=>withSession(full,()=>getOrderPaymentStateAction({orderId}))));
  expect(singles.every(row=>row.code==='OK')).toBe(true);
  expect(await getPaymentStatesBatch(actor,[],readCredit)).toEqual(new Map());
- const batch=await getPaymentStatesBatch(actor,[...ids,a.orderId],readCredit);
+ let sourceCreditReads=0;
+ const counted=await countSourceQueries(()=>getPaymentStatesBatch(actor,[...ids,a.orderId],async(...args)=>{sourceCreditReads++;return readCredit(...args);}));
+ const batch=counted.value;
+ expect(sourceCreditReads).toBe(1);expect(counted.reads).toBe(1);
  expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(singles[0]);expect(batch.get(b.orderId)).toEqual(singles[1]);
  const first=batch.get(a.orderId);if(first?.code!=='OK'||!first.data.payment)throw Error('TEST_REAL_INVOICE_PAYMENT_REQUIRED');
  expect(first.data.payment).toMatchObject({invoiceId:a.invoice.invoiceId,totalAmountCents:a.invoice.grossAmountCents,openAmountCents:a.invoice.grossAmountCents,currency:'EUR'});
@@ -151,7 +201,16 @@ it('250 informed zero/one/many reads preserve actual phone originals, freeze ver
  const before=await Promise.all(ids.map(id=>readOrderInformed(actor,id)));
  expect(before).toEqual([expect.objectContaining({code:'OK',informed:null,ampel:'rot'}),expect.objectContaining({code:'OK',informed:null,ampel:'rot'})]);
  expect(await readOrdersInformed(actor,[])).toEqual(new Map());
- const batch=await readOrdersInformed(actor,[...ids,a.orderId]);
+ const deliveryRead=vi.spyOn(deliveryProofs,'readCommunicationDeliveryFailures');
+ const collectionPort=await import('@/lib/server/commands/recordGoodsOutCommand');
+ const collectionRead=vi.spyOn(collectionPort,'readOrderCollectionStatesInTransaction');
+ let batch:Awaited<ReturnType<typeof readOrdersInformed>>;
+ try{
+  const counted=await countSourceQueries(()=>readOrdersInformed(actor,[...ids,a.orderId]));batch=counted.value;
+  expect(counted.reads).toBe(1);expect(deliveryRead).toHaveBeenCalledTimes(1);
+  expect(collectionRead).toHaveBeenCalledTimes(1);
+  expect(collectionRead.mock.calls[0][2]).toHaveLength(2);
+ }finally{deliveryRead.mockRestore();collectionRead.mockRestore();}
  expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(before[0]);expect(batch.get(b.orderId)).toEqual(before[1]);
  const operator=await createFixture(['auftraege'],'werkstatt');
  const input={orderId:a.orderId,expectedVersion:a.version,clientEventId:randomUUID()};

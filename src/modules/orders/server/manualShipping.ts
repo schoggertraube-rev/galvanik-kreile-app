@@ -15,6 +15,7 @@ const id=(value:unknown):value is string=>typeof value==='string'&&/^[A-Za-z0-9]
 export type ManualShippingPorts={
  readAllocation:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,input:{orderId:string;shipmentId:string;otherOrderId:string;otherShipmentId:string|null;sendungId:string})=>Promise<{chargedOrderNumbers:string[]}>;
  readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerStoredProfile|null>;
+ readCustomers:(tx:PrivilegedTenantTransaction,tenantId:string,customerIds:readonly string[])=>Promise<Map<string,CustomerStoredProfile|null>>;
  readSettings:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<ShippingSettings|null>;
 };
 type Order={id:string;customer_id:string;order_number:string;handover_mode:string|null;station:string;version:number;allowed:boolean};
@@ -105,13 +106,8 @@ async function readManualShippingGroup(auth:AuthorizationSnapshot,orderIds:strin
    shipping.set(row.order_id,order);
   }
   if(!shipping.size)return result;
-  const customers=new Map<string,CustomerStoredProfile>();
-  for(const order of shipping.values()){
-   if(customers.has(order.customer_id))continue;
-   const customer=await ports.readCustomer(tx,auth.tenantId,order.customer_id);
-   if(!customer)throw Error('SHIPPING_CUSTOMER_MISSING');
-   customers.set(order.customer_id,customer);
-  }
+  const customers=await ports.readCustomers(tx,auth.tenantId,[...new Set([...shipping.values()].map(order=>order.customer_id))]);
+  for(const order of shipping.values())if(!customers.get(order.customer_id))throw Error('SHIPPING_CUSTOMER_MISSING');
   const settings=await ports.readSettings(tx,auth.tenantId);
   const shipmentRequests=sql.join([...shipping.keys()].map(orderId=>sql`(${orderId})`),sql`,`);
   const shipmentRows=await tx.execute<{order_id:string;shipments:Shipment[]}>(sql`

@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-21",
+    "pr": 253,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Deine Startseite ist nach der PIN noch schneller da."
+    ]
+  },
+  {
+    "datum": "2026-11-21",
     "pr": 252,
     "seite": "heute",
     "ziel": "/",

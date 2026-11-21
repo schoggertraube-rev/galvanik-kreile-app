@@ -908,19 +908,33 @@ function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInv
 }
 
 type NativeCollectionReceiptRead={collectionId:string;clientEventId?:string};
-export function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:string|{orderId:string}):Promise<ReceiptRow[]>;
-export function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:NativeCollectionReceiptRead):Promise<CollectionReceiptRow[]>;
-export async function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:string|{orderId:string}|NativeCollectionReceiptRead):Promise<Array<ReceiptRow|CollectionReceiptRow>>{
+function createInvoiceReceiptsQuery(source:string|{orderId:string}|{orderIds:readonly string[]}|NativeCollectionReceiptRead){
  const native=typeof source==='object'&&'collectionId'in source,byKey=typeof source==='string';
- const predicate=native?sql`(snapshot#>>'{collection,collectionId}')=${source.collectionId} ${source.clientEventId===undefined?sql``:sql`AND client_event_id=${source.clientEventId}::uuid`}`:byKey?sql`client_event_id=${source}::uuid`:sql`order_id=${source.orderId}`;
- return tx.execute<ReceiptRow|CollectionReceiptRow>(sql`
+ const predicate=native?sql`(snapshot#>>'{collection,collectionId}')=${source.collectionId} ${source.clientEventId===undefined?sql``:sql`AND client_event_id=${source.clientEventId}::uuid`}`:byKey?sql`client_event_id=${source}::uuid`:'orderIds'in source?sql`order_id=ANY(ARRAY[${sql.join(source.orderIds.map(id=>sql`${id}`),sql`, `)}]::text[])`:sql`order_id=${source.orderId}`;
+ return sql`
   WITH receipt AS(
    SELECT * FROM private.v_invoice_receipt_v1 WHERE ${predicate} AND event_type=${native?COLLECTION_EVENT_TYPE:EVENT_TYPE}
    UNION ALL SELECT * FROM private.v_invoice_created_receipt_v2 WHERE ${predicate} AND event_type=${EVENT_TYPE_V2} AND ${!native}
   ) SELECT receipt.*,invoice.belegart,invoice.ursprung_rechnung_id::text,event.payload->'shippingCosts' AS shipping_costs_intent,event.payload->'reissue' AS reissue_intent
   FROM receipt JOIN public.invoices invoice ON invoice.tenant_id=receipt.tenant_id AND invoice.id=receipt.invoice_id
    JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id
-  ${byKey||native?sql`LIMIT 2`:sql``}`);
+  ${byKey||native?sql`LIMIT 2`:sql``}`;
+}
+export function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:string|{orderId:string}):Promise<ReceiptRow[]>;
+export function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:NativeCollectionReceiptRead):Promise<CollectionReceiptRow[]>;
+export async function readCreateInvoiceReceipts(tx:PrivilegedTenantTransaction,source:string|{orderId:string}|NativeCollectionReceiptRead):Promise<Array<ReceiptRow|CollectionReceiptRow>>{
+ if(typeof source!=='string'&&'orderId'in source){
+  const receipts=await readCreateInvoiceReceiptsMany(tx,[source.orderId]),rows=receipts.get(source.orderId);
+  if(rows===undefined)throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');return rows;
+ }
+ return tx.execute<ReceiptRow|CollectionReceiptRow>(createInvoiceReceiptsQuery(source));
+}
+/** Same tenant-scoped receipt views and joins; no historical original is filtered out. */
+export async function readCreateInvoiceReceiptsMany(tx:PrivilegedTenantTransaction,orderIds:readonly string[]):Promise<Map<string,ReceiptRow[]>>{
+ const ids=[...new Set(orderIds)],result=new Map<string,ReceiptRow[]>(ids.map(id=>[id,[]]));if(!ids.length)return result;
+ const rows=await tx.execute<ReceiptRow>(createInvoiceReceiptsQuery({orderIds:ids}));
+ for(const row of rows){const group=result.get(row.order_id);if(!group)throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');group.push(row);}
+ return result;
 }
 
 /** The same canonical cancellation query serves command, reader and repair. */
@@ -1205,28 +1219,48 @@ export async function readInvoiceShippingConsequencesBatch(auth:AuthorizationSna
  const sourceIds=inputs.flatMap(input=>{const header=headers.get(input.orderId);return header?.code==='OK'&&qualifyShippingProposalOrder(header.rows,input,{}).kind==='PROCEED'?[input.orderId]:[];});
  const sources=await readShippingProposalGroups(auth,sourceIds,readInvoiceIssueSourceRows);
  const readSource=async(orderId:string)=>{const source=sources.get(orderId);if(!source)throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING');if(source.code==='FAILED')throw source.cause;return source.rows;};
- const rows=await Promise.all(inputs.map(async input=>[input.orderId,await readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings,headers.get(input.orderId),readSource)] as const));
- return new Map(rows);
+ type Value=Awaited<ReturnType<typeof readInvoiceShippingConsequencesWithHeader>>;
+ const values:Array<Value>=new Array(inputs.length),seen=new Set<number>();
+ const load=async(indices:number[]):Promise<void>=>{
+  if(!indices.length)return;
+  try{
+   await withPrivilegedTenantTransaction(auth,async tx=>{
+    const groupSourceIds=[...new Set(indices.map(index=>inputs[index].orderId).filter(id=>sourceIds.includes(id)))];
+    const settings=groupSourceIds.length?{value:await readSettings(tx,auth.tenantId)}:undefined;
+    const originals=await readCreateInvoiceReceiptsMany(tx,groupSourceIds);
+    for(const index of indices){const input=inputs[index];
+     values[index]=await readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings,headers.get(input.orderId),readSource,{tx,settings,originals:originals.get(input.orderId)});seen.add(index);
+    }
+   });
+  }catch{
+   // The failed parent has completed its rollback before any child transaction.
+   if(indices.length===1){const index=indices[0],input=inputs[index];values[index]=await readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings,headers.get(input.orderId),readSource);seen.add(index);return;}
+   const half=Math.ceil(indices.length/2);await load(indices.slice(0,half));await load(indices.slice(half));
+  }
+ };
+ if(permitted)await load(inputs.map((_,index)=>index));else for(let index=0;index<inputs.length;index++){values[index]=undefined;seen.add(index);}
+ return new Map(inputs.map((input,index)=>{if(!seen.has(index))throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING');return [input.orderId,values[index]];}));
 }
 
 export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
  return readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings);
 }
-async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader,header?:ShippingProposalHeader,readSource?:(orderId:string)=>Promise<SourceRow[]>){
+async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader,header?:ShippingProposalHeader,readSource?:(orderId:string)=>Promise<SourceRow[]>,shared?:{tx:PrivilegedTenantTransaction;settings?:{value:Awaited<ReturnType<ShippingProposalSettingsReader>>};originals?:ReceiptRow[]}){
  if(!hasAuthorizationArea(auth,'preise'))return undefined;
  const identity:{orderNumber?:string;invoiceNumber?:string}={};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+ try{const work=async(tx:PrivilegedTenantTransaction)=>{
   if(header?.code==='FAILED')throw header.cause;
   const rows=header?.code==='OK'?header.rows:await readInvoiceShippingHeaders(tx,auth,[input.orderId]);
   const qualified=qualifyShippingProposalOrder(rows,input,identity);
   if(qualified.kind==='FAILED')throw qualified.cause;
   if(qualified.kind==='NOT_APPLICABLE')return qualified.value;
   const order=qualified.order;
-  const settings=await readSettings(tx,auth.tenantId);
+  const settings=shared?shared.settings?.value:await readSettings(tx,auth.tenantId);
   if(!settings||settings.shippingFeeCents===undefined)throw Error('SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING');
   const allocation=order.handover_mode==='shipping'?await readShippingInvoiceLines(tx,auth.tenantId,order,settings.shippingFeeCents,readVat):{lines:[],missingFee:false};
   const lines=allocation.lines;
-  const originals=await readCreateInvoiceReceipts(tx,{orderId:order.id});
+  const originals=shared?shared.originals:await readCreateInvoiceReceipts(tx,{orderId:order.id});
+  if(originals===undefined)throw Error('SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS');
   // Validate historical originals as well; a broken receipt is never silently
   // treated as absence of an issued invoice.
   const active=originals.map(row=>({row,receipt:mapInvoiceIssueReceipt(row,auth.tenantId,row.actor_id,readVat)})).filter(value=>value.row.current_status==='issued');
@@ -1263,7 +1297,7 @@ async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnaps
    }
   }
   return {code:'OK' as const,orderId:order.id,orderVersion:order.version,shippingCostMissing:allocation.missingFee,feeCents:settings.shippingFeeCents,lines,additionalInvoices,reissueWithoutShipping,...(datenluecken.length?{datenluecken}:{}),...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
- });}catch(error){
+ };return shared?await withTenantSavepoint(shared.tx,work):await withPrivilegedTenantTransaction(auth,work);}catch(error){
   const reason=error instanceof Error?error.message:'UnknownError';
   console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',reason);
   return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE'],...(identity.orderNumber?{message:SHIPPING_FEE_COPY.proposalMissing(identity.invoiceNumber??identity.orderNumber,identity.invoiceNumber!==undefined,reason==='SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING'?'freigabe':reason==='SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING'?'einstellungen':reason==='SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS'?'original':'quelle')}:{})};

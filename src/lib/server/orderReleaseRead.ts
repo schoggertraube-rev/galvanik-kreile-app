@@ -80,18 +80,16 @@ function informedOrderQuery(auth:AuthorizationSnapshot,orderId:string|SQL){retur
    FROM public.orders orders JOIN private.v_goods_out_ui_state_v1 state ON state.tenant_id=orders.tenant_id AND state.order_id=orders.id AND state.integrity_ok
    LEFT JOIN private.v_order_frozen_receipts_v1 freeze_state ON freeze_state.tenant_id=orders.tenant_id AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok
    WHERE orders.tenant_id=${auth.tenantId} AND orders.id=${orderId}`;}
-async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>){
+async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>,failures:Awaited<ReturnType<typeof readCommunicationDeliveryFailures>>,collectionState:Awaited<ReturnType<typeof import('./commands/recordGoodsOutCommand').readOrderCollectionStateInTransaction>>|undefined){
   if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   if(order.length!==1)return {code:'NOT_FOUND' as const};
-  const failures=await readCommunicationDeliveryFailures(tx,auth,rows.flatMap(row=>row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]));
   const failedThreads=new Set(failures.map(proof=>proof.threadId));
   const delivered=rows.filter(row=>row.payload.receipt.channel==='telefon'||!row.payload.receipt.threadId||!failedThreads.has(row.payload.receipt.threadId));
   const informed=delivered.at(-1)?.payload.receipt??null,firstInformed=delivered[0]?.payload.receipt??null;
   const latest=rows.at(-1)?.payload.receipt;
   const failedDelivery=latest?.threadId?failures.find(proof=>proof.threadId===latest.threadId)??null:null;
   const current=order[0];
-  const {readOrderCollectionStateInTransaction}=await import('./commands/recordGoodsOutCommand');
-  const collectionState=await readOrderCollectionStateInTransaction(tx,auth,{orderId,orderVersion:current.version,customerId:current.customer_id,freezeId:current.freeze_id,goodsOutEventId:current.goods_out_event_id});
+  if(collectionState===undefined)throw Error('COLLECTION_PLAN_SOURCE_MISSING');
   const invoiceMailOriginals=canTransportInvoiceDocument(auth)&&current.station==='fertig'?(await readCohort(current.customer_id,current.handover_mode)).map(row=>({id:row.id,orderId:row.order_id,version:row.aggregate_version})):undefined;
   let invoiceMailQueued=invoiceMailOriginals===undefined?undefined:false;
   if(invoiceMailOriginals?.length===101&&current.invoice_id!==null&&!invoiceMailOriginals.some(row=>row.id===current.invoice_id)){
@@ -112,11 +110,10 @@ async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const receipts=new Map<string,InformedSourceRow[]>(orderIds.map(id=>[id,[]]));
   const orders=new Map<string,InformedOrderRow[]>(orderIds.map(id=>[id,[]]));
-  const complaints=new Map<string,InformedComplaint>();
+  const complaints=await readOpenOrderComplaintsBatch(tx,auth.tenantId,orderIds);
   if(orderIds.length===1){
    const id=orderIds[0];receipts.set(id,await tx.execute<InformedSourceRow>(informedReceiptQuery(auth,id)));
    orders.set(id,await tx.execute<InformedOrderRow>(informedOrderQuery(auth,id)));
-   complaints.set(id,await readOpenOrderComplaint(tx,auth.tenantId,id));
   }else{
    const requested=sql.join(orderIds.map(id=>sql`(${id})`),sql`,`);
    // ARRAY preserves each canonical source's ORDER BY and per-object LIMIT.
@@ -126,20 +123,29 @@ async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string
    for(const {batch_order_id,records} of receiptRecords){if(!receipts.has(batch_order_id)||seenReceipts.has(batch_order_id)||!Array.isArray(records))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');seenReceipts.add(batch_order_id);receipts.set(batch_order_id,records);}
    if(seenReceipts.size!==orderIds.length)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
    for(const {batch_order_id,...source} of orderRecords){const rows=orders.get(batch_order_id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');rows.push(source);}
-   const complaintGroups=new Map<string,OpenComplaintRow[]>(orderIds.map(id=>[id,[]]));
-   const complaintRecords=await tx.execute<{batch_order_id:string;records:OpenComplaintRow[]}>(sql`SELECT requested.order_id AS batch_order_id,ARRAY(SELECT to_jsonb(source) FROM (${openComplaintQuery(auth.tenantId,sql`requested.order_id`)}) source) AS records FROM (VALUES ${requested}) requested(order_id)`);
-   const seenComplaints=new Set<string>();
-   for(const {batch_order_id,records} of complaintRecords){if(!complaintGroups.has(batch_order_id)||seenComplaints.has(batch_order_id)||!Array.isArray(records))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');seenComplaints.add(batch_order_id);complaintGroups.set(batch_order_id,records);}
-   if(seenComplaints.size!==orderIds.length)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
-   for(const id of orderIds){const rows=complaintGroups.get(id);if(!rows)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');complaints.set(id,qualifyOpenComplaint(rows));}
+
   }
   const cohorts=new Map<string,InformedCohort>();
   const readCohort=async(customerId:string,handover:'pickup'|'shipping'|null)=>{
    const key=JSON.stringify([customerId,handover]);const prior=cohorts.get(key);if(prior)return prior;
    const value=await readInformedCohort(tx,auth,customerId,handover);cohorts.set(key,value);return value;
   };
+  const threadIds=[...new Set([...receipts.values()].flatMap(rows=>rows.flatMap(row=>row.payload.receipt.threadId?[row.payload.receipt.threadId]:[])))];
+  const failures=await readCommunicationDeliveryFailures(tx,auth,threadIds);
+  const {readOrderCollectionStatesInTransaction}=await import('./commands/recordGoodsOutCommand');
+  const collectionInputs=orderIds.flatMap(orderId=>{
+   const source=orders.get(orderId);if(!source)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+   if(source.length!==1)return []; // same per-order NOT_FOUND result below
+   const current=source[0];return [{orderId,orderVersion:current.version,customerId:current.customer_id,freezeId:current.freeze_id,goodsOutEventId:current.goods_out_event_id}];
+  });
+  const collections=await readOrderCollectionStatesInTransaction(tx,auth,collectionInputs);
   const result=new Map<string,InformedRead>();
-  for(const id of orderIds){const rows=receipts.get(id),order=orders.get(id),complaint=complaints.get(id);if(!rows||!order||complaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');result.set(id,await qualifyOrderInformed(tx,auth,id,rows,order,complaint,readCohort));}
+  for(const id of orderIds){
+   const rows=receipts.get(id),order=orders.get(id),complaint=complaints.get(id);
+   if(!rows||!order||complaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+   const ownThreads=new Set(rows.flatMap(row=>row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]));
+   result.set(id,await qualifyOrderInformed(tx,auth,id,rows,order,complaint,readCohort,failures.filter(proof=>ownThreads.has(proof.threadId)),collections.get(id)));
+  }
   return result;
  });
 }
@@ -168,5 +174,21 @@ function openComplaintQuery(tenantId:string,orderId:string|SQL){return sql`
  `;}
 function qualifyOpenComplaint(rows:OpenComplaintRow[]){return rows[0]?{...rows[0],complaintIds:rows.map(row=>row.id)}:null;}
 export async function readOpenOrderComplaint(tx:PrivilegedTenantTransaction,tenantId:string,orderId:string){
- return qualifyOpenComplaint(await tx.execute<OpenComplaintRow>(openComplaintQuery(tenantId,orderId)));
+ const result=await readOpenOrderComplaintsBatch(tx,tenantId,[orderId]);
+ const complaint=result.get(orderId);
+ if(complaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+ return complaint;
+}
+/** The same canonical predicate/order and qualifier, once for the requested set. */
+export async function readOpenOrderComplaintsBatch(tx:PrivilegedTenantTransaction,tenantId:string,orderIds:readonly string[]):Promise<Map<string,ReturnType<typeof qualifyOpenComplaint>>>{
+ const ids=[...new Set(orderIds)],result=new Map<string,ReturnType<typeof qualifyOpenComplaint>>();
+ if(!ids.length)return result;
+ const records=await tx.execute<{batch_order_id:string;records:OpenComplaintRow[]}>(sql`SELECT requested.order_id AS batch_order_id,ARRAY(SELECT to_jsonb(source) FROM (${openComplaintQuery(tenantId,sql`requested.order_id`)}) source) AS records FROM unnest(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[]) requested(order_id)`);
+ const requested=new Set(ids);
+ for(const row of records){
+  if(!requested.has(row.batch_order_id)||result.has(row.batch_order_id)||!Array.isArray(row.records))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+  result.set(row.batch_order_id,qualifyOpenComplaint(row.records));
+ }
+ if(result.size!==ids.length)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
+ return result;
 }

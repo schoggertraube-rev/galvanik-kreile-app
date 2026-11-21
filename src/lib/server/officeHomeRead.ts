@@ -11,7 +11,7 @@ import {
   type OrdersHomeSource,
 } from "@/modules/orders/public";
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
-import {withPageReadBudget,configurePageReadBudget,withPageReadPhase} from '@/db/readBudget';
+import {withPageReadBudget,configurePageReadBudget,withPageReadPhase,withPageReadSourcesReady} from '@/db/readBudget';
 import {readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
@@ -41,12 +41,13 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot):
 
   try {
     let settingsIncomplete=false;
-    try{const source=await withPageReadPhase('home.settings',()=>readPageReadSettingsAction());if(source.code==='OK')configurePageReadBudget(source.settings.queryTimeoutMs);else settingsIncomplete=true;}
-    catch{settingsIncomplete=true;}
+    const settingsRead=withPageReadPhase('home.settings',()=>readPageReadSettingsAction()).then(source=>{if(source.code==='OK')configurePageReadBudget(source.settings.queryTimeoutMs);else settingsIncomplete=true;}).catch(()=>{settingsIncomplete=true;});
+    return await withPageReadSourcesReady(settingsRead,async()=>{
     // One request, one operational source; the Today composition consumes this
     // exact promise rather than issuing the same full-list query a second time.
     const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'}));
     const [orderSource, dashboard] = await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})), withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,new Date(),ordersRead))]);
+    await settingsRead;
     if(settingsIncomplete)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
     const common = {
       cacheLoginScope:await readCacheLoginScope(),
@@ -61,6 +62,7 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot):
     return orderSource.orders.length === 0
       ? { kind: "empty", ...common, projection }
       : { kind: "data", ...common, projection };
+    });
   } catch(error) {
     console.error('[OFFICE_HOME_READ_FAILED]',{name:error instanceof Error?error.name:'UnknownError',at:error instanceof Error?error.stack?.split('\n').slice(1,4):undefined});
     return { kind: "error", message: "Die aktuellen Auftragsdaten konnten nicht sicher geladen werden." };

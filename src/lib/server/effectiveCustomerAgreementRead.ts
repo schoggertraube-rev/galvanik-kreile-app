@@ -1,6 +1,6 @@
 import "server-only";
 
-import { sql } from "drizzle-orm";
+import { sql,type SQL } from "drizzle-orm";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type {
   CustomerAgreementRecord,
@@ -159,16 +159,22 @@ function mapAgreement(
  * The view is the one database truth for current typed payment agreements.
  * An order agreement has precedence over a customer agreement.
  */
-export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:CollectionAgreementReadInput):Promise<CollectionAgreementResolution>;
-export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:InvoiceAgreementReadInput):Promise<InvoiceAgreementResolution>;
-export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput):Promise<CustomerAgreementRecord|null>;
-export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput|CollectionAgreementReadInput|InvoiceAgreementReadInput):Promise<CustomerAgreementRecord|null|CollectionAgreementResolution|InvoiceAgreementResolution>{
-  const collectionScope=input.orderId===null;
-  if (!textId(input.tenantId) || !textId(input.customerId) || (collectionScope?(input.memberOrderIds.length===0||!input.memberOrderIds.every(textId)||new Set(input.memberOrderIds).size!==input.memberOrderIds.length):!textId(input.orderId))) {
-    throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_INPUT_INVALID");
-  }
-  const scopeIds=collectionScope?input.memberOrderIds:[input.orderId];
-  const base = sql`
+function qualifyEffectiveAgreementRows(rows:AgreementRow[],input:EffectiveCustomerAgreementReadInput):InvoiceAgreementResolution{
+  const agreements = rows.map((row) => mapAgreement(row, input));
+  const orderAgreements = agreements.filter((agreement) => agreement.orderId === input.orderId);
+  const customerAgreements = agreements.filter((agreement) => agreement.orderId === null);
+  if (
+    agreements.length !== rows.length
+    || orderAgreements.length > 1
+    || customerAgreements.length > 1
+    || agreements.length !== orderAgreements.length + customerAgreements.length
+  ) throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_AMBIGUOUS");
+  return {order:orderAgreements[0]??null,customer:customerAgreements[0]??null};
+}
+
+function effectiveAgreementQuery(input:{tenantId:string;customerId:string|SQL;orderId:string|SQL|null},scopeIds:readonly(string|SQL)[]):SQL{
+ const collectionScope=input.orderId===null;
+  return sql`
     SELECT id::text, tenant_id, customer_id, order_id, position, bezeichnung, wert, typ,
       ziel_tage, geld, hinweis, gueltig_bis, grund, version, created_at, created_by_name
     FROM private.v_customer_effective_agreement_v1
@@ -179,6 +185,18 @@ export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransact
       created_at DESC, id
     ${collectionScope?sql``:sql`LIMIT 3`}
   `;
+}
+
+export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:CollectionAgreementReadInput):Promise<CollectionAgreementResolution>;
+export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:InvoiceAgreementReadInput):Promise<InvoiceAgreementResolution>;
+export function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput):Promise<CustomerAgreementRecord|null>;
+export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransaction,input:EffectiveCustomerAgreementReadInput|CollectionAgreementReadInput|InvoiceAgreementReadInput):Promise<CustomerAgreementRecord|null|CollectionAgreementResolution|InvoiceAgreementResolution>{
+  const collectionScope=input.orderId===null;
+  if (!textId(input.tenantId) || !textId(input.customerId) || (collectionScope?(input.memberOrderIds.length===0||!input.memberOrderIds.every(textId)||new Set(input.memberOrderIds).size!==input.memberOrderIds.length):!textId(input.orderId))) {
+    throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_INPUT_INVALID");
+  }
+  const scopeIds=collectionScope?input.memberOrderIds:[input.orderId];
+  const base = effectiveAgreementQuery(input,scopeIds);
   // PostgreSQL cannot safely lock through the display view's optional creator
   // join. The locked form therefore reads the same current-row predicate from
   // its base table and locks exactly the agreement rows that can affect a
@@ -218,17 +236,30 @@ export async function readEffectiveCustomerAgreement(tx:PrivilegedTenantTransact
     });
     return {agreement:applicable.length===1?mapAgreement(applicable[0],input):null,ignored};
   }
-  const agreements = rows.map((row) => mapAgreement(row, input));
-  const orderAgreements = agreements.filter((agreement) => agreement.orderId === input.orderId);
-  const customerAgreements = agreements.filter((agreement) => agreement.orderId === null);
-  if (
-    agreements.length !== rows.length
-    || orderAgreements.length > 1
-    || customerAgreements.length > 1
-    || agreements.length !== orderAgreements.length + customerAgreements.length
-  ) throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_AMBIGUOUS");
-  if('invoiceTerms' in input&&input.invoiceTerms)return {order:orderAgreements[0]??null,customer:customerAgreements[0]??null};
-  return orderAgreements[0] ?? customerAgreements[0] ?? null;
+  const qualified=qualifyEffectiveAgreementRows(rows,input as EffectiveCustomerAgreementReadInput);
+  if('invoiceTerms'in input&&input.invoiceTerms)return qualified;
+  return qualified.order??qualified.customer;
+}
+
+/** Read-only set form of the same effective agreement source and precedence. */
+export async function readEffectiveCustomerAgreements(tx:PrivilegedTenantTransaction,tenantId:string,inputs:readonly{orderId:string;customerId:string}[]):Promise<Map<string,CustomerAgreementRecord|null>>{
+ const requested=new Map<string,{orderId:string;customerId:string}>(),result=new Map<string,CustomerAgreementRecord|null>();
+ for(const input of inputs){
+  if(!textId(tenantId)||!textId(input.orderId)||!textId(input.customerId)||requested.has(input.orderId)&&requested.get(input.orderId)!.customerId!==input.customerId)throw Error('CUSTOMER_AGREEMENT_EFFECTIVE_INPUT_INVALID');
+  requested.set(input.orderId,input);
+ }
+ if(!requested.size)return result;
+ const values=[...requested.values()];
+ const rows=await tx.execute<{order_id:string;records:AgreementRow[]}>(sql`SELECT requested.order_id,ARRAY(SELECT to_jsonb(source) FROM (${effectiveAgreementQuery({tenantId,customerId:sql`requested.customer_id`,orderId:sql`requested.order_id`},[sql`requested.order_id`])}) source) AS records
+  FROM unnest(ARRAY[${sql.join(values.map(input=>sql`${input.orderId}`),sql`, `)}]::text[],ARRAY[${sql.join(values.map(input=>sql`${input.customerId}`),sql`, `)}]::text[]) requested(order_id,customer_id)`);
+ for(const row of rows){
+  const input=requested.get(row.order_id);
+  if(!input||result.has(row.order_id)||!Array.isArray(row.records))throw Error('CUSTOMER_AGREEMENT_EFFECTIVE_ROW_INVALID');
+  const qualified=qualifyEffectiveAgreementRows(row.records,{tenantId,...input});
+  result.set(row.order_id,qualified.order??qualified.customer);
+ }
+ if(result.size!==requested.size)throw Error('CUSTOMER_AGREEMENT_EFFECTIVE_ROW_INVALID');
+ return result;
 }
 
 /**

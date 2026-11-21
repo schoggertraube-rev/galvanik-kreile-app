@@ -435,19 +435,31 @@ it('batches the actual shipping header once without changing zero, one, several,
  const inputs=[{orderId:intake.receipt.orderId,expectedVersion:intake.receipt.orderVersion},{orderId:ready.orderId,expectedVersion:ready.version},{orderId:secondReady.orderId,expectedVersion:secondReady.version}];
  const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_SHIPPING_BATCH_AUTH');
  const expected=await Promise.all(inputs.map(input=>readInvoiceShippingConsequences(auth.data,input,readInvoiceVat,readShippingSettingsInTransaction)));
- const options=db.$client.options,previous=options.debug;let headers=0,issueSources=0;
- options.debug=(_connection,statement)=>{if(statement.includes('AS invoice_exists')&&statement.includes('AS freeze_invalid'))headers++;if(statement.includes('FROM private.v_invoice_issue_source_v2 source'))issueSources++;};
+ const options=db.$client.options,previous=options.debug;let headers=0,issueSources=0,settingsReads=0,receiptQueries=0;
+ const countedSettings:typeof readShippingSettingsInTransaction=async(...args)=>{settingsReads++;return readShippingSettingsInTransaction(...args);};
+ options.debug=(_connection,statement)=>{if(statement.includes('AS invoice_exists')&&statement.includes('AS freeze_invalid'))headers++;if(statement.includes('FROM private.v_invoice_issue_source_v2 source'))issueSources++;if(statement.includes('FROM private.v_invoice_receipt_v1')&&statement.includes("event.payload->'shippingCosts'"))receiptQueries++;};
  try{
-  expect(await readInvoiceShippingConsequencesBatch(auth.data,[],readInvoiceVat,readShippingSettingsInTransaction)).toEqual(new Map());expect(headers).toBe(0);expect(issueSources).toBe(0);
-  const one=await readInvoiceShippingConsequencesBatch(auth.data,inputs.slice(0,1),readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(1);expect(one.get(inputs[0].orderId)).toEqual(expected[0]);expect(issueSources).toBe(0);
-  headers=0;const many=await readInvoiceShippingConsequencesBatch(auth.data,inputs,readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(1);expect(issueSources).toBe(1);
+  expect(await readInvoiceShippingConsequencesBatch(auth.data,[],readInvoiceVat,countedSettings)).toEqual(new Map());expect(headers).toBe(0);expect(issueSources).toBe(0);expect(settingsReads).toBe(0);expect(receiptQueries).toBe(0);
+  const one=await readInvoiceShippingConsequencesBatch(auth.data,inputs.slice(0,1),readInvoiceVat,countedSettings);expect(headers).toBe(1);expect(one.get(inputs[0].orderId)).toEqual(expected[0]);expect(issueSources).toBe(0);
+  headers=0;settingsReads=0;receiptQueries=0;const many=await readInvoiceShippingConsequencesBatch(auth.data,inputs,readInvoiceVat,countedSettings);expect(headers).toBe(1);expect(issueSources).toBe(1);expect(settingsReads).toBe(1);expect(receiptQueries).toBe(1);
   for(const [index,input] of inputs.entries())expect(many.get(input.orderId)).toEqual(expected[index]);
   expect(many.get(inputs[0].orderId)).toMatchObject({code:'NOT_APPLICABLE'});expect(many.get(ready.orderId)).toMatchObject({code:'OK'});
-  const stale=await readInvoiceShippingConsequencesBatch(auth.data,[inputs[0],{...inputs[1],expectedVersion:inputs[1].expectedVersion+1}],readInvoiceVat,readShippingSettingsInTransaction);
+  const stale=await readInvoiceShippingConsequencesBatch(auth.data,[inputs[0],{...inputs[1],expectedVersion:inputs[1].expectedVersion+1}],readInvoiceVat,countedSettings);
   expect(stale.get(inputs[0].orderId)).toEqual(expected[0]);expect(stale.get(ready.orderId)).toMatchObject({code:'SOURCE_INCOMPLETE'});
   const deniedActor=await createFixture(['auftraege'],'werkstatt'),denied=await withSession(deniedActor,()=>resolveAuthorization());if(!denied.ok)throw Error('TEST_SHIPPING_BATCH_DENIED_AUTH');
-  headers=0;const hidden=await readInvoiceShippingConsequencesBatch(denied.data,inputs,readInvoiceVat,readShippingSettingsInTransaction);expect(headers).toBe(0);expect([...hidden.values()]).toEqual(inputs.map(()=>undefined));
-  const retry=await readInvoiceShippingConsequencesBatch(auth.data,JSON.parse(JSON.stringify(inputs)),readInvoiceVat,readShippingSettingsInTransaction);expect(retry).toEqual(many);
+  headers=0;settingsReads=0;receiptQueries=0;const hidden=await readInvoiceShippingConsequencesBatch(denied.data,inputs,readInvoiceVat,countedSettings);expect(headers).toBe(0);expect(settingsReads).toBe(0);expect(receiptQueries).toBe(0);expect([...hidden.values()]).toEqual(inputs.map(()=>undefined));
+  const retry=await readInvoiceShippingConsequencesBatch(auth.data,JSON.parse(JSON.stringify(inputs)),readInvoiceVat,countedSettings);expect(retry).toEqual(many);
+  const sourceBefore=await sql`SELECT id,version,station FROM public.orders WHERE tenant_id=${tenant} AND id IN (${ready.orderId},${secondReady.orderId}) ORDER BY id`;
+  const fault:typeof readShippingSettingsInTransaction=async(tx,tenantId)=>{
+   const source=await readShippingSettingsInTransaction(tx,tenantId);
+   // Explicit synthetic native SQL fault after the real settings reader; no successful source is doubled.
+   await tx.execute(drizzleSql`SELECT 1 / 0 AS test_m7_settings_failure`);return source;
+  };
+  const partial=await readInvoiceShippingConsequencesBatch(auth.data,inputs,readInvoiceVat,fault);
+  expect(partial.get(inputs[0].orderId)).toEqual(expected[0]);
+  for(const order of [ready,secondReady])expect(partial.get(order.orderId)).toMatchObject({code:'SOURCE_INCOMPLETE'});
+  expect(await sql`SELECT id,version,station FROM public.orders WHERE tenant_id=${tenant} AND id IN (${ready.orderId},${secondReady.orderId}) ORDER BY id`).toEqual(sourceBefore);
+  expect(await readInvoiceShippingConsequencesBatch(auth.data,JSON.parse(JSON.stringify(inputs)),readInvoiceVat,readShippingSettingsInTransaction)).toEqual(many);
  }finally{options.debug=previous;}
 });
 
