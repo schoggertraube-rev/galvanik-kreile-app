@@ -80,6 +80,26 @@ it('Ladezeit M9 retains stable invoker-only native plan-cache functions without 
  expect(rows).toHaveLength(names.length);
  for(const row of rows){expect(names).toContain(row.proname);expect(row).toMatchObject({provolatile:'s',prosecdef:false,anon:false,authenticated:false,service_role:false});expect(row.proconfig).toContain('plan_cache_mode=force_generic_plan');expect(row.proconfig).toContain('search_path=public, private');}
 });
+it('254 K2 keeps all five native plan-cache sources inside the supplied tenant with a real own-tenant counterprobe',async()=>{
+ const a=await readyOrderForInvoice('TEST M9 Mandant','shipping');
+ const foreign='TEST-fremder-mandant';
+ await sql.begin(async tx=>{
+ // Same transaction-local tenant context as the actual source reader. The
+ // foreign function argument must still reject this existing own-tenant ID.
+ await tx`SELECT set_config('app.tenant_id',${tenant},true)`;
+ expect(await tx`SELECT * FROM private.read_today_card_snapshot_v1(${foreign},ARRAY[${a.orderId}]::text[])`).toHaveLength(0);
+ expect(await tx`SELECT * FROM private.read_invoice_shipping_headers_v1(${foreign},ARRAY[${a.orderId}]::text[])`).toHaveLength(0);
+ expect(await tx`SELECT * FROM private.read_order_informed_orders_v1(${foreign},ARRAY[${a.orderId}]::text[])`).toHaveLength(0);
+ const receipts=await tx`SELECT * FROM private.read_order_informed_receipts_v1(${foreign},ARRAY[${a.orderId}]::text[])`;
+ expect(receipts).toHaveLength(1);expect(receipts[0].records).toEqual([]);
+ const payment=await tx`SELECT * FROM private.read_order_payment_states_v1(${foreign},ARRAY[${a.orderId}]::text[])`;
+ expect(payment).toHaveLength(1);expect(payment[0].order_id).toBeNull();
+ expect((await tx`SELECT * FROM private.read_today_card_snapshot_v1(${tenant},ARRAY[${a.orderId}]::text[])`).length).toBeGreaterThan(0);
+ expect((await tx`SELECT * FROM private.read_invoice_shipping_headers_v1(${tenant},ARRAY[${a.orderId}]::text[])`).length).toBeGreaterThan(0);
+ const own=await tx`SELECT * FROM private.read_order_payment_states_v1(${tenant},ARRAY[${a.orderId}]::text[])`;
+ expect(own).toHaveLength(1);expect(own[0].order_id).toBe(a.orderId);
+ });
+});
 it('250 manual shipping retains real zero/one/many sources, shared reads, rights, versions and fresh tracking retry',async()=>{
  const a=await readyOrderForInvoice('TEST 250 shipping A','shipping');
  const b=await readyOrderForInvoice('TEST 250 shipping B','shipping',a.customerId);
