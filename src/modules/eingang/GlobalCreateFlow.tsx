@@ -62,6 +62,7 @@ import { recognizeNoteConcerns } from "./captureContract";
 import { findRecognizedCustomers } from "./customerRecognition";
 import { ORDER_POSITION_UNITS, ORDER_POSITION_SURFACES, normaliseOrderPositionUnit, normaliseOrderPositionSurface, orderPositionQuantityError, orderPositionPriceError, FREE_TEXT_VAT_RATE_BASIS_POINTS } from "@/lib/orderPositionContract";
 import { GLOBAL_CREATE_OPEN_EVENT, type GlobalCreateIntent, type GlobalCreateRequest } from "./requestGlobalCreate";
+import {isCreateShortcut} from '@/lib/client/deferredDialogEvents';
 import {INTAKE_MAIL_ADOPT_EVENT} from './mailSelectionContract';
 import {INTAKE_CHANGED_EVENT} from './messageContract';
 import type { IntakeDeviceCommand, IntakeDeviceResult } from "./deviceContract";
@@ -1405,9 +1406,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (isTyping) return;
       const key = event.key.toLowerCase();
       if (!open && key === "n") {
-        const visibleDialogOpen = [...document.querySelectorAll<HTMLElement>("[role='dialog']:not(.kr-dialog--karte)")]
-          .some((dialog) => dialog.getClientRects().length > 0 && dialog.getAttribute("aria-hidden") !== "true");
-        if (!ports.canCreateOrder || visibleDialogOpen) return;
+        if (!ports.canCreateOrder || !isCreateShortcut(event)) return;
         event.preventDefault();
         openWithIntent("DIRECT_INTAKE");
         return;

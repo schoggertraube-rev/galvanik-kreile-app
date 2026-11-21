@@ -11,6 +11,8 @@ const ports = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
+// Direct component probe: Next schedules this callback after its real HTTP response.
+vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
   hasAuthorizationArea: (authorization: { areas?: readonly string[] }, area: string) =>

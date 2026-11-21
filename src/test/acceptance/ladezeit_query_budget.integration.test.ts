@@ -1,21 +1,48 @@
 // @vitest-environment node
 // Native Loopback PostgreSQL; read-only TEST probes, no source/provider doubles.
-import {afterAll,expect,it} from 'vitest';
+import {afterAll,expect,it,vi} from 'vitest';
 import postgres from 'postgres';
 import {createServer} from 'node:http';
-import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort} from '@/db/readBudget';
+import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort,observeNativePageReadQuery,pageReadQueryObservation,withPageReadPhase,logPageReadQueryObservation} from '@/db/readBudget';
 
 const url=process.env.DATABASE_URL;
 const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
 if(!url||url!==process.env.H18_EXPECTED_DATABASE_URL||new URL(url).hostname!=='127.0.0.1'||new URL(url).port!==testPort)throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 const configured:number[]=[];
 let inspectRollback:((text:string)=>void)|undefined;
+let inspectWire:((text:string)=>void)|undefined;
 const native=postgres(url,{prepare:false,max:1,debug:(_connection,text,parameters)=>{
+ observeNativePageReadQuery(_connection,text);inspectWire?.(text);
  if(text.includes("set_config('statement_timeout'"))configured.push(Number(parameters[0]));
  inspectRollback?.(text);
 }});
 const client=withPageReadQueryLimits(native);
 afterAll(()=>native.end({timeout:5}));
+
+it('counts executed native SQL including SET and queued BEGIN without mixing two request scopes',async()=>{
+ await native`SELECT 1`;const wire:string[]=[];inspectWire=text=>wire.push(text);
+ const observed:Array<ReturnType<typeof pageReadQueryObservation>>=[];
+ try{
+  await Promise.all(['today.orders','today.tasks'].map((phase,index)=>withPageReadBudget(()=>withPageReadPhase(phase,async()=>{
+   const observation=pageReadQueryObservation();observed[index]=observation;
+   await client.begin(async tx=>{
+    if(index===0)await tx.savepoint(nested=>nested`SELECT 31`);
+    else await tx`SELECT 32`;
+   });
+  }),2000)));
+  expect(observed[0]).not.toBe(observed[1]);expect(observed[0].total).toBe(5);expect(observed[1].total).toBe(4);
+  expect(observed.map(value=>value.total).reduce((sum,value)=>sum+value,0)).toBe(wire.length);
+  expect(wire.filter(text=>text.includes("set_config('statement_timeout'")).length).toBe(2);
+  expect(observed[0].phases).toEqual({'today.orders':5});expect(observed[1].phases).toEqual({'today.tasks':4});
+  const output=vi.spyOn(console,'info').mockImplementation(()=>{});
+  try{
+   logPageReadQueryObservation(observed[0]);expect(output).toHaveBeenCalledOnce();
+   const [marker,serialized]=output.mock.calls[0];expect(marker).toBe('[PAGE_READ_SQL]');
+   expect(typeof serialized).toBe('string');expect(JSON.parse(String(serialized))).toEqual({route:'/',total:5,rights:0,page_settings:0,shipping_settings:0,phases:{'today.orders':5}});
+   expect(String(serialized)).not.toContain('SELECT');
+  }finally{output.mockRestore();}
+ }finally{inspectWire=undefined;}
+});
 
 it('sets one native timeout for four fast statements and refreshes it only after 250ms',async()=>{
  await client`SELECT 1`;configured.length=0;
@@ -28,6 +55,27 @@ it('sets one native timeout for four fast statements and refreshes it only after
   expect(await tx`SELECT 6 AS n`).toMatchObject([{n:6}]);
   expect(configured).toHaveLength(2);expect(configured[1]).toBeLessThan(configured[0]);
  }),2000);
+});
+
+it('counts the canonical rights row in its existing authorization scope without conflating a roster read',async()=>{
+ await native`SELECT 1`;
+ await withPageReadBudget(async()=>{
+  const observation=pageReadQueryObservation();
+  const read=()=>client.begin(tx=>tx`SELECT app_user.id,(SELECT count(*) FROM public.app_user_rights rights WHERE rights.user_id=app_user.id) AS rights FROM public.app_users app_user WHERE false`);
+  await withAuthorizationReadBudget(read);
+  expect(observation.rights).toBe(1);
+  await read();expect(observation.rights).toBe(1);expect(observation.total).toBe(8);
+ },2000);
+});
+
+it('attributes lazy and async native source queries to their real caller station',async()=>{
+ await native`SELECT 1`;
+ await withPageReadBudget(async()=>{
+  const observation=pageReadQueryObservation();
+  await withPageReadPhase('today.responsibility',()=>withPageReadPhase('today.source',()=>client`SELECT 42`));
+  await withPageReadPhase('today.responsibility',()=>withPageReadPhase('today.source',async()=>await client`SELECT 43`));
+  expect(observation.total).toBe(2);expect(observation.phases).toEqual({'today.responsibility':2});
+ },1000);
 });
 
 it('still cancels a real slow query at its page deadline and returns the native connection intact',async()=>{

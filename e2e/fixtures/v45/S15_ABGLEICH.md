@@ -181,7 +181,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 - `SURFACE_ASSIGNMENT_COPY.title`: "…" → `work.sign_missing`
 
-## Nur im Bestand (797)
+## Nur im Bestand (800)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -972,6 +972,9 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PENDING_UNDO_COPY.unconfirmed`: "Rückgängig wurde nicht bestätigt. Lade den aktuellen Stand."
 - `SURFACE_ASSIGNMENT_COPY.open`: "Oberfläche zuordnen"
 - `SURFACE_ASSIGNMENT_COPY.title`: "Oberfläche „"
+- `DIALOG_LOAD_COPY.unavailable`: "Der Dialog hat sich nicht geladen – lade die Seite neu."
+- `DIALOG_LOAD_COPY.mailUnavailable`: "Die Mailansicht hat sich nicht geladen – lade die Seite neu."
+- `DIALOG_LOAD_COPY.reload`: "Neu laden"
 - `PAGE_READ_COPY.loading`: "Deine Arbeitsfläche wird geladen."
 - `PAGE_READ_COPY.sourceIncomplete`: "Diese Quelle ist gerade nicht erreichbar · Erneut laden."
 - `PAGE_READ_COPY.partial`: "Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar."

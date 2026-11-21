@@ -15,6 +15,7 @@ afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();ports.sync.m
 it('flag OFF preserves fetch, online badge, manual sync and pagehide flush after a real 503 response',async()=>{
  const fetcher=vi.fn(async()=>new Response(null,{status:503}));vi.stubGlobal('fetch',fetcher);
  const view=render(<SyncProvider><State/></SyncProvider>);
+ fireEvent(window,new Event('pagehide'));
  await waitFor(()=>expect(ports.sync).toHaveBeenCalled());
  expect(window.fetch).toBe(fetcher);
  await act(async()=>{expect((await window.fetch('/TEST-503')).status).toBe(503);});
@@ -29,4 +30,21 @@ it('flag OFF preserves fetch, online badge, manual sync and pagehide flush after
  await waitFor(()=>expect(screen.getByTestId('online').textContent).toBe('offline'));
  state.offline24h=false;view.rerender(<SyncProvider><State/></SyncProvider>);
  await waitFor(()=>expect(screen.getByTestId('online').textContent).toBe('online'));expect(window.fetch).toBe(fetcher);
+});
+it('defers only mount sync until idle plus ten seconds and cancels a stale scope on unmount',async()=>{
+ vi.useFakeTimers();let idle:IdleRequestCallback|undefined;
+ const cancel=vi.fn();vi.stubGlobal('requestIdleCallback',vi.fn((callback:IdleRequestCallback)=>{idle=callback;return 1;}));vi.stubGlobal('cancelIdleCallback',cancel);
+ try{
+  const view=render(<SyncProvider><State/></SyncProvider>);
+  expect(ports.sync).not.toHaveBeenCalled();
+  await act(async()=>{idle?.({didTimeout:false,timeRemaining:()=>50});await vi.advanceTimersByTimeAsync(9999);});
+  expect(ports.sync).not.toHaveBeenCalled();
+  fireEvent(window,new Event('pagehide'));expect(ports.sync).toHaveBeenCalledOnce();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(1);});expect(ports.sync).toHaveBeenCalledTimes(2);
+  expect(ports.sync.mock.calls[1][2]).toMatchObject({flushDelayed:true,keepalive:false});
+  view.unmount();ports.sync.mockClear();
+  const next=render(<SyncProvider><State/></SyncProvider>);
+  await act(async()=>{idle?.({didTimeout:false,timeRemaining:()=>50});});next.unmount();
+  await act(async()=>{await vi.advanceTimersByTimeAsync(10000);});expect(ports.sync).not.toHaveBeenCalled();expect(cancel).toHaveBeenCalled();
+ }finally{vi.useRealTimers();}
 });

@@ -312,13 +312,17 @@ export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise
    const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
    return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
   }:undefined;
-  const shippingReads=withPageReadPhase('action.shipping',()=>readInvoiceShippingConsequencesBatch(auth,input.orderIds.flatMap(orderId=>{const card=cards.get(orderId),proof=evidence.get(orderId);return card?.code==='OK'&&proof?.code==='OK'?[{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId}]:[];}),readInvoiceVat,fundament.readShippingSettingsInTransaction));
+  // One qualified settings snapshot for both read branches in this Action only;
+  // writers and later requests still use the fresh canonical reader.
+  let shippingSettings:ReturnType<typeof fundament.readShippingSettingsInTransaction>|undefined;
+  const readShippingSettings:typeof fundament.readShippingSettingsInTransaction=(tx,tenantId)=>shippingSettings??=fundament.readShippingSettingsInTransaction(tx,tenantId);
+  const shippingReads=withPageReadPhase('action.shipping',()=>readInvoiceShippingConsequencesBatch(auth,input.orderIds.flatMap(orderId=>{const card=cards.get(orderId),proof=evidence.get(orderId);return card?.code==='OK'&&proof?.code==='OK'?[{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId}]:[];}),readInvoiceVat,readShippingSettings));
   const qualifiedCards=input.orderIds.flatMap(orderId=>{const source=cards.get(orderId),proof=evidence.get(orderId);return source?.code==='OK'&&proof?.code==='OK'?[source.data]:[];});
   const finishedIds=qualifiedCards.filter(card=>card.station==='fertig').map(card=>card.id);
   const shipmentIds=qualifiedCards.filter(card=>card.handoverMode==='shipping').map(card=>card.id);
   const informedReads=withPageReadPhase('action.informed',()=>readOrdersInformed(auth,finishedIds));
   const paymentReads=withPageReadPhase('action.payment',()=>getPaymentStatesBatch(auth,finishedIds,readCredit));
-  const shipmentReads=shipmentIds.length?withPageReadPhase('action.shipment',async()=>orders.readManualShippingBatch(auth,shipmentIds,await manualShippingPorts())):Promise.resolve(new Map<string,Awaited<ReturnType<typeof orders.readManualShipping>>>());
+  const shipmentReads=shipmentIds.length?withPageReadPhase('action.shipment',async()=>orders.readManualShippingBatch(auth,shipmentIds,{...await manualShippingPorts(),readSettings:readShippingSettings})):Promise.resolve(new Map<string,Awaited<ReturnType<typeof orders.readManualShipping>>>());
   const rows=await Promise.all(input.orderIds.map(async orderId=>{
    const source=cards.get(orderId),proof=evidence.get(orderId);
    if(!source||source.code!=='OK')return {orderId,result:source??{code:'UNAVAILABLE' as const,message:'Auftrag nicht verfügbar.'}};
