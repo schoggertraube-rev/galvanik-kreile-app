@@ -1,5 +1,6 @@
 "use client";
 import {reportProtocolClientError} from '@/modules/logging/public';
+import {scheduleIdleRead} from '@/lib/client/scheduleIdleRead';
 
 import {refreshDeviceStand} from './collectDeviceStand';
 import {readDeviceStandResponse} from './devicePortRead';
@@ -149,8 +150,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('kreile-offline-shell-ready',shellReady);
     refresh();window.addEventListener('kreile-pending-changed',changed);
     window.addEventListener('pagehide',leave);document.addEventListener('visibilitychange',hidden);
-    if(scope&&isOnline)run(true);
-    return ()=>{disposed=true;++timerGeneration;if(timer)clearTimeout(timer);window.removeEventListener('kreile-pending-changed',changed);window.removeEventListener('pagehide',leave);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('kreile-device-stand-changed',refreshStand);window.removeEventListener('kreile-offline-shell-ready',shellReady);if(activeScope===scope)activeScope=null;};
+    const cancelInitialSync=scope&&isOnline?scheduleIdleRead(()=>run(true),2000,10000):()=>{};
+    return ()=>{disposed=true;cancelInitialSync();++timerGeneration;if(timer)clearTimeout(timer);window.removeEventListener('kreile-pending-changed',changed);window.removeEventListener('pagehide',leave);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('kreile-device-stand-changed',refreshStand);window.removeEventListener('kreile-offline-shell-ready',shellReady);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline,offline24h]);
 
   const syncNow = useCallback(async () => {

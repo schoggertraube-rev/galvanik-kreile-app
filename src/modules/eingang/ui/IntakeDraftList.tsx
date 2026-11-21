@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Hinweis, Kachel } from "@/ui/kr";
 import { requestGlobalCreate } from "../requestGlobalCreate";
 import type { IntakeDraft, IntakeDraftPorts } from "../draftContract";
+import {scheduleIdleRead} from '@/lib/client/scheduleIdleRead';
 
 /** X12 reads the existing server store; this list owns no second draft state. */
 export function IntakeDraftList({ readDrafts, discardDraft }: Pick<IntakeDraftPorts, "readDrafts" | "discardDraft">) {
@@ -25,11 +26,11 @@ export function IntakeDraftList({ readDrafts, discardDraft }: Pick<IntakeDraftPo
     }
   }, [readDrafts]);
   useEffect(() => {
-    const initialRead = window.setTimeout(() => void reload(), 0);
+    const cancelInitialRead = scheduleIdleRead(() => void reload(), 2000);
     const changed = () => void reload();
     window.addEventListener("kreile:intake-drafts-changed", changed);
     window.addEventListener("focus", changed);
-    return () => { window.clearTimeout(initialRead); sequence.current += 1; window.removeEventListener("kreile:intake-drafts-changed", changed); window.removeEventListener("focus", changed); };
+    return () => { cancelInitialRead(); sequence.current += 1; window.removeEventListener("kreile:intake-drafts-changed", changed); window.removeEventListener("focus", changed); };
   }, [reload]);
   const remove = async (draft: IntakeDraft) => {
     if (deletion.current) return;
