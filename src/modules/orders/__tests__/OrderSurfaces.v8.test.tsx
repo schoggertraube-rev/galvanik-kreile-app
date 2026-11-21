@@ -65,6 +65,7 @@ describe("Orders V1.1 one-surface truth", () => {
     const ports={...actions,content:{visible:true,enabled:true,reason:null},onSaveContent:vi.fn()};
     const view=render(<OrderCardView initialSurfaceAssignmentOpen state={{kind:'data',card:source}} actions={ports} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
     expect(screen.getByLabelText('Oberfläche')).toHaveValue('');
+    expect(screen.queryByRole('option',{name:raw})).not.toBeInTheDocument();
     view.rerender(<OrderCardView initialSurfaceAssignmentOpen state={{kind:'data',card:source}} actions={{...ports,content:{visible:true,enabled:false,reason:'TEST kein Auftragsrecht'}}} onClose={vi.fn()} onOpenCustomer={vi.fn()}/>);
     expect(screen.queryByLabelText('Oberfläche')).not.toBeInTheDocument();
     expect(ports.onSaveContent).not.toHaveBeenCalled();

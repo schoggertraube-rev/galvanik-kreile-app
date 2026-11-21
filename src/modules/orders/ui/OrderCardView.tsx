@@ -537,7 +537,7 @@ function OrderItemDialog({ card, itemId, onClose, onSave }: { card: Extract<Orde
   const [surface, setSurface] = useState(existing?.surfaceAssignmentRequired
     ? suggestion?orderPositionSurfaceLabel(suggestion):"" :existing?.surface??"");
   const service = card.catalog?.find((entry) => entry.id === serviceId);
-  const surfaces = [...new Set([...SURFACE_OPTIONS, ...(existing?.surface ? [existing.surface] : []), ...(card.catalog ?? []).map((entry) => entry.surface)])];
+  const surfaces = [...new Set([...SURFACE_OPTIONS, ...(existing?.surface&&!existing.surfaceAssignmentRequired ? [existing.surface] : []), ...(card.catalog ?? []).map((entry) => entry.surface)])];
   const selectName = (value: string) => {
     const matches = (card.catalog ?? []).filter((entry) => entry.name.localeCompare(value.trim(), "de-DE", { sensitivity: "base" }) === 0);
     const selected = matches.length === 1 ? matches[0] : null;
