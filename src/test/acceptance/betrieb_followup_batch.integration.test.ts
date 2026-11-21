@@ -3,12 +3,14 @@ import {expect,it,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {sql as query} from 'drizzle-orm';
 import {full,sql,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyOrderForInvoice,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
+import {readyOrderForInvoice,readyInvoiceOrder,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
-import {readInvoiceVat} from '@/modules/accounting/server-public';
+import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
+import {getPaymentStatesBatch} from '@/lib/server/paymentSummaryRead';
+import {getOrderPaymentStateAction,confirmPaymentAction} from '@/app/actions/payments.actions';
 import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
 import {getManualShippingAction,saveManualTrackingAction} from '@/app/actions/orders.actions';
 
@@ -89,4 +91,53 @@ it('250 a real SQL failure rolls back before isolating the bad shipping group an
  const repaired=await readManualShippingBatch(actor,JSON.parse(JSON.stringify([a.orderId,b.orderId])),ports);
  expect(repaired.get(a.orderId)).toEqual(expected);expect(repaired.get(b.orderId)).toMatchObject({code:'OK'});
  expect((await readManualShippingBatch(actor,['TEST-missing-order'],ports)).get('TEST-missing-order')).toMatchObject({code:'NOT_FOUND'});
+});
+
+const readCredit:NonNullable<Parameters<typeof getPaymentStatesBatch>[2]>=(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
+it('250 payment batch preserves real zero/one/many originals and money rights, then rereads the actual one-cent payment and original retry',async()=>{
+ const a=await readyInvoiceOrder('TEST 250 payment A');
+ const b=await readyInvoiceOrder('TEST 250 payment B','pickup',false,a.customerId);
+ const actor=await authorization(),ids=[a.orderId,b.orderId];
+ const originals=()=>sql`SELECT id,order_id,event_type,payload FROM public.events WHERE tenant_id=${tenant} AND order_id IN (${a.orderId},${b.orderId}) AND event_type IN ('INVOICE_CREATED_V1','INVOICE_CREATED_V2','INVOICE_CREATED_V3') ORDER BY id`;
+ const original=await originals();expect(original).toHaveLength(2);
+ const singles=await Promise.all(ids.map(orderId=>withSession(full,()=>getOrderPaymentStateAction({orderId}))));
+ expect(singles.every(row=>row.code==='OK')).toBe(true);
+ expect(await getPaymentStatesBatch(actor,[],readCredit)).toEqual(new Map());
+ const batch=await getPaymentStatesBatch(actor,[...ids,a.orderId],readCredit);
+ expect(batch.size).toBe(2);expect(batch.get(a.orderId)).toEqual(singles[0]);expect(batch.get(b.orderId)).toEqual(singles[1]);
+ const first=batch.get(a.orderId);if(first?.code!=='OK'||!first.data.payment)throw Error('TEST_REAL_INVOICE_PAYMENT_REQUIRED');
+ expect(first.data.payment).toMatchObject({invoiceId:a.invoice.invoiceId,totalAmountCents:a.invoice.grossAmountCents,openAmountCents:a.invoice.grossAmountCents,currency:'EUR'});
+ const input={invoiceId:a.invoice.invoiceId,amount:1,method:'bar' as const,expectedVersion:first.data.payment.paymentVersion,expectedOpenAmountCents:first.data.payment.openAmountCents,clientEventId:randomUUID()};
+ const paid=await withSession(full,()=>confirmPaymentAction(input));expect(paid,JSON.stringify(paid)).toMatchObject({code:'OK'});
+ const replayed=await withSession(full,()=>confirmPaymentAction(JSON.parse(JSON.stringify(input))));expect(replayed).toMatchObject({code:'OK',replayed:true});
+ if(paid.code!=='OK'||replayed.code!=='OK')throw Error('TEST_REAL_PAYMENT_RECEIPT_REQUIRED');expect(replayed.receipt).toEqual(paid.receipt);
+ const fresh=await getPaymentStatesBatch(actor,JSON.parse(JSON.stringify(ids)),readCredit);
+ expect(fresh.get(a.orderId)).toMatchObject({code:'OK',data:{payment:{invoiceId:a.invoice.invoiceId,paidAmountCents:1,openAmountCents:a.invoice.grossAmountCents-1,paymentVersion:first.data.payment.paymentVersion+1}}});
+ expect(fresh.get(b.orderId)).toEqual(batch.get(b.orderId));expect(await originals()).toEqual(original);
+ const receipts=await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId}::uuid AND event_type='PAYMENT_CONFIRMED_V1'`;
+ expect(receipts).toHaveLength(1);expect(receipts[0].user_id).toBe(actor.userId);
+ const denied=await authorization(await createFixture(['kunden']));let creditReads=0;
+ const hidden=await getPaymentStatesBatch(denied,ids,async(...args)=>{creditReads++;return readCredit(...args);});
+ expect([...hidden.values()].map(row=>row.code)).toEqual(['FORBIDDEN','FORBIDDEN']);expect(creditReads).toBe(0);
+ expect(await getPaymentStatesBatch(actor,[b.orderId],readCredit)).toEqual(new Map([[b.orderId,fresh.get(b.orderId)]]));
+});
+
+it('250 payment credit SQL failure uses the original savepoint and keeps actual invoice money and the following customer source',async()=>{
+ const a=await readyInvoiceOrder('TEST 250 payment good credit');
+ const b=await readyInvoiceOrder('TEST 250 payment unavailable credit');
+ const actor=await authorization();
+ const good=await withSession(full,()=>getOrderPaymentStateAction({orderId:a.orderId}));
+ const badBaseline=await withSession(full,()=>getOrderPaymentStateAction({orderId:b.orderId}));
+ if(badBaseline.code!=='OK')throw Error('TEST_REAL_PAYMENT_SOURCE_REQUIRED');
+ const fault:typeof readCredit=async(tx,tenantId,customerId)=>{
+  const original=await readCredit(tx,tenantId,customerId);
+  if(customerId===b.customerId)await tx.execute(query`SELECT 1 / 0 AS test_credit_source_failure`);
+  return original;
+ };
+ const partial=await getPaymentStatesBatch(actor,[b.orderId,a.orderId],fault);
+ expect(partial.get(a.orderId)).toEqual(good);
+ expect(partial.get(b.orderId)).toMatchObject({code:'OK',data:{payment:badBaseline.data.payment,creditApplication:{code:'SOURCE_INCOMPLETE'}}});
+ const recovered=await getPaymentStatesBatch(actor,JSON.parse(JSON.stringify([b.orderId,a.orderId])),readCredit);
+ expect(recovered.get(a.orderId)).toEqual(good);expect(recovered.get(b.orderId)).toEqual(badBaseline);
+ expect((await getPaymentStatesBatch(actor,['TEST-no-payment'],readCredit)).get('TEST-no-payment')).toMatchObject({code:'NOT_FOUND'});
 });
