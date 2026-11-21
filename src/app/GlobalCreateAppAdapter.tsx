@@ -1,10 +1,10 @@
 "use client";
 
 import {hasQuoteFinancials} from '@/modules/eingang/public';
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,clarifyIncomingInvoiceAction,searchInvoiceSuppliersAction} from '@/app/actions/eingang.actions';
-import {IncomingInvoiceDialogs,type InvoicePorts} from '@/modules/eingang/public';
+import {type InvoicePorts} from '@/modules/eingang/public';
 import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import {saveIntakeTaskAction,completeIntakeTaskAction,getIntakeTaskAction,createCustomerForIntakeAction,getIntakeAssignmentAction,assignIntakeCustomerAction,setIntakeNoBusinessAction} from '@/app/actions/eingang.actions';
 import type {TaskPorts,AssignmentPorts} from '@/modules/eingang/public';
@@ -16,11 +16,11 @@ import { readOnsiteQuoteProgressAction, receiveOnsiteQuoteAction, prepareQuoteFr
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getIntakeCatalogAction } from "@/app/actions/catalog.actions";
 import {getComplaintOrderChoicesAction} from '@/app/actions/complaints.actions';
-import {CommunicationPanel} from "@/components/communication/CommunicationPanel";
+
 import {getOpenIntakeMailsAction,saveIntakeProspectAction} from "@/app/actions/eingang.actions";
 import { getOrderRegisterDb, getLiveOrderCardAction } from "@/app/actions/orders.actions";
 import {
-  GlobalCreateFlow,requestGlobalCreate,IntakeMessageDialogs,type MailSelectionPorts,IntakeObjectDialogs,type IntakeObjectPorts,
+  requestGlobalCreate,type MailSelectionPorts,type IntakeObjectPorts,
   type GlobalCreateConversionResult,
   type GlobalCreateCustomerResult,
   type GlobalCreateCustomerChoice,
@@ -38,10 +38,26 @@ import {
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { canCompleteTaskArea, isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
-import {ComplaintDialogs,type ComplaintPorts} from '@/modules/eingang/public';
+import {type ComplaintPorts} from '@/modules/eingang/public';
 import {getComplaintDialogAction,reklamationAusfuehrenAction,nacharbeitAnlegenAction,sendeReklamationErgebnisAction,sendeNacharbeitBegleitscheinAction} from '@/app/actions/complaints.actions';
 import {uploadDomainAttachment} from '@/components/attachments/DomainAttachmentPanel';
 import {getDomainAttachmentOriginalAction,getDomainAttachmentsAction} from '@/app/actions/domainAttachments.actions';
+
+import dynamic from 'next/dynamic';
+import {scheduleIdleRead} from '@/lib/client/scheduleIdleRead';
+import {createDeferredDialogEvents,withDeferredDialogReady,type DeferredDialogGroup} from '@/lib/client/deferredDialogEvents';
+const loadCreate=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.GlobalCreateFlow,'create'));
+const loadMessage=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.IntakeMessageDialogs,'message'));
+const loadObject=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.IntakeObjectDialogs,'object'));
+const loadInvoice=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.IncomingInvoiceDialogs,'invoice'));
+const loadComplaint=()=>import('@/modules/eingang/public').then(module=>withDeferredDialogReady(module.ComplaintDialogs,'complaint'));
+const loadCommunication=()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel);
+const GlobalCreateFlow=dynamic(loadCreate,{ssr:false,loading:()=>null});
+const IntakeMessageDialogs=dynamic(loadMessage,{ssr:false,loading:()=>null});
+const IntakeObjectDialogs=dynamic(loadObject,{ssr:false,loading:()=>null});
+const IncomingInvoiceDialogs=dynamic(loadInvoice,{ssr:false,loading:()=>null});
+const ComplaintDialogs=dynamic(loadComplaint,{ssr:false,loading:()=>null});
+const CommunicationPanel=dynamic(loadCommunication,{ssr:false,loading:()=>null});
 
 type ChoiceSource={contactPerson?:string|null;id:string;customerNumber?:string|null;name:string;customerType:string;companyName?:string|null;salutation?:"frau"|"herr"|"ohne"|null;firstName?:string|null;lastName?:string|null;contactRole?:string|null;email?:string|null;phone?:string|null;street?:string|null;houseNumber?:string|null;zipCode?:string|null;city?:string|null;country?:string|null;paymentPreference?:string|null;vatId?:string|null;handoverPreference?:"pickup"|"shipping"|null;autoInfo?:boolean;vorrang?:boolean;invoiceTermsEnabled?:boolean;invoiceTermDays?:number|null;duplicateMatch?:{kind:"exact"|"possible";by:string}|null};
 function customerChoice(source:ChoiceSource):GlobalCreateCustomerChoice {
@@ -70,6 +86,21 @@ export function GlobalCreateAppAdapter() {
     return null;
   });
   const { canAction, hasArea, name, role, areas,offlineScope } = usePermissions();
+  const [dialogsRequested,setDialogsRequested]=useState(false);
+  const deferredDialogs=useMemo(()=>createDeferredDialogEvents(()=>setDialogsRequested(true)),[offlineScope,role]);
+  const receiverReady=useCallback((group:DeferredDialogGroup)=>deferredDialogs.ready(group),[deferredDialogs]);
+  useLayoutEffect(()=>{
+    if(!role||!isAppRole(role))return;
+    return deferredDialogs.attach();
+  },[deferredDialogs,role]);
+  useEffect(()=>{
+    if(!role||!isAppRole(role))return;
+    const cancel=scheduleIdleRead(()=>{
+      setDialogsRequested(true);
+      void Promise.all([loadCreate(),loadMessage(),loadObject(),loadInvoice(),loadComplaint(),loadCommunication()]).catch(()=>console.warn('[DIALOG_PRELOAD_FAILED]'));
+    },1500);
+    return cancel;
+  },[deferredDialogs,role]);
   const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,...(canAction('createQuote')?{createQuote:(source:{id:string;number:string;customerId:string})=>requestGlobalCreate({intent:'QUOTE',prefill:{sourceComplaint:source}})}:{}),read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,sendReminder:sendeNacharbeitBegleitscheinAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
     addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
@@ -153,7 +184,7 @@ export function GlobalCreateAppAdapter() {
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <><ComplaintDialogs ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
+    <>{dialogsRequested?<><ComplaintDialogs onReceiverReady={receiverReady} ports={complaintPorts} onRefresh={()=>router.refresh()}/><IncomingInvoiceDialogs onReceiverReady={receiverReady} ports={invoicePorts} allowed={hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs onReceiverReady={receiverReady} ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs onReceiverReady={receiverReady} ports={objectPorts} onOpenCustomer={openCustomer} onOpenOrder={openOrder} onOpenQuote={openQuote} customerOverlayId={activeCustomerOverlayId} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('buchhaltung')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow onReceiverReady={receiverReady}
       key={offlineScope??'no-offline-actor'} ports={{
         offlineScope,
         readIntakeOrderSource: async (orderId) => {
@@ -350,6 +381,6 @@ export function GlobalCreateAppAdapter() {
           finally{router.replace("/start");router.refresh();}
         },
       }}
-    /></>
+    /></>:null}</>
   );
 }
