@@ -1,5 +1,5 @@
 import {cache} from 'react';
-import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
+import {DEFAULT_PAGE_READ_SETTINGS,withPageReadSettingsSource} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
 import {parsePageReadSettings,pageReadSettingsFromCompany} from '../public';
@@ -60,7 +60,7 @@ const pageReadProjection=sql`jsonb_build_object(
  'hasInvoiceBatchLimit',to_jsonb(company_settings) ? 'rechnung_mail_grenze',
  'queryTimeoutMs',to_jsonb(company_settings)->'seiten_abfrage_ms',
  'invoiceMailBatchLimit',to_jsonb(company_settings)->'rechnung_mail_grenze') AS page_read_source`;
-const readPageReadSettingsRow=cache(async(tenantId:string)=>{
+const readPageReadSettingsRow=cache(async(tenantId:string)=>withPageReadSettingsSource(async()=>{
  const rows=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{page_read_source:unknown}>(sql`
   SELECT ${pageReadProjection}
   FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`));
@@ -68,7 +68,7 @@ const readPageReadSettingsRow=cache(async(tenantId:string)=>{
  const source=pageReadSettingsFromCompany(rows[0].page_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!source)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');
  return source.settings;
-});
+}));
 export async function readPageReadSettings(context:{tenantId:string}){
  return readPageReadSettingsRow(context.tenantId);
 }

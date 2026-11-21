@@ -9,11 +9,25 @@ export const DEFAULT_PAGE_READ_SETTINGS={
 } as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
-type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number};
+type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
 export const AUTHORIZATION_READ_TIMEOUT_MS=DEFAULT_PAGE_READ_SETTINGS.authorizationTimeoutMs;
 export const isAuthorizationRead=():boolean=>budgets.getStore()?.kind==='authorization';
+/** Start composition immediately, but acquire data connections only after the
+ * existing company source configured this request. Authorization is independent. */
+export function withPageReadSourcesReady<T>(ready:Promise<unknown>,work:()=>Promise<T>):Promise<T>{
+ const parent=budgets.getStore();if(!parent)return work();
+ const scope={...parent};
+ scope.sourcesReady=ready.then(()=>{scope.deadline=parent.deadline;});
+ return budgets.run(scope,work);
+}
+/** The canonical settings query must itself be able to open the data gate,
+ * including when its request cache is first reached from a parallel reader. */
+export function withPageReadSettingsSource<T>(work:()=>Promise<T>):Promise<T>{
+ const parent=budgets.getStore();
+ return parent?.sourcesReady?budgets.run({...parent,sourcesReady:undefined},work):work();
+}
 /** Separate short read scope; returning to a page restores its own deadline. */
 export function withAuthorizationReadBudget<T>(work:()=>Promise<T>):Promise<T>{
  const startedAt=Date.now(),parent=budgets.getStore();
@@ -69,6 +83,7 @@ function boundedQuery<T extends QueryLike>(query:T):T{
   if(!budgets.getStore())return query;
   let pending:Promise<unknown>|undefined;
   const start=()=>pending??=(async()=>{
+    await budgets.getStore()?.sourcesReady;
     const store=budgets.getStore(),prepare=store?.prepareStatement;
     if(!store||!prepare)return withinBudget(()=>query,()=>query.cancel());
     if(store.timeoutSetAt===undefined||Date.now()-store.timeoutSetAt>=250){
@@ -112,6 +127,7 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
         const callbackIndex=args.findLastIndex(arg=>typeof arg==='function');
         if(callbackIndex<0)return Reflect.apply(value,target,args);
         const callback=args[callbackIndex] as (sql:object)=>unknown;
+        const run=()=>{
         const acquiringAt=Date.now();
         const budget=budgets.getStore();
         if(!budget)return Reflect.apply(value,target,args);
@@ -155,6 +171,9 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
           };
           Promise.resolve(Reflect.apply(value,target,args)).then(result=>{clearTimeout(timer);resolve(result);},error=>{clearTimeout(timer);reject(error&&typeof error==='object'&&'code'in error&&error.code==='57014'?new PageReadTimeout():error);});
         });
+        };
+        const ready=budgets.getStore()?.sourcesReady;
+        return ready?ready.then(run):run();
       };
       return (...args:unknown[])=>{
         const result=Reflect.apply(value,target,args);
@@ -174,12 +193,15 @@ export function pageReadFetchPort(fetchPort:typeof fetch):typeof fetch{
  return (input,init)=>{
   const budget=budgets.getStore();
   if(!budget)return fetchPort(input,init);
+  const read=()=>{
   const remaining=budget.deadline-Date.now();
   if(remaining<=0)return Promise.reject(new PageReadTimeout());
   const original=init?.signal??(input instanceof Request?input.signal:undefined);
   const deadline=AbortSignal.timeout(remaining);
   const signal=original?AbortSignal.any([original,deadline]):deadline;
   return withinBudget(()=>fetchPort(input,{...init,signal}));
+  };
+  return budget.sourcesReady?budget.sourcesReady.then(read):read();
  };
 }
 
