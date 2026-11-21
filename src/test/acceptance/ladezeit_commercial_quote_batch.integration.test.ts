@@ -12,6 +12,10 @@ import {readOrderCommercialQuote,readOrderCommercialQuotes,type OrderCommercialQ
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {db} from '@/db';
+import {customerFixture,intakeOrderFixture,readyOrderForInvoice,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
+import {getTodayOrderReadAction} from '@/app/actions/orders.actions';
+import * as shippingPorts from '@/modules/orders/server-public';
+import {sql as nativeSql} from 'drizzle-orm';
 
 const url=process.env.DATABASE_URL;
 const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
@@ -61,5 +65,43 @@ it('reads zero/one/many immutable full and partial awards in two SQL statements,
  expect(cards.get(sources[0].orderId)).toMatchObject({code:'OK',data:{operationalFacts:{pricesMissing:null}}});
  expect(cards.get(sources[1].orderId)).toMatchObject({code:'OK',data:{operationalFacts:{pricesMissing:false}}});
  expect((await read(JSON.parse(JSON.stringify(sources.map(source=>source.orderId))))).get(sources[1].orderId)).toEqual(sources[1].quote);
+ expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${tenant}`).toEqual(before);
+});
+
+it('C9 keeps thirteen of fifteen real Today orders unchanged beside an ambiguous KV and a native shipping SQL fault',async()=>{
+ const quotes:Array<{orderId:string;quoteId:string}>=[];
+ await runQuoteQuantityCase({name:'TEST C9 damaged KV',quantity:1,received:1,total:1000,expected:1000,hours:null,fixed:0,operational:true,inspect:async source=>{quotes.push({orderId:source.orderId,quoteId:source.quoteId});}});
+ const customerId=await customerFixture('TEST C9 unaffected orders');
+ const healthy:string[]=[];
+ for(let index=0;index<13;index++)healthy.push((await intakeOrderFixture('TEST C9 healthy '+index,customerId)).receipt.orderId);
+ const shipping=await readyOrderForInvoice('TEST C9 shipping SQL','shipping');
+ await manualTrackingFixture(shipping.orderId);
+ const bad=quotes[0];if(!bad)throw Error('TEST_C9_REAL_QUOTE_REQUIRED');
+ const ids=[bad.orderId,shipping.orderId,...healthy];expect(ids).toHaveLength(15);
+ const baseline=await withSession(full,()=>getTodayOrderReadAction({orderIds:ids}));
+ expect(baseline).toMatchObject({code:'OK'});if(baseline.code!=='OK')throw Error('TEST_C9_BASELINE_REQUIRED');
+ expect(baseline.data.rows.every(row=>row.result.code==='OK')).toBe(true);
+ // Explicit append-only synthetic ambiguity in this file's isolated TEST tenant.
+ for(const rate of [700,1900])await sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,user_id,payload,status,client_event_id,event_schema_version,created_at)
+  VALUES(${randomUUID()},${tenant},${bad.orderId},'QUOTE_VAT_FROM_COMPANY_V1','TEST C9 ambiguous KV',${full.actorId}::uuid,${sql.json({quoteId:bad.quoteId,edition:2,vatRateBasisPoints:rate})},'success',${randomUUID()}::uuid,1,statement_timestamp())`;
+ const before=await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${tenant}`;
+ const original=shippingPorts.readManualShippingBatch;
+ const fault=vi.spyOn(shippingPorts,'readManualShippingBatch').mockImplementation((auth,orderIds,ports)=>original(auth,orderIds,{...ports,readCustomers:async(tx,tenantId,customerIds)=>{
+  const result=await ports.readCustomers(tx,tenantId,customerIds);
+  if(orderIds.includes(shipping.orderId))await tx.execute(nativeSql`SELECT 1/0 AS test_c9_shipping_source_failure`);
+  return result;
+ }}));
+ try{
+  const partial=await withSession(full,()=>getTodayOrderReadAction(JSON.parse(JSON.stringify({orderIds:ids}))));
+  expect(partial).toMatchObject({code:'OK'});if(partial.code!=='OK')throw Error('TEST_C9_PARTIAL_REQUIRED');
+  for(const id of healthy)expect(partial.data.rows.find(row=>row.orderId===id)).toEqual(baseline.data.rows.find(row=>row.orderId===id));
+  expect(partial.data.rows.find(row=>row.orderId===bad.orderId)).toMatchObject({result:{code:'OK',data:{card:{operationalFacts:{pricesMissing:null}}}}});
+  const shippingRow=partial.data.rows.find(row=>row.orderId===shipping.orderId);
+  expect(shippingRow?.result).toMatchObject({code:'OK'});if(shippingRow?.result.code!=='OK')throw Error('TEST_C9_SHIPPING_CARD_RETAINED');
+  expect(shippingRow.result.data.nextActionRule.datenluecken).toContain('labelReady');
+ }finally{fault.mockRestore();}
+ const recovered=await withSession(full,()=>getTodayOrderReadAction({orderIds:ids}));
+ expect(recovered).toMatchObject({code:'OK'});if(recovered.code!=='OK')throw Error('TEST_C9_RECOVERED_REQUIRED');
+ expect(recovered.data.rows.find(row=>row.orderId===shipping.orderId)).toEqual(baseline.data.rows.find(row=>row.orderId===shipping.orderId));
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${tenant}`).toEqual(before);
 });
