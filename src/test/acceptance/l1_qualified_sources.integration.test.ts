@@ -118,6 +118,7 @@ it('B1 isolates a genuine unknown-surface SQL exception from two healthy Today o
  const started=Date.now(),home=await withSession(full,()=>loadOfficeHome(authorization.data));
  expect(Date.now()-started).toBeLessThan(3000);expect(home.kind).toBe('data');if(home.kind!=='data')throw Error('TEST_B1_HOME');
  expect(home.dashboard.items.filter(item=>item.key==='source-order:'+bad)).toHaveLength(1);
+ expect(home.dashboard.items.find(item=>item.key==='source-order:'+bad)).toMatchObject({field:'action',kind:'order',orderId:bad,orderVersion:fixtures[0].receipt.orderVersion,primaryActionLabel:'Auftrag öffnen'});
  for(const id of ids.slice(1))expect(home.dashboard.orderActions?.rows.some(row=>row.orderId===id)).toBe(true);
 });
 });
