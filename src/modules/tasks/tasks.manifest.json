@@ -33,6 +33,8 @@
     "@/modules/tasks/server-public#completeTask",
     "@/modules/tasks/server-public#readTask",
     "@/modules/tasks/server-public#readTaskForAuthorization",
+    "@/modules/tasks/server-public#projectTaskCalendarSources",
+    "@/modules/tasks/server-public#projectQuoteFollowupSources",
     "@/modules/tasks/server-public#TaskReadContext",
     "@/modules/tasks/server-public#TaskSourceRead",
     "@/modules/tasks/server-public#TaskCalendarSources",

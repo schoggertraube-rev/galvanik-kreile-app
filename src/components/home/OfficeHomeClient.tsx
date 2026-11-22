@@ -1,10 +1,10 @@
 "use client";
 import dynamic from 'next/dynamic';
 const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
-import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { confirmInvoiceHandoverAction,listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -18,7 +18,7 @@ import { IntakeDraftList } from "@/modules/eingang/public";
 import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";
 import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
+type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean} };
 export type OfficeHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & OfficeIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & OfficeIdentity)
@@ -50,7 +50,9 @@ function actionType(item: TodayItem): HandlungsArt { return item.urgency === "co
 function reminderLabel(value: string) { return `Aufgeschoben bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))} · zählt weiter mit`; }
 function assignmentDeadline(value?: string) { return value ? `Frist ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`))}` : "bis erledigt"; }
 
-export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
+export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
+  const [polled,setPolled]=useState<{base:OfficeHomeModel;value:OfficeHomeModel}|null>(null);
+  const model=polled?.base===initialModel?polled.value:initialModel;
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
   const { hasArea, loading: permissionsLoading } = usePermissions();
@@ -71,6 +73,39 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const [mailId, setMailId] = useState<string | null>(null);
   const [mailPreview, setMailPreview] = useState<MailPreview | null>(null);
   const [mailMessage, setMailMessage] = useState("");
+  const modelPoll=useRef<(()=>Promise<void>)|null>(null);
+  useEffect(()=>{
+    if(!('dashboard'in initialModel)||!initialModel.modelRead?.pending||!initialModel.cacheLoginScope)return;
+    const scope=initialModel.cacheLoginScope,controller=new AbortController();
+    let stopped=false,running=false,timer:ReturnType<typeof setTimeout>|undefined;
+    const poll=async()=>{
+      if(stopped||running)return;
+      running=true;if(timer)clearTimeout(timer);
+      try{
+      let nextDelay=initialModel.modelRead!.pollMs,again=true;
+      try{
+        const response=await fetch('/api/heute/modell?nur=veraltet',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
+        if(response.status===401||response.status===403)return;
+        if(!response.ok)throw Error('TODAY_MODEL_READ_UNAVAILABLE');
+        const result=await response.json() as {code?:string;model?:OfficeHomeModel};
+        if(stopped)return;
+        if(result.code!=='OK'||!result.model||!('dashboard'in result.model))throw Error('TODAY_MODEL_RESPONSE_INCOMPLETE');
+        if(result.model.cacheLoginScope!==scope)return;
+        const next=result.model;
+        setPolled({base:initialModel,value:next});
+        again=next.modelRead?.pending===true;
+        if(next.modelRead)nextDelay=next.modelRead.pollMs;
+      }catch{
+        if(stopped||controller.signal.aborted)return;
+        setMessage(PAGE_READ_COPY.sourceIncomplete);
+      }
+      if(!stopped&&again)timer=setTimeout(()=>{void poll();},nextDelay);
+      }finally{running=false;}
+    };
+    modelPoll.current=poll;
+    timer=setTimeout(()=>{void poll();},initialModel.modelRead.pollMs);
+    return ()=>{stopped=true;controller.abort();if(timer)clearTimeout(timer);if(modelPoll.current===poll)modelPoll.current=null;};
+  },[initialModel]);
   const openMail = async (graphMessageId: string) => {
     setMailId(graphMessageId);
     setMailPreview(null);
@@ -92,7 +127,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       setMailMessage("Die Mail konnte nicht sicher gelesen werden.");
     }
   };
-  const primary = (item: TodayItem) => { if(item.invoiceMail){setInvoiceMail(item.invoiceMail);}else if((item.kind==='complaint'||item.kind==='task')&&item.target){const handled=!window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:item.target.screen,arg:item.target.arg}}));if(!handled)setMessage(item.kind==='task'?'Aufgabe konnte nicht geöffnet werden · sie bleibt gespeichert.':'Aktion konnte nicht geöffnet werden · Reklamation bleibt offen.');}else if (item.kind === "order" && item.orderId) { if(item.surfaceAssignments?.length) openOrder(item.orderId,"surface"); else openOrder(item.orderId); } else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
+  const primary = (item: TodayItem) => { if(item.key.startsWith('source-order:')&&item.primaryActionLabel===TODAY_MODEL_COPY.reload){if(modelPoll.current)void modelPoll.current();else router.refresh();return;} if(item.invoiceMail){setInvoiceMail(item.invoiceMail);}else if((item.kind==='complaint'||item.kind==='task')&&item.target){const handled=!window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:item.target.screen,arg:item.target.arg}}));if(!handled)setMessage(item.kind==='task'?'Aufgabe konnte nicht geöffnet werden · sie bleibt gespeichert.':'Aktion konnte nicht geöffnet werden · Reklamation bleibt offen.');}else if (item.kind === "order" && item.orderId) { if(item.surfaceAssignments?.length) openOrder(item.orderId,"surface"); else openOrder(item.orderId); } else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
   const dashboardItems = model.kind === "data" || model.kind === "empty" || model.kind==='partial' ? model.dashboard.items : [];
   const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act,fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach,beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
@@ -26,7 +26,10 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 }));
 
 import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
-import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
+import type {OfficeHomeModel} from '../OfficeHomeClient';
+
+afterEach(()=>vi.unstubAllGlobals());
 
 const actionPorts = {
   savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
@@ -361,4 +364,44 @@ it('H4 offers the real handover command beside each original and preserves its r
  expect(ports.confirmHandover.mock.calls[0][0]).toEqual(ports.confirmHandover.mock.calls[1][0]);
  expect(ports.confirmHandover.mock.calls[0][0]).toMatchObject({invoiceId:original.documentId});
  expect(ports.refresh).toHaveBeenCalledTimes(1);expect(ports.openInvoice).not.toHaveBeenCalled();
+});
+
+// Explicit isolated client transport fixtures. These verify React fences only;
+// genuine GET/Auth/DB/model behavior is covered by the native acceptance cases.
+const pollingModel=(title:string,pending=true):OfficeHomeModel=>({kind:'data',role:'meister',cacheLoginScope:'TEST-poll-scope',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,
+ modelRead:{source:'modell',pending,incomplete:false,pollMs:1,rebuild:false},dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[{key:'source-order:TEST-poll',field:'action',kind:'order',orderId:'TEST-poll',orderVersion:1,title,meta:'',urgency:'warning',primaryActionLabel:TODAY_MODEL_COPY.reload}]}});
+
+it('controlled model transport never adopts a response for another login scope',async()=>{
+ const next={...pollingModel('TEST foreign response',false),cacheLoginScope:'TEST-other-scope'};
+ const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(JSON.stringify({code:'OK',model:next}),{status:200}));vi.stubGlobal('fetch',fetch);
+ render(<RolfHomeClient model={pollingModel('TEST existing model')} ports={actionPorts}/>);
+ await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+ await act(async()=>{await Promise.resolve();});
+ expect(screen.queryByText('TEST foreign response')).toBeNull();
+ expect(screen.getAllByText('TEST existing model')[0]).toBeVisible();
+ expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet');
+});
+
+it('controlled late model response cannot replace a newer RSC snapshot even in the same login scope',async()=>{
+ let finish!:(value:Response)=>void;
+ const fetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));vi.stubGlobal('fetch',fetch);
+ const view=render(<RolfHomeClient model={pollingModel('TEST first snapshot')} ports={actionPorts}/>);
+ await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+ view.rerender(<RolfHomeClient model={pollingModel('TEST newer RSC',false)} ports={actionPorts}/>);
+ await act(async()=>{finish(new Response(JSON.stringify({code:'OK',model:pollingModel('TEST stale delayed snapshot',false)}),{status:200}));await Promise.resolve();});
+ expect(screen.getAllByText('TEST newer RSC')[0]).toBeVisible();
+ expect(screen.queryByText('TEST stale delayed snapshot')).toBeNull();
+});
+
+it('controlled manual reload and automatic polling share one in-flight request and await its actual response',async()=>{
+ let finish!:(value:Response)=>void;
+ const fetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));vi.stubGlobal('fetch',fetch);
+ render(<RolfHomeClient model={pollingModel('TEST waiting model')} ports={actionPorts}/>);
+ await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+ for(const button of screen.getAllByRole('button',{name:TODAY_MODEL_COPY.reload})){fireEvent.click(button);fireEvent.click(button);}
+ expect(fetch).toHaveBeenCalledTimes(1);
+ expect(screen.queryByText('TEST acknowledged model')).toBeNull();
+ await act(async()=>{finish(new Response(JSON.stringify({code:'OK',model:pollingModel('TEST acknowledged model',false)}),{status:200}));await Promise.resolve();});
+ await waitFor(()=>expect(screen.getAllByText('TEST acknowledged model')[0]).toBeVisible());
+ expect(fetch).toHaveBeenCalledTimes(1);
 });

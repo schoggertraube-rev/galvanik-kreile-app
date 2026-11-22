@@ -7,12 +7,12 @@
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
     "page_routes": 15,
-    "api_routes": 6,
+    "api_routes": 7,
     "server_action_groups": 47,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 94
+    "total": 95
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -39,6 +39,16 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "A-25 E-B2 protected background rebuild through the existing projector; real TEST request/session/DB cases verified, independent exact-head acceptance pending. Cron activation requires Owner configuration."
+    },
+    {
+      "stable_id": "api.today.model",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/heute/modell/route.ts",
+      "route": "/api/heute/modell",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "A-25 E-C authenticated Home read with current session, canonical any-area gate and existing derived single-flight refresh; no new business writer. Exact native route/role tests required before independent acceptance."
     },
     {
       "stable_id": "page.root",
@@ -414,7 +424,7 @@
         "importOutlookMailAction"
       ],
       "classification": "REAL_PENDING_SECRET",
-      "open_reason": "Tenant-bound Microsoft Graph mail port. Preview activation is externally blocked by invalid_client and remains In Klärung.",
+      "open_reason": "Tenant-bound Microsoft Graph mail port. Preview activation is externally blocked by invalid_client and remains In KlÃ¤rung.",
       "visible": false,
       "reachable": true,
       "provider": "microsoft-graph",
@@ -580,7 +590,7 @@
         "getDeveloperCockpitStats"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "getDeveloperCockpitStats — hardcoded frictionAnalysis, suggestions, and fallback numbers removed in F1-R0. Returns only real tracking events (empty when none). Pending real analytics data contract.",
+      "open_reason": "getDeveloperCockpitStats â€” hardcoded frictionAnalysis, suggestions, and fallback numbers removed in F1-R0. Returns only real tracking events (empty when none). Pending real analytics data contract.",
       "visible": false,
       "reachable": true
     },
@@ -605,9 +615,9 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/invoices.actions.ts",
       "exported_functions": [
-          "addOrderToCollectionAction",
-          "issueCollectionInvoiceAction",
-          "removeOrderFromCollectionAction",
+        "addOrderToCollectionAction",
+        "issueCollectionInvoiceAction",
+        "removeOrderFromCollectionAction",
         "issueInvoiceAction",
         "setInvoiceItemPricesAction",
         "cancelInvoiceAction",

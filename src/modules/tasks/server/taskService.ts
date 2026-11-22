@@ -61,15 +61,18 @@ async function find(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapsh
  return rows.length===1?rows[0]:null;
 }
 function hiddenReference(reference:TaskReference):TaskReferenceRead{return {...reference,label:null,customerId:null,customerType:null,orderId:null,channel:null,phone:null,sourceVersion:null};}
+function taskReferenceVisible(auth:AuthorizedReadContext,reference:TaskReferenceRead){
+ if(reference.type==='allgemein')return false;
+ const requiredArea=reference.type==='eingang'&&reference.channel==='mail'?'mails':refAreas[reference.type];
+ return reference.type==='eingang'&&auth.canReadArea('mails')||requiredArea!==undefined&&auth.canReadArea(requiredArea);
+}
 async function context(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,reference:TaskReference,required=true,enforceVisibility=true):Promise<TaskReferenceRead>{
  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
  if(reference.type==='allgemein')return hiddenReference(reference);
- const area=refAreas[reference.type];
  const rows=await tx.execute<Omit<TaskReferenceRead,'type'>>(sql`SELECT id,label,customer_id AS "customerId",customer_type AS "customerType",order_id AS "orderId",channel,phone,source_version AS "sourceVersion" FROM private.v_task_contexts_v1
   WHERE tenant_id=${auth.tenantId} AND kind=${reference.type} AND id=${reference.id}`);
  if(rows.length!==1){if(required)reject('NOT_FOUND','Bezug nicht verfügbar · Fehlercode: TASK_REFERENCE_NOT_FOUND.');return hiddenReference(reference);}
- const requiredArea=reference.type==='eingang'&&rows[0].channel==='mail'?'mails':area;
- const visible=reference.type==='eingang'&&readAuth.canReadArea('mails')||requiredArea!==undefined&&readAuth.canReadArea(requiredArea);
+ const visible=taskReferenceVisible(readAuth,{...rows[0],type:reference.type});
  if(enforceVisibility&&(!visible)){if(required)reject('FORBIDDEN','Der Bezug ist für diesen Login nicht freigegeben.');return hiddenReference(reference);}
  return {...rows[0],type:reference.type};
 }
@@ -330,7 +333,7 @@ export async function readTaskForAuthorization(auth:AuthorizationSnapshot|TaskRe
      const source=await withTenantSavepoint(tx,nested=>readTaskSourceInTransaction(nested,auth,{taskId:ref.id}));
      if(!source.task||source.task.version!==ref.version||source.task.status!=='offen'||!source.task.item_id){missingTaskIds.push(ref.id);continue;}
      if('canReadArea'in auth){sources.push(source);if(source.canceledForEdit.code==='SOURCE_INCOMPLETE')missingTaskIds.push(ref.id);}
-     else{const read=presentTaskSource(auth,source);rows.push({id:source.task.id,version:source.task.version,itemId:source.task.item_id,dueDate:source.task.faellig_am,canComplete:read.canComplete,canOpenReference:read.canOpenReference});}
+     else rows.push(projectCalendarTaskSource(auth,source));
      if(source.pricingSource==='SOURCE_INCOMPLETE'||source.collectionSource==='SOURCE_INCOMPLETE'||source.invoiceFollowupSource==='SOURCE_INCOMPLETE')missingTaskIds.push(ref.id);
     }catch{missingTaskIds.push(ref.id);}
    }
@@ -342,6 +345,33 @@ export async function readTaskForAuthorization(auth:AuthorizationSnapshot|TaskRe
   const source=await readTaskSourceInTransaction(tx,auth,request);
   return 'canReadArea'in auth?source:presentTaskSource(auth,source);
  });}catch(error){return resultError(error);}
+}
+/** Same actor/recipient/reference projection as the live calendar read. */
+function projectCalendarTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead){
+ const task=source.task;
+ if(!task||!task.item_id)throw Error('TASK_CALENDAR_SOURCE_INVALID');
+ if(!canReadTaskArea(auth,task.fuer_bereich))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
+ const reference=source.reference.type==='allgemein'||taskReferenceVisible(liveTaskReadContext(auth),source.reference)?source.reference:hiddenReference(source.reference);
+ const read=presentTaskSource(auth,{...source,reference});
+ return {id:task.id,version:task.version,itemId:task.item_id,dueDate:task.faellig_am,canComplete:read.canComplete,canOpenReference:read.canOpenReference};
+}
+export function projectTaskCalendarSources(auth:AuthorizationSnapshot,source:TaskCalendarSources):TaskCalendarRead{
+ if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:DISPATCH_CALL_COPY.forbidden};
+ const missingTaskIds=source.missingTaskIds.filter(id=>{
+  const known=source.rows.find(row=>row.task?.id===id);if(!known)return true;
+  return known.pricingSource==='SOURCE_INCOMPLETE'||known.collectionSource==='SOURCE_INCOMPLETE'||known.invoiceFollowupSource==='SOURCE_INCOMPLETE'
+   ||known.canceledForEdit.code==='SOURCE_INCOMPLETE'&&!!known.task&&allowed(auth,known.task);
+ });
+ const rows:Extract<TaskCalendarRead,{rows:unknown}>['rows']=[];
+ for(const known of source.rows){
+  try{rows.push(projectCalendarTaskSource(auth,known));}
+  catch(error){
+   if(!known.task)throw error;
+   if(!missingTaskIds.includes(known.task.id))missingTaskIds.push(known.task.id);
+  }
+ }
+ const unknownGap=source.code==='SOURCE_INCOMPLETE'&&source.missingTaskIds.length===0;
+ return {code:missingTaskIds.length||unknownGap?'SOURCE_INCOMPLETE':'OK',rows,missingTaskIds};
 }
 async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|TaskReadContext,request:TaskOpenRequest){
  const readAuth='canReadArea'in auth?auth:liveTaskReadContext(auth);
@@ -422,9 +452,16 @@ export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransact
  // are verified below. Generic task read/edit authority is unchanged.
  const candidates=tasks.filter(task=>taskUuid(task.bezug_id));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
- const sources=candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [{id:task.id,title:readAuth.canReadArea('preise')?task.titel:quoteFollowupTitle(quote.customerName,quote.number),dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,assignedLogin:task.fuer_login}];});
+ const sources=candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [maskQuoteFollowupTitle(readAuth,{id:task.id,title:task.titel,dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,assignedLogin:task.fuer_login})];});
  if('canReadArea'in auth)return sources;
- return sources.map(({assignedLogin,...source})=>({...source,isMine:assignedLogin===auth.userId})).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+ return projectQuoteFollowupSources(auth,sources);
+}
+function maskQuoteFollowupTitle(auth:AuthorizedReadContext,source:QuoteFollowupTaskSource){
+ return auth.canReadArea('preise')?source:{...source,title:quoteFollowupTitle(source.customerName,source.quoteNumber)};
+}
+export function projectQuoteFollowupSources(auth:AuthorizationSnapshot,sources:readonly QuoteFollowupTaskSource[]):QuoteFollowupTaskToday[]{
+ const readAuth=authorizationReadContext(auth);
+ return sources.map(row=>{const {assignedLogin,...source}=maskQuoteFollowupTitle(readAuth,row);return {...source,isMine:assignedLogin===auth.userId};}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
 }
 
 /** Only the persisted physical command can create this normal shared clarification task. */

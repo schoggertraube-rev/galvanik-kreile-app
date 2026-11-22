@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import {PAGE_READ_COPY} from "@/ui/situationCatalog";
+import {PAGE_READ_COPY,TODAY_MODEL_COPY} from "@/ui/situationCatalog";
+import {usePermissions} from '@/lib/auth/PermissionsContext';
 import { useEffect, useState, useTransition } from "react";
 import {
   changeOwnPinAction,
@@ -77,6 +78,8 @@ export function SettingsAdminClient({
   catalogLocked: string | null;
   returnTo?: string | null;
 }) {
+  const {hasPermission}=usePermissions();
+  const [rebuildingToday,setRebuildingToday]=useState(false);
   const { canManageCompany, canManageLogins } = initialSnapshot.capabilities ?? {
     canManageCompany: true,
     canManageLogins: true,
@@ -355,6 +358,15 @@ export function SettingsAdminClient({
 
   return <main className={styles.page} data-testid="gregor-system-admin">
     <header><p>Einstellungen</p><h1>Arbeitsplatz & Zugänge</h1><span>Firmendaten, Leistungen und bestehende Zugänge</span></header>
+    {hasPermission('perm_sys_diag')?<button type="button" disabled={rebuildingToday} onClick={async()=>{
+      if(rebuildingToday)return;
+      setRebuildingToday(true);setMessage(TODAY_MODEL_COPY.rebuildRunning);
+      try{
+        const response=await fetch('/api/heute/neuaufbau',{credentials:'same-origin',cache:'no-store'});
+        setMessage(response.status===204?TODAY_MODEL_COPY.rebuildDone:response.status===409?TODAY_MODEL_COPY.rebuildRunning:PAGE_READ_COPY.sourceIncomplete);
+      }catch{setMessage(PAGE_READ_COPY.sourceIncomplete);}
+      finally{setRebuildingToday(false);}
+    }}>{TODAY_MODEL_COPY.rebuildButton}</button>:null}
 
     {(canManageCompany || canManageLogins || currentUser) ? <nav aria-label="Einstellungsbereiche">
       {canManageCompany ? <button aria-pressed={tab === "company"} onClick={() => setTab("company")}>Firmendaten</button> : null}
