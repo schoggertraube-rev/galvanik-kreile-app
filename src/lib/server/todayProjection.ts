@@ -1,8 +1,23 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {withPageReadPhase} from '@/db/readBudget';
-import {getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
+import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import type {TodayReadSettings} from '@/modules/fundament/public';
+import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
+import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
+import {readManualShippingBatch} from '@/modules/orders/server-public';
+import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
+import {readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
+import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors} from '@/modules/quotes/server-public';
+import {readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
+import {paymentReadAuthorization,type PaymentReadProfile,type PaymentReadAuthorization} from './paymentContract';
+import {readTodayOrderSources,type TodayOrderReadPorts} from './todayOrderRead';
+import {readLiveOrderCardSource} from './orderCardRead';
+import {getOperationalOrders} from './operationalOrders';
+import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
+import {readTodayMoneySupport} from './todayDashboard';
+import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 
 const TODAY_PROJECTOR_VERSION=1;
@@ -10,12 +25,12 @@ const TODAY_LIST_KINDS=['orders','messages','money','complaints','quote_followup
 type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
-export type ProjectorAuthorization=Readonly<{tenantId:string;areas:readonly AccessArea[];permissions:readonly PermissionKey[];[projectionBrand]:true}>;
+export type ProjectorAuthorization=Readonly<{tenantId:string;areas:readonly AccessArea[];permissions:readonly PermissionKey[];canReadArea:(area:AccessArea)=>boolean;canReadTaskArea:(area:AccessArea|null)=>boolean;payment:PaymentReadAuthorization;canReadOperationalQuotes:boolean;[projectionBrand]:true}>;
 type TodaySourceKey=Readonly<{kind:TodaySourceKind;sourceId:string}>;
 type TodayProjectionResult=
  | {code:'OK';payload:unknown;sourceVersion?:number;listed?:boolean}
  | {code:'GONE'}
- | {code:'SOURCE_INCOMPLETE';errorCode:string};
+ | {code:'SOURCE_INCOMPLETE';errorCode:string;payload?:unknown};
 type TodayProjectionPorts={
  readSettings:(context:{tenantId:string})=>Promise<TodayReadSettings>;
  readSources:(authorization:ProjectorAuthorization,keys:readonly TodaySourceKey[])=>Promise<ReadonlyMap<string,TodayProjectionResult>>;
@@ -28,17 +43,81 @@ type Lease={token:string;tenantSeq:string;day:string};
 /** Canonical area/role policy over the existing active user/rights source.
  * No new app_user, session, role, write grant or synthetic actor is created. */
 async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthorization>{
- const rows=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{role:string;areas:unknown}>(sql`
-  SELECT actor.role,(SELECT coalesce(array_agg(rights.bereich ORDER BY rights.bereich),ARRAY[]::text[])
+ const rows=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{role:string;active:boolean;areas:unknown}>(sql`
+  SELECT actor.role,actor.active,(SELECT coalesce(array_agg(rights.bereich ORDER BY rights.bereich),ARRAY[]::text[])
    FROM public.app_user_rights rights WHERE rights.tenant_id=actor.tenant_id AND rights.user_id=actor.id) AS areas
   FROM public.app_users actor WHERE actor.tenant_id=${tenantId} AND actor.active ORDER BY actor.id`));
  const areas=new Set<AccessArea>();
+ const profiles:PaymentReadProfile[]=[];
  for(const row of rows){
-  if(!isAppRole(row.role)||!Array.isArray(row.areas)||!row.areas.every(isAccessArea))throw Error('TODAY_PROJECTOR_RIGHTS_SOURCE_INVALID');
-  for(const area of normalizeAccessAreasForRole(row.role,[...getFixedAccessAreasForRole(row.role),...row.areas]))areas.add(area);
+  if(!isAppRole(row.role)||row.active!==true||!Array.isArray(row.areas)||!row.areas.every(isAccessArea))throw Error('TODAY_PROJECTOR_RIGHTS_SOURCE_INVALID');
+  const normalized=normalizeAccessAreasForRole(row.role,[...getFixedAccessAreasForRole(row.role),...row.areas]);
+  profiles.push({tenantId,role:row.role,active:row.active,areas:normalized,permissions:getPermissionsForAreas(normalized)});
+  for(const area of normalized)areas.add(area);
  }
  const union=Object.freeze([...areas].sort());
- return Object.freeze({tenantId,areas:union,permissions:Object.freeze([...getPermissionsForAreas(union)]),[projectionBrand]:true as const});
+ const paymentProfiles=profiles.map(paymentReadAuthorization);
+ return Object.freeze({tenantId,areas:union,permissions:Object.freeze([...getPermissionsForAreas(union)]),canReadArea:(area:AccessArea)=>areas.has(area),canReadTaskArea:(area:AccessArea|null)=>profiles.some(profile=>canReadTaskArea(profile,area)),
+  payment:{tenantId,canReadSummary:context=>paymentProfiles.some(profile=>profile.canReadSummary(context)),canReadOrderStates:paymentProfiles.some(profile=>profile.canReadOrderStates)},
+  canReadOperationalQuotes:profiles.some(profile=>profile.active),[projectionBrand]:true as const});
+}
+
+/** Per-run composition of the productive readers. No session/actor is forged;
+ * personal rules, assignment ownership and command grants stay on the live path. */
+function productivePorts():TodayProjectionPorts{
+ const orderLists=new WeakMap<ProjectorAuthorization,ReturnType<typeof getOperationalOrders>>();
+ const orders=(auth:ProjectorAuthorization)=>{let value=orderLists.get(auth);if(!value){value=getOperationalOrders(auth,{purpose:'today'});orderLists.set(auth,value);}return value;};
+ const orderPorts:TodayOrderReadPorts={readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
+  readCredit:(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),
+  readShipments:(auth,ids,readSettings)=>readManualShippingBatch(auth,ids,{readSettings,readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,
+   readAllocation:(tx,tenantId,customerId,input)=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)})};
+ const source=(payload:unknown,complete=true,errorCode='TODAY_PROJECTOR_SOURCE_INCOMPLETE'):TodayProjectionResult=>complete?{code:'OK',payload}:{code:'SOURCE_INCOMPLETE',errorCode,payload};
+ const known=(result:{code:string})=>result.code==='OK'||result.code==='FORBIDDEN';
+ return {readSettings:readTodayReadSettings,listOrderIds:async auth=>(await orders(auth)).map(row=>row.id),
+  readSources:async(auth,keys)=>{
+   const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(new Date()).today;
+   const orderKeys=keys.filter(key=>key.kind==='order');
+   if(orderKeys.length){
+    const rows=await readTodayOrderSources(auth,orderKeys.map(key=>key.sourceId),orderPorts);
+    await Promise.all(rows.map(async row=>{
+     const key='order:'+row.orderId,result=row.result;
+     if(result.code!=='OK'){values.set(key,source(result,false,'TODAY_PROJECTOR_ORDER_SOURCE_INCOMPLETE'));return;}
+     const liveCardStatus=await readLiveOrderCardSource(auth,{orderId:row.orderId});
+     if(liveCardStatus.code!=='OK'||liveCardStatus.data.version!==result.data.card.version){values.set(key,source({result,liveCardStatus},false,'TODAY_PROJECTOR_LIVE_CARD_SOURCE_INCOMPLETE'));return;}
+     values.set(key,{code:'OK',payload:{result,liveCardStatus},sourceVersion:result.data.card.version,listed:true});
+    }));
+   }
+   await Promise.all(keys.filter(key=>key.kind!=='order').map(async key=>{
+    try{
+     let result:TodayProjectionResult;
+     switch(key.kind){
+      case 'orders':result=source(await orders(auth));break;
+      case 'messages':{const read=await readIntakeMessagesForAuthorization(auth,'offen');result=source(read,known(read));break;}
+      case 'complaints':{const read=await readComplaintsForAuthorization(auth);result=source(read,known(read));break;}
+      case 'company':{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise')});result=source(read,known(read));break;}
+      case 'quote_followups':result=source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day)));break;
+      case 'money':{const read=await readTodayMoneySupport(auth,day);result=source(read,!read.supportMissing.length&&[read.invoiceSource,read.prepaymentSource,read.collectionSource,read.invoiceMailSource].every(known));break;}
+      case 'tasks':{const read=await readTaskForAuthorization(auth,{calendar:true});result=source(read,known(read));break;}
+      case 'quotes':{
+       // The live Today list uses the existing operational read capability;
+       // financial masking and all actor-bound U2 commands remain live.
+       const context={tenantId:auth.tenantId,capabilities:{canReadQuote:auth.canReadOperationalQuotes}};
+       const list=await listOpenQuotesCommand(context);
+       if(list.code!=='OK'){result=source({list},known(list));break;}
+       const cards=await Promise.all(list.quotes.map(async quote=>{
+        const read=await readQuoteCommand(context,{quoteId:quote.quoteId});
+        const actors=read.code==='OK'?await readQuoteActors(context,{quoteId:read.quote.quoteId,version:read.quote.version}):null;
+        return {quoteId:quote.quoteId,read,actors,versionMatches:read.code==='OK'&&read.quote.version===quote.version};
+       }));
+       result=source({list,cards},cards.every(card=>card.versionMatches&&card.actors?.code==='OK'));break;
+      }
+      default:throw Error('TODAY_PROJECTOR_KIND_INVALID');
+     }
+     values.set(todaySourceKey(key),result);
+    }catch{values.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_SOURCE_FAILED'});}
+   }));
+   return values;
+  }};
 }
 
 async function claim(tenantId:string,settings:TodayReadSettings):Promise<Lease|null>{
@@ -70,7 +149,10 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
    if(result.code==='OK'){
     if(result.payload===undefined||row.kind==='order'&&(!Number.isSafeInteger(result.sourceVersion)||Number(result.sourceVersion)<0||typeof result.listed!=='boolean'))throw Error('TODAY_PROJECTOR_RESULT_INVALID');
     payload=JSON.stringify(result.payload);if(payload===undefined)throw Error('TODAY_PROJECTOR_PAYLOAD_MISSING');
-   }else if(result.code==='SOURCE_INCOMPLETE'&&!/^[A-Z][A-Z0-9_]{0,99}$/.test(result.errorCode))throw Error('TODAY_PROJECTOR_ERROR_CODE_INVALID');
+   }else if(result.code==='SOURCE_INCOMPLETE'){
+    if(!/^[A-Z][A-Z0-9_]{0,99}$/.test(result.errorCode))throw Error('TODAY_PROJECTOR_ERROR_CODE_INVALID');
+    if(result.payload!==undefined){payload=JSON.stringify(result.payload);if(payload===undefined)throw Error('TODAY_PROJECTOR_PAYLOAD_MISSING');}
+   }
   }catch{result={code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_ROW_FAILED'};payload=null;}
   return sql`(${row.kind}::text,${row.sourceId}::text,${row.sourceSeq}::bigint,${row.tenantSeq}::bigint,${row.day}::date,
    ${result.code}::text,${result.code==='SOURCE_INCOMPLETE'?result.errorCode:null}::text,${payload}::jsonb,
@@ -143,5 +225,5 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
  }finally{await release(tenantId,lease);}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
-export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
-export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
+export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts())=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
+export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts())=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);

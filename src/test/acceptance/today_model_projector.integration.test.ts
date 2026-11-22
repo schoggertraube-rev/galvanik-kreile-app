@@ -20,7 +20,7 @@ import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/
 import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
-type TodayProjectionPorts=Parameters<typeof refreshTodayModel>[1];
+type TodayProjectionPorts=NonNullable<Parameters<typeof refreshTodayModel>[1]>;
 type TodayProjectionResult=Awaited<ReturnType<TodayProjectionPorts['readSources']>> extends ReadonlyMap<string,infer Result>?Result:never;
 const todaySourceKey=(key:Parameters<TodayProjectionPorts['readSources']>[1][number])=>key.kind+':'+key.sourceId;
 

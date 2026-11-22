@@ -104,7 +104,7 @@ const readCompanyLetterSettingsRow=cache(async(tenantId:string,includeDeliveryNo
   if(missingFields.length)return {code:'VALIDATION_ERROR' as const,missingFields};
   return {code:'OK' as const,company:rows[0]};
  }));
-export async function readCompanyLetterSettings(context:CompanyDocumentContext){
+export async function readCompanyLetterSettings(context:Pick<CompanyDocumentContext,'tenantId'|'canRead'|'includeDeliveryNoteIdentity'>&Partial<Pick<CompanyDocumentContext,'actorId'>>){
  if(!context.canRead)return {code:'FORBIDDEN' as const};
  try{return await readCompanyLetterSettingsRow(context.tenantId,context.includeDeliveryNoteIdentity===true)}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
 }
