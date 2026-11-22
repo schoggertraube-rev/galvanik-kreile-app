@@ -425,14 +425,20 @@ export async function freezeInvoiceMailRequest(tx:PrivilegedTenantTransaction,au
  return snapshot;
 }
 
-export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string){
- const rows=await tx.execute<{customerId:string;actorId:string;requestId:string;threadId:string;reason:string}>(sql`SELECT thread.customer_id AS "customerId",marker.user_id::text AS "actorId",marker.correlation_id::text AS "requestId",thread.id::text AS "threadId",marker.payload->>'reason' AS reason
+/** The original marker/thread/PREPARE/SENT/message proof, shared by single
+ * reads and the set-based covering-task lookup. No second evidence rule. */
+function invoiceMailRemainderProofSource(tenantId:string){
+ return sql`SELECT marker.id::text AS marker_id,thread.customer_id AS "customerId",marker.user_id::text AS "actorId",marker.correlation_id::text AS "requestId",thread.id::text AS "threadId",marker.payload->>'reason' AS reason
   FROM public.events marker JOIN public.communication_threads thread ON thread.tenant_id=marker.tenant_id AND thread.id::text=marker.payload->>'threadId' AND thread.source='MS_GRAPH_OUT:'||marker.correlation_id::text AND thread.status='sent'
   JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.client_event_id=thread.id AND prepared.user_id=thread.created_by AND prepared.status='success' AND prepared.event_schema_version=1
   JOIN public.events sent ON sent.tenant_id=prepared.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text AND sent.payload->>'intent'=prepared.payload->>'intent' AND sent.payload->'document'=prepared.payload->'document' AND sent.status='success' AND sent.event_schema_version=1
   JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.created_by=prepared.user_id
-  WHERE marker.tenant_id=${auth.tenantId} AND marker.id=${markerId} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.status='success'
-   AND marker.payload->>'customerId'=thread.customer_id AND prepared.payload->'document'->>'kind'='INVOICE'`);
+  WHERE marker.tenant_id=${tenantId} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.status='success'
+   AND marker.payload->>'customerId'=thread.customer_id AND prepared.payload->'document'->>'kind'='INVOICE'`;
+}
+
+export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string){
+ const rows=await tx.execute<{customerId:string;actorId:string;requestId:string;threadId:string;reason:string}>(sql`SELECT "customerId","actorId","requestId","threadId",reason FROM (${invoiceMailRemainderProofSource(auth.tenantId)}) proof WHERE marker_id=${markerId}`);
  if(!rows.length){const marker=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${markerId} AND event_type='INVOICE_MAIL_REMAINDER_PENDING_V1'`);if(!marker.length)return null;}
  if(rows.length!==1||!rows[0].reason)throw Error('INVOICE_MAIL_REMAINDER_SOURCE_INVALID');
  const snapshots=await tx.execute<{payload:{invoiceIds:string[];customerId:string};actor:string;request_id:string}>(sql`SELECT payload,user_id::text AS actor,correlation_id::text AS request_id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${invoiceMailSnapshotKey(markerId)+':snapshot'} AND event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND status='success' AND event_schema_version=1`);
@@ -442,18 +448,27 @@ export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransac
  return {...rows[0],pending:remainder.length>0,invoiceIds};
 }
 
-/** Candidate keys only, from the same immutable marker/request source. A task
- * must still qualify its actual actor, customer and complete covering scope. */
+/** Covering candidates and their immutable evidence in one read. Qualification
+ * stays in memory; only the selected task's open invoice remainder is read. */
 export async function readInvoiceMailCoveringRequestIds(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string,invoiceIds:readonly string[]){
  if(!invoiceIds.length)throw Error('INVOICE_MAIL_REQUEST_ORIGINALS_REQUIRED');
- const rows=await tx.execute<{id:string}>(sql`SELECT marker.id::text AS id FROM public.events marker
+ const rows=await tx.execute<{id:string;actorId:string;customerId:string;requestId:string;reason:string|null;snapshotId:string;snapshotActor:string;snapshotRequestId:string;invoiceIds:unknown;proofCount:number}>(sql`WITH proof AS (${invoiceMailRemainderProofSource(auth.tenantId)})
+  SELECT marker.id::text AS id,marker.user_id::text AS "actorId",marker.payload->>'customerId' AS "customerId",marker.correlation_id::text AS "requestId",marker.payload->>'reason' AS reason,
+   request.id AS "snapshotId",request.user_id::text AS "snapshotActor",request.correlation_id::text AS "snapshotRequestId",request.payload->'invoiceIds' AS "invoiceIds",coalesce(proof_counts.count,0)::int AS "proofCount"
+  FROM public.events marker
   JOIN public.events request ON request.tenant_id=marker.tenant_id AND request.correlation_id=marker.correlation_id
    AND request.event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND request.status='success' AND request.event_schema_version=1
+  LEFT JOIN (SELECT marker_id,count(*) AS count FROM proof GROUP BY marker_id) proof_counts ON proof_counts.marker_id=marker.id
   WHERE marker.tenant_id=${auth.tenantId} AND marker.user_id=${auth.userId}::uuid AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.status='success'
    AND marker.payload->>'customerId'=${customerId} AND request.payload->>'customerId'=${customerId}
    AND request.payload->'invoiceIds' @> ${JSON.stringify(invoiceIds)}::jsonb
   ORDER BY marker.created_at,marker.id`);
- return rows.map(row=>row.id);
+ return rows.map(row=>{
+  const invoiceIds=row.invoiceIds;
+  const valid=row.proofCount===1&&!!row.reason&&row.snapshotId===invoiceMailSnapshotKey(row.id)+':snapshot'&&row.snapshotActor===row.actorId&&row.snapshotRequestId===row.requestId
+   &&Array.isArray(invoiceIds)&&invoiceIds.length>0&&invoiceIds.every((id:unknown)=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id))&&new Set(invoiceIds).size===invoiceIds.length;
+  return {...row,invoiceIds:valid?invoiceIds as string[]:null};
+ });
 }
 
 export async function recordInvoiceMailRemainderFailure(auth:AuthorizationSnapshot,input:{markerId:string;requestId:string;threadId:string;customerId:string;reason:string},createTask:(tx:PrivilegedTenantTransaction,markerId:string)=>Promise<void>){
