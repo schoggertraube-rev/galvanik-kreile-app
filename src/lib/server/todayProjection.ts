@@ -18,7 +18,7 @@ import {getOperationalOrders} from './operationalOrders';
 import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
 import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
-import {withPrivilegedTenantTransaction} from './privilegedDb';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS} from './todayProjectionSchedule';
 type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
@@ -143,6 +143,15 @@ async function pending(tenantId:string,lease:Lease,limit?:number):Promise<Snapsh
     OR source.projector_version<>${TODAY_PROJECTOR_VERSION} OR source.status IN ('PENDING','SOURCE_INCOMPLETE'))
   ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
 }
+/** Same short write-phase lock order as the source invalidators. Source reads
+ * have already completed; the existing lease/sequence/version CAS still wins. */
+async function lockProjectionSources(tx:PrivilegedTenantTransaction,tenantId:string,keys:readonly TodaySourceKey[]){
+ await tx.execute(sql`SELECT 1 FROM private.today_tenant_v1 WHERE tenant_id=${tenantId} FOR UPDATE`);
+ if(keys.length)await tx.execute(sql`SELECT source.kind,source.source_id FROM private.today_source_v1 source
+  WHERE source.tenant_id=${tenantId} AND (source.kind,source.source_id) IN
+   (VALUES ${sql.join(keys.map(key=>sql`(${key.kind}::text,${key.sourceId}::text)`),sql`, `)})
+  ORDER BY source.kind,source.source_id FOR UPDATE`);
+}
 async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[],results:ReadonlyMap<string,TodayProjectionResult>,buildMs:number,canMarkFailure=true):Promise<{built:number;stale:number}>{
  const values=rows.map(row=>{
   let result=results.get(todaySourceKey(row))??{code:'SOURCE_INCOMPLETE' as const,errorCode:'TODAY_PROJECTOR_SOURCE_MISSING'};
@@ -161,7 +170,9 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
    ${result.code==='OK'&&row.kind==='order'?result.sourceVersion:null}::integer,${result.code==='OK'&&row.kind==='order'?result.listed:null}::boolean)`;
  });
  try{
-  const saved=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_source_v1 source
+  const saved=await withPrivilegedTenantTransaction({tenantId},async tx=>{
+   await lockProjectionSources(tx,tenantId,rows);
+   return tx.execute(sql`UPDATE private.today_source_v1 source
    SET payload=build.payload,status=build.status,error_code=build.error_code,
     listed=CASE WHEN build.status='GONE' THEN false WHEN build.kind='order' AND build.status='OK' THEN build.listed ELSE source.listed END,
     source_version=build.source_version,built_seq=build.source_seq,built_tenant_seq=build.tenant_seq,built_day=build.day,
@@ -173,7 +184,8 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
     AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
     AND (build.kind<>'order' OR build.status<>'OK' OR EXISTS(SELECT 1 FROM public.orders orders
       WHERE orders.tenant_id=source.tenant_id AND orders.id=source.source_id AND orders.version=build.source_version))
-   RETURNING source.source_id`));
+   RETURNING source.source_id`);
+  });
   return {built:saved.length,stale:rows.length-saved.length};
  }catch{
   // A failed group rolls back natively before it is split. Normal operation is
@@ -205,6 +217,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
    if(ids.some(id=>typeof id!=='string'||!id.length||id.length>128)||new Set(ids).size!==ids.length)throw Error('TODAY_PROJECTOR_ORDER_LIST_INVALID');
    const keys:TodaySourceKey[]=[...TODAY_LIST_KINDS.map(kind=>({kind,sourceId:'*'})),...ids.map(sourceId=>({kind:'order' as const,sourceId}))];
    await withPrivilegedTenantTransaction({tenantId},async tx=>{
+    await lockProjectionSources(tx,tenantId,[...keys,...known.map(row=>({kind:'order' as const,sourceId:row.id}))]);
     if(keys.length)await tx.execute(sql`INSERT INTO private.today_source_v1(tenant_id,kind,source_id)
      SELECT ${tenantId},key.kind,key.id FROM (VALUES ${sql.join(keys.map(key=>sql`(${key.kind}::text,${key.sourceId}::text)`),sql`, `)}) AS key(kind,id)
      WHERE EXISTS(SELECT 1 FROM private.today_tenant_v1 tenant WHERE tenant.tenant_id=${tenantId} AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp())

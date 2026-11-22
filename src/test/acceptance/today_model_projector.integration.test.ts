@@ -46,6 +46,72 @@ const ports:TodayProjectionPorts={
 };
 beforeAll(async()=>{orderId=(await readyInvoiceOrder('TEST Today worker source')).orderId;});
 
+it('PL11:36 locks the tenant before source keys when rebuild and a real command overlap in both start orders',async()=>{
+ const waitFor=async(kind:'writer'|'projector')=>{
+  for(let attempt=0;attempt<100;attempt++){
+   const rows=await sql`SELECT activity.pid,pg_blocking_pids(activity.pid) AS blockers,
+    EXISTS(SELECT 1 FROM pg_locks held WHERE held.pid=activity.pid AND held.locktype='tuple' AND held.granted AND held.relation='private.today_tenant_v1'::regclass) AS "waitingOnTenant"
+    FROM pg_stat_activity activity
+    WHERE wait_event_type='Lock' AND pid<>pg_backend_pid() AND
+     CASE WHEN ${kind}='writer' THEN query LIKE '%FROM private.update_order_promised_due_date_v1%'
+      ELSE query LIKE 'UPDATE private.today_source_v1 source%' OR query LIKE 'SELECT 1 FROM private.today_tenant_v1%' OR query LIKE 'SELECT source.kind,%' END`;
+   if(rows.length===1)return rows[0] as {pid:number;blockers:number[];waitingOnTenant:boolean};
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  throw Error('TEST_ACTUAL_LOCK_NOT_OBSERVED_'+kind);
+ };
+ for(const writerFirst of [true,false]){
+  const order=await readyInvoiceOrder('TEST projector writer '+String(writerFirst));
+  expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
+  await sql`UPDATE private.today_source_v1 SET built_at=statement_timestamp() WHERE tenant_id=${tenant}`;
+  await sql`UPDATE private.today_source_v1 SET built_at='2000-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  await sql`UPDATE private.today_source_v1 SET built_at='2001-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='money' AND source_id='*'`;
+  let entered!:()=>void,publish!:()=>void,probeReady!:()=>void,releaseProbe!:()=>void;
+  const reading=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{publish=resolve;});
+  const locked=new Promise<void>(resolve=>{probeReady=resolve;}),unlock=new Promise<void>(resolve=>{releaseProbe=resolve;});
+  const build=rebuildTodayModel(tenant,{...ports,readSources:async(...args)=>{
+   const values=await ports.readSources(...args);
+   if(args[1].some(key=>key.kind==='order'&&key.sourceId===order.orderId)){entered();await gate;}
+   return values;
+  }});
+  await reading;
+  let probePid=0;
+  // Lock-only TEST probe; no business value or invalidation rule is changed.
+  const probe=sql.begin(async tx=>{
+   const [backend]=await tx`SELECT pg_backend_pid() AS pid`;probePid=backend.pid;
+   await tx`SELECT 1 FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='money' AND source_id='*' FOR UPDATE`;
+   probeReady();await unlock;
+  });
+  await locked;
+  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-22',reason:'TEST actual projector lock order',clientEventId:randomUUID()};
+  let command:ReturnType<typeof changeOrderPromisedDueDateAction>|undefined;
+  try{
+   if(writerFirst){
+    command=withSession(full,()=>changeOrderPromisedDueDateAction(input));
+    const writer=await waitFor('writer');publish();
+    const projector=await waitFor('projector');
+    expect(projector.waitingOnTenant).toBe(true);
+    expect(projector.blockers).toContain(writer.pid);
+    expect(projector.blockers).not.toContain(probePid);
+   }else{
+    publish();const projector=await waitFor('projector');
+    command=withSession(full,()=>changeOrderPromisedDueDateAction(input));
+    const writer=await waitFor('writer');
+    expect(writer.waitingOnTenant).toBe(true);
+    expect(writer.blockers).toContain(projector.pid);
+    expect(writer.blockers).not.toContain(probePid);
+   }
+   releaseProbe();
+   const [projected,written]=await Promise.all([build,command]);
+   expect(projected.code).toBe('OK');expect(written.code).toBe('OK');
+   expect(await sql`SELECT count(*)::integer AS count FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId} AND event_type='ORDER_PROMISED_DUE_DATE_CHANGED_V1'`).toEqual([{count:1}]);
+   const [state]=await sql`SELECT source.source_seq>source.built_seq AS stale,source.source_version=orders.version AS current FROM private.today_source_v1 source JOIN public.orders orders ON orders.tenant_id=source.tenant_id AND orders.id=source.source_id WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${order.orderId}`;
+   expect(state.stale||state.current).toBe(true);
+   expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
+  }finally{publish();releaseProbe();await Promise.allSettled([build,probe,...(command?[command]:[])]);}
+ }
+});
+
 it('uses read-only union capabilities and publishes actual card versions with count-only refresh diagnostics',async()=>{
  expectTypeOf<ProjectorAuthorization>().not.toExtend<AuthorizationSnapshot>();
  const before=await sql`SELECT id::text FROM public.app_users WHERE tenant_id=${tenant} ORDER BY id`;
