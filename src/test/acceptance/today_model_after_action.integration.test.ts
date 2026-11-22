@@ -10,6 +10,8 @@ import {rebuildTodayModel} from '@/lib/server/todayProjection';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {observeAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {sql as query} from 'drizzle-orm';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 const phases=(calls:unknown[][])=>calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1]))).filter(row=>row.phase==='today.refresh');
 
@@ -31,7 +33,25 @@ it('keeps the real command response ahead of refresh and publishes the new card 
   expect(phases(output.mock.calls)).toHaveLength(1);
   const retry=await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))),true);
   expect(retry).toEqual({...result,replayed:true});
+  expect(phases(output.mock.calls)).toHaveLength(1);
   expect(await sql`SELECT count(*)::integer AS count FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId} AND event_type='ORDER_PROMISED_DUE_DATE_CHANGED_V1'`).toEqual([{count:1}]);
+ }finally{output.mockRestore();}
+});
+
+it('PL11:36 schedules nothing for a real read transaction or a rolled-back source change',async()=>{
+ const order=await readyInvoiceOrder('TEST no refresh without a committed mark');
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ const output=vi.spyOn(console,'info');
+ try{
+  await withSession(full,()=>observeAction('TESTTodayReadOnlyEnvelope',{type:'order',id:order.orderId},()=>withPrivilegedTenantTransaction({tenantId:tenant},tx=>tx.execute(query`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`)),readLoggingSettings),true);
+  expect(phases(output.mock.calls)).toEqual([]);
+  const before=await sql`SELECT source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  const abort=new Error('TEST_ROLL_BACK_OBSERVED_SOURCE_CHANGE');
+  await withSession(full,()=>observeAction('TESTTodayRollbackEnvelope',{type:'order',id:order.orderId},async()=>{
+   await expect(withPrivilegedTenantTransaction({tenantId:tenant},async tx=>{await tx.execute(query`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${order.orderId}`);throw abort;})).rejects.toBe(abort);
+  },readLoggingSettings),true);
+  expect(phases(output.mock.calls)).toEqual([]);
+  expect(await sql`SELECT source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual(before);
  }finally{output.mockRestore();}
 });
 
