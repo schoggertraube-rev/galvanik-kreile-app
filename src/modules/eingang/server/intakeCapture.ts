@@ -9,6 +9,7 @@ import "server-only";
 import {readExpectedPackageOrders} from "@/lib/server/packageIntakeContextPort";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { recognizeIntakeText } from "@/lib/server/intakeTextRecognition";
 import { readLiveOrderCard } from "@/lib/server/orderCardRead";
@@ -25,7 +26,7 @@ export function validIntakeOriginalTakeover(value:unknown):value is IntakeOrigin
 type Row = { importFailure:MailImportFailure|null; id: string; kanal:string; version: number; text: string | null; fortsetzung_von:string|null; kunde_id: string | null; vorgang_id: string | null; vorgang_art?:string|null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
 function failure(code: Exclude<IntakeCaptureResult, { code: "OK" }>["code"], message: string): Exclude<IntakeCaptureResult, { code: "OK" }> { return { code, message }; }
 function record(input: unknown): input is Record<string, unknown> { return input !== null && typeof input === "object" && !Array.isArray(input); }
-function mayAccessCaptureContent(auth:AuthorizationSnapshot,channel:string){return channel!=='mail'||hasAuthorizationArea(auth,'mails');}
+function mayAccessCaptureContent(auth:AuthorizationSnapshot|AuthorizedReadContext,channel:string){return channel!=='mail'||('canReadArea'in auth?auth.canReadArea('mails'):hasAuthorizationArea(auth,'mails'));}
 function context(value: unknown): value is IntakeContext | undefined {
   return value === undefined || record(value) && Object.keys(value).every(key => key === "customerId" || key === "orderId")
     && Object.values(value).every(part => typeof part === "string" && part.trim().length > 0 && part.length <= 128);
@@ -37,13 +38,14 @@ export async function authorizedIntakeContext(ctx?: IntakeContext): Promise<Auth
   if (!hasAuthorizationArea(result.data, area)) return failure("FORBIDDEN", `Bereich ${area} ist nicht freigegeben.`);
   return result.data;
 }
-export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId: string, ctx?: IntakeContext,invoiceOnly=false,pendingOriginalImport=false): Promise<IntakeCaptureResult> {
+export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot|AuthorizedReadContext, itemId: string, ctx?: IntakeContext,invoiceOnly=false,pendingOriginalImport=false): Promise<IntakeCaptureResult> {
+  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
   return withPrivilegedTenantTransaction(auth, async tx => {
     const rows = await tx.execute<Row>(sql`SELECT ${mailImportFailureProjection()} AS "importFailure",id::text,kanal, version, text, fortsetzung_von::text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
       FROM public.intake_item source WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid`);
     if (rows.length !== 1) return failure("NOT_FOUND", "Eingang wurde nicht gefunden.");
     const row = rows[0];
-    if(invoiceOnly&&(!hasAuthorizationArea(auth,'buchhaltung')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');
+    if(invoiceOnly&&(!readAuth.canReadArea('buchhaltung')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');
     if(!invoiceOnly&&!mayAccessCaptureContent(auth,row.kanal))return failure('FORBIDDEN','Mail-Inhalte benötigen das Recht Mails.');
     if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,itemId))return failure("FORBIDDEN","Original der Fortsetzung ist für diesen Login nicht freigegeben.");
     if (ctx?.customerId && row.kunde_id !== ctx.customerId || ctx?.orderId && row.vorgang_id !== ctx.orderId) return failure("FORBIDDEN", "Eingang gehört nicht zu diesem Kontext.");
@@ -61,7 +63,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
     const suggestions=await tx.execute<NonNullable<IntakeCapture["suggestions"]>[number]>(sql`SELECT id::text,file_id::text AS "fileId",order_id AS "orderId",
       feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt"
       FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND (${!invoiceOnly} OR feld LIKE 'rechnung.%') ORDER BY id`);
-    const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||hasAuthorizationArea(auth,'mails'));
+    const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||readAuth.canReadArea('mails'));
     const continuations = await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${itemId}::uuid ORDER BY erstellt_am,id`);
     const sourceText = row.fortsetzung_von ? await tx.execute<{text:string|null;source_id:string}>(sql`SELECT original.nachher->>'text' AS text,created.nachher->>'textSourceId' AS source_id
       FROM public.intake_event created JOIN public.intake_event original ON original.tenant_id=created.tenant_id
@@ -74,7 +76,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
       orderId: invoiceOnly?null:row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: invoiceOnly?row.anliegen.filter(value=>value==='rechnung'):contentAllowed?row.anliegen:[],dismissedConcerns:contentAllowed?row.anliegen_abgewaehlt:[],openConcerns:contentAllowed?row.anliegen_offen:[],
       files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions:contentAllowed||invoiceOnly?suggestions:[] };
     capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition(capture);
-    if (!invoiceOnly && hasAuthorizationArea(auth,"auftraege") && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
+    if (!invoiceOnly && readAuth.canReadArea('auftraege') && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
       capture.expectedOrders=await readExpectedPackageOrders(tx,auth,row.kunde_id);
     }
     if(contentAllowed){

@@ -6,19 +6,35 @@ import {intakeCaptureSnapshot} from './intakeCapture';
 import {readMessageNextAction} from './messageNextAction';
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {hasAuthorizationArea,resolveAuthorization} from '@/lib/server/authorization';
+import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
-import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult} from '../messageContract';
+import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult,type IntakeMessageSourcesResult} from '../messageContract';
 
-/** One projection of intake_item; no communications/phone_notes shadow inbox. */
-export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>{
+function invalidMessageRead(filter:unknown,sourceItemId?:string,changedSince?:string):Exclude<IntakeMessagesResult,{code:'OK'}>|null{
  if(changedSince!==undefined&&(!Number.isFinite(Date.parse(changedSince))||new Date(changedSince).toISOString()!==changedSince))return {code:'VALIDATION_ERROR',message:OFFLINE_DEVICE_READ_COPY.invalidWindow};
  if(sourceItemId!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sourceItemId))return {code:'VALIDATION_ERROR',message:'Originalantwort ist ungültig.'};
  if(!MESSAGE_FILTERS.includes(filter as MessageFilter))return {code:'VALIDATION_ERROR',message:'Nachrichtenfilter ist ungültig.'};
+ return null;
+}
+/** One projection of intake_item; no communications/phone_notes shadow inbox. */
+export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>{
+ const invalid=invalidMessageRead(filter,sourceItemId,changedSince);if(invalid)return invalid;
  try{
   const result=await resolveAuthorization();if(!result.ok)return {code:result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden. Code: INTAKE_MESSAGES_SESSION.'};
-  const auth=result.data;if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
+  return readIntakeMessagesForAuthorization(result.data,filter,sourceItemId,changedSince);
+ }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
+}
+/** Same SQL/originals for the live wrapper and the identity-free source reader.
+ * Current login, effective areas and live U2 commands remain session output. */
+export function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot,filter?:unknown,sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>;
+export function readIntakeMessagesForAuthorization(auth:AuthorizedReadContext,filter?:unknown,sourceItemId?:string,changedSince?:string):Promise<IntakeMessageSourcesResult>;
+export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot|AuthorizedReadContext,filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult|IntakeMessageSourcesResult>{
+ const invalid=invalidMessageRead(filter,sourceItemId,changedSince);if(invalid)return invalid;
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+ try{
+  if(!readAuth.canReadArea('mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
   return await withPrivilegedTenantTransaction(auth,async tx=>{
    const deviceMatches=(alias:'source'|'candidate')=>{const row=sql.identifier(alias);return sql`(${openIntakePredicate(alias)} OR EXISTS(SELECT 1 FROM public.intake_event changed WHERE changed.tenant_id=${row}.tenant_id AND changed.item_id=${row}.id AND changed.zeit>=${changedSince}::timestamptz))`;};
    const matches=changedSince!==undefined?deviceMatches('candidate'):filter==='offen'?openIntakePredicate('candidate')
@@ -48,7 +64,9 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
    const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
-   return {code:'OK' as const,messages:await Promise.all(messages.map(async row=>{const priority=readFallbackMessagePriority(row);const capture=priority.code==='OK'&&priority.rank===3?await intakeCaptureSnapshot(auth,row.id):undefined;return {...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture),actorTrace:actors.get(row.id)};})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   const sources=await Promise.all(messages.map(async row=>{const priority=readFallbackMessagePriority(row);const capture=priority.code==='OK'&&priority.rank===3?await intakeCaptureSnapshot(auth,row.id):undefined;return {row,priority,capture};}));
+   if('canReadArea'in auth)return {code:'OK' as const,messages:sources.map(({row,priority})=>({...row,fallbackPriority:priority,actorTrace:actors.get(row.id)})),captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}])};
+   return {code:'OK' as const,messages:sources.map(({row,priority,capture})=>({...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture),actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }
