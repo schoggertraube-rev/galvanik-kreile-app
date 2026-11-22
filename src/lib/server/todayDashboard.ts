@@ -265,7 +265,7 @@ async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:R
 }
 
 export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
-export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>): Promise<TodayDashboard> {
+export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
   const diagnosticStarted=Date.now();
   const calendar=readTodayCalendar(readNow),today=calendar.today;
   const access=todaySourceAccess(authorizationReadContext(auth));
@@ -304,11 +304,35 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   ])];
   const responsibilityRead=withPageReadPhase('today.responsibility',()=>readTodayResponsibilities(auth,responsibilityIds));
   logPageReadPhase('today.initial',diagnosticStarted,{rows:orders.length});
-  const sourceNotices:TodayItem[]=[];
-  const retainOrderSourceNotice=(order:{id:string;version:number;orderNumber:string})=>{if(!sourceNotices.some(item=>item.key==='source-order:'+order.id))sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});};
   // One existing App composition owns the narrow bulk U2 projection and
   // its canonical rights/source ports, without complete cards or actor menus.
   const batch=ordersAllowed?await withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:orders.map(order=>order.id)})):null;
+  let versions:Array<{id:string;version:number}>|null=[];
+  if(orders.length){
+    try{
+      versions=await withPageReadPhase('today.versions',()=>withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;version:number}>(sql`SELECT id,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(orders.map(row=>sql`${row.id}`),sql`, `)}]::text[])`)));
+    }catch{versions=null;}
+  }
+  const {quoteList,quoteReads}=await quotesRead;
+  const taskRead=await tasksRead;
+  const responsibilitySource=await responsibilityRead;
+  return {calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource};
+}
+
+export type TodayDashboardSources=Awaited<ReturnType<typeof collectTodaySources>>;
+/** One synchronous composition for the live and later qualified model sources. */
+export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDashboardSources,calendar=sources.calendar):TodayDashboard {
+  const {access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead}=sources;
+  // The existing visible-item pruning is local to this composition. Captured
+  // source facts remain intact for retries and equality comparisons.
+  const responsibilitySource=sources.responsibilitySource.code==='OK'
+    ?{...sources.responsibilitySource,data:Object.assign(new Map(sources.responsibilitySource.data),{unavailableOrderIds:[...sources.responsibilitySource.data.unavailableOrderIds]})}
+    :sources.responsibilitySource;
+  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
+  const today=calendar.today;
+  const orders=orderSource.code==='OK'?orderSource.data:[];
+  const sourceNotices:TodayItem[]=[];
+  const retainOrderSourceNotice=(order:{id:string;version:number;orderNumber:string})=>{if(!sourceNotices.some(item=>item.key==='source-order:'+order.id))sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});};
   const cardSources=new Map(batch?.code==='OK'?batch.data.rows.map(row=>[row.orderId,row.result]):[]);
   const orderActionReads=orders.map(order=>{
    const source=cardSources.get(order.id);
@@ -336,14 +360,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
    }
    return row;
   });
-  // Detect a command that changed an order while independent qualified sources
-  // were being read. Never combine different versions into a clickable action.
-  if(orderActionReads.length){
-    try{
-      const versions=await withPageReadPhase('today.versions',()=>withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;version:number}>(sql`SELECT id,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(orderActionReads.map(row=>sql`${row.orderId}`),sql`, `)}]::text[])`)));
-      for(const row of orderActionReads)if(!versions.some(current=>current.id===row.orderId&&current.version===row.version))row.read=null;
-    }catch{for(const row of orderActionReads)row.read=null;}
-  }
+  // The existing late read is captured before pure composition. Unknown
+  // versions still invalidate only their own clickable order actions.
+  for(const row of orderActionReads)if(versions===null||!versions.some(current=>current.id===row.orderId&&current.version===row.version))row.read=null;
   // A late version-read failure must not silently remove known orders.
   for(const order of orders)if(orderActionReads.some(row=>row.orderId===order.id&&row.read===null))retainOrderSourceNotice(order);
   const orderActions={code:orderSource.code==='OK'&&orderActionReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
@@ -353,11 +372,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const orderSchedule=projectOrderSchedule(orderActions,calendar);
   // The canonical list and operational U2 card are the only quote sources.
   // Raw financial list objects never escape this server composition.
-  const {quoteList,quoteReads}=await quotesRead;
   const quoteActions={code:quoteList.code==='OK'&&quoteReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
     rows:quoteReads.flatMap(row=>row.read?[row as TodayQuoteActionRow]:[]),missingQuoteIds:quoteReads.filter(row=>row.read===null).map(row=>row.quoteId)};
 
-  const taskRead=await tasksRead;
   const taskKnown=taskRead?.code==='OK';
   const taskSchedule=projectIntakeTaskSchedule(taskRead&&'rows'in taskRead?taskRead:{code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]},calendar);
 
@@ -450,7 +467,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   const ownTaskKeys=new Set(followupsKnown?quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id):[]);
-  const responsibilitySource=await responsibilityRead;
   if(responsibilitySource.code==='OK'){
     const itemIds=new Set(items.flatMap(item=>item.orderId?[item.orderId]:[]));
     for(const id of responsibilitySource.data.keys())if(!itemIds.has(id))responsibilitySource.data.delete(id);
@@ -530,21 +546,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
 
   if(graphAllowed)for(const task of taskSchedule.rows)if(task.state==='active')mainMissing.push('TODAY_TASK_MAIN_BINDING:'+task.id);
 
-  logPageReadPhase('today.model',diagnosticStarted,{rows:items.length,actions:orderActions.rows.length,missing:orderActions.missingOrderIds.length});
-  await observeTodayModelShadow(auth,today,{
-   orders:ordersAllowed&&orderSource.code==='OK'?orders.length:null,
-   orderCards:ordersAllowed&&batch?.code==='OK'?batch.data.rows.filter(row=>row.result.code==='OK').length:null,
-   messages:graphAllowed&&graph.code==='OK'?graph.messages.length:null,
-   invoices:moneyAllowed&&support.invoiceSource.code==='OK'?support.invoiceSource.data.length:null,
-   prepayments:moneyAllowed&&support.prepaymentSource.code==='OK'?support.prepaymentSource.data.length:null,
-   collections:moneyAllowed&&support.collectionSource.code==='OK'?support.collectionSource.data.length:null,
-   invoiceMailGroups:access.invoiceMail&&support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.length:null,
-   complaints:access.complaints&&complaints.code==='OK'?complaints.complaints.length:null,
-   quoteFollowups:graphAllowed&&quoteFollowups.code==='OK'&&'tasks'in quoteFollowups?quoteFollowups.tasks.length:null,
-   quotes:graphAllowed&&quoteList.code==='OK'?quoteList.quotes.length:null,
-   tasks:graphAllowed&&taskRead&&'rows'in taskRead&&taskRead.code==='OK'?taskRead.rows.length:null,
-   company:access.company&&companyLetter.code==='OK'&&'companyName'in companyLetter?1:null,
-  });
+
   return {
     hauptaktion,hauptaktionsQuelle,
     calendar,
@@ -565,6 +567,32 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     delegationTargets: support.delegationTargets.map((target) => ({ userId: target.id, displayName: target.full_name })),
     outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message,
   };
+}
+
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>): Promise<TodayDashboard> {
+  const diagnosticStarted=Date.now();
+  const sources=await collectTodaySources(auth,readComplaints,readQuoteFollowups,readNow,operationalSource);
+  const dashboard=composeTodayDashboard(auth,sources,sources.calendar);
+  const {access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,quoteList,taskRead}=sources;
+  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
+  const orders=orderSource.code==='OK'?orderSource.data:[];
+  const calendar=sources.calendar,today=calendar.today;
+  logPageReadPhase('today.model',diagnosticStarted,{rows:dashboard.items.length,actions:dashboard.orderActions?.rows.length??0,missing:dashboard.orderActions?.missingOrderIds.length??0});
+  await observeTodayModelShadow(auth,today,{
+   orders:ordersAllowed&&orderSource.code==='OK'?orders.length:null,
+   orderCards:ordersAllowed&&batch?.code==='OK'?batch.data.rows.filter(row=>row.result.code==='OK').length:null,
+   messages:graphAllowed&&graph.code==='OK'?graph.messages.length:null,
+   invoices:moneyAllowed&&support.invoiceSource.code==='OK'?support.invoiceSource.data.length:null,
+   prepayments:moneyAllowed&&support.prepaymentSource.code==='OK'?support.prepaymentSource.data.length:null,
+   collections:moneyAllowed&&support.collectionSource.code==='OK'?support.collectionSource.data.length:null,
+   invoiceMailGroups:access.invoiceMail&&support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.length:null,
+   complaints:access.complaints&&complaints.code==='OK'?complaints.complaints.length:null,
+   quoteFollowups:graphAllowed&&quoteFollowups.code==='OK'&&'tasks'in quoteFollowups?quoteFollowups.tasks.length:null,
+   quotes:graphAllowed&&quoteList.code==='OK'?quoteList.quotes.length:null,
+   tasks:graphAllowed&&taskRead&&'rows'in taskRead&&taskRead.code==='OK'?taskRead.rows.length:null,
+   company:access.company&&companyLetter.code==='OK'&&'companyName'in companyLetter?1:null,
+  });
+  return dashboard;
 }
 
 export async function saveTodayPreferences(auth: AuthorizationSnapshot, value: unknown) {
