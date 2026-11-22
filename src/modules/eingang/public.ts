@@ -10,7 +10,7 @@ export {
 } from "./requestGlobalCreate";
 export {INTAKE_MAIL_ADOPT_EVENT} from './mailSelectionContract';
 export type {MailImportFailure,IntakeMailSummary,IntakeMailSelectionResult} from './mailSelectionContract';
-export const IntakeMessageDialogs=Object.assign(dynamic(()=>import('./ui/IntakeMessageDialogs').then(module=>module.IntakeMessageDialogs)),{load:()=>import('./ui/IntakeMessageDialogs').then(module=>module.IntakeMessageDialogs)});
+export {IntakeMessageDialogs} from './ui/IntakeMessageDialogs';
 export type {MailSelectionPorts} from './ui/MailSelectionDialog';
 export type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeContext, IntakeConcern, IntakeCaptureKindInput } from "./captureContract";
 export { uploadIntakeOriginal } from "./intakeOriginalUpload";
@@ -18,7 +18,7 @@ export type {
   GlobalCreateIntent,
   GlobalCreateRequest,
 } from "./requestGlobalCreate";
-export const GlobalCreateFlow=Object.assign(dynamic(()=>import('./GlobalCreateFlow').then(module=>module.GlobalCreateFlow)),{load:()=>import('./GlobalCreateFlow').then(module=>module.GlobalCreateFlow)});
+export {GlobalCreateFlow} from './GlobalCreateFlow';
 export {
   ORDER_INTAKE_FREE_TEXT_UNITS,
   isOrderIntakeFreeTextUnit,
@@ -55,7 +55,7 @@ export type {
 export type {CustomerComparisonValue} from "@/modules/customers/public";
 export { getIntakeDeviceId, type IntakeDeviceCommand, type IntakeDeviceRequest, type IntakeDeviceResult } from "./deviceContract";
 export const IntakeDirectEntry=dynamic(()=>import('./ui/IntakeDirectEntry').then(module=>module.IntakeDirectEntry));
-export const IntakeDraftList=dynamic(()=>import('./ui/IntakeDraftList').then(module=>module.IntakeDraftList));
+export {IntakeDraftList} from './ui/IntakeDraftList';
 export {parseGoodsReceiptInput,parseQuoteGoodsReceiptInput,goodsReceiptGaps,goodsReceiptWare} from "./goodsReceiptContract";
 export type {GoodsReceiptInput,GoodsReceiptPhotoKind,GoodsReceiptOrderRead,GoodsReceiptRecord,GoodsReceiptFailure,GoodsReceiptReadResult} from "./goodsReceiptContract";
 export const IntakeObjectDialogs=Object.assign(dynamic(()=>import('./ui/IntakeObjectDialogs').then(module=>module.IntakeObjectDialogs)),{load:()=>import('./ui/IntakeObjectDialogs').then(module=>module.IntakeObjectDialogs)});

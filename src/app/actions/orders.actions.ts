@@ -786,41 +786,27 @@ export async function transitionOrderProcess(params: {
   return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag." };
 }
 
-export async function createOrderFromScan(params: {
-  customerId?: string;
-  customerName?: string;
-  title?: string;
-  parts: { name: string; quantity: number; surfaceRequested?: string; material?: string }[];
-  forceCreateCustomer?: boolean;
-}): Promise<
-  | { ok: true; data: { orderId: string; newCustomerId?: string; status: string; customerChoices?: Record<string, unknown>[] } }
-  | { ok: false; error: string; message: string; details?: unknown }
-> {
-  void params;
-  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Auftragserstellung benötigt den W3-Command-Vertrag." };
-}
-
 // E-C: Today model is composed at the existing Today/Orders Action seam.
 import 'server-only';
-import {getComplaints} from '@/app/actions/complaints.actions';
-import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
-import {readModelPageSettingsInTransaction} from '@/modules/fundament/server-public';
-import {projectIntakeMessageSources} from '@/modules/eingang/server-public';
-import {projectTaskCalendarSources,projectQuoteFollowupSources} from '@/modules/tasks/server-public';
-import {maskComplaintReadResult} from '@/modules/complaints/server-public';
 import type {QuoteReadback} from '@/modules/quotes/public';
 import {hasAnyAuthorizationArea} from '@/lib/server/authorization';
-import {loadOfficeHome,todayHomePartFromModel} from '@/lib/server/officeHomeRead';
+import type {TodayModelReadPorts,TodayDashboardSources} from '@/lib/server/todayDashboard';
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
-import {quoteV45Capabilities,readV45QuoteRule,v45QuoteFacts} from '@/lib/server/v45QuoteRead';
-import {readTodaySourcesFromModel,readTodayModelInTransaction,todayModelRevision,todayModelRevisionMap,modelRecord,type TodayModelReadPorts} from '@/lib/server/todayDashboard';
-import {composeTodayDashboard,type TodayDashboardSources} from '@/lib/server/todayDashboard';
 
 /** The App binds the existing module projectors. No writer, session identity,
  * business lookup, second permission policy or replacement source is created. */
-function todayModelPorts():TodayModelReadPorts{return {
+async function todayModelPorts():Promise<TodayModelReadPorts>{
+ const {getComplaints}=await import('@/app/actions/complaints.actions');
+ const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+ const {readModelPageSettingsInTransaction}=await import('@/modules/fundament/server-public');
+ const {projectIntakeMessageSources}=await import('@/modules/eingang/server-public');
+ const {projectTaskCalendarSources,projectQuoteFollowupSources}=await import('@/modules/tasks/server-public');
+ const {maskComplaintReadResult}=await import('@/modules/complaints/server-public');
+ const {quoteOperationContext}=await import('@/lib/server/quoteAuthorization');
+ const {quoteV45Capabilities,readV45QuoteRule,v45QuoteFacts}=await import('@/lib/server/v45QuoteRead');
+ const {modelRecord}=await import('@/lib/server/todayDashboard');
+ return {
  liveComplaints:getComplaints,
  liveFollowups:getQuoteFollowupsForTodayAction,
  readSettings:readModelPageSettingsInTransaction,
@@ -865,7 +851,8 @@ function todayModelPorts():TodayModelReadPorts{return {
 };}
 
 async function readModelTodayHome(auth:AuthorizationSnapshot,readAt=new Date(),deferLive=false){
- const result=await readTodaySourcesFromModel(auth,todayModelPorts(),readAt,deferLive);
+ const {readTodaySourcesFromModel,composeTodayDashboard}=await import('@/lib/server/todayDashboard');
+ const result=await readTodaySourcesFromModel(auth,await todayModelPorts(),readAt,deferLive);
  if(result.code!=='OK')return result;
  const dashboard=await withPageReadPhase('today.model.compose',async()=>composeTodayDashboard(auth,result.sources,result.sources.calendar),value=>({rows:value.items.length,missing:value.orderActions?.missingOrderIds.length??0}));
  return {...result,dashboard};
@@ -879,6 +866,7 @@ export async function readOfficeHomeModelAction(input?:{deferLive?:boolean}):Pro
  const current=await resolveAuthorization();
  if(!current.ok)return {kind:'denied',message:PAGE_READ_COPY.sourceIncomplete};
  if(!hasAnyAuthorizationArea(current.data))return {kind:'no_areas'};
+ const {loadOfficeHome}=await import('@/lib/server/officeHomeRead');
  return loadOfficeHome(current.data,input?.deferLive===true,readModelTodayHome);
 }
 
@@ -887,10 +875,12 @@ export async function readOfficeHomeModelAction(input?:{deferLive?:boolean}):Pro
 export async function readTodayHomeRevision(){
  const current=await resolveAuthorization();if(!current.ok||!hasAnyAuthorizationArea(current.data))return null;
  const auth=current.data;
+ const {readTodayModelInTransaction,todayModelRevision,todayModelRevisionMap}=await import('@/lib/server/todayDashboard');
+ const ports=await todayModelPorts();
  const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const {readTodayCalendar}=await import('@/lib/today/todayDashboardPolicy');
  return withPrivilegedTenantTransaction(auth,async tx=>{
-  const settings=await todayModelPorts().readSettings(tx,auth);
+  const settings=await ports.readSettings(tx,auth);
   if(settings.today.todayReadSource==='live')return null;
   const day=readTodayCalendar(new Date()).today,model=await readTodayModelInTransaction(tx,auth,day,true);
   if(model.code!=='OK')return null;
@@ -912,7 +902,22 @@ export async function readTodayHomePart(part:import('@/components/home/OfficeHom
  // No Lager reader is installed on this main. R1: no mock inventory, inferred
  // zero or parallel stock table; bind the approved package's facade when merged.
  if(part==='stock')return {code:'SOURCE_INCOMPLETE',part};
+ const {loadOfficeHome,todayHomePartFromModel}=await import('@/lib/server/officeHomeRead');
  const model=await loadOfficeHome(auth,false,readModelTodayHome);
  return todayHomePartFromModel(model,part);
  }catch{console.error('[TODAY_REGION_SOURCE_FAILED]',{part,code:'SOURCE_INCOMPLETE'});return {code:'SOURCE_INCOMPLETE',part};}
+}
+
+export async function createOrderFromScan(params: {
+  customerId?: string;
+  customerName?: string;
+  title?: string;
+  parts: { name: string; quantity: number; surfaceRequested?: string; material?: string }[];
+  forceCreateCustomer?: boolean;
+}): Promise<
+  | { ok: true; data: { orderId: string; newCustomerId?: string; status: string; customerChoices?: Record<string, unknown>[] } }
+  | { ok: false; error: string; message: string; details?: unknown }
+> {
+  void params;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Auftragserstellung benötigt den W3-Command-Vertrag." };
 }

@@ -1,16 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  GlobalCreateFlow as GlobalCreateFlowLoader,
+  GlobalCreateFlow,
   type GlobalCreatePorts,
   type GlobalCreateIntent,
 } from "@/components/layout/GlobalCreateFlow";
-import {IntakeMessageDialogs as IntakeMessageDialogsLoader,type IntakeCapture,type IntakeDraftPorts} from '@/modules/eingang/public';
+import {IntakeMessageDialogs,type IntakeCapture,type IntakeDraftPorts} from '@/modules/eingang/public';
 import {createDeferredDialogEvents,withDeferredDialogReady} from '@/lib/client/deferredDialogEvents';
-
-let GlobalCreateFlow:Awaited<ReturnType<typeof GlobalCreateFlowLoader.load>>;
-let IntakeMessageDialogs:Awaited<ReturnType<typeof IntakeMessageDialogsLoader.load>>;
-beforeAll(async()=>{[GlobalCreateFlow,IntakeMessageDialogs]=await Promise.all([GlobalCreateFlowLoader.load(),IntakeMessageDialogsLoader.load()]);});
 
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
 const QUOTE_ID = "1c32e174-8494-46f0-9f5f-1a45f2a60bd1";

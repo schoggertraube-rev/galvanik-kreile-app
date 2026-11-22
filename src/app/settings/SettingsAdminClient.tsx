@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import {PAGE_READ_COPY,TODAY_MODEL_COPY} from "@/ui/situationCatalog";
-import {usePermissions} from '@/lib/auth/PermissionsContext';
 import { useEffect, useState, useTransition } from "react";
 import {
   changeOwnPinAction,
@@ -78,7 +77,6 @@ export function SettingsAdminClient({
   catalogLocked: string | null;
   returnTo?: string | null;
 }) {
-  const {hasPermission}=usePermissions();
   const [rebuildingToday,setRebuildingToday]=useState(false);
   const { canManageCompany, canManageLogins } = initialSnapshot.capabilities ?? {
     canManageCompany: true,
@@ -358,7 +356,7 @@ export function SettingsAdminClient({
 
   return <main className={styles.page} data-testid="gregor-system-admin">
     <header><p>Einstellungen</p><h1>Arbeitsplatz & Zugänge</h1><span>Firmendaten, Leistungen und bestehende Zugänge</span></header>
-    {hasPermission('perm_sys_diag')?<button type="button" disabled={rebuildingToday} onClick={async()=>{
+    {initialSnapshot.capabilities?.canManageSystem===true?<button type="button" disabled={rebuildingToday} onClick={async()=>{
       if(rebuildingToday)return;
       setRebuildingToday(true);setMessage(TODAY_MODEL_COPY.rebuildRunning);
       try{
