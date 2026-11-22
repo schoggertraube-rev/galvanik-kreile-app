@@ -345,3 +345,48 @@ test("Varianten, historische Gebinde, Mandanten und Rubrikwechsel bleiben getren
   assert.deepEqual(await withSession(nurLesen, () => getLagerArtikelZumStichtag(fremdId, new Date())), { ok: true, data: null });
   assert.deepEqual(await speichere({ ...rubrikwechsel, id: fremdId }), { ok: false, code: "NOT_FOUND" });
 });
+
+// Explicit schema probe on a real TEST draft; the direct row edit is rolled back.
+// This is invalidation evidence, not a second product writer or an article-edit claim.
+test("Lagerquellen entwerten dasselbe Heute-Modell mit expliziten Ereignissen und echter Zeilenänderung", async () => {
+  const foreignTenant = mandant + "-foreign";
+  await sql`INSERT INTO private.today_tenant_v1(tenant_id) VALUES(${foreignTenant})`;
+  const foreignBefore = await sql`SELECT to_jsonb(model) AS original FROM private.today_tenant_v1 model WHERE tenant_id=${foreignTenant}`;
+  const actor = await createFixture(["auftraege"], "werkstatt");
+  const draft = await withSession(actor, () => speichereLagerStammdaten({
+    befehlId: randomUUID(), daten: { art: "artikel.entwurf", name: "TEST Quellenentwertung", fotoId: null },
+  }));
+  assert.ok(draft.ok, JSON.stringify(draft));
+  const [scope] = await sql`SELECT pg_get_functiondef('private.today_event_scope_v1(text)'::regprocedure) AS source`;
+  for (const event of ["LAGER_STAMMBEFEHL_V1", "LAGER_ARTIKEL_AUFGABE_V1"]) {
+    expect.soft(scope.source, event).toContain("'" + event + "'");
+  }
+  const triggers = await sql`SELECT tgname FROM pg_trigger WHERE tgrelid='public.inventory_items'::regclass
+    AND NOT tgisinternal AND tgname IN ('today_mark_insert_v1','today_mark_update_v1','today_mark_delete_v1') ORDER BY tgname`;
+  expect.soft(triggers.map(row => row.tgname)).toEqual(["today_mark_delete_v1", "today_mark_insert_v1", "today_mark_update_v1"]);
+  let originalRow: unknown;
+  const rollback = new Error("TEST_LAGER_INVALIDATION_ROLLBACK");
+  try {
+    await sql.begin(async tx => {
+      const original = await tx`SELECT to_jsonb(article) AS original FROM public.inventory_items article
+        WHERE tenant_id=${mandant} AND id=${draft.data.id} AND name='TEST Quellenentwertung'`;
+      assert.equal(original.length, 1);
+      originalRow = original[0].original;
+      const [before] = await tx`SELECT tenant_seq::bigint::text AS seq FROM private.today_tenant_v1 WHERE tenant_id=${mandant}`;
+      await tx`UPDATE public.inventory_items SET name='TEST nur zurückgerollte Quellenänderung'
+        WHERE tenant_id=${mandant} AND id=${draft.data.id} AND name='TEST Quellenentwertung'`;
+      const [after] = await tx`SELECT tenant_seq::bigint::text AS seq FROM private.today_tenant_v1 WHERE tenant_id=${mandant}`;
+      expect.soft(BigInt(after.seq)).toBe(BigInt(before.seq) + BigInt(1));
+      expect(await tx`SELECT to_jsonb(model) AS original FROM private.today_tenant_v1 model WHERE tenant_id=${foreignTenant}`).toEqual(foreignBefore);
+      // Synthetic unassigned legacy fixture, all three operations rolled back.
+      const legacyId = randomUUID();
+      await tx`INSERT INTO public.inventory_items(id,name,tenant_id) VALUES(${legacyId},'TEST unassigned legacy source',NULL)`;
+      await tx`UPDATE public.inventory_items SET name='TEST unassigned legacy changed' WHERE id=${legacyId} AND tenant_id IS NULL`;
+      await tx`DELETE FROM public.inventory_items WHERE id=${legacyId} AND tenant_id IS NULL AND name='TEST unassigned legacy changed'`;
+      expect(await tx`SELECT tenant_seq::bigint::text AS seq FROM private.today_tenant_v1 WHERE tenant_id=${mandant}`).toEqual([after]);
+      throw rollback;
+    });
+  } catch (error) { if (error !== rollback) throw error; }
+  expect(await sql`SELECT to_jsonb(article) AS original FROM public.inventory_items article
+    WHERE tenant_id=${mandant} AND id=${draft.data.id}`).toEqual([{ original: originalRow }]);
+});
