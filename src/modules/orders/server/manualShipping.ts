@@ -3,7 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {sql,type SQL} from 'drizzle-orm';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
-import type {AuthorizationSnapshot} from '@/lib/server/authorization';
+import type {AuthorizationSnapshot,AuthorizedReadContext} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {ShippingSettings} from '@/modules/fundament/public';
@@ -29,7 +29,7 @@ function trackingLink(settings:ShippingSettings,tracking:string|null){
  const url=settings.trackingUrl.replace('{nr}',encodeURIComponent(tracking));
  try{const parsed=new URL(url);return parsed.protocol==='https:'&&settings.trackingUrl.includes('{nr}')?url:null;}catch{return null;}
 }
-function manualShippingOrderQuery(auth:AuthorizationSnapshot,orderId:string|SQL,lock=false){
+function manualShippingOrderQuery(auth:Pick<AuthorizationSnapshot,'tenantId'>,orderId:string|SQL,lock=false){
  return sql`SELECT id,customer_id,order_number,handover_mode,station,version,
   private.order_release_allowed_v1(tenant_id,id,true,true) AS allowed FROM public.orders
   WHERE tenant_id=${auth.tenantId} AND id=${orderId} ${lock?sql`FOR UPDATE`:sql``}`;
@@ -89,7 +89,7 @@ export type ManualShippingReadResult=ReturnType<typeof projectManualShipping>|Re
 
 /** Set reads retain the original per-order shipment limit and
  * ordering. No results survive the transaction or a subsequent read/retry. */
-async function readManualShippingGroup(auth:AuthorizationSnapshot,orderIds:string[],ports:ManualShippingPorts){
+async function readManualShippingGroup(auth:Pick<AuthorizationSnapshot,'tenantId'>,orderIds:string[],ports:ManualShippingPorts){
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const requested=sql.join(orderIds.map(orderId=>sql`(${orderId})`),sql`,`);
   const rows=await tx.execute<{order_id:string;orders:Order[]}>(sql`
@@ -124,8 +124,8 @@ async function readManualShippingGroup(auth:AuthorizationSnapshot,orderIds:strin
  });
 }
 
-export async function readManualShippingBatch(auth:AuthorizationSnapshot,orderIds:readonly string[],ports:ManualShippingPorts):Promise<Map<string,ManualShippingReadResult>>{
- const result=new Map<string,ManualShippingReadResult>(),valid:string[]=[],allowed=authorized(auth);
+export async function readManualShippingBatch(auth:AuthorizationSnapshot|AuthorizedReadContext,orderIds:readonly string[],ports:ManualShippingPorts):Promise<Map<string,ManualShippingReadResult>>{
+ const result=new Map<string,ManualShippingReadResult>(),valid:string[]=[],allowed='canReadArea'in auth?auth.canReadArea('auftraege'):authorized(auth);
  for(const orderId of new Set(orderIds)){
   if(!allowed){result.set(orderId,error('FORBIDDEN','SHIPPING_FORBIDDEN'));continue;}
   if(!id(orderId)){result.set(orderId,error('VALIDATION_ERROR','ORDER_ID_INVALID'));continue;}
@@ -146,8 +146,8 @@ export async function readManualShippingBatch(auth:AuthorizationSnapshot,orderId
  await read(valid);
  return result;
 }
-export async function readManualShipping(auth:AuthorizationSnapshot,orderId:unknown,ports:ManualShippingPorts):Promise<ManualShippingReadResult>{
- if(!authorized(auth))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
+export async function readManualShipping(auth:AuthorizationSnapshot|AuthorizedReadContext,orderId:unknown,ports:ManualShippingPorts):Promise<ManualShippingReadResult>{
+ if(!('canReadArea'in auth?auth.canReadArea('auftraege'):authorized(auth)))return error('FORBIDDEN','SHIPPING_FORBIDDEN');
  if(!id(orderId))return error('VALIDATION_ERROR','ORDER_ID_INVALID');
  const result=await readManualShippingBatch(auth,[orderId],ports);
  return result.get(orderId)??error('UNAVAILABLE','MANUAL_SHIPPING_READ_FAILED');

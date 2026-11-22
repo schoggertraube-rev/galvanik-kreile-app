@@ -6,7 +6,7 @@ import {beforeAll,expect,it,vi,expectTypeOf} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,manualTrackingFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization,authorizationReadContext,type AuthorizationSnapshot,type AuthorizedReadContext} from '@/lib/server/authorization';
 import {readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
@@ -17,12 +17,14 @@ import {createQuoteAction} from '@/app/actions/quotes.actions';
 import {reklamationAusfuehrenAction,getComplaints} from '@/app/actions/complaints.actions';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
-import {setOrderPickupAppointmentAction} from '@/app/actions/orders.actions';
+import {setOrderPickupAppointmentAction,getManualShippingAction} from '@/app/actions/orders.actions';
 import {readOrderPickupAppointment,readOrderPickupAppointmentInTransaction} from '@/lib/server/pickupAppointmentPort';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} from '@/lib/server/commands/immutableInvoiceCommand';
+import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch,readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readInvoiceVat} from '@/modules/accounting/public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
+import {readManualShipping,readManualShippingBatch} from '@/modules/orders/server-public';
 import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 let prepared:Awaited<ReturnType<typeof readyInvoiceOrder>>;
 let quoteId:string,quoteVersion:number;
@@ -86,6 +88,31 @@ it('shares qualified shipping-invoice consequences and original numbers for zero
   const expected=await readInvoiceShippingConsequences(result.data,stale,readInvoiceVat,readShippingSettingsInTransaction);
   expect(await readInvoiceShippingConsequences(projection,stale,readInvoiceVat,readShippingSettingsInTransaction)).toEqual(expected);
   if(session.canReadArea('preise'))expect(expected).toMatchObject({code:'SOURCE_INCOMPLETE',datenluecken:['SHIPPING_INVOICE_SOURCE']});
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
+});
+it('reads actual manual shipment originals and address fields through one shipping kernel for both callbacks',async()=>{
+ const shipping=await readyInvoiceOrder('TEST manual shipment kernel','shipping');
+ const receipt=await manualTrackingFixture(shipping.orderId);
+ const ports:Parameters<typeof readManualShipping>[2]={readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,readSettings:readShippingSettingsInTransaction,readAllocation:(tx,tenantId,customerId,input)=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ for(const profile of profiles){
+  const fixture=profile.rights===null?full:await createFixture(profile.rights,profile.role);
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_MANUAL_SHIPPING_AUTH');
+  const areas=result.data.areas;if(!Array.isArray(areas))throw Error('TEST_MANUAL_SHIPPING_AREAS_REQUIRED');
+  const session=authorizationReadContext(result.data),projection:AuthorizedReadContext={tenantId:result.data.tenantId,permissions:result.data.permissions,canReadArea:area=>areas.includes(area)};
+  for(const ids of [[],[shipping.orderId],[prepared.orderId,shipping.orderId]]){
+   const expected=await readManualShippingBatch(result.data,ids,ports);
+   expect(await readManualShippingBatch(session,ids,ports)).toEqual(expected);
+   const actual=await readManualShippingBatch(projection,ids,ports);expect(actual).toEqual(expected);expect(actual.size).toBe(ids.length);
+   for(const orderId of ids)expect(await readManualShipping(projection,JSON.parse(JSON.stringify(orderId)),ports)).toEqual(actual.get(orderId));
+  }
+  const actual=await readManualShipping(projection,shipping.orderId,ports);
+  if(session.canReadArea('auftraege')){
+   expect(actual).toMatchObject({code:'OK',data:{orderId:shipping.orderId,fields:{street:'TEST Weg',houseNumber:'1'},shipments:[{id:receipt.shipmentId,trackingNumber:receipt.trackingNumber,carrier:receipt.carrier,updatedAt:receipt.updatedAt}]}});
+   expect(await withSession(fixture,()=>getManualShippingAction({orderId:shipping.orderId}))).toEqual(actual);
+  }else expect(actual).toMatchObject({code:'FORBIDDEN',reason:'SHIPPING_FORBIDDEN'});
+  expect(await readManualShipping(projection,'invalid id',ports)).toEqual(await readManualShipping(result.data,'invalid id',ports));
  }
  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
 });
