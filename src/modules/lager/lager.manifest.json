@@ -35,7 +35,9 @@
   "migrations": [
     "20261122153938_s_lag_p1_stammdaten.sql",
     "20261122153940_s_lag_p1_stammbefehle.sql",
-    "20261122153942_s_lag_p1_ladezeit.sql"
+    "20261122153942_s_lag_p1_ladezeit.sql",
+    "20261122180025_lager_today_source_coverage.sql",
+    "20261122200120_lager_today_trigger_contract.sql"
   ],
   "viewsFunctions": [
     "private.lager_naechste_kurznummer",

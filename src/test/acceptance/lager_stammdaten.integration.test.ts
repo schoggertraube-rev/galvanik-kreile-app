@@ -348,9 +348,10 @@ test("Varianten, historische Gebinde, Mandanten und Rubrikwechsel bleiben getren
 
 // Explicit schema probe on a real TEST draft; the direct row edit is rolled back.
 // This is invalidation evidence, not a second product writer or an article-edit claim.
-test("Lagerquellen entwerten dasselbe Heute-Modell mit expliziten Ereignissen und echter Zeilenänderung", async () => {
-  const foreignTenant = mandant + "-foreign";
+test("Lagerquellen entwerten dasselbe Heute-Modell mit expliziten Ereignissen und echter Zeilenänderung", async ({ onTestFinished }) => {
+  const foreignTenant = mandant + "-foreign-" + randomUUID();
   await sql`INSERT INTO private.today_tenant_v1(tenant_id) VALUES(${foreignTenant})`;
+  onTestFinished(async () => { await sql`DELETE FROM private.today_tenant_v1 WHERE tenant_id=${foreignTenant}`; });
   const foreignBefore = await sql`SELECT to_jsonb(model) AS original FROM private.today_tenant_v1 model WHERE tenant_id=${foreignTenant}`;
   const actor = await createFixture(["auftraege"], "werkstatt");
   const draft = await withSession(actor, () => speichereLagerStammdaten({
@@ -364,6 +365,8 @@ test("Lagerquellen entwerten dasselbe Heute-Modell mit expliziten Ereignissen un
   const triggers = await sql`SELECT tgname FROM pg_trigger WHERE tgrelid='public.inventory_items'::regclass
     AND NOT tgisinternal AND tgname IN ('today_mark_insert_v1','today_mark_update_v1','today_mark_delete_v1') ORDER BY tgname`;
   expect.soft(triggers.map(row => row.tgname)).toEqual(["today_mark_delete_v1", "today_mark_insert_v1", "today_mark_update_v1"]);
+  const [inventoryTrigger] = await sql`SELECT pg_get_functiondef('private.today_mark_inventory_items_v1()'::regprocedure) AS source`;
+  expect(inventoryTrigger.source).toContain("today_lock_tenants_v1");
   let originalRow: unknown;
   const rollback = new Error("TEST_LAGER_INVALIDATION_ROLLBACK");
   try {
