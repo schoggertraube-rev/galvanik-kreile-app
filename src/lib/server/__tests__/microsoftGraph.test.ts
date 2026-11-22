@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // Controlled settings source for provider-port unit cases; the native settings
 // round trip is covered independently against the isolated Replay tenant.
 const settings=vi.hoisted(()=>({queryTimeoutMs:10000,invoiceMailBatchLimit:101}));
+import {PageReadTimeout,hasPageReadBudget,pageReadFetchPort,withPageReadBudget} from '@/db/readBudget';
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphSentDocumentEvidence,
@@ -45,6 +46,28 @@ it.each(['reader','value'] as const)('PL02:51 uses the canonical default when th
  expect(await readMicrosoftGraphSentMailByRequest({clientRequestId:'11111111-1111-4111-8111-111111111111',recipient:'test@example.invalid',preparedAt:'2026-11-22T01:00:00Z'},env,fetchPort,source)).toMatchObject({code:'OK'});
  expect(timeout).toHaveBeenCalledWith(DEFAULT_PAGE_READ_SETTINGS.graphTimeoutMs);
  expect(fetchPort).toHaveBeenCalledTimes(2);
+});
+
+it('E0 keeps an already dispatched send outside a page-read deadline and restores that deadline afterwards',async()=>{
+  // Only the external provider is doubled. Its delayed 202 comes after dispatch;
+  // a read timeout must not turn that accepted send into an unknown outcome.
+  const requests:string[]=[];
+  const fetchPort=vi.fn(async(input:RequestInfo|URL)=>{
+    const url=String(input);requests.push(url);
+    if(url.includes('/oauth2/v2.0/token'))return new Response(JSON.stringify({access_token:'TEST-token'.repeat(5)}),{status:200});
+    expect(url).toContain('/sendMail');
+    await new Promise(resolve=>setTimeout(resolve,40));
+    return new Response(null,{status:202});
+  });
+  await withPageReadBudget(async()=>{
+    const result=await sendMicrosoftGraphMail({to:'TEST-customer@example.invalid',subject:'TEST original',body:'TEST original body'},env,fetchPort);
+    expect(requests).toHaveLength(2);expect(requests[1]).toContain('/sendMail');
+    expect(result).toEqual({code:'OK',data:{accepted:true}});
+    expect(hasPageReadBudget()).toBe(true);
+    await expect(pageReadFetchPort(fetchPort)('https://example.invalid/TEST-read')).rejects.toBeInstanceOf(PageReadTimeout);
+  },10);
+  expect(hasPageReadBudget()).toBe(false);
+  expect(requests).toHaveLength(2);expect(requests.filter(url=>url.endsWith('/sendMail'))).toHaveLength(1);
 });
 
 it('preserves large inline work photos and small ordinary images while excluding a signature CID',async()=>{
