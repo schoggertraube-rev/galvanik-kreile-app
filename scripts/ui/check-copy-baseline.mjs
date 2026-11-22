@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {collectInlineCopy,isTextBaselineFile} from '../quality/eslint-ui-copy-plugin.mjs';
+import {assertSafeDrizzleAny} from '../quality/drizzle-any-binding.mjs';
 
 const path='scripts/quality/ui-copy-baseline.json';
 const git=(...args)=>execFileSync('git',args,{encoding:'utf8',maxBuffer:32*1024*1024,stdio:['pipe','pipe','pipe']});
@@ -24,6 +25,10 @@ export function assertBaselineShrinks(current,previous){
 function main(){
  const index=process.argv.indexOf('--base');if(index<0||!process.argv[index+1])throw Error('S15_BASE_REQUIRED');
  const base=process.argv[index+1];git('rev-parse','--verify',base+'^{commit}');
+ // The existing language/ratchet step also rejects unsafe Drizzle array binds.
+ // Inspect every tracked source, including unchanged callers; no baseline escape.
+ const sources=git('ls-files','-z','--','src','scripts','e2e').split('\0').filter(name=>/\.[cm]?[jt]sx?$/u.test(name));
+ for(const name of sources)assertSafeDrizzleAny(readFileSync(name,'utf8'),name);
  let previous;
  if(git('ls-tree','--name-only',base,path).trim())previous=JSON.parse(git('show',base+':'+path));
  else previous=baselineFromTree(base);
