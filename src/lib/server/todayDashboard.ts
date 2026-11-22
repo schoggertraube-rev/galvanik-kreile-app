@@ -11,7 +11,8 @@ import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentR
 
 import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {authorizationReadContext,type AuthorizedReadContext,type AuthorizationSnapshot} from "@/lib/server/authorization";
+import type {AuthorizationSnapshot} from "@/lib/server/authorization";
+import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
