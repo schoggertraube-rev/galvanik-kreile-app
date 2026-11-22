@@ -32,7 +32,7 @@ import {createQuoteAction,readQuoteDefaultsAction,changeQuoteLifecycleAction} fr
 import {saveQuoteSettingsAction} from '@/app/actions/settings.actions';
 import {reklamationAusfuehrenAction} from '@/app/actions/complaints.actions';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
-import {APP_ROLES,normalizeAccessAreasForRole,type AccessArea} from '@/lib/auth/authorizationContract';
+import {APP_ROLES,ACCESS_AREAS,normalizeAccessAreasForRole,type AccessArea} from '@/lib/auth/authorizationContract';
 import {GET as getModelRoute} from '@/app/api/heute/modell/route';
 
 
@@ -147,7 +147,10 @@ it('E-G1 fills all eight productive source kinds and creates the real canonical 
  expect(await withSession(full,()=>saveIntakeTaskAction({clientKey:task.client_key,taskId:task.id,version:task.version,kind:task.art,title:task.titel,dueDate:clock.yesterday,time:task.uhrzeit,forLogin:task.fuer_login,forArea:task.fuer_bereich,reference:{type:task.bezug_typ,id:task.bezug_id},note:task.notiz}))).toMatchObject({code:'OK'});
  const photo=await storeOrderPhoto(order.orderId);
  expect(await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:globalThis.crypto.randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST G1 complaint',photoIds:[photo],goodsReturn:'ja'}))).toMatchObject({code:'OK'});
- for(const role of APP_ROLES)profiles.set('role-'+role,await createFixture(normalizeAccessAreasForRole(role,[]),role));
+ for(const role of APP_ROLES){
+  profiles.set('role-'+role,await createFixture(normalizeAccessAreasForRole(role,[]),role));
+  profiles.set('role-granted-'+role,await createFixture(normalizeAccessAreasForRole(role,[...ACCESS_AREAS]),role));
+ }
  for(const profile of customProfiles)profiles.set(profile.key,await createFixture(profile.areas,'buero'));
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const sources=await sql`SELECT kind,status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'order' ORDER BY kind`;
@@ -155,7 +158,7 @@ it('E-G1 fills all eight productive source kinds and creates the real canonical 
  for(const row of sources)expect(row.payload).not.toBeNull();
 });
 
-it.each([...APP_ROLES.map(role=>'role-'+role),...customProfiles.map(profile=>profile.key)])('E-G1 keeps the full dashboard equal for actual profile %s',async key=>{
+it.each([...APP_ROLES.map(role=>'role-'+role),...APP_ROLES.map(role=>'role-granted-'+role),...customProfiles.map(profile=>profile.key)])('E-G1 keeps the same Home access or full dashboard for actual profile %s',async key=>{
  const fixture=profiles.get(key);if(!fixture)throw Error('TEST_G1_PROFILE_NOT_CREATED_'+key);
  await withSession(fixture,async()=>{
   const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_G1_ACTUAL_PROFILE_AUTH');
