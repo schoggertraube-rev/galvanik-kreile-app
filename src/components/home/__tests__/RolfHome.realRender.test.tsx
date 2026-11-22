@@ -405,3 +405,19 @@ it('controlled manual reload and automatic polling share one in-flight request a
  await waitFor(()=>expect(screen.getAllByText('TEST acknowledged model')[0]).toBeVisible());
  expect(fetch).toHaveBeenCalledTimes(1);
 });
+
+it('controlled return to a fresh model checks its scoped revision and keeps unchanged visible content',async()=>{
+ const current=pollingModel('TEST unchanged visible content',false);
+ if(!('modelRead'in current)||!current.modelRead)throw Error('TEST_CONDITIONAL_MODEL_REQUIRED');
+ current.modelRead={...current.modelRead,revision:'a'.repeat(64)};
+ const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(null,{status:304}));vi.stubGlobal('fetch',fetch);
+ render(<RolfHomeClient model={current} ports={actionPorts}/>);
+ expect(fetch).not.toHaveBeenCalled();
+ fireEvent.focus(window);
+ await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+ await act(async()=>{await Promise.resolve();});
+ const headers=new Headers(fetch.mock.calls[0][1]?.headers);
+ expect(headers.get('If-None-Match')).toBe('"'+'a'.repeat(64)+'"');expect(headers.get('X-Kreile-Login-Scope')).toBe('TEST-poll-scope');
+ expect(screen.getAllByText('TEST unchanged visible content')[0]).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
+ fireEvent.focus(window);await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
+});

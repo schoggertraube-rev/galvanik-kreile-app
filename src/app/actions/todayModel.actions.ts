@@ -9,7 +9,7 @@ import type {QuoteReadback} from '@/modules/quotes/public';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {quoteV45Capabilities,readV45QuoteRule,v45QuoteFacts} from '@/lib/server/v45QuoteRead';
-import {readTodaySourcesFromModel,modelRecord,type TodayModelReadPorts} from '@/lib/server/todayDashboard';
+import {readTodaySourcesFromModel,readTodayModelInTransaction,todayModelRevision,modelRecord,type TodayModelReadPorts} from '@/lib/server/todayDashboard';
 import {composeTodayDashboard,type TodayDashboardSources} from '@/lib/server/todayDashboard';
 import {withPageReadPhase} from '@/db/readBudget';
 
@@ -64,4 +64,19 @@ export async function readModelTodayHome(auth:AuthorizationSnapshot,readAt=new D
  if(result.code!=='OK')return result;
  const dashboard=await withPageReadPhase('today.model.compose',async()=>composeTodayDashboard(auth,result.sources,result.sources.calendar),value=>({rows:value.items.length,missing:value.orderActions?.missingOrderIds.length??0}));
  return {...result,dashboard};
+}
+
+/** Cheap conditional read: the same settings/qualification SQL, no JSON payload,
+ * actor follow-up reads or dashboard composition when nothing has changed. */
+export async function readTodayHomeRevision(auth:AuthorizationSnapshot){
+ const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
+ const {readTodayCalendar}=await import('@/lib/today/todayDashboardPolicy');
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const settings=await ports.readSettings(tx,auth);
+  if(settings.today.todayReadSource==='live')return null;
+  const day=readTodayCalendar(new Date()).today,model=await readTodayModelInTransaction(tx,auth,day,true);
+  if(model.code!=='OK')return null;
+  const pending=model.needsRebuild||model.rows.some(row=>!row.fresh);
+  return {revision:todayModelRevision(auth,model.rows,day),pending};
+ });
 }

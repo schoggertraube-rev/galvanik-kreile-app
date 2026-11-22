@@ -18,7 +18,7 @@ import { IntakeDraftList } from "@/modules/eingang/public";
 import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";
 import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean} };
+type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string} };
 export type OfficeHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & OfficeIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & OfficeIdentity)
@@ -75,23 +75,25 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
   const [mailMessage, setMailMessage] = useState("");
   const modelPoll=useRef<(()=>Promise<void>)|null>(null);
   useEffect(()=>{
-    if(!('dashboard'in initialModel)||!initialModel.modelRead?.pending||!initialModel.cacheLoginScope)return;
+    if(!('dashboard'in initialModel)||!initialModel.modelRead||!initialModel.cacheLoginScope)return;
     const scope=initialModel.cacheLoginScope,controller=new AbortController();
-    let stopped=false,running=false,timer:ReturnType<typeof setTimeout>|undefined;
+    let stopped=false,running=false,timer:ReturnType<typeof setTimeout>|undefined,revision=initialModel.modelRead.revision;
     const poll=async()=>{
       if(stopped||running)return;
       running=true;if(timer)clearTimeout(timer);
       try{
       let nextDelay=initialModel.modelRead!.pollMs,again=true;
       try{
-        const response=await fetch('/api/heute/modell?nur=veraltet',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
+        const response=await fetch('/api/heute/modell?nur=veraltet',{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{'X-Kreile-Login-Scope':scope,...(revision?{'If-None-Match':'"'+revision+'"'}:{})}});
         if(response.status===401||response.status===403)return;
+        if(response.status===304){again=false;return;}
         if(!response.ok)throw Error('TODAY_MODEL_READ_UNAVAILABLE');
         const result=await response.json() as {code?:string;model?:OfficeHomeModel};
         if(stopped)return;
         if(result.code!=='OK'||!result.model||!('dashboard'in result.model))throw Error('TODAY_MODEL_RESPONSE_INCOMPLETE');
         if(result.model.cacheLoginScope!==scope)return;
         const next=result.model;
+        revision=next.modelRead?.revision;
         setPolled({base:initialModel,value:next});
         again=next.modelRead?.pending===true;
         if(next.modelRead)nextDelay=next.modelRead.pollMs;
@@ -103,9 +105,12 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
       }finally{running=false;}
     };
     modelPoll.current=poll;
-    timer=setTimeout(()=>{void poll();},initialModel.modelRead.pollMs);
-    return ()=>{stopped=true;controller.abort();if(timer)clearTimeout(timer);if(modelPoll.current===poll)modelPoll.current=null;};
+    const resume=()=>{if(document.visibilityState==='visible')void poll();};
+    window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);
+    if(initialModel.modelRead.pending)timer=setTimeout(()=>{void poll();},initialModel.modelRead.pollMs);
+    return ()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);stopped=true;controller.abort();if(timer)clearTimeout(timer);if(modelPoll.current===poll)modelPoll.current=null;};
   },[initialModel]);
+  const refreshToday=()=>{if(modelPoll.current)void modelPoll.current();else router.refresh();};
   const openMail = async (graphMessageId: string) => {
     setMailId(graphMessageId);
     setMailPreview(null);
@@ -154,7 +159,7 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     const id=item.invoiceMail.documentId,prior=invoiceHandoverRequests.current.get(id);
     if(prior?.busy)return;
     const request={key:prior?.key??crypto.randomUUID(),busy:true};invoiceHandoverRequests.current.set(id,request);
-    try{const result=await confirmInvoiceHandoverAction({invoiceId:id,clientRequestId:request.key});setMessage(result.message);if(result.code==='OK')router.refresh();}
+    try{const result=await confirmInvoiceHandoverAction({invoiceId:id,clientRequestId:request.key});setMessage(result.message);if(result.code==='OK')refreshToday();}
     catch{setMessage(INVOICE_DELIVERY_COPY.manualHandoverFailed);}
     finally{request.busy=false;}
   };
@@ -163,7 +168,7 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, specId: item.kind === "order" ? "hbmehr.auftrag-offnen" : undefined, onClick: () => primary(item) }, ...(item.invoiceMail?[{text:INVOICE_DELIVERY_COPY.manualHandover,icon:"check" as const,onClick:()=>void confirmInvoiceHandover(item)}]:[]), { text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }, ...(canDelegate && item.kind === "order" && model.dashboard.delegationTargets.length > 0 ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
     onOeffnen: () => primary(item), onWeitere: () => setMore(item),
   }); });
-  const saveReminder = async (mode: TodayReminderMode) => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setMessage(result.message ?? "Erinnerung gespeichert"); setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
+  const saveReminder = async (mode: TodayReminderMode) => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setMessage(result.message ?? "Erinnerung gespeichert"); setLater(null); refreshToday(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
   const delegate = async (target: TodayDashboard["delegationTargets"][number]) => {
     if (!more?.orderId || !more.orderVersion) return;
     const { key, orderId, orderVersion, dueDate } = more;
@@ -174,7 +179,7 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
       setDelegated((current) => ({ ...current, [key]: { name: target.displayName, version: result.receipt?.aggregateVersion ?? orderVersion + 1, dueDate } }));
       setMessage(`Bei ${target.displayName} · ${assignmentDeadline(dueDate)} · Rückgängig`);
       setMore(null);
-      router.refresh();
+      refreshToday();
     } else setMessage(result.message ?? "Zuweisung nicht gespeichert.");
   };
   const fieldHasContent = (field: TodayItem["field"]) => entries(field).length > 0 || (field === "money" && collectionNotices.length > 0);
@@ -219,7 +224,7 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}
-    {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Heute zu tun bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); router.refresh(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
+    {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Heute zu tun bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); refreshToday(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
     {!dashboardHasVisibleContent && !customize && !model.dashboard.outlookMessage && model.kind!=="partial" ? <Zustand art="leer" text={companyHasOrders ? "Nichts offen" : "Noch keine Aufträge erfasst."} aktion={!companyHasOrders && canStartOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
       {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage)).map(fieldCard)}
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}

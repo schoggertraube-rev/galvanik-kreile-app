@@ -247,3 +247,25 @@ it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s so
   }finally{output.mockRestore();}
  });
 });
+
+it('conditional real GET skips unchanged composition and reloads after an actual command sequence',async()=>{
+ const order=await readyInvoiceOrder('TEST conditional source revision');
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ await withSession(full,async()=>{
+  const initial=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet'));
+  expect(initial.status).toBe(200);const value=await initial.json(),etag=initial.headers.get('etag');
+  expect(etag).toMatch(/^"[a-f0-9]{64}"$/);expect(value.model.cacheLoginScope).toBeTruthy();
+  const request=()=>new Request('http://127.0.0.1/api/heute/modell?nur=veraltet',{headers:{'If-None-Match':etag!,'X-Kreile-Login-Scope':value.model.cacheLoginScope}});
+  const output=vi.spyOn(console,'info');
+  try{
+   const unchanged=await getModelRoute(request());expect(unchanged.status).toBe(304);expect(await unchanged.text()).toBe('');
+   const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
+   expect(phases).toContain('today.model.read');expect(phases).not.toContain('today.model.compose');expect(phases).not.toContain('today.source');
+  }finally{output.mockRestore();}
+  const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-09-05',reason:'TEST conditional model actual source sequence',clientEventId:randomUUID()};
+  expect((await changeOrderPromisedDueDateAction(command)).code).toBe('OK');
+  const changed=await getModelRoute(request());expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(etag);
+  const current=await changed.json();expect(current.model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)).toMatchObject({version:order.version+1});
+  expect(await changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(command)))).toMatchObject({code:'OK',replayed:true});
+ });
+});

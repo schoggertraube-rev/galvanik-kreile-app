@@ -44,15 +44,16 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot):
     const now=new Date(),modeled=await readModelTodayHome(authorization,now);
     let orderSource:{code:'OK';orders:OperationalOrder[]}|{code:'SOURCE_INCOMPLETE'};
     let dashboard:Awaited<ReturnType<typeof readTodayDashboard>>;
-    let modelRead:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean};
+    let modelRead:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string};
     if(modeled.code==='OK'){
       dashboard=modeled.dashboard;
       orderSource=modeled.operationalSource.code==='OK'?{code:'OK',orders:modeled.operationalSource.data}:{code:'SOURCE_INCOMPLETE'};
-      modelRead={source:'modell',pending:modeled.pending,incomplete:modeled.incomplete,pollMs:modeled.settings.today.todayStalePollMs,rebuild:modeled.needsRebuild};
+      modelRead={source:'modell',pending:modeled.pending,incomplete:modeled.incomplete,pollMs:modeled.settings.today.todayStalePollMs,rebuild:modeled.needsRebuild,revision:modeled.sourceRevision};
       if(modeled.needsRebuild||modeled.pending)await scheduleTodayProjection([authorization.tenantId],modeled.needsRebuild?'rebuild':'refresh');
     }else{
       // Only an explicitly selected live path or a known empty model uses the
-      // existing live collector. A stale/failed source is never a live fallback.
+      // existing whole live collector. Individual disqualified model rows use
+      // only their canonical live readers inside the model collection.
       const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'}));
       [orderSource,dashboard]=await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})),withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,now,ordersRead))]);
       modelRead={source:modeled.code==='LIVE'?'live':'modell',pending:modeled.code==='EMPTY',incomplete:false,pollMs:modeled.settings.today.todayStalePollMs,rebuild:modeled.code==='EMPTY'};
