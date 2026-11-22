@@ -289,6 +289,7 @@ export function logPageReadPhase(phase:string,startedAt:number,counts:Readonly<R
   if(!diagnosticPhases.has(phase)||!Number.isFinite(startedAt))return;
   const safeCounts=Object.fromEntries(Object.entries(counts).filter(([key,value])=>/^[a-z_]{1,40}$/.test(key)&&Number.isSafeInteger(value)&&value>=0));
   const codes=new Set<string>(),names=new Set<string>(),reasons=new Set<string>();
+  try{
   for(let current:unknown=error,depth=0;current&&typeof current==='object'&&depth<5;depth++){
    const code:unknown=Object.getOwnPropertyDescriptor(current,'code')?.value;
    const message:unknown=Object.getOwnPropertyDescriptor(current,'message')?.value;
@@ -298,6 +299,7 @@ export function logPageReadPhase(phase:string,startedAt:number,counts:Readonly<R
    if(typeof name==='string'&&diagnosticNames.has(name))names.add(name);
    current=Object.getOwnPropertyDescriptor(current,'cause')?.value;
   }
+  }catch{safeCounts.error_metadata_failed=1;}
   const budget=budgets.getStore(),now=Date.now();
   console.info('[PAGE_READ_PHASE]',JSON.stringify({phase,durationMs:Math.max(0,now-startedAt),offsetMs:budget?startedAt-budget.startedAt:null,counts:safeCounts,codes:[...codes],reasons:[...reasons],names:[...names],budgetKind:budget?.kind??(budget?'page':'unscoped'),remainingMs:budget?Math.max(0,budget.deadline-now):null}));
  }catch{console.error('[PAGE_READ_DIAGNOSTIC_FAILED]');}

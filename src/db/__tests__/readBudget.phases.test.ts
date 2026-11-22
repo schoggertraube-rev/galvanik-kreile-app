@@ -25,3 +25,11 @@ it('records only the measured RSC byte count, never a response body',()=>{
  logPageReadPhase('rsc.bytes',Date.now(),{bytes:1234});
  expect(JSON.parse(String(output.mock.calls[0][1]))).toMatchObject({phase:'rsc.bytes',counts:{bytes:1234}});
 });
+it('marks an unreadable diagnostic object without adding a second business error',async()=>{
+ const output=vi.spyOn(console,'info').mockImplementation(()=>{});
+ const logged=vi.spyOn(console,'error').mockImplementation(()=>{});
+ const failure=new Proxy({},{getOwnPropertyDescriptor:()=>{throw Error('TEST private diagnostic trap');}});
+ await expect(withPageReadPhase('auth.candidates',()=>{throw failure;})).rejects.toBe(failure);
+ expect(logged).not.toHaveBeenCalled();expect(output).toHaveBeenCalledOnce();
+ expect(JSON.parse(String(output.mock.calls[0][1]))).toMatchObject({phase:'auth.candidates',counts:{failed:1,error_metadata_failed:1},codes:[],names:[],reasons:[]});
+});
