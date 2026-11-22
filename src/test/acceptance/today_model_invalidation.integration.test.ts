@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 
 it('creates only private tenant-keyed derived sources with no public read or delete privilege',async()=>{
@@ -57,4 +57,36 @@ it('explicitly classifies every production versioned constant and keeps unknown 
  for(const file of files)for(const match of readFileSync(file,'utf8').matchAll(/['"`]([A-Z][A-Z0-9_]*_V\d+)['"`]/g))types.add(match[1]);
  for(const type of types)expect(definition.source,`missing explicit event scope: ${type}`).toContain("'"+type+"'");
  expect(await sql`SELECT private.today_event_scope_v1('TEST_UNKNOWN_FUTURE_V999') AS unknown_scope,private.today_event_scope_v1('USER_LAST_SEEN_RECORDED_V1') AS seen_scope,private.today_event_scope_v1(NULL) AS null_scope`).toEqual([{unknown_scope:'tenant',seen_scope:'none',null_scope:'tenant'}]);
+});
+
+
+it('invalidates the tenant epoch for actual right-row insert/update/delete without changing another tenant',async()=>{
+ // Explicit schema/invalidation probe in this isolated TEST tenant. These SQL
+ // operations do not claim to be the administrative Action/permission writer.
+ const actor=await createFixture(['auftraege']);
+ const other=tenant+'-rights-isolation';await sql`INSERT INTO private.today_tenant_v1(tenant_id) VALUES(${other})`;
+ const [before]=await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`;
+ const otherBefore=await sql`SELECT to_jsonb(model) AS row FROM private.today_tenant_v1 model WHERE tenant_id=${other}`;
+ await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${tenant},${actor.actorId}::uuid,'mails',${full.actorId}::uuid)`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+1}]);
+ await sql`UPDATE public.app_user_rights SET bereich='kunden' WHERE tenant_id=${tenant} AND user_id=${actor.actorId}::uuid AND bereich='mails'`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+2}]);
+ await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${actor.actorId}::uuid AND bereich='kunden'`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+3}]);
+ expect(await sql`SELECT to_jsonb(model) AS row FROM private.today_tenant_v1 model WHERE tenant_id=${other}`).toEqual(otherBefore);
+ expect(await sql`SELECT bereich FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${actor.actorId}::uuid ORDER BY bereich`).toEqual([{bereich:'auftraege'}]);
+});
+
+
+it('invalidates actual app-user name and active changes while retaining the existing role source',async()=>{
+ // Isolated TEST schema probe, not a new identity, role or administrative writer.
+ const actor=await createFixture(['mails']);
+ const [before]=await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`;
+ await sql`UPDATE public.app_users SET full_name='TEST actual changed name' WHERE tenant_id=${tenant} AND id=${actor.actorId}::uuid`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+1}]);
+ await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${tenant} AND id=${actor.actorId}::uuid`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+2}]);
+ await sql`UPDATE public.app_users SET active=true WHERE tenant_id=${tenant} AND id=${actor.actorId}::uuid`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+3}]);
+ expect(await sql`SELECT role,full_name,active FROM public.app_users WHERE tenant_id=${tenant} AND id=${actor.actorId}::uuid`).toEqual([{role:actor.role,full_name:'TEST actual changed name',active:true}]);
 });
