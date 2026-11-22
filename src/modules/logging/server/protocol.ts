@@ -5,8 +5,7 @@ import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/auth
 import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {after} from 'next/server';
-import {outsidePageReadBudget} from '@/db/readBudget';
+import {scheduleTodayProjection} from '@/lib/server/todayProjectionSchedule';
 import type {TechnicalEvent,TechnicalLogRow,ClickLogRow,LogFilter,LogSubject,LogReason,LoggingSettingsReader} from '../public';
 
 // PL16.11: instance-local loss is explicitly accepted at cold start. Not a second log source.
@@ -172,16 +171,7 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
   // A scheduling/runtime failure cannot roll back or replace the main result;
   // the trigger-owned pending marker remains for the next live escape/rebuild.
   const tenants=[...readAuthorization().tenantTransactions.keys()];
-  if(tenants.length){
-   try{after(()=>outsidePageReadBudget(async()=>{
-    const {refreshTodayModel}=await import('@/lib/server/todayProjection');
-    for(const tenantId of tenants){
-     try{await refreshTodayModel(tenantId);}
-     catch{console.error('[TODAY_PROJECTOR_REFRESH_FAILED]',{code:'SOURCE_INCOMPLETE'});}
-    }
-   }));}
-   catch{console.error('[TODAY_PROJECTOR_SCHEDULE_FAILED]',{code:'SOURCE_INCOMPLETE'});}
-  }
+  if(tenants.length)await scheduleTodayProjection(tenants,'refresh');
  }
  },logTechnical);
 }
