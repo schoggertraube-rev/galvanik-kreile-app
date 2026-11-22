@@ -71,17 +71,20 @@ export async function speichereLagerStammdaten(auftrag: unknown, ports: LagerTas
 }
 
 /** Verknüpft die im Eingang bestätigte Variantenwahl mit dem dort gesicherten Original. */
-export async function bestaetigeLagerEtikettZuordnung(input: {
-  befehlId: string; eingangId: string; fotoId: string; artikelId: string; version: number;
-}, ports: LagerTaskPorts): Promise<Stammantwort> {
+export async function bestaetigeLagerEtikettZuordnung(input: unknown, ports: LagerTaskPorts): Promise<Stammantwort> {
+  if (!input || typeof input !== "object" || Array.isArray(input)
+      || Object.keys(input).sort().join(",") !== "artikelId,befehlId,eingangId,fotoId,version") {
+    return { ok: false, code: "VALIDATION_ERROR" };
+  }
+  const value = input as Record<string, unknown>;
   return speichereLagerStammdaten({
-    befehlId: input.befehlId,
+    befehlId: value.befehlId,
     daten: {
       art: "artikel.foto_zuordnen",
-      id: input.artikelId,
-      version: input.version,
-      fotoId: input.fotoId,
-      eingangId: input.eingangId,
+      id: value.artikelId,
+      version: value.version,
+      fotoId: value.fotoId,
+      eingangId: value.eingangId,
     },
   }, ports);
 }

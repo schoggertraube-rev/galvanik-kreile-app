@@ -159,6 +159,16 @@ test("Interne Metallports folgen der Fachtransaktion, öffentliche Ausgaben dem 
   });
 });
 
+test("Ungültige Etikettenargumente werden ohne Schreibwirkung abgewiesen", async () => {
+  const buero = await createFixture(["lager.stamm"], "buero");
+  const before = await sql`SELECT count(*)::integer AS anzahl FROM public.events WHERE tenant_id=${mandant}`;
+  for (const input of [null, [], "TEST", {}, { befehlId: randomUUID(), actorId: buero.actorId }]) {
+    expect(await withSession(buero, () => bestaetigeLagerEtikettZuordnung(input)))
+      .toEqual({ ok: false, code: "VALIDATION_ERROR" });
+  }
+  expect(await sql`SELECT count(*)::integer AS anzahl FROM public.events WHERE tenant_id=${mandant}`).toEqual(before);
+});
+
 test("Fehlender echter Aufgabenbeleg rollt Entwurf und Aufgabe zurück; derselbe Befehl bleibt wiederholbar", async () => {
   const werkstatt = await createFixture(["auftraege"], "werkstatt");
   const input = { befehlId: randomUUID(), daten: { art: "artikel.entwurf", name: "TEST Belegausfall", fotoId: null } };

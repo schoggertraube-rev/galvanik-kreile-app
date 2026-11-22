@@ -175,5 +175,7 @@ export async function leseLagerArtikelOhnePreisFuerHeute(
           AND preis.storniert_am IS NULL AND preis.fehlpreis_am IS NULL
       )
   `);
-  return { anzahl: stand?.anzahl ?? 0, ersterArtikelId: stand?.ersterArtikelId ?? null };
+  if (!stand || !Number.isSafeInteger(stand.anzahl) || stand.anzahl < 0
+      || (stand.anzahl > 0 && !stand.ersterArtikelId)) throw Error("LAGER_PREISQUELLE_UNVOLLSTAENDIG");
+  return { anzahl: stand.anzahl, ersterArtikelId: stand.ersterArtikelId };
 }

@@ -18,8 +18,6 @@ export async function speichereLagerStammdatenAction(input: unknown) {
   return speichereLagerStammdaten(input, taskPorts);
 }
 
-export async function bestaetigeLagerEtikettZuordnungAction(input: {
-  befehlId: string; eingangId: string; fotoId: string; artikelId: string; version: number;
-}) {
+export async function bestaetigeLagerEtikettZuordnungAction(input: unknown) {
   return bestaetigeLagerEtikettZuordnung(input, taskPorts);
 }
