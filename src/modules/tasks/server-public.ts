@@ -30,3 +30,5 @@ export {createIntakeMailFailureTask} from './server/taskService';
 export {synchronizeEvidenceVisibilityRetryTask} from './server/taskService';
 
 export type {TaskReadContext,TaskSourceRead,TaskCalendarSources} from './server/taskService';
+
+export {synchronizeLagerEntwurfTask} from './server/taskService';

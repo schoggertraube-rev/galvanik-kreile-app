@@ -54,8 +54,8 @@ it('KORR-233 K1: missing visibility source keeps the real login and records one 
   const login=await withSession(full,()=>getAuthBootstrapAction());
   expect(login).toMatchObject({status:'authenticated',user:{offline24h:false}});
   if(login.status!=='authenticated'||!login.user.packageSwitches)throw Error('TEST_KORR233_LOGIN_FAILED');
-  expect(Object.keys(login.user.packageSwitches)).toHaveLength(17);
-  expect(Object.values(login.user.packageSwitches)).toEqual(Array(17).fill(false));
+  expect(Object.keys(login.user.packageSwitches)).toHaveLength(19);
+  expect(Object.values(login.user.packageSwitches)).toEqual(Array(19).fill(false));
   const records=await sql`SELECT id,event_type,command,subject_type,subject_id,reason,original_ref,original_sha256 FROM public.technical_protocol
    WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${full.actorId}::uuid AND command='PACKAGE_SWITCH_VISIBILITY_FAILED' ORDER BY recorded_at,id`;
   expect(records).toHaveLength(before.length+1);
@@ -89,7 +89,7 @@ it('KORR-233 K2: enabled offline pilot with null roles never enables offline for
 it('S21 F1/F3/F5-F8: existing rights, one N5 audit, fresh reread and real domain write while off',async()=>{
  const initial=await withSession(full,()=>readPackageSwitchesAction());
  expect(initial.code).toBe('OK');if(initial.code!=='OK')throw Error('TEST_S21_INITIAL');
- expect(Object.keys(initial.switches)).toHaveLength(17);
+ expect(Object.keys(initial.switches)).toHaveLength(19);
  expect(initial.switches).toMatchObject({tag_anordnen:false,tag_notizen:false});
  const original=await originalFlag('p2_eingang');
  const denied=await createFixture(['auftraege']),other=await createFixture(['einstellungen']);
