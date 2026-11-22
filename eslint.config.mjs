@@ -209,6 +209,13 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // E2 Projektor, PL 22.11. 04:3x (Entscheid 04:25:53); no glob or other root.
+  {
+    files: ["src/lib/server/todayProjection.ts"],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [modulesServerConsumerFacadePattern, nonExecutableReferencePattern] }],
+    },
+  },
   // ── Domain isolation: auth must not depend on business domains ──
   {
     files: ["src/lib/auth/**/*.ts", "src/lib/auth/**/*.tsx"],

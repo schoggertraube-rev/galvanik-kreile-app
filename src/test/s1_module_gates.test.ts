@@ -23,6 +23,8 @@ import {
   resolveSpec,
   runModuleGates,
   validateAgainstSchema,
+  validTodayProjectorComposition,
+  allowedServerFacadeConsumer,
   writeBaseline,
 } from "../../scripts/quality/check-module-gates.mjs";
 
@@ -658,6 +660,49 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     expect(f).toContainEqual(expect.stringContaining("src/app/actions/reexport.actions.ts:2: Server-Fassade"));
     expect(f).toContainEqual(expect.stringContaining("darf nicht re-exportiert werden"));
     expect(f).toContainEqual(expect.stringContaining("src/test/customer.integration.test.tsx:1: Server-Fassade"));
+  });
+
+  it("E2 permits only the named server-only read composition; every other non-Action path stays red", () => {
+    const projector = "src/lib/server/todayProjection.ts";
+    const source = `${IMP} 'server-only';\n${IMP} { readCustomerProfile as readProfile } from '@/modules/customers/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return readProfile();}\n${EXP} async function rebuildTodayModel(){return readProfile();}\n`;
+    expect(validTodayProjectorComposition(source)).toBe(true);
+    expect(allowedServerFacadeConsumer(projector, source)).toBe(true);
+    for (const file of ["src/lib/server/anotherProjection.ts", "src/lib/server/todayProjection2.ts", "src/app/client.tsx", "src/app/api/heute/route.ts"]) {
+      expect(allowedServerFacadeConsumer(file, source), file).toBe(false);
+    }
+    const readModule = {
+      "src/modules/customers/customers.manifest.json": manifest("customers", { publicExports: ["@/modules/customers/server-public#readCustomerProfile"] }),
+      "src/modules/customers/public.ts": `${EXP} {};\n`,
+      "src/modules/customers/server-public.ts": `${IMP} 'server-only';\n${EXP} {readCustomerProfile} from './server/readCustomerProfile';\n`,
+      "src/modules/customers/server/readCustomerProfile.ts": `${EXP} const readCustomerProfile=()=>null;\n`,
+    };
+    expect(findingsOf(repo({...readModule,[projector]:source}))).toEqual([]);
+    const badPath = findingsOf(repo({...readModule,"src/lib/server/anotherProjection.ts":source}));
+    expect(badPath).toContainEqual(expect.stringContaining("anotherProjection.ts:2: Server-Fassade"));
+    const directive = findingsOf(repo({...readModule,[projector]:source+"'use server';\n"}));
+    expect(directive).toContainEqual(expect.stringContaining("E2-Projektor muss server-only bleiben"));
+  });
+
+  it("E2 rejects Action directives, writers, whole facades, re-exports and any additional public API", () => {
+    const source = `${IMP} 'server-only';\n${IMP} { readCustomerProfile } from '@/modules/customers/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return readCustomerProfile();}\n${EXP} async function rebuildTodayModel(){return readCustomerProfile();}\n`;
+    const invalid = [
+      source.replace(`${IMP} 'server-only';\n`, ""),
+      `'use server';\n${source}`,
+      source+"'use server';\n",
+      source+"async function command(){'use server';}\n",
+      source.replace("{ readCustomerProfile }", "{ createCustomer }"),
+      source.replace("{ readCustomerProfile }", "* as reader"),
+      source.replace("{ readCustomerProfile }", "reader"),
+      source+`${EXP} const anotherRead=1;\n`,
+      source+`${EXP} default refreshTodayModel;\n`,
+      source+`${EXP} {readCustomerProfile};\n`,
+      source+`${EXP} * from '@/modules/customers/server-public';\n`,
+      source+`const facade=${IMP}('@/modules/customers/server-public');\n`,
+      source+`type Facade=typeof ${IMP}('@/modules/customers/server-public');\n`,
+      source.replace("@/modules/customers/server-public", "../../modules/customers/server-public").replace("{ readCustomerProfile }", "{ createCustomer }"),
+      source.replace(`${EXP} type ProjectorAuthorization`, "type ProjectorAuthorization"),
+    ];
+    for (const candidate of invalid) expect(validTodayProjectorComposition(candidate), candidate).toBe(false);
   });
 
   it("Im eigenen Modul nur relative Imports; @/modules/<eigen>/... = FAIL", () => {
