@@ -59,30 +59,65 @@ function nationwideGermanHolidays(year: number): Set<number> {
   ]);
 }
 
-export function isWorkingDay(value: string): boolean {
-  const day = parseDay(value);
-  if (!day) return false;
-  const dayOrdinal = ordinal(day);
-  const weekday = new Date(dayOrdinal * DAY_MS).getUTCDay();
-  return weekday !== 0 && weekday !== 6 && !nationwideGermanHolidays(day.year).has(dayOrdinal);
+export type Betriebsruhe = Readonly<{ von: string; bis: string }>;
+
+export type Betriebskalender = Readonly<{
+  gueltigAb: string;
+  gueltigBis: string;
+  wochentage: readonly number[];
+  feiertage: readonly string[];
+  betriebsruhe: readonly Betriebsruhe[];
+}>;
+
+export function istBetriebsruhe(value: unknown): value is Betriebsruhe {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const { von, bis } = value as Partial<Betriebsruhe>;
+  return typeof von === "string" && typeof bis === "string" && von <= bis
+    && parseDay(von) !== null && parseDay(bis) !== null;
 }
 
-export function plusWorkingDays(value: string, count: number, additionalHolidays: readonly string[] = []): string | null {
+export function validierterBetriebskalender(stand: Betriebskalender): boolean {
+  return parseDay(stand.gueltigAb) !== null && parseDay(stand.gueltigBis) !== null && stand.gueltigAb <= stand.gueltigBis
+    && stand.wochentage.length > 0 && new Set(stand.wochentage).size === stand.wochentage.length
+    && stand.wochentage.every(tag => Number.isInteger(tag) && tag >= 0 && tag <= 6)
+    && stand.feiertage.every(tag => parseDay(tag) !== null)
+    && stand.betriebsruhe.every(istBetriebsruhe);
+}
+
+/** Die Gebietsdaten kommen aus dem belegten Feiertagskalender des Betriebs. */
+export function istArbeitstag(value: string, stand?: Betriebskalender): boolean | null {
+  const day = parseDay(value);
+  if (!day || stand && (value < stand.gueltigAb || value > stand.gueltigBis)) return null;
+  const dayOrdinal = ordinal(day);
+  const weekday = new Date(dayOrdinal * DAY_MS).getUTCDay();
+  const offenerWochentag = stand ? stand.wochentage.includes(weekday) : weekday !== 0 && weekday !== 6;
+  return offenerWochentag && !nationwideGermanHolidays(day.year).has(dayOrdinal)
+    && (!stand || !stand.feiertage.includes(value)
+      && !stand.betriebsruhe.some(schliessung => value >= schliessung.von && value <= schliessung.bis));
+}
+
+export function isWorkingDay(value: string): boolean {
+  return istArbeitstag(value) === true;
+}
+
+export function plusWorkingDays(value: string, count: number, additionalHolidays: readonly string[] = [], stand?: Betriebskalender): string | null {
   const day = parseDay(value);
   if (!day || !Number.isSafeInteger(count) || count < 0 || !Array.isArray(additionalHolidays) || !additionalHolidays.every(value=>typeof value==='string'&&parseDay(value)!==null)) return null;
   const closedDays=new Set(additionalHolidays);
-  const working=(value:string)=>isWorkingDay(value)&&!closedDays.has(value);
-  let current = ordinal(day);
-  if (count === 0) {
-    while (!working(formatDay(fromOrdinal(current)))) current += 1;
-    return formatDay(fromOrdinal(current));
-  }
-  let remaining = count;
+  if (stand && (!validierterBetriebskalender(stand) || value < stand.gueltigAb || value > stand.gueltigBis)) return null;
+  let current = ordinal(day) + (count === 0 ? 0 : 1);
+  let remaining = Math.max(1, count);
   while (remaining > 0) {
+    const datum = formatDay(fromOrdinal(current));
+    const arbeitstag = istArbeitstag(datum, stand);
+    if (arbeitstag === null) return null;
+    if (arbeitstag && !closedDays.has(datum)) {
+      remaining -= 1;
+      if (remaining === 0) return datum;
+    }
     current += 1;
-    if (working(formatDay(fromOrdinal(current)))) remaining -= 1;
   }
-  return formatDay(fromOrdinal(current));
+  return null;
 }
 
 export function previousWorkingDay(value: string): string | null {
@@ -93,22 +128,23 @@ export function previousWorkingDay(value: string): string | null {
   return formatDay(fromOrdinal(current));
 }
 
-export function workingDaysBetween(from: string, to: string, additionalHolidays: readonly string[] = []): number | null {
+export function workingDaysBetween(from: string, to: string, additionalHolidays: readonly string[] = [], stand?: Betriebskalender): number | null {
   const fromDay = parseDay(from);
   const toDay = parseDay(to);
   if (!fromDay || !toDay || !Array.isArray(additionalHolidays) || !additionalHolidays.every(value=>typeof value==='string'&&parseDay(value)!==null)) return null;
+  if (stand && (!validierterBetriebskalender(stand) || [from,to].some(tag => tag < stand.gueltigAb || tag > stand.gueltigBis))) return null;
   const closedDays=new Set(additionalHolidays);
   const start = ordinal(fromDay);
   const end = ordinal(toDay);
   if (start === end) return 0;
   if (end < start) {
-    const reverse = workingDaysBetween(to, from,additionalHolidays);
+    const reverse = workingDaysBetween(to, from,additionalHolidays,stand);
     return reverse === null ? null : -reverse;
   }
   let total = 0;
   for (let current = start + 1; current <= end; current += 1) {
     const value=formatDay(fromOrdinal(current));
-    if (isWorkingDay(value)&&!closedDays.has(value)) total += 1;
+    if (istArbeitstag(value,stand)&&!closedDays.has(value)) total += 1;
   }
   return total;
 }

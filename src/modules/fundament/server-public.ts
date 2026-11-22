@@ -29,3 +29,4 @@ export {readLagerEinstellungen,readAusschussBerechnenInTransaction,readKanalAnha
   readQ6EinstellungenInTransaction,readErkennungsEinstellungenInTransaction,readSuchaliasGruppenInTransaction,
   readEnergiePauschaleInTransaction} from "./server/s16dSpurDSettingsPort";
 export type {LagerEinstellungen,KanalAnhangGrenzen} from "./server/s16dSpurDSettingsPort";
+export {readArbeitskalenderInTransaction} from "./server/s16dArbeitskalender";

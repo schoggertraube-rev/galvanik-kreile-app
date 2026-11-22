@@ -1,7 +1,8 @@
 import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { readLagerEinstellungen, readKanalAnhangGrenzen } from "@/modules/fundament/server-public";
+import { readLagerEinstellungen, readKanalAnhangGrenzen, readArbeitskalenderInTransaction } from "@/modules/fundament/server-public";
+import { plusWorkingDays } from "@/lib/domain/workingDays";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1") {
@@ -33,4 +34,25 @@ test("S16d reads the same defaults without a company row and the changed row in 
     throw new Error("S16D_TEST_ROLLBACK");
   })).rejects.toThrow("S16D_TEST_ROLLBACK");
   expect(await readLagerEinstellungen(tenantId)).toEqual(withoutRow);
+});
+
+test("S16d calendar reads the same company's closure and leaves missing coverage open", async () => {
+  const tenantId = `TEST-s16d-calendar-${crypto.randomUUID()}`;
+  const coverage = {
+    gueltigAb: "2026-11-01",
+    gueltigBis: "2026-11-30",
+    wochentage: [1, 2, 3, 4, 5],
+    feiertage: [] as string[],
+  };
+  await expect(withPrivilegedTenantTransaction({ tenantId }, async tx => {
+    await tx.execute(sql`INSERT INTO public.company_settings (id,tenant_id,betriebsruhe)
+      VALUES ('default',${tenantId},'[ {"von":"2026-11-23","bis":"2026-11-23"} ]'::jsonb)`);
+    const calendar = await readArbeitskalenderInTransaction(tx, tenantId, coverage);
+    expect(calendar?.istArbeitstag("2026-11-23")).toBe(false);
+    expect(calendar?.istArbeitstag("2026-12-01")).toBeNull();
+    expect(calendar?.versandpufferArbeitstage).toBe(2);
+    expect(plusWorkingDays("2026-11-20", 1, [], calendar?.stand)).toBe("2026-11-24");
+    expect(await readArbeitskalenderInTransaction(tx, tenantId, null)).toBeNull();
+    throw new Error("S16D_CALENDAR_TEST_ROLLBACK");
+  })).rejects.toThrow("S16D_CALENDAR_TEST_ROLLBACK");
 });
