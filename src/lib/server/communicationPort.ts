@@ -228,6 +228,7 @@ export async function attachInboxMessage(
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
   input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; allowResend?:boolean;legacyReplaces?:LegacyQuoteReplacement; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeConfirmation?:{outboxId:string;sourceClientEventId:string;original:IntakeMailOriginal} },
+  readGraphSettings?:import('./microsoftGraph').GraphReadSettingsSource,
 ): Promise<Result<CommunicationReceipt>> {
   if (input?.confirmedResend!==undefined&&input.confirmedResend!==true || !validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -406,7 +407,7 @@ export async function sendCommunicationMail(
   let sentItemsEvidence:{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}|undefined;
   let resendConfirmationId:string|undefined;
   if(pending.recovery){
-    const proof=await readMicrosoftGraphSentMailByRequest({clientRequestId:input.clientRequestId,recipient:target.email,preparedAt:pending.recordedAt});
+    const proof=await readMicrosoftGraphSentMailByRequest({clientRequestId:input.clientRequestId,recipient:target.email,preparedAt:pending.recordedAt},undefined,undefined,readGraphSettings);
     if(proof.code!=='OK')return {code:'CONFLICT',message:COLLECTION_REMINDER_COPY.unclear};
     if('notFound'in proof.data){
       const confirmation=await withPrivilegedTenantTransaction(auth,async tx=>{

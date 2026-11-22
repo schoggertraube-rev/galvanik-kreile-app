@@ -20,7 +20,7 @@ function eventKey(tenantId:string,itemId:string,threadId:string){const h=createH
 const intent=(proof:DeliveryFailure)=>JSON.stringify([proof.itemId,proof.threadId,proof.graphMessageId,proof.sentGraphMessageId,proof.clientRequestId,proof.originalMessageId,proof.recipient,proof.originalSha256]);
 
 /** Called after the one canonical import; the existing assignment writer links the proven customer. */
-export async function qualifyImportedDeliveryFailure(auth:AuthorizationSnapshot,itemId:string,bind:(customerId:string)=>Promise<{code:string}>){
+export async function qualifyImportedDeliveryFailure(auth:AuthorizationSnapshot,itemId:string,bind:(customerId:string)=>Promise<{code:string}>,readGraphSettings?:import('./microsoftGraph').GraphReadSettingsSource){
  if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'eingang'))return {code:'FORBIDDEN' as const,message:DELIVERY_FAILURE_COPY.forbidden};
  try{
   const original=await withPrivilegedTenantTransaction(auth,tx=>readIntakeDeliveryEvidence(tx,auth,itemId));
@@ -29,7 +29,7 @@ export async function qualifyImportedDeliveryFailure(auth:AuthorizationSnapshot,
   if(!report||report.status!=='failed'||!report.originalMessageId||!report.recipient)return {code:'IN_KLAERUNG' as const,message:DELIVERY_FAILURE_COPY.unclear};
   const existing=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{threadId:string}>(sql`SELECT payload->>'threadId' AS "threadId" FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_DELIVERY_FAILED_V1' AND payload->>'itemId'=${itemId}`));
   if(existing.length){const proofs=await withPrivilegedTenantTransaction(auth,tx=>readCommunicationDeliveryFailures(tx,auth,existing.map(row=>row.threadId)));if(proofs.length!==1||proofs[0].itemId!==itemId)throw Error('DELIVERY_PROOF_AMBIGUOUS');return {code:'OK' as const,replayed:true};}
-  const sent=await readMicrosoftGraphSentMailReference(report.originalMessageId,report.recipient);
+  const sent=await readMicrosoftGraphSentMailReference(report.originalMessageId,report.recipient,undefined,undefined,readGraphSettings);
   if(sent.code!=='OK'||!sent.data.clientRequestId)return {code:'IN_KLAERUNG' as const,message:DELIVERY_FAILURE_COPY.unclear};
   const threads=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;customer_id:string}>(sql`SELECT id::text,customer_id FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source=${'MS_GRAPH_OUT:'+sent.data.clientRequestId} AND status='sent'`));
   if(threads.length!==1)return {code:'IN_KLAERUNG' as const,message:DELIVERY_FAILURE_COPY.unclear};

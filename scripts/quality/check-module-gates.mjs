@@ -89,6 +89,18 @@ const ADAPTER_FORBIDDEN_TARGET = /(?:^|\/)(?:supabase|db|database|commands?|repo
 const ADAPTER_GENERIC_ROUTE_TUNNEL = /\b(?:href|url|route|pathname|[A-Za-z_$][\w$]*(?:href|url|route|pathname))\??\s*:\s*string\b/i;
 const SERVER_ACTION_FILE = /^src\/app\/actions\/[^/]+\.actions\.ts$/;
 const REAL_DB_TEST_FILE = /^src\/test\/.+\.integration\.test\.ts$/;
+// E2 Projektor, PL 22.11. 04:3x (Entscheid 04:25:53): exactly one named root.
+const TODAY_PROJECTOR_FILE = 'src/lib/server/todayProjection.ts';
+const TODAY_PROJECTOR_READ_FACADES = new Map([
+  ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction'])],
+  ['orders',new Set(['readManualShipping','readManualShippingBatch'])],
+  ['accounting',new Set(['readInvoiceVat','readCustomerCreditInTransaction'])],
+  ['customers',new Set(['readCustomerProfile'])],
+  ['quotes',new Set(['listOpenQuotesCommand','readQuoteCommand','readQuoteActors'])],
+  ['complaints',new Set(['readComplaintsForAuthorization'])],
+  ['eingang',new Set(['readIntakeMessagesForAuthorization'])],
+  ['tasks',new Set(['readTaskForAuthorization','readQuoteFollowupTasksForToday'])],
+]);
 const SERVER_ONLY_SPEC = /^(?:server-only|postgres(?:\/|$)|drizzle-orm(?:\/|$)|@supabase(?:\/|$)|node:)|^@\/(?:db(?:\/|$)|lib\/server\/privilegedDb(?:\/|$)|lib\/supabase(?:\/|$)|utils\/supabase(?:\/|$))/;
 const ENTRYPOINT_BASELINE_STATUS = "TRANSITIONAL_BOOTSTRAP_SHRINK_ONLY";
 const ENTRYPOINT_BOOTSTRAP_PACKAGE = "PATH1_ENTRYPOINT_BASELINE_BOOTSTRAP";
@@ -452,7 +464,35 @@ function clientFacadeViolation(root, entryRel) {
   return null;
 }
 
-function allowedServerFacadeConsumer(file, source) {
+export function validTodayProjectorComposition(source) {
+  const tree=ts.createSourceFile(TODAY_PROJECTOR_FILE,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+  const first=tree.statements[0];
+  if(!first||!ts.isImportDeclaration(first)||first.importClause||!ts.isStringLiteral(first.moduleSpecifier)||first.moduleSpecifier.text!=='server-only')return false;
+  let forbiddenDirective=false,wholeFacade=false;
+  const isServerFacade=specifier=>/\/server-public$/.test(resolveSpec(TODAY_PROJECTOR_FILE,specifier)??'');
+  const visit=node=>{
+    if(ts.isExpressionStatement(node)&&ts.isStringLiteral(node.expression)&&node.expression.text==='use server')forbiddenDirective=true;
+    if(ts.isCallExpression(node)&&node.arguments.some(argument=>ts.isStringLiteral(argument)&&isServerFacade(argument.text)))wholeFacade=true;
+    if(ts.isImportTypeNode(node)&&ts.isLiteralTypeNode(node.argument)&&ts.isStringLiteral(node.argument.literal)&&isServerFacade(node.argument.literal.text))wholeFacade=true;
+    ts.forEachChild(node,visit);
+  };
+  visit(tree);if(forbiddenDirective||wholeFacade)return false;
+  const exports=analyzeFacadeExports(source,TODAY_PROJECTOR_FILE);
+  if(exports.errors.length||exports.hasDefault||exports.hasExportEquals||exports.hasStarReexport||[...exports.symbols].sort().join(',')!=='ProjectorAuthorization,rebuildTodayModel,refreshTodayModel')return false;
+  if(!tree.statements.some(statement=>ts.isTypeAliasDeclaration(statement)&&statement.name.text==='ProjectorAuthorization'&&hasModifier(statement,ts.SyntaxKind.ExportKeyword)))return false;
+  for(const statement of tree.statements){
+    if(ts.isExportDeclaration(statement)||ts.isExportAssignment(statement))return false;
+    if(!ts.isImportDeclaration(statement)||!ts.isStringLiteral(statement.moduleSpecifier))continue;
+    const facade=(resolveSpec(TODAY_PROJECTOR_FILE,statement.moduleSpecifier.text)??'').match(/^src\/modules\/([^/]+)\/server-public$/);
+    if(!facade)continue;
+    const allowed=TODAY_PROJECTOR_READ_FACADES.get(facade[1]),bindings=statement.importClause?.namedBindings;
+    if(!allowed||!bindings||!ts.isNamedImports(bindings)||statement.importClause.name)return false;
+    if(bindings.elements.some(binding=>!allowed.has((binding.propertyName??binding.name).text)))return false;
+  }
+  return true;
+}
+export function allowedServerFacadeConsumer(file, source) {
+  if(file===TODAY_PROJECTOR_FILE)return validTodayProjectorComposition(source);
   if (REAL_DB_TEST_FILE.test(file)) return true;
   return SERVER_ACTION_FILE.test(file) && hasDirectiveInPrologue(source, "use server");
 }
@@ -844,6 +884,7 @@ function gateImports(root, findings) {
   gateTsconfigAliases(root, findings);
   for (const file of listCodeFiles(root, "src", findings)) {
     const source = readFileSync(path.join(root, file), "utf8");
+    if(file===TODAY_PROJECTOR_FILE&&!validTodayProjectorComposition(source))findings.push(`[naht2] ${file}: E2-Projektor muss server-only bleiben, nur Lesefassaden konsumieren und genau die drei freigegebenen Exporte besitzen`);
     const importer = moduleOf(file);
     for (const { spec, index } of importSources(source)) {
       const target = resolveSpec(file, spec);

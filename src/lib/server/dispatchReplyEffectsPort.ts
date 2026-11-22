@@ -19,7 +19,7 @@ export async function readImportedDispatchReplyEvidence(auth:AuthorizationSnapsh
 }
 
 /** Invoked only by the real mail import/assignment command, under its actor. */
-export async function recordImportedDispatchReplies(auth:AuthorizationSnapshot,itemId:string,ports:{readLinked:DispatchResponsePorts['readLinked'];record:(input:{customerId:string;handover:'pickup'|'shipping';proof:DispatchResponseCheck['proofs'][number]})=>Promise<DispatchReplyReceipt>}){
+export async function recordImportedDispatchReplies(auth:AuthorizationSnapshot,itemId:string,ports:{readGraphSettings?:DispatchResponsePorts['readGraphSettings'];readLinked:DispatchResponsePorts['readLinked'];record:(input:{customerId:string;handover:'pickup'|'shipping';proof:DispatchResponseCheck['proofs'][number]})=>Promise<DispatchReplyReceipt>}){
  if(!hasAuthorizationArea(auth,'mails'))throw Error('DISPATCH_REPLY_FORBIDDEN');
  const [original]=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{customer_id:string|null;graph_message_id:string;reply_chain:{status?:string}|null}>(sql`SELECT customer_id,graph_message_id,reply_chain FROM private.v_intake_reply_evidence_v1 WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}`));
  if(!original?.customer_id||!original.reply_chain||original.reply_chain.status==='missing')return;
@@ -35,7 +35,7 @@ export async function recordImportedDispatchReplies(auth:AuthorizationSnapshot,i
  if(!notices.length)return;
  for(const handover of ['pickup','shipping'] as const){
   const group=notices.filter(row=>row.handover===handover);if(!group.length)continue;
-  const response=await readDispatchResponses(auth,{customerId,noticeThreadIds:group.map(row=>row.thread_id),oldestNoticeAt:group.map(row=>new Date(row.created_at).toISOString()).sort()[0]},{readLinked:async(actor,target)=>{const linked=await ports.readLinked(actor,target);return linked.code==='OK'&&Array.isArray(linked.data)?{code:'OK',data:linked.data.filter(row=>row.id===original.graph_message_id)}:{code:'UNAVAILABLE'};}});
+  const response=await readDispatchResponses(auth,{customerId,noticeThreadIds:group.map(row=>row.thread_id),oldestNoticeAt:group.map(row=>new Date(row.created_at).toISOString()).sort()[0]},{readGraphSettings:ports.readGraphSettings,readLinked:async(actor,target)=>{const linked=await ports.readLinked(actor,target);return linked.code==='OK'&&Array.isArray(linked.data)?{code:'OK',data:linked.data.filter(row=>row.id===original.graph_message_id)}:{code:'UNAVAILABLE'};}});
   if(response.state==='UNAVAILABLE'||response.state==='NOT_CHECKED')throw Error('DISPATCH_REPLY_QUALIFICATION_UNAVAILABLE');
   for(const proof of response.proofs)await ports.record({customerId,handover,proof});
  }

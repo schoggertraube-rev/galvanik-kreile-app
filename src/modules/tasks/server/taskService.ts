@@ -17,7 +17,7 @@ import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import {CUSTOMER_CREDIT_COPY,SITUATION_COPY,LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
 import {readCanceledInvoiceMailTaskSource,isCanceledInvoiceMailTask,bindCanceledInvoiceMailTask,readCanceledInvoiceTaskCompletion} from '@/lib/server/communicationDocumentPort';
-import {readInvoiceMailRemainderFailure} from '@/lib/server/communicationDocumentPort';
+import {readInvoiceMailRemainderFailure,readInvoiceMailCoveringRequestIds,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
 import {INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
@@ -560,12 +560,38 @@ export async function synchronizeInvoiceMailRemainderTask(tx:PrivilegedTenantTra
  const source=await readInvoiceMailRemainderFailure(tx,auth,markerId);
  if(!source){if(repaired)return;throw Error('INVOICE_MAIL_REMAINDER_MARKER_MISSING');}
  if(source.actorId!==auth.userId)throw Error('INVOICE_MAIL_REMAINDER_ACTOR_CHANGED');
+ // Later turns reuse an actual same-actor task whose original request covers
+ // every invoice here. Never take over an ordinary or another actor's task.
+ await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('invoice-mail-task:'||${auth.tenantId}||':'||${source.customerId},0))`);
+ if(repaired&&source.pending)throw Error('INVOICE_MAIL_REMAINDER_STILL_PENDING');
  const prior=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${markerId}::uuid FOR UPDATE`);
  if(prior.length){
   const task=prior.length===1?await find(tx,auth,prior[0].id,true):null;
   if(!task||task.erstellt_von!==source.actorId||task.bezug_typ!=='kunde'||task.bezug_id!==source.customerId||task.art!=='aufgabe')throw Error('INVOICE_MAIL_REMAINDER_TASK_CHANGED');
   if(repaired&&task.status==='offen')await finishTask(tx,auth,{taskId:task.id,version:task.version,note:INVOICE_DELIVERY_COPY.remainderDone},deps);
   return;
+ }
+ const coveringSources=await readInvoiceMailCoveringRequestIds(tx,auth,source.customerId,source.invoiceIds);
+ if(coveringSources.length){
+  const candidates=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks
+   WHERE tenant_id=${auth.tenantId} AND erstellt_von=${auth.userId}::uuid AND bezug_typ='kunde' AND bezug_id=${source.customerId} AND art='aufgabe'
+    AND (${repaired}::boolean OR status='offen') AND client_key=ANY(ARRAY[${sql.join(coveringSources.map(row=>sql`${row.id}`),sql`, `)}]::uuid[]) ORDER BY erstellt_am,id FOR UPDATE`);
+  // The task rows are already locked. Actor/customer/snapshot coverage and the
+  // same original evidence proof are qualified without any per-candidate SQL.
+  const selected=(()=>{
+   const task=candidates[0];if(!task)return null;
+   const matches=coveringSources.filter(row=>row.id===task.client_key);
+   if(matches.length!==1||!matches[0].invoiceIds)throw Error('INVOICE_MAIL_REMAINDER_SOURCE_INVALID');
+   const covering=matches[0],invoiceIds=covering.invoiceIds!;
+   if(covering.actorId!==auth.userId||covering.customerId!==source.customerId||!source.invoiceIds.every(id=>invoiceIds.includes(id)))throw Error('INVOICE_MAIL_REMAINDER_SNAPSHOT_INVALID');
+   if(task.erstellt_von!==source.actorId||task.bezug_typ!=='kunde'||task.bezug_id!==source.customerId||task.art!=='aufgabe')throw Error('INVOICE_MAIL_REMAINDER_TASK_CHANGED');
+   return {task,invoiceIds};
+  })();
+  if(selected){
+   const remainder=await withTenantSavepoint(tx,nested=>readInvoiceMailOpenRemainder(nested,auth.tenantId,source.customerId,selected.invoiceIds));
+   if(repaired&&!remainder.length&&selected.task.status==='offen')await finishTask(tx,auth,{taskId:selected.task.id,version:selected.task.version,note:INVOICE_DELIVERY_COPY.remainderDone},deps);
+   return;
+  }
  }
  if(repaired)throw Error('INVOICE_MAIL_REMAINDER_TASK_MISSING');
  const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);

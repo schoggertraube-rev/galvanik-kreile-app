@@ -1,5 +1,6 @@
 import "server-only";
 import {pageReadFetchPort,DEFAULT_PAGE_READ_SETTINGS,outsidePageReadBudget} from '@/db/readBudget';
+import type {PageReadSettings} from '@/modules/fundament/public';
 import {createHash} from "node:crypto";
 
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
@@ -12,12 +13,18 @@ const REQUIRED_ENV = [
 ] as const;
 
 type FetchPort = typeof fetch;
+/** Root composition supplies the existing canonical tenant reader, never SQL here.
+ * PL22.11.02:51: legacy/missing values retain the one canonical startup default. */
+export type GraphReadSettingsSource=()=>Promise<PageReadSettings|null|undefined>;
 /** Retain caller cancellation and the request-wide read deadline even in
  * legacy Sent-Items adapters with their own provider timeout. */
-function boundedGraphRead(fetchPort:FetchPort):FetchPort{
- return pageReadFetchPort((input,init)=>{
+function boundedGraphRead(fetchPort:FetchPort,readSettings?:GraphReadSettingsSource):FetchPort{
+ let settings:ReturnType<GraphReadSettingsSource>|undefined;
+ return pageReadFetchPort(async(input,init)=>{
+  const source=await(settings??=readSettings?readSettings():Promise.resolve(undefined));
+  const queryTimeoutMs=source?.queryTimeoutMs??DEFAULT_PAGE_READ_SETTINGS.graphTimeoutMs;
   const original=init?.signal??(input instanceof Request?input.signal:undefined);
-  const providerDeadline=AbortSignal.timeout(DEFAULT_PAGE_READ_SETTINGS.graphTimeoutMs);
+  const providerDeadline=AbortSignal.timeout(queryTimeoutMs);
   return fetchPort(input,{...init,signal:original?AbortSignal.any([original,providerDeadline]):providerDeadline});
  });
 }
@@ -321,10 +328,10 @@ export async function sendMicrosoftGraphMail(
 }
 
 /** Resolve an uncertain send by its immutable provider header, never by subject. */
-export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId:string;recipient:string;preparedAt:string},env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}|{notFound:true}>>{
+export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId:string;recipient:string;preparedAt:string},env:Environment=process.env,fetchPort:FetchPort=fetch,readSettings?:GraphReadSettingsSource):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}|{notFound:true}>>{
  const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
  if(!/^[0-9a-f-]{36}$/i.test(input.clientRequestId)||!Number.isFinite(Date.parse(input.preparedAt)))return {code:'UNAVAILABLE',message:'Versandbeleg fehlt.'};
- const bounded=boundedGraphRead(fetchPort);
+ const bounded=boundedGraphRead(fetchPort,readSettings);
  try{
   const token=await accessToken(config,bounded),select='id,internetMessageId,internetMessageHeaders';
   const query=new URLSearchParams({'$top':'100','$select':select,'$filter':'sentDateTime ge '+new Date(Date.parse(input.preparedAt)-60000).toISOString()});
@@ -347,7 +354,7 @@ export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId
    if(!payload['@odata.nextLink']){
     if(matches.length>1)throw Error('GRAPH_SENT_SCAN_AMBIGUOUS');
     if(!matches.length)return {code:'OK',data:{notFound:true}};
-    const proof=await readMicrosoftGraphSentMailReference(matches[0],input.recipient,env,bounded);
+    const proof=await readMicrosoftGraphSentMailReference(matches[0],input.recipient,env,bounded,readSettings);
     if(proof.code!=='OK')return proof;
     if(proof.data.clientRequestId!==input.clientRequestId)throw Error('GRAPH_SENT_SCAN_REQUEST_MISMATCH');
     return proof;
@@ -362,10 +369,10 @@ export async function readMicrosoftGraphSentMailByRequest(input:{clientRequestId
 }
 
 /** Read-only provider proof: a reply reference is tied to our immutable request header, never its subject. */
-export async function readMicrosoftGraphSentMailReference(internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}>>{
+export async function readMicrosoftGraphSentMailReference(internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch,readSettings?:GraphReadSettingsSource):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;clientRequestId:string|null;sentAt:string}>>{
  const config=readConfig(env);if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht verbunden.'};
  if(!/^<[^<>\s]{1,998}>$/.test(internetMessageId)||!/^\S+@\S+\.\S+$/.test(replySender))return {code:'UNAVAILABLE',message:'Antwortreferenz fehlt oder ist ungültig.'};
- const bounded=boundedGraphRead(fetchPort);
+ const bounded=boundedGraphRead(fetchPort,readSettings);
  try{
   const token=await accessToken(config,bounded),query=new URLSearchParams({'$top':'2','$filter':"internetMessageId eq '"+internetMessageId.replaceAll("'","''")+"'",'$select':'id,internetMessageId,from,toRecipients,isDraft,sentDateTime,internetMessageHeaders'});
   const response=await graphGetMessage(config,token,'mailFolders/sentitems/messages?'+query,bounded);if(!response.ok)await providerFailure(response,'GRAPH_SENT_REPLY_REFERENCE');
@@ -438,12 +445,12 @@ export async function readMicrosoftGraphMime(messageId:string,env:Environment=pr
 
 /** Resolve a real reply target from Sent Items; no draft/send API or wider mail grant. */
 export async function readMicrosoftGraphSentDocumentEvidence(
- internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch,
+ internetMessageId:string,replySender:string,env:Environment=process.env,fetchPort:FetchPort=fetch,readSettings?:GraphReadSettingsSource,
 ):Promise<GraphResult<{graphMessageId:string;internetMessageId:string;sentAt:string;pdfSha256:string[]}>>{
  const config=readConfig(env);
  if(!config)return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
  if(!/^<[^<>\s]{1,998}>$/.test(internetMessageId)||!/^\S+@\S+\.\S+$/.test(replySender)||replySender.length>320)return {code:'UNAVAILABLE',message:'Die direkte Antwortreferenz ist nicht eindeutig lesbar.'};
- const boundedFetch=boundedGraphRead(fetchPort);
+ const boundedFetch=boundedGraphRead(fetchPort,readSettings);
  try{
   const token=await accessToken(config,boundedFetch),query=new URLSearchParams({'$top':'2','$filter':"internetMessageId eq '"+internetMessageId.replaceAll("'","''")+"'",'$select':'id,internetMessageId,from,toRecipients,isDraft,sentDateTime,hasAttachments'});
   const response=await graphGetMessage(config,token,'mailFolders/sentitems/messages?'+query,boundedFetch);

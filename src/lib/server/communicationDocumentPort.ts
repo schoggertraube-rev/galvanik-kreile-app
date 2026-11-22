@@ -266,9 +266,15 @@ export async function assertInvoiceNotSent(tx:PrivilegedTenantTransaction,tenant
 type InvoiceMailLegacyRow={id:string;order_id:string;order_number:string;invoice_number:string;aggregate_version:number;mail_pending:boolean;paper_handover:boolean|null};
 type InvoiceMailNativeRow={id:string;order_id:null;order_number:null;collection_source:unknown;invoice_number:string;aggregate_version:number;source_integrity_ok:boolean;mail_pending:boolean;paper_handover:boolean|null};
 /** Read the existing immutable PREPARE, not a new group assembled around it. */
-async function bindInvoiceMailGroup<Row extends InvoiceMailLegacyRow|InvoiceMailNativeRow>(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,rows:Row[]){
+async function bindInvoiceMailGroup<Row extends InvoiceMailLegacyRow|InvoiceMailNativeRow>(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,rows:Row[],scope?:InvoiceMailReadScope){
  const pending=rows.find(row=>row.mail_pending);
- if(!pending)return rows.slice(0,101);
+ if(!pending){
+  const maximum=scope?.maxOriginals??101;
+  if(!Number.isSafeInteger(maximum)||maximum<1)throw Error('INVOICE_MAIL_TURN_LIMIT_INVALID');
+  const anchor=scope?.anchorId?rows.find(row=>row.id===scope.anchorId):undefined;
+  const selected=anchor?[anchor,...rows.filter(row=>row.id!==anchor.id)]:rows;
+  return selected.slice(0,Math.min(maximum,101));
+ }
  const receipts=await tx.execute<{created_by:string;prepared_by:string;mail_prepared_by:string;order_id:string|null;customer_id:string;subject:string;source:string;request_id:string;
   payload:{document:CommunicationDocument;intent:string;targetType:string;targetId:string;subject:string;bodySha256:string};
   mail_payload:{threadId:string;clientRequestId:string;targetType:string;targetId:string;customerId:string;orderId:string|null;intentHash:string;contentSha256:string;documents:Array<{id:string;sha256:string}>}}>(sql`SELECT thread.created_by::text,sent.user_id::text AS prepared_by,mail.user_id::text AS mail_prepared_by,thread.order_id,thread.customer_id,thread.subject,thread.source,sent.correlation_id::text AS request_id,sent.payload,mail.payload AS mail_payload
@@ -300,7 +306,7 @@ async function bindInvoiceMailGroup<Row extends InvoiceMailLegacyRow|InvoiceMail
 }
 // Every consumer sees the same frozen group. The existing assertNotSent/lock
 // boundary still forbids any new physical attempt while its outcome is unclear.
-export type InvoiceMailReadScope={snapshotIds?:readonly string[];all?:true};
+export type InvoiceMailReadScope={snapshotIds?:readonly string[];all?:true;maxOriginals?:number;anchorId?:string};
 export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds?:readonly string[],native?:false,unreservedOnly?:boolean,scope?:InvoiceMailReadScope):Promise<InvoiceMailLegacyRow[]>;
 export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:true,unreservedOnly?:boolean,scope?:InvoiceMailReadScope):Promise<InvoiceMailNativeRow[]>;
 export function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string,handover:string|null,resendIds:readonly string[]|undefined,native:boolean|undefined,unreservedOnly?:boolean,scope?:InvoiceMailReadScope):Promise<Array<InvoiceMailLegacyRow|InvoiceMailNativeRow>>;
@@ -323,7 +329,7 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
   ORDER BY invoice.issued_at,invoice.id ${scope?.all?sql``:sql`LIMIT 102`}`);
   // PL20.11.00:32: the unchanged 101-original transport limit binds one
   // deterministic oldest group. The sentinel/rest remain in the overview.
-  const group=scope?.all?rows:await bindInvoiceMailGroup(tx,tenantId,customerId,rows);
+  const group=scope?.all?rows:await bindInvoiceMailGroup(tx,tenantId,customerId,rows,scope);
   if(group.some(row=>typeof row.paper_handover!=='boolean'||row.source_integrity_ok!==true))throw Error('INVOICE_MAIL_COLLECTION_SOURCE_INCOMPLETE');
   return group;
  }
@@ -335,13 +341,13 @@ export async function readInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenan
   WHERE ${invoiceOrderReadyForMail(tenantId)} AND orders.handover_mode=${handover}
   ORDER BY invoice.issued_at,invoice.id ${scope?.all?sql``:sql`LIMIT 102`}`);
  if(rows.some(row=>typeof row.paper_handover!=='boolean'))throw Error('INVOICE_MANUAL_HANDOVER_SOURCE_INCOMPLETE');
- return scope?.all?rows:bindInvoiceMailGroup(tx,tenantId,customerId,rows);
+ return scope?.all?rows:bindInvoiceMailGroup(tx,tenantId,customerId,rows,scope);
 }
 export class InvoiceMailListChanged extends Error{
  constructor(readonly number:string,readonly added:boolean){super('INVOICE_MAIL_LIST_CHANGED');}
 }
-export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null;native?:boolean;unreservedOnly?:boolean;snapshotIds?:readonly string[]},expected:readonly string[],prepared:readonly string[],resendIds:readonly string[]=[]){
- const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover,resendIds,group.native,group.unreservedOnly,{snapshotIds:group.snapshotIds});
+export async function assertInvoiceMailCohort(tx:PrivilegedTenantTransaction,tenantId:string,group:{customerId:string;handover:string|null;native?:boolean;unreservedOnly?:boolean;snapshotIds?:readonly string[];maxOriginals?:number;anchorId?:string},expected:readonly string[],prepared:readonly string[],resendIds:readonly string[]=[]){
+ const current=await readInvoiceMailCohort(tx,tenantId,group.customerId,group.handover,resendIds,group.native,group.unreservedOnly,{snapshotIds:group.snapshotIds,maxOriginals:group.maxOriginals,anchorId:group.anchorId});
  const added=current.find(row=>!expected.includes(row.id)),removed=expected.find(id=>!current.some(row=>row.id===id));
  const unprepared=current.find(row=>expected.includes(row.id)&&!prepared.includes(row.id));
  if(added||unprepared)throw new InvoiceMailListChanged((added??unprepared)!.invoice_number,true);
@@ -384,12 +390,24 @@ function invoiceMailSnapshotKey(markerId:string){
  const bytes=createHash('sha256').update('invoice-mail-request-snapshot:'+markerId).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
  const h=bytes.subarray(0,16).toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }
+type InvoiceMailRequestSnapshot={customerId:string;handover:string|null;native:boolean;invoiceIds:string[];anchorId:string};
+async function readInvoiceMailSnapshotRows(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string){
+ return tx.execute<{actor:string;request_id:string;payload:{customerId:string;handover:string|null;native:boolean;invoiceIds:string[];anchorId:string}}>(sql`SELECT user_id::text AS actor,correlation_id::text AS request_id,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${eventId} AND event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND status='success' AND event_schema_version=1`);
+}
+/** Same immutable request source; legacy prepared groups never acquire a new scope. */
+export async function readInvoiceMailRequestSnapshot(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{markerId:string;requestId:string;invoiceId:string}){
+ const eventId=invoiceMailSnapshotKey(input.markerId)+':snapshot';
+ const rows=await readInvoiceMailSnapshotRows(tx,auth,eventId);
+ if(!rows.length)return null;
+ if(rows.length!==1||rows[0].actor!==auth.userId||rows[0].request_id!==input.requestId||rows[0].payload.anchorId!==input.invoiceId||!Array.isArray(rows[0].payload.invoiceIds)||!rows[0].payload.invoiceIds.length||rows[0].payload.invoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id))||new Set(rows[0].payload.invoiceIds).size!==rows[0].payload.invoiceIds.length)throw Error('INVOICE_MAIL_REQUEST_SNAPSHOT_INVALID');
+ return rows[0].payload as InvoiceMailRequestSnapshot;
+}
 export async function freezeInvoiceMailRequest(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{markerId:string;requestId:string;invoiceId:string;expectedIds:readonly string[];unreservedOnly:boolean}){
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('invoice-mail-remainder:'||${auth.tenantId}||':'||${input.requestId},0))`);
  const snapshotKey=invoiceMailSnapshotKey(input.markerId),eventId=snapshotKey+':snapshot';
- const read=()=>tx.execute<{actor:string;request_id:string;payload:{customerId:string;handover:string|null;native:boolean;invoiceIds:string[];anchorId:string}}>(sql`SELECT user_id::text AS actor,correlation_id::text AS request_id,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${eventId} AND event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND status='success' AND event_schema_version=1`);
- let rows=await read();
- if(!rows.length){
+
+ let snapshot=await readInvoiceMailRequestSnapshot(tx,auth,input);
+ if(!snapshot){
   const source=await tx.execute<{customer_id:string;order_id:string|null;handover_mode:string|null}>(sql`SELECT invoice.customer_id,invoice.order_id,orders.handover_mode FROM public.invoices invoice LEFT JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id WHERE invoice.tenant_id=${auth.tenantId} AND invoice.id=${input.invoiceId}::uuid AND invoice.status='issued'`);
   if(source.length!==1)throw Error('INVOICE_MAIL_REQUEST_ANCHOR_INVALID');
   const anchor=source[0],native=anchor.order_id===null;
@@ -401,27 +419,56 @@ export async function freezeInvoiceMailRequest(tx:PrivilegedTenantTransaction,au
   const invoiceIds=originals.map(row=>row.id);
   if(!invoiceIds.length||input.expectedIds.some(id=>!invoiceIds.includes(id)))throw Error('INVOICE_MAIL_REQUEST_LIST_CHANGED');
   await tx.execute(sql`INSERT INTO public.events(id,tenant_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at) VALUES(${eventId},${auth.tenantId},'INVOICE_MAIL_REQUEST_SNAPSHOT_V1',${DISPATCH_NOTICE_COPY.invoiceRequestSnapshot},${JSON.stringify({customerId:anchor.customer_id,handover:anchor.handover_mode,native,invoiceIds,anchorId:input.invoiceId})}::jsonb,'success',${auth.userId}::uuid,${snapshotKey}::uuid,${input.requestId}::uuid,1,statement_timestamp())`);
-  rows=await read();
+  snapshot=await readInvoiceMailRequestSnapshot(tx,auth,input);
  }
- if(rows.length!==1||rows[0].actor!==auth.userId||rows[0].request_id!==input.requestId||rows[0].payload.anchorId!==input.invoiceId||!Array.isArray(rows[0].payload.invoiceIds)||!rows[0].payload.invoiceIds.length||rows[0].payload.invoiceIds.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id))||new Set(rows[0].payload.invoiceIds).size!==rows[0].payload.invoiceIds.length)throw Error('INVOICE_MAIL_REQUEST_SNAPSHOT_INVALID');
- return rows[0].payload;
+ if(!snapshot)throw Error('INVOICE_MAIL_REQUEST_SNAPSHOT_INVALID');
+ return snapshot;
 }
 
-export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string){
- const rows=await tx.execute<{customerId:string;actorId:string;requestId:string;threadId:string;reason:string}>(sql`SELECT thread.customer_id AS "customerId",marker.user_id::text AS "actorId",marker.correlation_id::text AS "requestId",thread.id::text AS "threadId",marker.payload->>'reason' AS reason
+/** The original marker/thread/PREPARE/SENT/message proof, shared by single
+ * reads and the set-based covering-task lookup. No second evidence rule. */
+function invoiceMailRemainderProofSource(tenantId:string){
+ return sql`SELECT marker.id::text AS marker_id,thread.customer_id AS "customerId",marker.user_id::text AS "actorId",marker.correlation_id::text AS "requestId",thread.id::text AS "threadId",marker.payload->>'reason' AS reason
   FROM public.events marker JOIN public.communication_threads thread ON thread.tenant_id=marker.tenant_id AND thread.id::text=marker.payload->>'threadId' AND thread.source='MS_GRAPH_OUT:'||marker.correlation_id::text AND thread.status='sent'
   JOIN public.events prepared ON prepared.tenant_id=thread.tenant_id AND prepared.event_type='COMMUNICATION_DOCUMENT_PREPARED_V1' AND prepared.client_event_id=thread.id AND prepared.user_id=thread.created_by AND prepared.status='success' AND prepared.event_schema_version=1
   JOIN public.events sent ON sent.tenant_id=prepared.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=thread.id::text AND sent.payload->>'intent'=prepared.payload->>'intent' AND sent.payload->'document'=prepared.payload->'document' AND sent.status='success' AND sent.event_schema_version=1
   JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.created_by=prepared.user_id
-  WHERE marker.tenant_id=${auth.tenantId} AND marker.id=${markerId} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.status='success'
-   AND marker.payload->>'customerId'=thread.customer_id AND prepared.payload->'document'->>'kind'='INVOICE'`);
+  WHERE marker.tenant_id=${tenantId} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.status='success'
+   AND marker.payload->>'customerId'=thread.customer_id AND prepared.payload->'document'->>'kind'='INVOICE'`;
+}
+
+export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string){
+ const rows=await tx.execute<{customerId:string;actorId:string;requestId:string;threadId:string;reason:string}>(sql`SELECT "customerId","actorId","requestId","threadId",reason FROM (${invoiceMailRemainderProofSource(auth.tenantId)}) proof WHERE marker_id=${markerId}`);
  if(!rows.length){const marker=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${markerId} AND event_type='INVOICE_MAIL_REMAINDER_PENDING_V1'`);if(!marker.length)return null;}
  if(rows.length!==1||!rows[0].reason)throw Error('INVOICE_MAIL_REMAINDER_SOURCE_INVALID');
  const snapshots=await tx.execute<{payload:{invoiceIds:string[];customerId:string};actor:string;request_id:string}>(sql`SELECT payload,user_id::text AS actor,correlation_id::text AS request_id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${invoiceMailSnapshotKey(markerId)+':snapshot'} AND event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND status='success' AND event_schema_version=1`);
  if(snapshots.length!==1||snapshots[0].actor!==rows[0].actorId||snapshots[0].request_id!==rows[0].requestId||snapshots[0].payload.customerId!==rows[0].customerId||!Array.isArray(snapshots[0].payload.invoiceIds)||!snapshots[0].payload.invoiceIds.length)throw Error('INVOICE_MAIL_REMAINDER_SNAPSHOT_INVALID');
  const invoiceIds=snapshots[0].payload.invoiceIds;
  const remainder=await readInvoiceMailOpenRemainder(tx,auth.tenantId,rows[0].customerId,invoiceIds);
- return {...rows[0],pending:remainder.length>0};
+ return {...rows[0],pending:remainder.length>0,invoiceIds};
+}
+
+/** Covering candidates and their immutable evidence in one read. Qualification
+ * stays in memory; only the selected task's open invoice remainder is read. */
+export async function readInvoiceMailCoveringRequestIds(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string,invoiceIds:readonly string[]){
+ if(!invoiceIds.length)throw Error('INVOICE_MAIL_REQUEST_ORIGINALS_REQUIRED');
+ const rows=await tx.execute<{id:string;actorId:string;customerId:string;requestId:string;reason:string|null;snapshotId:string;snapshotActor:string;snapshotRequestId:string;invoiceIds:unknown;proofCount:number}>(sql`WITH proof AS (${invoiceMailRemainderProofSource(auth.tenantId)})
+  SELECT marker.id::text AS id,marker.user_id::text AS "actorId",marker.payload->>'customerId' AS "customerId",marker.correlation_id::text AS "requestId",marker.payload->>'reason' AS reason,
+   request.id AS "snapshotId",request.user_id::text AS "snapshotActor",request.correlation_id::text AS "snapshotRequestId",request.payload->'invoiceIds' AS "invoiceIds",coalesce(proof_counts.count,0)::int AS "proofCount"
+  FROM public.events marker
+  JOIN public.events request ON request.tenant_id=marker.tenant_id AND request.correlation_id=marker.correlation_id
+   AND request.event_type='INVOICE_MAIL_REQUEST_SNAPSHOT_V1' AND request.status='success' AND request.event_schema_version=1
+  LEFT JOIN (SELECT marker_id,count(*) AS count FROM proof GROUP BY marker_id) proof_counts ON proof_counts.marker_id=marker.id
+  WHERE marker.tenant_id=${auth.tenantId} AND marker.user_id=${auth.userId}::uuid AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.status='success'
+   AND marker.payload->>'customerId'=${customerId} AND request.payload->>'customerId'=${customerId}
+   AND request.payload->'invoiceIds' @> ${JSON.stringify(invoiceIds)}::jsonb
+  ORDER BY marker.created_at,marker.id`);
+ return rows.map(row=>{
+  const invoiceIds=row.invoiceIds;
+  const valid=row.proofCount===1&&!!row.reason&&row.snapshotId===invoiceMailSnapshotKey(row.id)+':snapshot'&&row.snapshotActor===row.actorId&&row.snapshotRequestId===row.requestId
+   &&Array.isArray(invoiceIds)&&invoiceIds.length>0&&invoiceIds.every((id:unknown)=>typeof id==='string'&&/^[0-9a-f-]{36}$/i.test(id))&&new Set(invoiceIds).size===invoiceIds.length;
+  return {...row,invoiceIds:valid?invoiceIds as string[]:null};
+ });
 }
 
 export async function recordInvoiceMailRemainderFailure(auth:AuthorizationSnapshot,input:{markerId:string;requestId:string;threadId:string;customerId:string;reason:string},createTask:(tx:PrivilegedTenantTransaction,markerId:string)=>Promise<void>){

@@ -1,4 +1,5 @@
 import "server-only";
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
 import { sql, type SQL } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
@@ -474,6 +475,7 @@ export async function readCustomerSummary(
   authorization: AuthorizationSnapshot,
   input: { customerId: string },
   openCondition: SQL,
+  readSettings?:()=>Promise<import('@/modules/fundament/public').PageReadSettings|null|undefined>,
 ): Promise<CustomerSummaryReadResult> {
   if (!exactObject(input, ["customerId"]) || !validId(input.customerId)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Kundenkennung." };
@@ -484,6 +486,13 @@ export async function readCustomerSummary(
   }
   try {
     const {readV45CustomerRule}=await import("./v45CustomerRead");
+    // Resolve before borrowing the summary connection. The same canonical
+    // source drives the command and the already existing composer/group field.
+    let mailTurnLimit:number|null=DEFAULT_PAGE_READ_SETTINGS.invoiceMailBatchLimit;
+    if(hasAuthorizationArea(authorization,'preise')&&readSettings){
+      try{mailTurnLimit=(await readSettings())?.invoiceMailBatchLimit??DEFAULT_PAGE_READ_SETTINGS.invoiceMailBatchLimit;}
+      catch(error){mailTurnLimit=null;console.error('[CUSTOMER_INVOICE_SETTINGS_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});}
+    }
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<SummaryRow>(sql`
         SELECT summary.*,
@@ -518,11 +527,12 @@ export async function readCustomerSummary(
         if(pending.count===0)summary.invoiceSendGroupIds=[];
         else{
           const first=pending.originals[0];
-          if(first.orderId===null||first.handover==='pickup'||first.handover==='shipping'){
+          if(mailTurnLimit!==null&&(first.orderId===null||first.handover==='pickup'||first.handover==='shipping')){
             try{
               // The same reader retains prepared originals here so the existing
               // N5/Sent-Items recovery button cannot disappear from the overview.
-              const cohort=await withTenantSavepoint(tx,nested=>readInvoiceMailCohort(nested,authorization.tenantId,input.customerId,first.handover,[],first.orderId===null));
+              const maxOriginals=mailTurnLimit;
+              const cohort=await withTenantSavepoint(tx,nested=>readInvoiceMailCohort(nested,authorization.tenantId,input.customerId,first.handover,[],first.orderId===null,false,{maxOriginals}));
               const ids=new Set(cohort.map(row=>row.id));
               if(ids.has(first.id)&&cohort.length===ids.size&&cohort.every(row=>pending.originals.some(original=>original.id===row.id)))summary.invoiceSendGroupIds=pending.originals.filter(original=>ids.has(original.id)).map(original=>original.id);
             }catch(error){console.error('[CUSTOMER_INVOICE_GROUP_SOURCE_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});}
