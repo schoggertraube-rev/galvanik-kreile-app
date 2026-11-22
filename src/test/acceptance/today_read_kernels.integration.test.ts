@@ -26,6 +26,10 @@ import {readShippingSettingsInTransaction} from '@/modules/fundament/server-publ
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readManualShipping,readManualShippingBatch} from '@/modules/orders/server-public';
 import {readOrdersInformed,readOrderInformed} from '@/lib/server/orderReleaseRead';
+import {confirmPaymentAction,setPaymentModeAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
+import {getPaymentState,getPaymentStatesBatch,readPaymentSummary} from '@/lib/server/paymentSummaryRead';
+import {paymentReadAuthorization,type PaymentReadProfile,type PaymentReadAuthorization} from '@/lib/server/paymentContract';
+import {readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 let prepared:Awaited<ReturnType<typeof readyInvoiceOrder>>;
 let quoteId:string,quoteVersion:number;
@@ -145,6 +149,43 @@ it('projects the same persisted phone notice, release and collection sources for
    if(session.canReadArea('zahlungen'))expect(actual.overdueInvoiceIds).toEqual([]);
    else expect(actual.overdueInvoiceIds).toBeUndefined();
   }else expect(actual).toEqual({code:'FORBIDDEN'});
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
+});
+it('keeps actual payment and pickup-cashier predicates unchanged without adding a command identity to the read kernel',async()=>{
+ expectTypeOf<PaymentReadAuthorization>().not.toExtend<AuthorizationSnapshot>();
+ const cashOrder=await readyInvoiceOrder('TEST payment callback kernel');
+ const initialAuth=await withSession(full,()=>resolveAuthorization());if(!initialAuth.ok)throw Error('TEST_PAYMENT_INITIAL_AUTH');
+ const initial=await getPaymentState(initialAuth.data,cashOrder.orderId);if(initial.code!=='OK'||!initial.data.payment)throw Error('TEST_PAYMENT_INITIAL_SOURCE');
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:cashOrder.orderId,paymentMode:'abholung',expectedVersion:initial.data.paymentModeVersion,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const cashier=await createFixture(['auftraege','kassieren']);
+ const input={invoiceId:cashOrder.invoice.invoiceId,amount:1000,method:'bar' as const,expectedVersion:initial.data.payment.paymentVersion,expectedOpenAmountCents:initial.data.payment.openAmountCents,clientEventId:randomUUID()};
+ const paid=await withSession(cashier,()=>confirmPaymentAction(input));expect(paid).toMatchObject({code:'OK',replayed:false});if(paid.code!=='OK')throw Error('TEST_PAYMENT_REAL_RECEIPT');
+ expect(await withSession(cashier,()=>confirmPaymentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:paid.receipt});
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ for(const profile of [...profiles,{name:'payments only',rights:['zahlungen'],role:'meister' as const},{name:'cashier only',rights:['kassieren'],role:'meister' as const},{name:'orders and cashier',rights:['auftraege','kassieren'],role:'meister' as const}]){
+  const fixture=profile.rights===null?full:await createFixture(profile.rights,profile.role);
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_PAYMENT_READ_AUTH');
+  // These are the actual resolved active-profile facts, not a made-up role,
+  // user or session. The resulting callback has neither role nor actor ID.
+  const source:PaymentReadProfile={tenantId:result.data.tenantId,active:result.data.active,permissions:result.data.permissions,areas:result.data.areas,role:result.data.role};
+  const session=paymentReadAuthorization(result.data),projection=paymentReadAuthorization(source);
+  expect(projection).not.toHaveProperty('userId');expect(projection).not.toHaveProperty('role');
+  const readCredit=authorizationReadContext(result.data).canReadArea('zahlungen')?((tx:Parameters<typeof readCustomerCreditInTransaction>[0],tenantId:string,customerId:string)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile)):undefined;
+  const summary=await readPaymentSummary(result.data);expect(await readPaymentSummary(session)).toEqual(summary);expect(await readPaymentSummary(projection)).toEqual(summary);
+  for(const ids of [[],[cashOrder.orderId],[cashOrder.orderId,prepared.orderId],[cashOrder.orderId,cashOrder.orderId]]){
+   const expected=await getPaymentStatesBatch(result.data,ids,readCredit);
+   expect(await getPaymentStatesBatch(session,ids,readCredit)).toEqual(expected);
+   const actual=await getPaymentStatesBatch(projection,ids,readCredit);expect(actual).toEqual(expected);expect(actual.size).toBe(new Set(ids).size);
+   for(const orderId of new Set(ids))expect(await getPaymentState(projection,JSON.parse(JSON.stringify(orderId)),readCredit)).toEqual(actual.get(orderId));
+  }
+  expect(await getPaymentState(projection,'invalid id',readCredit)).toEqual(await getPaymentState(result.data,'invalid id',readCredit));
+  const actual=await getPaymentState(projection,cashOrder.orderId,readCredit);
+  expect(await withSession(fixture,()=>getOrderPaymentStateAction({orderId:cashOrder.orderId}))).toEqual(actual);
+  if(profile.name==='orders and cashier'){
+   expect(actual).toMatchObject({code:'OK',data:{payment:{invoiceId:cashOrder.invoice.invoiceId,openAmountCents:initial.data.payment.openAmountCents-1000,paymentVersion:paid.receipt.paymentVersion}}});
+   expect(await getPaymentState(projection,prepared.orderId)).toMatchObject({code:'FORBIDDEN'});expect(summary).toMatchObject({code:'FORBIDDEN'});
+  }
  }
  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
 });
