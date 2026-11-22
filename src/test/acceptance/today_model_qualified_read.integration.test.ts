@@ -219,7 +219,7 @@ it('actual model GET rejects anonymous, no-area and malformed requests without r
  const invalid=await withSession(full,()=>getModelRoute(request('?nur=veraltet&nur=veraltet')));expect(invalid.status).toBe(400);
 });
 
-it('actual GET recomputes a command-stale model and returns the freshly qualified version without another business effect',async()=>{
+it('actual GET returns a command-stale model promptly while the scheduled projector catches up without another business effect',async()=>{
  const order=await readyInvoiceOrder('TEST native model GET');
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-08-05',reason:'TEST actual GET after source command',clientEventId:randomUUID()};
@@ -227,8 +227,10 @@ it('actual GET recomputes a command-stale model and returns the freshly qualifie
  const response=await withSession(full,()=>getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet')),true);
  expect(response.status).toBe(200);expect(response.headers.get('Cache-Control')).toBe('private, no-store');
  const result=await response.json();expect(result.code).toBe('OK');
- expect(result.model.modelRead).toMatchObject({source:'modell',pending:false});
- expect(result.model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)?.version).toBe(order.version+1);
+ expect(result.model.modelRead).toMatchObject({source:'modell',pending:true});
+ expect((await refreshTodayModel(tenant)).code).toBe('OK');
+ const settled=await withSession(full,()=>getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet')),true);
+ expect((await settled.json()).model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)?.version).toBe(order.version+1);
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))))).toEqual({...saved,replayed:true});
  expect(await sql`SELECT count(*)::integer AS count FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId} AND event_type='ORDER_PROMISED_DUE_DATE_CHANGED_V1'`).toEqual([{count:1}]);
 });

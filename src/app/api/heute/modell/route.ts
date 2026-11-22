@@ -2,7 +2,6 @@ import {readTodayHomeRevision,readTodayHomePart} from '@/app/actions/orders.acti
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {resolveAuthorization,hasAnyAuthorizationArea} from '@/lib/server/authorization';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
-import {refreshTodayModel,rebuildTodayModel} from '@/lib/server/todayProjection';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -37,11 +36,10 @@ export async function GET(request:Request){
   const before=await loadOfficeHome(auth.data);
   if(!('dashboard'in before))return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});
   if(before.modelRead?.source==='live'||!before.modelRead?.pending)return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead?.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
-  const refreshed=await (before.modelRead.rebuild?rebuildTodayModel(auth.data.tenantId):refreshTodayModel(auth.data.tenantId));
-  // BUSY returns the current qualified partial view immediately. The client's
-  // configured poll interval is the upper bound, without holding a DB slot.
-  const model=refreshed.code==='BUSY'?before:await loadOfficeHome(auth.data);
-  return Response.json({code:'OK',model},{headers:{...responseHeaders,...('modelRead'in model&&model.modelRead?.revision?{ETag:'"'+model.modelRead.revision+'"'}:{})}});
+  // loadOfficeHome has already scheduled the coalesced projector. A model
+  // refresh can take longer than an HTTP request and must never hold this GET
+  // (or its database slot) open until the platform's runtime limit.
+  return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
  }catch{
   console.error('[TODAY_MODEL_READ_FAILED]',{code:'SOURCE_INCOMPLETE'});
   return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});

@@ -21,6 +21,9 @@ import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} fr
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
+import {withPageReadBudget} from '@/db/readBudget';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {sql as query} from 'drizzle-orm';
 type TodayProjectionPorts=NonNullable<Parameters<typeof refreshTodayModel>[1]>;
 type TodayProjectionResult=Awaited<ReturnType<TodayProjectionPorts['readSources']>> extends ReadonlyMap<string,infer Result>?Result:never;
 const todaySourceKey=(key:Parameters<TodayProjectionPorts['readSources']>[1][number])=>key.kind+':'+key.sourceId;
@@ -45,6 +48,26 @@ const ports:TodayProjectionPorts={
  },
 };
 beforeAll(async()=>{orderId=(await readyInvoiceOrder('TEST Today worker source')).orderId;});
+
+it('cancels a stalled native projector source before the platform runtime limit without publishing a false result',async()=>{
+ const actor=await auth();
+ const current=await withSession(full,()=>readLiveOrderCard(actor,{orderId}));
+ if(current.code!=='OK')throw Error('TEST_MODEL_CARD_REQUIRED');
+ const changed=await withSession(full,()=>changeOrderPromisedDueDateAction({orderId,expectedVersion:current.data.version,dueDate:'2027-09-02',reason:'TEST stalled native projector',clientEventId:randomUUID()}));
+ expect(changed.code).toBe('OK');
+ const started=Date.now();
+ try{
+  await expect(withPageReadBudget(()=>refreshTodayModel(tenant,{...ports,readSources:async()=>{
+   await withPrivilegedTenantTransaction({tenantId:tenant},tx=>tx.execute(query`SELECT pg_sleep(1)`));
+   throw Error('TEST_STALLED_SOURCE_NOT_CANCELLED');
+  }}),200)).rejects.toThrow();
+  expect(Date.now()-started).toBeLessThan(3000);
+  expect(await sql`SELECT source_seq>built_seq AS pending FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{pending:true}]);
+ }finally{
+  // Restore only this isolated TEST tenant after a deliberately interrupted lease.
+  await sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=NULL WHERE tenant_id=${tenant}`;
+ }
+});
 
 it('PL11:36 renews a real short lease across a longer native source read and retains single ownership',async()=>{
  const read=async()=>{const [company]=await sql`SELECT to_jsonb(company) AS row FROM public.company_settings company WHERE tenant_id=${tenant}`;if(!company)throw Error('TEST_LEASE_SETTINGS_REQUIRED');return company.row;};
