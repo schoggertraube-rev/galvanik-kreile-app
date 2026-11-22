@@ -1,4 +1,6 @@
 import 'server-only';
+import {getComplaints} from '@/app/actions/complaints.actions';
+import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {readModelPageSettingsInTransaction} from '@/modules/fundament/server-public';
 import {projectIntakeMessageSources} from '@/modules/eingang/server-public';
 import {projectTaskCalendarSources,projectQuoteFollowupSources} from '@/modules/tasks/server-public';
@@ -14,6 +16,8 @@ import {withPageReadPhase} from '@/db/readBudget';
 /** The App binds the existing module projectors. No writer, session identity,
  * business lookup, second permission policy or replacement source is created. */
 const ports:TodayModelReadPorts={
+ liveComplaints:getComplaints,
+ liveFollowups:getQuoteFollowupsForTodayAction,
  readSettings:readModelPageSettingsInTransaction,
  messages:(auth,value)=>{
   const source=modelRecord(value);if(!source)throw Error('TODAY_MODEL_MESSAGES_INVALID');

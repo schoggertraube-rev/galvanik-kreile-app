@@ -210,8 +210,40 @@ it('actual GET keeps the explicit live escape independent of model reads and pro
    expect(response.status).toBe(200);const result=await response.json();
    expect(result.model.modelRead).toMatchObject({source:'live',pending:false});
    expect(result.model.dashboard.orderActions.rows.length).toBeGreaterThan(0);
+   const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_LIVE_EQUALITY_AUTH');
+   const original=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(result.model.dashboard.calendar.readStartedAt)));
+   expect(JSON.stringify(result.model.dashboard)).toBe(JSON.stringify(original));
    const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
    expect(phases).toContain('today.orders');expect(phases).not.toContain('today.model.read');expect(phases).not.toContain('today.refresh');
+  }finally{output.mockRestore();}
+ });
+});
+
+// Isolated derived-cache faults, not fabricated business source receipts.
+it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s source live while qualified rows remain cached',async fault=>{
+ const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_TARGETED_LIVE_AUTH');
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ const now=new Date();
+ const baseline=await withSession(full,()=>readModelTodayHome(resolved.data,now));
+ expect(baseline.code).toBe('OK');if(baseline.code!=='OK')throw Error('TEST_TARGETED_MODEL_REQUIRED');
+ const read=async()=>{const [source]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;if(!source)throw Error('TEST_TARGETED_MODEL_SOURCE');return source.row;};
+ await withRestoredTestSource({label:'TEST complete targeted model source '+fault,read,restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_TARGETED_COLUMN');
+  const names=columns.map(column=> '"'+column+'"').join(',');
+  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;
+ }},async()=>{
+  if(fault==='incomplete')await sql`UPDATE private.today_source_v1 SET status='SOURCE_INCOMPLETE',payload=NULL,error_code='TEST_DERIVED_SOURCE_FAILURE' WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;
+  else await sql`UPDATE private.today_source_v1 SET built_tenant_seq=built_tenant_seq-1 WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;
+  const qualification=await withPrivilegedTenantTransaction(resolved.data,tx=>readTodayModelInTransaction(tx,resolved.data,readTodayCalendar(now).today));
+  expect(qualification.rows.find(row=>row.kind==='messages')).toMatchObject({fresh:false});
+  const output=vi.spyOn(console,'info');
+  try{
+   const current=await withSession(full,()=>withPageReadBudget(()=>readModelTodayHome(resolved.data,now),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
+   expect(current.code).toBe('OK');if(current.code!=='OK')throw Error('TEST_TARGETED_LIVE_RESULT');
+   expect(current.dashboard).toEqual(baseline.dashboard);
+   const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
+   expect(phases.filter(phase=>['today.orders','today.graph','today.support','today.complaints','today.followups','today.tasks','today.quotes','today.company','today.batch'].includes(phase))).toEqual(['today.graph']);
+   expect(current.sources.batch).toEqual(baseline.sources.batch);
   }finally{output.mockRestore();}
  });
 });
