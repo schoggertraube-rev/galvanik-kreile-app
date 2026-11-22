@@ -8,12 +8,25 @@ import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {readMicrosoftGraphSentMailByRequest} from '@/lib/server/microsoftGraph';
 import {readPageReadSettings} from '@/modules/fundament/server-public';
+import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
-it('does not contact Graph with a fabricated default when the tenant settings source is absent',async()=>{
- const fetchPort=vi.fn();
+it('PL02:51 uses the canonical startup defaults when no tenant settings row exists yet',async()=>{
+ const fetchPort=vi.fn().mockResolvedValueOnce(Response.json({access_token:'TEST-token'.repeat(5)})).mockResolvedValueOnce(Response.json({value:[]}));
+ const timeout=vi.spyOn(AbortSignal,'timeout');
  const result=await withSession(full,()=>readMicrosoftGraphSentMailByRequest({clientRequestId:randomUUID(),recipient:'TEST-recipient@example.invalid',preparedAt:new Date().toISOString()},process.env,fetchPort,()=>readPageReadSettings({tenantId:tenant})));
- expect(result.code).toBe('UNAVAILABLE');
+ expect(result).toEqual({code:'OK',data:{notFound:true}});
+ expect(timeout).toHaveBeenCalledWith(DEFAULT_PAGE_READ_SETTINGS.graphTimeoutMs);
+ expect(await sql`SELECT id FROM public.company_settings WHERE tenant_id=${tenant}`).toHaveLength(0);
+ timeout.mockRestore();
+});
+
+it('does not replace an ambiguous existing settings source with defaults or contact Graph',async()=>{
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) VALUES(${randomUUID()},${tenant},'TEST ambiguous Graph settings'),(${randomUUID()},${tenant},'TEST second ambiguous Graph settings')`;
+ expect(await sql`SELECT id FROM public.company_settings WHERE tenant_id=${tenant}`).toHaveLength(2);
+ const fetchPort=vi.fn();
+ expect(await withSession(full,()=>readMicrosoftGraphSentMailByRequest({clientRequestId:randomUUID(),recipient:'TEST-recipient@example.invalid',preparedAt:new Date().toISOString()},process.env,fetchPort,()=>readPageReadSettings({tenantId:tenant})))).toMatchObject({code:'UNAVAILABLE'});
  expect(fetchPort).not.toHaveBeenCalled();
+ await sql`DELETE FROM public.company_settings WHERE tenant_id=${tenant}`;
 });
 
 it('uses the persisted tenant deadline to cancel a real Graph read and reads successfully on retry',async()=>{
