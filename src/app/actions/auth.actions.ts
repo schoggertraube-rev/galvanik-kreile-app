@@ -5,6 +5,7 @@ import {actionObservationActive,withActionObservation} from '@/lib/server/action
 import {getAuthBootstrapState,type AuthBootstrapState} from '@/lib/server/authBootstrap';
 
 import bcrypt from "bcryptjs";
+import {withPageReadPhase} from '@/db/readBudget';
 import {PIN_LOGIN_COPY} from "@/ui/situationCatalog";
 import { offlinePartition } from "@/lib/server/offlinePartition";
 import { and, eq } from "drizzle-orm";
@@ -118,15 +119,16 @@ async function verifyAndMigratePin(
   pin: string,
   tx:PrivilegedTenantTransaction,
 ): Promise<boolean> {
-  if (!user.pinHash) return false;
+  const storedHash=user.pinHash;
+  if (!storedHash) return false;
 
-  if (user.pinHash.startsWith("$2")) {
-    return bcrypt.compare(pin, user.pinHash);
+  if (storedHash.startsWith("$2")) {
+    return withPageReadPhase('auth.bcrypt',()=>bcrypt.compare(pin, storedHash));
   }
 
-  if (user.pinHash !== pin) return false;
+  if (storedHash !== pin) return false;
 
-  const hashed = await bcrypt.hash(pin, 12);
+  const hashed = await withPageReadPhase('auth.bcrypt',()=>bcrypt.hash(pin, 12));
   const updatedAt = new Date();
   await tx
     .update(appUsers)
@@ -135,7 +137,7 @@ async function verifyAndMigratePin(
       and(
         eq(appUsers.id, user.id),
         eq(appUsers.tenantId, APP_TENANT_ID),
-        eq(appUsers.pinHash, user.pinHash),
+        eq(appUsers.pinHash, storedHash),
       ),
     );
 
@@ -176,7 +178,7 @@ export async function loginWithPin(
       return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 
-    const candidates = await db
+    const candidates = await withPageReadPhase('auth.candidates',()=>db
       .select({
         id: appUsers.id,
         active: appUsers.active,
@@ -191,14 +193,14 @@ export async function loginWithPin(
           eq(appUsers.tenantId, APP_TENANT_ID),
           eq(appUsers.active, true),
         ),
-      );
+      ));
     const user = resolvePinLoginCandidate(loginHandle, candidates);
 
     const loginRole=user&&canUsePinLogin(user.role)?user.role:null;
     const eligible=user!==undefined&&user!==null&&loginRole!==null&&user.tenantId===APP_TENANT_ID;
     const clientIp=process.env.VERCEL==='1'?trustedPinClientIp(await (await import('next/headers')).headers()):null;
 
-    const pinAttempt = await runPinAttempt(
+    const pinAttempt = await withPageReadPhase('auth.tx',()=>runPinAttempt(
       eligible?user.id:null,
       async (tx) => {
         if(!eligible)return false;
@@ -209,7 +211,7 @@ export async function loginWithPin(
         return current ? verifyAndMigratePin(current,pin,tx) : false;
       },
       clientIp,
-    );
+    ));
     if (pinAttempt.status === "blocked") {
       return {
         ok: false,
@@ -232,7 +234,7 @@ export async function loginWithPin(
       expiresAt: now + SESSION_TTL_MS,
     });
 
-    const lastSeen = await recordUserLastSeenForLogin();
+    const lastSeen = await withPageReadPhase('auth.last_seen',()=>recordUserLastSeenForLogin());
     if (lastSeen.code !== "OK") {
       await clearAppSession();
       return { ok: false, message: "Login konnte nicht sicher bestätigt werden." };

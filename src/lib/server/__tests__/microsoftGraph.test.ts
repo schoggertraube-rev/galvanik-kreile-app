@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {PageReadTimeout,hasPageReadBudget,pageReadFetchPort,withPageReadBudget} from '@/db/readBudget';
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphSentDocumentEvidence,
@@ -16,6 +17,28 @@ const env = {
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+it('E0 keeps an already dispatched send outside a page-read deadline and restores that deadline afterwards',async()=>{
+  // Only the external provider is doubled. Its delayed 202 comes after dispatch;
+  // a read timeout must not turn that accepted send into an unknown outcome.
+  const requests:string[]=[];
+  const fetchPort=vi.fn(async(input:RequestInfo|URL)=>{
+    const url=String(input);requests.push(url);
+    if(url.includes('/oauth2/v2.0/token'))return new Response(JSON.stringify({access_token:'TEST-token'.repeat(5)}),{status:200});
+    expect(url).toContain('/sendMail');
+    await new Promise(resolve=>setTimeout(resolve,40));
+    return new Response(null,{status:202});
+  });
+  await withPageReadBudget(async()=>{
+    const result=await sendMicrosoftGraphMail({to:'TEST-customer@example.invalid',subject:'TEST original',body:'TEST original body'},env,fetchPort);
+    expect(requests).toHaveLength(2);expect(requests[1]).toContain('/sendMail');
+    expect(result).toEqual({code:'OK',data:{accepted:true}});
+    expect(hasPageReadBudget()).toBe(true);
+    await expect(pageReadFetchPort(fetchPort)('https://example.invalid/TEST-read')).rejects.toBeInstanceOf(PageReadTimeout);
+  },10);
+  expect(hasPageReadBudget()).toBe(false);
+  expect(requests).toHaveLength(2);expect(requests.filter(url=>url.endsWith('/sendMail'))).toHaveLength(1);
+});
 
 it('preserves large inline work photos and small ordinary images while excluding a signature CID',async()=>{
   const rows=[
