@@ -64,6 +64,9 @@ const readPageReadSettingsRow=cache(async(tenantId:string)=>withPageReadSettings
  const rows=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{page_read_source:unknown}>(sql`
   SELECT ${pageReadProjection}
   FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`));
+ // PL22.11.02:51: a known absent value uses the one declared startup default.
+ // Ambiguous or malformed present settings remain unreadable; no error fallback.
+ if(!rows.length)return {queryTimeoutMs:DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs,invoiceMailBatchLimit:DEFAULT_PAGE_READ_SETTINGS.invoiceMailBatchLimit};
  if(rows.length!==1)throw Error('PAGE_READ_SETTINGS_SOURCE_INCOMPLETE');
  const source=pageReadSettingsFromCompany(rows[0].page_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!source)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');

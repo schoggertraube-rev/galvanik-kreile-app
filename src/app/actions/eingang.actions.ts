@@ -4,7 +4,7 @@ import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
@@ -433,7 +433,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
   const customerId = existingCustomerId(input);
   const authorization = await resolveAuthorization();
   if (!customerId || !authorization.ok || !hasAuthorizationArea(authorization.data, "eingang") || (input as {customer?:{changes?:unknown}})?.customer?.changes) {
-    return erfasseAuftragAusEingangCommand(input,undefined,createCustomerInTransaction,updateCustomerInTransaction,after,queueOrderPrints);
+    return erfasseAuftragAusEingangCommand(input,undefined,createCustomerInTransaction,updateCustomerInTransaction,after,queueOrderPrints,readPageReadSettings);
   }
   const customer = await readCustomerOrderReadinessCommand(authorization.data, {
     customerId,
@@ -452,7 +452,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
       missing: readiness.issues.map((issue) => issue.field),
     };
   }
-  return erfasseAuftragAusEingangCommand(input, { customerId, readiness },undefined,undefined,after,queueOrderPrints);
+  return erfasseAuftragAusEingangCommand(input, { customerId, readiness },undefined,undefined,after,queueOrderPrints,readPageReadSettings);
 
  },readLoggingSettings);
 }

@@ -15,7 +15,7 @@ import {
 } from "@/lib/server/authorization";
 import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 import {intakeHandoverDirective} from '@/modules/eingang/public';
-import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY} from '@/ui/situationCatalog';
+import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY,ORDER_CONTENT_COPY} from '@/ui/situationCatalog';
 import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
 import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
 import {readManualHandoverReceipt,type ManualHandoverReceipt} from '@/lib/server/orderHandoverSourcePort';
@@ -333,11 +333,18 @@ export async function changeOrderContent(input: ChangeOrderContentInput,readCust
       if (existing.some((row) => !items.some((item) => item.id === row.id))) return { code: "VALIDATION_ERROR" as const, message: "Positionen dürfen hier nicht gelöscht werden." };
       const catalogIds = [...new Set(items.flatMap((item) => item.catalogServiceId ? [item.catalogServiceId] : []))];
       const catalog = catalogIds.length ? await tx.execute<CatalogRow>(sql`SELECT id::text AS id, name, surface, unit, net_price_cents, vat_rate_basis_points, active FROM public.catalog_services WHERE tenant_id=${auth.data.tenantId} AND id = ANY(ARRAY[${sql.join(catalogIds.map(id=>sql`${id}`),sql`, `)}]::uuid[])`) : [];
-      if (catalog.length !== catalogIds.length) return { code: "VALIDATION_ERROR" as const, message: "Eine gewählte Katalogleistung ist nicht verfügbar." };
+      if (catalog.length !== catalogIds.length) return { code: "VALIDATION_ERROR" as const, message: ORDER_CONTENT_COPY.catalogMissing };
       const services = new Map(catalog.map((service) => [service.id, service]));
+      for (const item of items) {
+        if (!item.catalogServiceId) continue;
+        const service = services.get(item.catalogServiceId);
+        if (!service) return {code:'VALIDATION_ERROR' as const,message:ORDER_CONTENT_COPY.catalogMissing};
+        if (!service.active && !existing.some(row=>row.id===item.id && row.catalog_service_id===service.id)) {
+          return {code:'VALIDATION_ERROR' as const,message:ORDER_CONTENT_COPY.catalogInactive(service.name)};
+        }
+      }
       const normalized = items.map((item) => {
         const service = item.catalogServiceId ? services.get(item.catalogServiceId) : null;
-        if (item.catalogServiceId && (!service || (!service.active && !existing.some((row) => row.id === item.id && row.catalog_service_id === service.id)))) throw new Error("ORDER_CONTENT_CATALOG_INVALID");
         const normalized=service ? { ...item, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.net_price_cents, vatRateBasisPoints: service.vat_rate_basis_points as 0 | 700 | 1900 } : item;
         const current=existing.find(row=>row.id===item.id);
         return !canSetPrices&&current

@@ -64,7 +64,9 @@ describe.each(['cancel','reissue'] as const)('KORR S38a-2 %s actual frozen remai
    return response;
   });
   try{
-   expect(await withSession(full,()=>sendCustomerMailAction(input!))).toMatchObject({code:'UNAVAILABLE'});
+   // PL22.11.02:51: a completed101-invoice turn is OK; original102 stays in
+   // the same protected follow-up task until a later turn or real cancellation.
+   expect(await withSession(full,()=>sendCustomerMailAction(input!))).toMatchObject({code:'OK'});
    expect(mailPosts()).toHaveLength(1);
    expect(JSON.parse(String(mailPosts()[0][1]?.body)).message.attachments).toHaveLength(101);
    const tasks=await sql`SELECT task.id::text FROM public.events marker JOIN public.tasks task ON task.tenant_id=marker.tenant_id AND task.client_key::text=marker.id WHERE marker.tenant_id=${tenant} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.correlation_id=${input!.clientRequestId}::uuid`;

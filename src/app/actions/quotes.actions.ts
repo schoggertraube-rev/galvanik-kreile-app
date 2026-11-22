@@ -1,6 +1,6 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
@@ -107,7 +107,7 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput,optio
      if(!prior.length){
       const quote=await readQuoteCommand(context,{quoteId:input.quoteId});if(quote.code!=='OK')return quote;
       const source=await readIntakeQuoteReplyReference(auth.data,{itemId:input.source.itemId,version:input.source.version,quoteId:input.quoteId,customerId:quote.quote.customerId});if(source.code!=='OK')return source;
-      const target=await readMicrosoftGraphSentDocumentEvidence(source.reference.internetMessageId,source.reference.sender);if(target.code!=='OK')return {code:'VALIDATION_ERROR' as const,message:target.message};
+      const target=await readMicrosoftGraphSentDocumentEvidence(source.reference.internetMessageId,source.reference.sender,undefined,undefined,()=>readPageReadSettings(auth.data));if(target.code!=='OK')return {code:'VALIDATION_ERROR' as const,message:target.message};
       const documents=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteReplyDocuments(tx,auth.data,input.quoteId,quote.quote.customerId));
       const matching=documents.filter(row=>Number.isSafeInteger(row.document?.edition)&&target.data.pdfSha256.includes(row.document?.sha256));
       const editions=[...new Set(matching.map(row=>row.document.edition))];if(documents.length>100||editions.length!==1)return {code:'VALIDATION_ERROR' as const,message:'Das beantwortete PDF ist keiner eindeutigen gesendeten KV-Fassung zugeordnet. Aktuelle Fassung bestätigen lassen.'};
