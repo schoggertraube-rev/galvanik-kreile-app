@@ -35,6 +35,8 @@ export type AuthorizationSnapshot = {
   active: true;
 };
 
+export {authorizationReadContext,type AuthorizedReadContext} from './authorizationReadContext';
+
 export {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 
 export function hasAnyAuthorizationArea(

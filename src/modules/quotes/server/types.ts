@@ -14,6 +14,11 @@ export type QuoteCommandContext = {
   capabilities: QuoteCommandCapabilities;
 };
 
+/** Read ports need their existing read capability, never a write actor or grants. */
+export type QuoteReadContext = Pick<QuoteCommandContext,'tenantId'> & {
+  capabilities: Pick<QuoteCommandCapabilities,'canReadQuote'>;
+};
+
 export type QuotePositionInput = {
   unit?: string | null;
   plannedMinutes?: number | null;

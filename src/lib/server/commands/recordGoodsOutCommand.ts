@@ -587,13 +587,13 @@ function qualifyCollectionState(tenantId:string,input:OrderCollectionReadInput,a
  return {orderId:input.orderId,orderVersion:input.orderVersion,collectionPlanned:agreement?.type==='sammelrechnung'||prepared,
   collectionPrepared:prepared,preparationEventId:active[0]?.eventId??null,collectionId:members[0]?.collection_id??null};
 }
-export async function readOrderCollectionStateInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:OrderCollectionReadInput){
+export async function readOrderCollectionStateInTransaction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,input:OrderCollectionReadInput){
  const states=await readOrderCollectionStatesInTransaction(tx,auth,[input]);
  const state=states.get(input.orderId);if(state===undefined)throw Error("COLLECTION_PLAN_SOURCE_MISSING");return state;
 }
 
 /** Every receipt, freeze and physical member is qualified by the same single/set reader. */
-export async function readOrderCollectionStatesInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,inputs:readonly OrderCollectionReadInput[]):Promise<Map<string,ReturnType<typeof qualifyCollectionState>>>{
+export async function readOrderCollectionStatesInTransaction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,inputs:readonly OrderCollectionReadInput[]):Promise<Map<string,ReturnType<typeof qualifyCollectionState>>>{
  const requested=new Map<string,OrderCollectionReadInput>(),result=new Map<string,ReturnType<typeof qualifyCollectionState>>();
  for(const input of inputs){const prior=requested.get(input.orderId);if(prior&&canonicalJson(prior)!==canonicalJson(input))throw Error('COLLECTION_PLAN_ORDER_VERSION_INVALID');requested.set(input.orderId,input);}
  if(!requested.size)return result;

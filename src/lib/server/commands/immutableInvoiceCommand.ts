@@ -26,7 +26,7 @@ import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/serv
 import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { sql } from "drizzle-orm";
-import { hasAuthorizationArea, readActiveAreaHolders, resolveAuthorization,type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, readActiveAreaHolders, resolveAuthorization,authorizationReadContext,type AuthorizationSnapshot,type AuthorizedReadContext } from "@/lib/server/authorization";
 import {getRoleLabel} from '@/lib/auth/authorizationContract';
 import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 import {
@@ -1169,7 +1169,7 @@ type ShippingProposalSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:str
 type ShippingProposalOrder=Pick<LockedOrder,'id'|'customer_id'|'handover_mode'|'version'>&{order_number:string;station:string;current_station:string;current_station_id:string;status:string;invoice_exists:boolean;freeze_active:boolean;freeze_invalid:boolean};
 type ShippingProposalReadGroup<T>={code:'OK';rows:T[]}|{code:'FAILED';cause:unknown};
 type ShippingProposalHeader=ShippingProposalReadGroup<ShippingProposalOrder>;
-async function readInvoiceShippingHeaders(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderIds:readonly string[]){
+async function readInvoiceShippingHeaders(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,orderIds:readonly string[]){
  return tx.execute<ShippingProposalOrder>(sql`SELECT * FROM private.read_invoice_shipping_headers_v1(${auth.tenantId},ARRAY[${sql.join(orderIds.map(value=>sql`${value}`),sql`, `)}]::text[])`);
 }
 function qualifyShippingProposalOrder(rows:readonly ShippingProposalOrder[],input:ShippingProposalInput,identity:{orderNumber?:string}){
@@ -1188,7 +1188,7 @@ function qualifyShippingProposalOrder(rows:readonly ShippingProposalOrder[],inpu
 }
 /** Same canonical proposal reader; batch only its repeated source header.
  * Failed groups are isolated after their native transaction has rolled back. */
-async function readShippingProposalGroups<T>(auth:AuthorizationSnapshot,orderIds:readonly string[],readRows:(tx:PrivilegedTenantTransaction,ids:readonly string[])=>Promise<readonly {id:string;row:T}[]>){
+async function readShippingProposalGroups<T>(auth:Pick<AuthorizationSnapshot,'tenantId'>,orderIds:readonly string[],readRows:(tx:PrivilegedTenantTransaction,ids:readonly string[])=>Promise<readonly {id:string;row:T}[]>){
  const groups=new Map<string,ShippingProposalReadGroup<T>>();
  const load=async(ids:readonly string[]):Promise<void>=>{
   if(!ids.length)return;
@@ -1202,8 +1202,9 @@ async function readShippingProposalGroups<T>(auth:AuthorizationSnapshot,orderIds
  };
  await load([...new Set(orderIds)]);return groups;
 }
-export async function readInvoiceShippingConsequencesBatch(auth:AuthorizationSnapshot,inputs:readonly ShippingProposalInput[],readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
- const permitted=hasAuthorizationArea(auth,'preise');
+export async function readInvoiceShippingConsequencesBatch(auth:AuthorizationSnapshot|AuthorizedReadContext,inputs:readonly ShippingProposalInput[],readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+ const permitted=readAuth.canReadArea('preise');
  const headers=permitted?await readShippingProposalGroups(auth,inputs.map(input=>input.orderId),async(tx,ids)=>(await readInvoiceShippingHeaders(tx,auth,ids)).map(row=>({id:row.id,row}))):new Map<string,ShippingProposalHeader>();
  // This is the same canonical early gate used by the single reader. Missing,
  // invalid and not-applicable orders retain their original result in the worker.
@@ -1233,11 +1234,12 @@ export async function readInvoiceShippingConsequencesBatch(auth:AuthorizationSna
  return new Map(inputs.map((input,index)=>{if(!seen.has(index))throw Error('SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING');return [input.orderId,values[index]];}));
 }
 
-export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
+export async function readInvoiceShippingConsequences(auth:AuthorizationSnapshot|AuthorizedReadContext,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader){
  return readInvoiceShippingConsequencesWithHeader(auth,input,readVat,readSettings);
 }
-async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnapshot,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader,header?:ShippingProposalHeader,readSource?:(orderId:string)=>Promise<SourceRow[]>,shared?:{tx:PrivilegedTenantTransaction;settings?:{value:Awaited<ReturnType<ShippingProposalSettingsReader>>};originals?:ReceiptRow[]}){
- if(!hasAuthorizationArea(auth,'preise'))return undefined;
+async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnapshot|AuthorizedReadContext,input:ShippingProposalInput,readVat:InvoiceVatReader,readSettings:ShippingProposalSettingsReader,header?:ShippingProposalHeader,readSource?:(orderId:string)=>Promise<SourceRow[]>,shared?:{tx:PrivilegedTenantTransaction;settings?:{value:Awaited<ReturnType<ShippingProposalSettingsReader>>};originals?:ReceiptRow[]}){
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+ if(!readAuth.canReadArea('preise'))return undefined;
  const identity:{orderNumber?:string;invoiceNumber?:string}={};
  try{const work=async(tx:PrivilegedTenantTransaction)=>{
   if(header?.code==='FAILED')throw header.cause;

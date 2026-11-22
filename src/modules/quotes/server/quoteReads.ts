@@ -8,8 +8,8 @@ export { listOpenQuotesCommand, readQuoteCommand } from "./quoteCommands";
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readCaseActorTraces} from '@/lib/server/caseActorRead';
-import type {QuoteCommandContext} from './types';
-export async function readQuoteActors(auth:QuoteCommandContext,input:{quoteId:string;version:number}){
+import type {QuoteReadContext} from './types';
+export async function readQuoteActors(auth:QuoteReadContext,input:{quoteId:string;version:number}){
  if(!auth.capabilities.canReadQuote)return {code:'FORBIDDEN' as const,message:'KV-Akteure sind nicht freigegeben.'};
  if(typeof input?.quoteId!=='string'||!Number.isSafeInteger(input.version)||input.version<1)return {code:'VALIDATION_ERROR' as const,message:'KV-Kennung oder Stand fehlt.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{

@@ -9,7 +9,7 @@ import {DELIVERY_FAILURE_COPY} from '@/ui/situationCatalog';
 
 type DeliveryFailure={itemId:string;threadId:string;graphMessageId:string;sentGraphMessageId:string;clientRequestId:string;originalMessageId:string;recipient:string;originalSha256:string};
 type DeliveryEvidence={customerId:string|null;graphMessageId:string;report:{source:string;status:string;originalSha256:string;originalMessageId:string|null;recipient:string|null}|null;proof_ok:boolean};
-async function readIntakeDeliveryEvidence(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string){
+async function readIntakeDeliveryEvidence(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,itemId:string){
  const rows=await tx.execute<DeliveryEvidence>(sql`SELECT customer_id AS "customerId",graph_message_id AS "graphMessageId",report,proof_ok FROM private.v_intake_delivery_evidence_v1 WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}`);
  if(!rows.length)return null;if(rows.length!==1)throw Error('DELIVERY_ORIGINAL_AMBIGUOUS');const row=rows[0];
  if(!row.report)return null;
@@ -50,7 +50,7 @@ export async function qualifyImportedDeliveryFailure(auth:AuthorizationSnapshot,
 }
 
 /** One durable evidence reader used by notification, reminder and response projections. */
-export async function readCommunicationDeliveryFailures(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,threadIds:readonly string[]){
+export async function readCommunicationDeliveryFailures(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,threadIds:readonly string[]){
  if(!threadIds.length)return [];
  const rows=await tx.execute<{payload:DeliveryFailure;status:string;event_schema_version:number;correlation_id:string;user_id:string|null;customer_id:string|null;source:string|null;thread_status:string|null;created_at:string}>(sql`
   SELECT event.payload,event.status,event.event_schema_version,event.correlation_id::text,event.user_id::text,thread.customer_id,thread.source,thread.status AS thread_status,(event.created_at AT TIME ZONE 'UTC')::text AS created_at

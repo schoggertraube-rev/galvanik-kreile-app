@@ -1,7 +1,7 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
-type Actor={tenantId:string;userId:string};
+type Actor={tenantId:string};
 
 const caseActorAction=sql`event.event_type||CASE WHEN event.payload->>'action' IN ('accept','sent','reject','extend','conditional','aufnehmen','entscheiden','bewerten','nacharbeit','gutschrift','abschliessen','zurueckziehen','wieder_oeffnen') THEN ':'||(event.payload->>'action') ELSE '' END`;
 import type {CaseActorEvidence,CaseActorTrace} from '@/lib/domain/caseActorContract';
