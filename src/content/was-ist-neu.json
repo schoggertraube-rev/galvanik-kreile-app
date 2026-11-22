@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-22",
+    "pr": 265,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Deine Artikelentwürfe bleiben mit genau einer Aufgabe verbunden."
+    ]
+  },
+  {
+    "datum": "2026-11-22",
     "pr": 258,
     "seite": "kunden",
     "ziel": "/customers",
