@@ -25,8 +25,9 @@ import { completeTask } from "@/modules/tasks/server-public";
 
 const schalter = ["p3_lager_inventur", "p4_lager"] as const;
 const replayDatabase = process.env.DATABASE_URL;
+const replayPort = process.env.GITHUB_ACTIONS === "true" ? "54322" : "54342";
 if (!replayDatabase || replayDatabase !== process.env.H18_EXPECTED_DATABASE_URL
-    || new URL(replayDatabase).hostname !== "127.0.0.1" || new URL(replayDatabase).port !== "54342") {
+    || new URL(replayDatabase).hostname !== "127.0.0.1" || new URL(replayDatabase).port !== replayPort) {
   throw Error("LAGER_P1_DEDICATED_LOOPBACK_REQUIRED");
 }
 type OriginalSchalter = { id: string; name: string; description: string | null; enabled: boolean;
