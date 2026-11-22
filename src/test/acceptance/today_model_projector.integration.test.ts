@@ -9,7 +9,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
-import {readLiveOrderCard} from '@/lib/server/orderCardRead';
+import {readLiveOrderCard,readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
@@ -138,4 +138,38 @@ it('reads the persisted single-row batch limit and does not let one incomplete l
  for(let attempt=0;attempt<9;attempt++)expect((await refreshTodayModel(tenant,bounded)).code).toBe('OK');
  expect(new Set(visits).size).toBe(9);
  expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
+});
+
+
+it('feeds the identical Today card/list kernels with the real actor-free capability and keeps permission denial',async()=>{
+ const actor=await auth(),expected=(await readTodayOrderCards(actor,[orderId])).get(orderId);
+ expect(expected?.code).toBe('OK');if(expected?.code!=='OK')throw Error('TEST_REAL_TODAY_CARD_REQUIRED');
+ const before=await sql`SELECT id::text FROM public.app_users WHERE tenant_id=${tenant} ORDER BY id`;
+ let actualCapability:ProjectorAuthorization|undefined;
+ const readOnly:TodayProjectionPorts={
+  readSettings:readTodayReadSettings,
+  listOrderIds:async capability=>(await getOperationalOrders(capability,{purpose:'today'})).map(row=>row.id),
+  readSources:async(capability,keys)=>{
+   actualCapability=capability;
+   const cards=await readTodayOrderCards(capability,keys.filter(key=>key.kind==='order').map(key=>key.sourceId));
+   const results=new Map<string,TodayProjectionResult>();
+   for(const key of keys){
+    if(key.kind==='orders')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(capability,{purpose:'today'})});
+    else if(key.kind==='order'){
+     const card=cards.get(key.sourceId);
+     if(card?.code==='OK')results.set(todaySourceKey(key),{code:'OK',payload:{card:card.data},sourceVersion:card.data.version,listed:true});
+     else results.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_REAL_TODAY_CARD_INCOMPLETE'});
+    }else results.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
+   }
+   return results;
+  },
+ };
+ expect((await rebuildTodayModel(tenant,readOnly)).code).toBe('OK');
+ expect(actualCapability).toBeDefined();if(!actualCapability)throw Error('TEST_PROJECTOR_CAPABILITY_REQUIRED');
+ expect(actualCapability).not.toHaveProperty('userId');expect(actualCapability).not.toHaveProperty('role');expect(actualCapability).not.toHaveProperty('active');
+ const [saved]=await sql`SELECT payload,source_version,status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`;
+ expect(saved).toEqual({payload:JSON.parse(JSON.stringify({card:expected.data})),source_version:expected.data.version,status:'OK',fresh:true});
+ const denied=await readTodayOrderCards({...actualCapability,permissions:[]},[orderId]);
+ expect(denied.get(orderId)).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT id::text FROM public.app_users WHERE tenant_id=${tenant} ORDER BY id`).toEqual(before);
 });

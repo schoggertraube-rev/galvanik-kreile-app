@@ -571,12 +571,12 @@ function mapLabelPrint(row: LabelPrintRow, tenantId: string, orderId: string) {
   return { eventId: row.event_id, occurredAt: toIso(row.occurred_at) };
 }
 
-function canView(authorization: AuthorizationSnapshot): boolean {
+function canView(authorization: Pick<AuthorizationSnapshot,'permissions'>): boolean {
   return authorization.permissions.includes("perm_view_leitstand");
 }
 
 type OrderPriceEvent={aggregate_version:number;payload:{prices:unknown}};
-function qualifyCurrentOrderItems(authorization:AuthorizationSnapshot,queue:QueueRow,isReworkOrder:boolean,intakeRows:IntakeRow[],currentRows:CurrentItemRow[],contentEvent:ContentEventRow|null,priceEvents:OrderPriceEvent[]){
+function qualifyCurrentOrderItems(authorization:Pick<AuthorizationSnapshot,'tenantId'>,queue:QueueRow,isReworkOrder:boolean,intakeRows:IntakeRow[],currentRows:CurrentItemRow[],contentEvent:ContentEventRow|null,priceEvents:OrderPriceEvent[]){
       const intake = intakeRows[0];
       if (
         (isReworkOrder && intakeRows.length !== 0)
@@ -649,7 +649,7 @@ function qualifyCurrentOrderItems(authorization:AuthorizationSnapshot,queue:Queu
  return items;
 }
 
-function qualifyOrderFreeze(authorization:AuthorizationSnapshot,queue:QueueRow,items:OrderCardItem[],extraRows:ExtraWorkRow[],freezeRows:FreezeRow[]){
+function qualifyOrderFreeze(authorization:Pick<AuthorizationSnapshot,'tenantId'>,queue:QueueRow,items:OrderCardItem[],extraRows:ExtraWorkRow[],freezeRows:FreezeRow[]){
       const itemById = new Map(items.map((item) => [item.id, item]));
       const extraLines = extraRows.map((row) => {
         if (row.order_id !== queue.id) throw new Error("ORDER_CARD_EXTRA_WORK_ORDER_INVALID");
@@ -698,7 +698,7 @@ function qualifyOrderFreeze(authorization:AuthorizationSnapshot,queue:QueueRow,i
  return mappedFreeze;
 }
 
-function qualifyOrderQueue(authorization:AuthorizationSnapshot,queueRows:QueueRow[]){
+function qualifyOrderQueue(authorization:Pick<AuthorizationSnapshot,'tenantId'>,queueRows:QueueRow[]){
  const queue=queueRows[0];
       if (
         queueRows.length !== 1
@@ -719,7 +719,7 @@ function qualifyOrderQueue(authorization:AuthorizationSnapshot,queueRows:QueueRo
  return {...queue,customer_name:queue.customer_name};
 }
 
-function qualifyOrderOrigin(authorization:AuthorizationSnapshot,originRows:OrderOriginRow[]){
+function qualifyOrderOrigin(authorization:Pick<AuthorizationSnapshot,'tenantId'>,originRows:OrderOriginRow[]){
       const origin = originRows[0];
       if (
         originRows.length !== 1
@@ -734,7 +734,7 @@ function qualifyOrderOrigin(authorization:AuthorizationSnapshot,originRows:Order
 }
 
 type CardHandoverEvent={id:string;event_type:string;payload:{receipt:{orderId:string;orderVersion:number;message:string;taskId:string|null;mailActor:{originalItemId:string}}}};
-async function qualifyHandoverNotice(tx:import('./privilegedDb').PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,queue:QueueRow,handoverEvent:CardHandoverEvent|undefined){
+async function qualifyHandoverNotice(tx:import('./privilegedDb').PrivilegedTenantTransaction,authorization:Pick<AuthorizationSnapshot,'tenantId'>,queue:QueueRow,handoverEvent:CardHandoverEvent|undefined){
       let handoverNotice:LiveOrderCard['handoverNotice'];
       if(handoverEvent?.event_type==='ORDER_HANDOVER_CHANGED_V1'){
         const source=await readManualHandoverReceipt(tx,authorization.tenantId,handoverEvent.id);
@@ -757,12 +757,15 @@ function qualifiedItemUnits(items:OrderCardItem[],awardedQuote:OrderCommercialQu
  return items.map(item=>{const awarded=awardedQuote?.positions.find(position=>position.itemId===item.id);return awarded?{...item,unit:awarded.unit==null?null:orderPositionUnitLabel(awarded.unit)}:item;});
 }
 
+/** The Today snapshot never reads a login identity or role. The same live
+ * permission and tenant checks apply to both a session and the read-only union. */
+type TodayOrderReadAuthorization=Pick<AuthorizationSnapshot,'tenantId'|'permissions'>;
 export type TodayOrderCard=Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'customerName'|'title'|'station'|'dueAt'|'handoverMode'|'items'|'freeze'|'handoverNotice'|'operationalFacts'>;
 type TodayCardRow={kind:string;order_id:string;position:number;data:unknown};
 /** One snapshot query for the displayed order facts. Both projections use
  * the same current-item, intake/content/price, freeze and handover validators.
  * No actor list, agreement hints, timeline, print queue or assignment menu. */
-export async function readTodayOrderCards(authorization:AuthorizationSnapshot,orderIds:readonly string[]):Promise<Map<string,OrderCardReadResult<TodayOrderCard>>>{
+export async function readTodayOrderCards(authorization:TodayOrderReadAuthorization,orderIds:readonly string[]):Promise<Map<string,OrderCardReadResult<TodayOrderCard>>>{
  const diagnosticStarted=Date.now();
  const results=new Map<string,OrderCardReadResult<TodayOrderCard>>();
  if(!canView(authorization)||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
