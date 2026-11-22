@@ -1,5 +1,5 @@
 import 'server-only';
-export {saveTask,completeTask,readTask,createMissingGoodsTask,createInvoiceClarificationTask,resolveInvoiceClarificationTask,syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from './server/taskService';
+export {saveTask,completeTask,readTask,readTaskForAuthorization,createMissingGoodsTask,createInvoiceClarificationTask,resolveInvoiceClarificationTask,syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from './server/taskService';
 export type {TaskEffectRequest,TaskEffects} from './server/taskService';
 export {createOrderHandoverTask,readOrderHandoverTaskState} from './server/taskService';
 
@@ -28,3 +28,5 @@ export {synchronizeInvoiceMailRemainderTask} from './server/taskService';
 
 export {createIntakeMailFailureTask} from './server/taskService';
 export {synchronizeEvidenceVisibilityRetryTask} from './server/taskService';
+
+export type {TaskReadContext,TaskSourceRead,TaskCalendarSources} from './server/taskService';

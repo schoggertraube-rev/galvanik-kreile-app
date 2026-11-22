@@ -304,42 +304,17 @@ export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise
   if(!inherited){const settings=await readPageReadSettingsAction();if(settings.code==='OK')configurePageReadBudget(settings.settings.queryTimeoutMs);}
   const authorization=await withPageReadPhase('action.auth',()=>resolveOrderCardAuthorization());if(!authorization.ok)return authorization.result;
   const auth=authorization.data;
-  const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
-  const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,input.orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,input.orderIds))]);
-  const [{readInvoiceShippingConsequencesBatch},{readInvoiceVat},fundament,{readOrdersInformed},{readOrderPickupAppointment},{readV45OrderRule},{getPaymentStatesBatch},orders]=await Promise.all([
-   import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead'),import('@/modules/orders/server-public')]);
-  const readCredit=hasAuthorizationArea(auth,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
-   const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
-   return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
-  }:undefined;
-  // One qualified settings snapshot for both read branches in this Action only;
-  // writers and later requests still use the fresh canonical reader.
-  let shippingSettings:ReturnType<typeof fundament.readShippingSettingsInTransaction>|undefined;
-  const readShippingSettings:typeof fundament.readShippingSettingsInTransaction=(tx,tenantId)=>shippingSettings??=fundament.readShippingSettingsInTransaction(tx,tenantId);
-  const shippingReads=withPageReadPhase('action.shipping',()=>readInvoiceShippingConsequencesBatch(auth,input.orderIds.flatMap(orderId=>{const card=cards.get(orderId),proof=evidence.get(orderId);return card?.code==='OK'&&proof?.code==='OK'?[{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId}]:[];}),readInvoiceVat,readShippingSettings));
-  const qualifiedCards=input.orderIds.flatMap(orderId=>{const source=cards.get(orderId),proof=evidence.get(orderId);return source?.code==='OK'&&proof?.code==='OK'?[source.data]:[];});
-  const finishedIds=qualifiedCards.filter(card=>card.station==='fertig').map(card=>card.id);
-  const shipmentIds=qualifiedCards.filter(card=>card.handoverMode==='shipping').map(card=>card.id);
-  const informedReads=withPageReadPhase('action.informed',()=>readOrdersInformed(auth,finishedIds));
-  const paymentReads=withPageReadPhase('action.payment',()=>getPaymentStatesBatch(auth,finishedIds,readCredit));
-  const shipmentReads=shipmentIds.length?withPageReadPhase('action.shipment',async()=>orders.readManualShippingBatch(auth,shipmentIds,{...await manualShippingPorts(),readSettings:readShippingSettings})):Promise.resolve(new Map<string,Awaited<ReturnType<typeof orders.readManualShipping>>>());
-  const rows=await Promise.all(input.orderIds.map(async orderId=>{
-   const source=cards.get(orderId),proof=evidence.get(orderId);
-   if(!source||source.code!=='OK')return {orderId,result:source??{code:'UNAVAILABLE' as const,message:'Auftrag nicht verfügbar.'}};
-   if(!proof||proof.code!=='OK')return {orderId,result:proof??{code:'UNAVAILABLE' as const,message:'Nachweise konnten nicht sicher geladen werden.'}};
-   const card=source.data;
+  const [{readTodayOrderSources},{readV45OrderRule}]=await Promise.all([import('@/lib/server/todayOrderRead'),import('@/lib/server/v45OrderRead')]);
+  const sources=await readTodayOrderSources(auth,input.orderIds,await todayOrderSourcePorts());
+  const rows=sources.map(({orderId,result})=>{
+   if(result.code!=='OK')return {orderId,result};
+   const {card,records,shipping,informed,payment,shipment,appointment}=result.data;
    try{
-    const [shipping,informed,payment,shipment,appointment]=await Promise.all([
-     shippingReads.then(rows=>{if(!rows.has(card.id))throw Error('SHIPPING_PROPOSAL_BATCH_SOURCE_MISSING');return rows.get(card.id);}),
-     card.station==='fertig'?informedReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_NOTIFICATION_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
-     card.station==='fertig'?paymentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_PAYMENT_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
-     card.handoverMode==='shipping'?shipmentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('MANUAL_SHIPPING_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
-     card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
-    ]);
-    if(informed?.code==='OK'&&informed.orderVersion!==card.version)return {orderId,result:{code:'UNAVAILABLE' as const,message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'}};
-    return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:appointment,nextActionRule:readV45OrderRule(auth,card,informed?{orderId:card.id,value:informed}:undefined,{orderId:card.id,records:proof.data},{shipping,payment,shipment})}}};
-   }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
-  }));
+    const nextActionRule=readV45OrderRule(auth,card,informed?{orderId:card.id,value:informed}:undefined,{orderId:card.id,records},{shipping,payment,shipment});
+    return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:appointment,nextActionRule}}};
+   }
+   catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
+  });
   logPageReadPhase('action.model',diagnosticStarted,{requested:input.orderIds.length,ok:rows.filter(row=>row.result.code==='OK').length,failed:rows.filter(row=>row.result.code!=='OK').length});
   return {code:'OK',data:{rows}};
  },DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
@@ -415,6 +390,21 @@ async function manualShippingPorts(){
  const {readInvoiceVat}=await import('@/modules/accounting/server-public');
  return {readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,readSettings:readShippingSettingsInTransaction,readAllocation:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string,input:Parameters<typeof readShippingMergeAllocation>[3])=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
 }
+async function todayOrderSourcePorts():Promise<import('@/lib/server/todayOrderRead').TodayOrderReadPorts>{
+ const [{readInvoiceVat},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public')]);
+ return {readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
+  readCredit:async(tx,tenantId,customerId)=>{
+   const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
+   return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
+  },
+  readShipments:async(auth,ids,readSettings)=>{
+   const {readManualShippingBatch}=await import('@/modules/orders/server-public');
+   return readManualShippingBatch(auth,ids,{...await manualShippingPorts(),readSettings});
+  },
+ };
+}
+
+
 export async function markOrderInformedByPhoneAction(input:{orderId:string;expectedVersion:number;clientEventId:string}){
  return observeAction('markOrderInformedByPhoneAction',subjectForAction('markOrderInformedByPhoneAction',input),async()=>{
  const auth=await resolveOrderCardAuthorization();if(!auth.ok)return auth.result;

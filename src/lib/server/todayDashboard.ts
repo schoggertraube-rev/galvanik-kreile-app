@@ -160,10 +160,10 @@ export function todaySourceAccess(auth:Pick<AuthorizedReadContext,'canReadArea'>
   invoiceMail,company:invoiceMail,
  };
 }
-async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:ReturnType<typeof todaySourceAccess>){
- const {orders:ordersAllowed,money:moneyAllowed}=access;
- const [money,person,orders]=await Promise.all([
-  withPrivilegedTenantTransaction(auth,async tx=>{
+/** Existing tenant-wide money facts; personal preferences and assignments stay live. */
+export async function readTodayMoneySupport(auth:AuthorizationSnapshot|AuthorizedReadContext,today:string,access=todaySourceAccess('canReadArea'in auth?auth:authorizationReadContext(auth))){
+ const {money:moneyAllowed}=access;
+ return withPrivilegedTenantTransaction(auth,async tx=>{
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`
           SELECT invoice.id, invoice.payment_version, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
                  customer.country AS customer_country, invoice.due_date,
@@ -213,7 +213,12 @@ async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:R
    return {supportMissing:invoiceMailSource.code!=='OK'?['TODAY_UNSENT_INVOICE_SOURCE']:invoiceMailSource.data.missing,invoiceMailSource,invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[],prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[]};
   }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
    return {supportMissing:['TODAY_SUPPORT_SOURCE','TODAY_UNSENT_INVOICE_SOURCE'],invoiceMailSource:{code:'SOURCE_INCOMPLETE' as const},invoiceSource:{code:'SOURCE_INCOMPLETE' as const},invoices:[] as InvoiceRow[],prepaymentSource:{code:'SOURCE_INCOMPLETE' as const},prepayments:[] as PrepaymentRow[],collectionSource:{code:'SOURCE_INCOMPLETE' as const},collections:[] as CollectionRow[]};
-  }),
+  });
+}
+async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:ReturnType<typeof todaySourceAccess>){
+ const {orders:ordersAllowed}=access;
+ const [money,person,orders]=await Promise.all([
+  readTodayMoneySupport(auth,today,access),
   withPrivilegedTenantTransaction(auth,async tx=>{
       const preferencesSource = await readTodaySource(tx,nested=>
         nested.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`));

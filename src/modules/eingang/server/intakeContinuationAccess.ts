@@ -1,11 +1,11 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {type AuthorizationSnapshot,type AuthorizedReadContext} from "@/lib/server/authorization";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 /** A continuation never grants broader access than either original source. */
-export async function mayUseContinuationSources(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string):Promise<boolean>{
+export async function mayUseContinuationSources(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,itemId:string):Promise<boolean>{
  const rows=await tx.execute<{channel:string;actor:string;source_channel:string|null;source_actor:string|null;has_parent:boolean}>(sql`
   WITH RECURSIVE chain AS (
     SELECT id,tenant_id,fortsetzung_von,kanal,erstellt_von FROM public.intake_item
@@ -22,8 +22,9 @@ export async function mayUseContinuationSources(tx:PrivilegedTenantTransaction,a
     ORDER BY created.zeit,created.id LIMIT 1) original ON chain.fortsetzung_von IS NOT NULL
   LEFT JOIN public.intake_item source ON source.tenant_id=chain.tenant_id AND source.id::text=original.id`);
  if(!rows.length)return false;
- const hasMailAccess=hasAuthorizationArea(auth,"mails");
+ const hasMailAccess='canReadArea'in auth?auth.canReadArea('mails'):hasAuthorizationArea(auth,"mails");
+ const actorId='canReadArea'in auth?null:auth.userId;
  return rows.every(row=>(!row.has_parent||row.source_actor!==null)
-   &&(hasMailAccess||row.channel!=="mail"&&row.actor===auth.userId
-     &&(!row.has_parent||row.source_channel!=="mail"&&row.source_actor===auth.userId)));
+   &&(hasMailAccess||actorId!==null&&row.channel!=="mail"&&row.actor===actorId
+     &&(!row.has_parent||row.source_channel!=="mail"&&row.source_actor===actorId)));
 }

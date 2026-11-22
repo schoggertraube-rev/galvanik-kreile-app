@@ -26,7 +26,7 @@ const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
 function snapshotHash(value:StorageLetterSnapshot){const c=value.company,r=value.recipient;return digest(JSON.stringify([value.date,c.companyName,c.street,c.zip,c.city,c.country,r.name,r.street,r.zip,r.city,r.country,value.orderNumbers,value.body,...(value.deadline?[value.deadline.date,value.deadline.due]:[]),...(value.customerText?[canonicalJson(value.customerText)]:[])]));}
 function postedDayValid(value:unknown,earliest:string):value is string{return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value+'T12:00:00Z').toISOString().slice(0,10)===value&&value>=earliest&&value<=berlinCalendarDay();}
 type TaskState={id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string;erstellt_von:string;titel:string;notiz:string;fuer_bereich:string;fuer_login:string|null;status:string;version:number;erledigt_von:string|null;erledigt_notiz:string|null};
-async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,letterKey:string){
+async function source(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,letterKey:string){
  const rows=await tx.execute<Source>(sql`SELECT id::text,payload,user_id::text,(status='success' AND event_schema_version=1 AND client_event_id::text=payload->'meta'->>'stageKey' AND correlation_id=client_event_id AND payload->'meta'->>'stage'='E4') AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND client_event_id=${letterKey}::uuid AND payload->>'channel'='post'`);
  if(!rows.length)return null;if(rows.length!==1||!rows[0].proof_ok)throw Error('POSTAL_LETTER_SOURCE_INVALID');
  const row=rows[0],p=row.payload,d=p.document;
@@ -200,7 +200,7 @@ export async function readPostalCollectionHistory(tx:PrivilegedTenantTransaction
  }
  return result;
 }
-export async function verifyPostalDispatch(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{customerId:string;letterKey:string;documentId:string}){
+export async function verifyPostalDispatch(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,input:{customerId:string;letterKey:string;documentId:string}){
  const read=await source(tx,auth,input.letterKey);if(!read||read.payload.meta.customerId!==input.customerId||read.payload.document.id!==input.documentId||read.outcome?.event_type!=='ORDER_COLLECTION_REMINDER_SENT_V1')throw Error('POSTAL_DISPATCH_NOT_PROVED');
 }
 export async function finishPostalTaskAfterGoodsOut(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;letterKey:string},complete:(input:{taskId:string;orderId:string;clientKey:string})=>Promise<void>){

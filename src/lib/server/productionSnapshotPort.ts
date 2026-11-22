@@ -146,7 +146,7 @@ export async function recordProductionPricingRetry(tx:PrivilegedTenantTransactio
  if(!proof||proof.actorId!==auth.userId||JSON.stringify(proof.phase==='basis'?{phase:'basis',productionEventId:proof.productionEventId,itemId:proof.itemId}:proof.phase==='nachtrag'||proof.phase===undefined?{pricingEventId:proof.pricingEventId,pricingOccurredAt:proof.pricingOccurredAt}:null)!==JSON.stringify(source.phase==='basis'?{phase:'basis',productionEventId:source.productionEventId,itemId:source.itemId}:{pricingEventId:source.pricingEventId,pricingOccurredAt:source.pricingOccurredAt}))throw Error('PRODUCTION_PRICING_MARKER_SOURCE_INVALID');
  return id;
 }
-export async function readProductionPricingRetrySource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){
+export async function readProductionPricingRetrySource(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,id:string){
  const markers=await tx.execute<{id:string;actorId:string;orderId:string;itemId:string;payload:ProductionPricingFailure}>(sql`SELECT id,user_id::text AS "actorId",order_id AS "orderId",item_id AS "itemId",payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${id} AND event_type='ORDER_PRODUCTION_PRICING_RETRY_REQUIRED_V1' AND status='success' AND event_schema_version=1`);
  if(!markers.length)return null;
  const m=markers[0];if(markers.length!==1||pricingRetryKey(auth.tenantId,m.payload)!==id||m.orderId!==m.payload.orderId||m.itemId!==m.payload.itemId)throw Error('PRODUCTION_PRICING_MARKER_CHANGED');
