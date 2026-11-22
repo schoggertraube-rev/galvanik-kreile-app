@@ -1,6 +1,6 @@
 // @vitest-environment node
 // Actual productive default composition, Actions/Auth/DB/Storage in an isolated TEST tenant.
-import {expect,it,vi} from 'vitest';
+import {afterEach,expect,it,vi} from 'vitest';
 type Dispatcher={getCacheForType:<T>(factory:()=>T)=>T};
 const rsc=vi.hoisted(()=>({server:null as null|{__SERVER_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE:{A:Dispatcher|null}}}));
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -10,7 +10,7 @@ vi.mock('react',async original=>{
  const require=createRequire(import.meta.url),server=require(join(process.cwd(),'node_modules/react/cjs/react.react-server.development.js'));
  rsc.server=server;return {...await original<typeof import('react')>(),cache:server.cache};
 });
-import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {rebuildTodayModel,refreshTodayModel} from '@/lib/server/todayProjection';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
@@ -21,6 +21,7 @@ import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
+import {GET as rebuildRoute} from '@/app/api/heute/neuaufbau/route';
 import {readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
 
 
@@ -144,4 +145,58 @@ it('PL11:36 removes an existing TEST-only order outside the canonical Today memb
   expect(records.at(-1)).toMatchObject({different:0});
   expect(records.at(-1).model.orderCards).toBe(listed.length);
  }finally{output.mockRestore();}
+});
+
+// Own unmerged route cases share the real productive TEST cohort.
+const request=(headers:Record<string,string>={})=>new Request('http://127.0.0.1/api/heute/neuaufbau',{headers});
+afterEach(()=>vi.unstubAllEnvs());
+
+it('rejects anonymous/header claims and a real non-diagnostic login without computing a model',async()=>{
+ vi.stubEnv('CRON_SECRET','');
+ const before=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
+ const anonymous=await withRequest('',()=>rebuildRoute(request({'user-agent':'vercel-cron/1.0','x-vercel-cron':'1'})));
+ expect(anonymous.status).toBe(401);expect(await anonymous.text()).toBe('');
+ const reader=await createFixture(['auftraege']);
+ const denied=await withSession(reader,()=>rebuildRoute(request()));
+ expect(denied.status).toBe(403);expect(await denied.text()).toBe('');
+ expect(await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} ORDER BY kind,source_id`).toEqual(before);
+});
+
+it('requires the exact runtime bearer proof even for a diagnostic session and never returns the credential',async()=>{
+ vi.stubEnv('CRON_SECRET','TEST-today-cron-provider-boundary');
+ const operator=await createFixture(['wartung'],'developer');
+ const rejectedHeaders:Record<string,string>[]=[{},{authorization:'Bearer TEST-wrong-boundary'}];
+ for(const headers of rejectedHeaders){
+  const denied=await withSession(operator,()=>rebuildRoute(request(headers)));
+  expect(denied.status).toBe(401);expect(await denied.text()).toBe('');
+ }
+ const accepted=await withRequest('',()=>rebuildRoute(request({authorization:'Bearer TEST-today-cron-provider-boundary'})));
+ expect(accepted.status).toBe(204);expect(accepted.headers.get('Cache-Control')).toBe('private, no-store');
+ expect(await accepted.text()).toBe('');
+ expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'order'`).toEqual([{count:8}]);
+});
+
+it('uses only the real existing diagnostic permission when no Cron credential is configured',async()=>{
+ vi.stubEnv('CRON_SECRET','');
+ const operator=await createFixture(['wartung'],'developer');
+ const accepted=await withSession(operator,()=>rebuildRoute(request()));
+ expect(accepted.status).toBe(204);expect(await accepted.text()).toBe('');
+ expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
+});
+
+it('PL11:36 returns an empty 409 while the actual tenant lease is occupied',async()=>{
+ vi.stubEnv('CRON_SECRET','');
+ const operator=await createFixture(['wartung'],'developer');
+ const read=async()=>{const [row]=await sql`SELECT to_jsonb(tenant_row) AS row FROM private.today_tenant_v1 tenant_row WHERE tenant_id=${tenant}`;if(!row)throw Error('TEST_ROUTE_TENANT_REQUIRED');return row.row;};
+ await withRestoredTestSource({label:'TEST full route tenant lease',read,restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_ROUTE_COLUMN_INVALID');
+  const names=columns.map(column=>'"'+column+'"').join(',');
+  await sql`UPDATE private.today_tenant_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_tenant_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant}`;
+ }},async()=>{
+  await sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=statement_timestamp()+interval '1 hour' WHERE tenant_id=${tenant}`;
+  const before=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
+  const response=await withSession(operator,()=>rebuildRoute(request()));
+  expect(response.status).toBe(409);expect(await response.text()).toBe('');
+  expect(await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} ORDER BY kind,source_id`).toEqual(before);
+ });
 });

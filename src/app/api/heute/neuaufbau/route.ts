@@ -26,7 +26,7 @@ export async function GET(request:Request){
  }
  try{
   const result=await outsidePageReadBudget(()=>rebuildTodayModel(tenantId));
-  return Response.json(result,{status:result.code==='BUSY'?202:200,headers:{'Cache-Control':'private, no-store'}});
+  return new Response(null,{status:result.code==='BUSY'?409:204,headers:{'Cache-Control':'private, no-store'}});
  }catch{
   console.error('[TODAY_PROJECTOR_REBUILD_FAILED]',{code:'SOURCE_INCOMPLETE'});
   return new Response(null,{status:503,headers:{'Cache-Control':'private, no-store'}});
