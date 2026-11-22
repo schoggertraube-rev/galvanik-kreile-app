@@ -269,7 +269,7 @@ export async function collectTodaySources(auth: AuthorizationSnapshot,readCompla
   const diagnosticStarted=Date.now();
   const calendar=readTodayCalendar(readNow),today=calendar.today;
   const access=todaySourceAccess(authorizationReadContext(auth));
-  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
+  const {orders:ordersAllowed,messages:graphAllowed}=access;
   const quotesRead=(async()=>{
   const quoteList=graphAllowed?await withPageReadPhase('today.quotes',()=>listOpenQuotesAction({purpose:'today'}).catch(()=>({code:'SOURCE_INCOMPLETE' as const}))):{code:'OK' as const,quotes:[]};
   const rows=quoteList.code==='OK'?await Promise.all(quoteList.quotes.map(async quote=>{

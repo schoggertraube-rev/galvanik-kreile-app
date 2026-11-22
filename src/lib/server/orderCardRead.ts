@@ -762,6 +762,17 @@ function qualifiedItemUnits(items:OrderCardItem[],awardedQuote:OrderCommercialQu
  * permission and tenant checks apply to both a session and the read-only union. */
 type TodayOrderReadAuthorization=Pick<AuthorizationSnapshot,'tenantId'|'permissions'>;
 export type TodayOrderCard=Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'customerName'|'title'|'station'|'dueAt'|'handoverMode'|'items'|'freeze'|'handoverNotice'|'operationalFacts'>;
+function maskOrderPriceFields(authorization:Pick<AuthorizationSnapshot,'permissions'>,card:Pick<LiveOrderCard,'items'|'freeze'>):Pick<LiveOrderCard,'items'|'freeze'>{
+ if(authorization.permissions.includes('perm_view_prices'))return {items:card.items,freeze:card.freeze};
+ return {
+  items:card.items.map(item=>({...item,unitPriceCents:null,vatRateBasisPoints:null,extraWork:item.extraWork.map(line=>({...line,hourlyRateCents:null,amountCents:null}))})),
+  freeze:card.freeze?{...card.freeze,hourlyRateCents:null,totalAmountCents:null}:card.freeze,
+ };
+}
+/** Same price mask as the existing live readers, without a database read. */
+export function maskTodayOrderCard(authorization:Pick<AuthorizationSnapshot,'permissions'>,card:TodayOrderCard):TodayOrderCard{
+ return {...card,...maskOrderPriceFields(authorization,card)};
+}
 type TodayCardRow={kind:string;order_id:string;position:number;data:unknown};
 /** One snapshot query for the displayed order facts. Both projections use
  * the same current-item, intake/content/price, freeze and handover validators.
@@ -869,11 +880,10 @@ export async function readTodayOrderCards(authorization:TodayOrderReadAuthorizat
       if(queue.station!=='fertig'&&activeComplaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
       if(activeComplaint instanceof Error)throw activeComplaint;
       const handoverNotice=handover?await withTenantSavepoint(tx,nested=>qualifyHandoverNotice(nested,authorization,queue,handover)):undefined;
-      const cardItems=qualifiedItemUnits(items,awardedQuote),money=authorization.permissions.includes('perm_view_prices');
-      results.set(orderId,{code:'OK',data:{id:queue.id,version:queue.version,orderNumber:queue.order_number,customerId:queue.customer_id,customerName:queue.customer_name,title:queue.title,station:queue.station,dueAt:toNullableIso(queue.due_date),handoverMode:queue.handover_mode,
-       items:money?cardItems:cardItems.map(item=>({...item,unitPriceCents:null,vatRateBasisPoints:null,extraWork:item.extraWork.map(line=>({...line,hourlyRateCents:null,amountCents:null}))})),
-       freeze:money||!freeze?freeze:{...freeze,hourlyRateCents:null,totalAmountCents:null},...(handoverNotice?{handoverNotice}:{}),
-       operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint)}});
+      const cardItems=qualifiedItemUnits(items,awardedQuote);
+      results.set(orderId,{code:'OK',data:maskTodayOrderCard(authorization,{id:queue.id,version:queue.version,orderNumber:queue.order_number,customerId:queue.customer_id,customerName:queue.customer_name,title:queue.title,station:queue.station,dueAt:toNullableIso(queue.due_date),handoverMode:queue.handover_mode,
+       items:cardItems,freeze,...(handoverNotice?{handoverNotice}:{}),
+       operationalFacts:qualifiedOperationalFacts(origin,items,awardedQuote,awardedQuoteUnavailable,activeComplaint)})});
      }catch(error){failCard(orderId,error);}
     }
    }));
@@ -1117,9 +1127,7 @@ export async function readLiveOrderCardSource(
         assignmentOptions,
         dueDateChanges,
         labelPrints,
-        items: canReadMoney ? cardItems : cardItems.map((item) => ({ ...item, unitPriceCents: null, vatRateBasisPoints: null,
-          extraWork: item.extraWork.map((line) => ({ ...line, hourlyRateCents: null, amountCents: null })) })),
-        freeze: canReadMoney || !mappedFreeze ? mappedFreeze : { ...mappedFreeze, hourlyRateCents: null, totalAmountCents: null },
+        ...maskOrderPriceFields(authorization,{items:cardItems,freeze:mappedFreeze}),
         agreement,
         agreementHint,
       } satisfies LiveOrderCardSource;

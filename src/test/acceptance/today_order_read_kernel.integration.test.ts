@@ -9,7 +9,7 @@ import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {authorizationReadContext} from '@/lib/server/authorizationReadContext';
 import {paymentReadAuthorization} from '@/lib/server/paymentContract';
-import {readLiveOrderCard,readLiveOrderCardSource} from '@/lib/server/orderCardRead';
+import {maskTodayOrderCard,readLiveOrderCard,readLiveOrderCardSource} from '@/lib/server/orderCardRead';
 import {readTodayOrderSources,type TodayOrderReadAuthorization,type TodayOrderReadPorts} from '@/lib/server/todayOrderRead';
 import {readV45OrderRule} from '@/lib/server/v45OrderRead';
 import {assignOrderTaskAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
@@ -70,4 +70,23 @@ it('uses one complete Today source composition before the unchanged actor-bound 
    }));
   }
  }
+});
+
+it('applies the same price mask to captured real card facts and the current restricted reader without mutating the original',async()=>{
+ const order=await readyInvoiceOrder('TEST shared price mask');
+ const fullAuth=await withSession(full,()=>resolveAuthorization());if(!fullAuth.ok)throw Error('TEST_PRICE_MASK_FULL_AUTH');
+ const [source]=await readTodayOrderSources(fullAuth.data,[order.orderId],ports);
+ if(source.result.code!=='OK')throw Error('TEST_PRICE_MASK_SOURCE');
+ const card=source.result.data.card,original=JSON.stringify(card);
+ expect(card.items.some(item=>item.unitPriceCents!==null)).toBe(true);
+ const reader=await createFixture(['auftraege'],'werkstatt');
+ const actual=await withSession(reader,()=>resolveAuthorization());if(!actual.ok)throw Error('TEST_PRICE_MASK_READER_AUTH');
+ const masked=maskTodayOrderCard(actual.data,card);
+ expect(masked.items.every(item=>item.unitPriceCents===null&&item.vatRateBasisPoints===null&&item.extraWork.every(line=>line.hourlyRateCents===null&&line.amountCents===null))).toBe(true);
+ if(masked.freeze)expect(masked.freeze).toMatchObject({hourlyRateCents:null,totalAmountCents:null});
+ const [live]=await readTodayOrderSources(actual.data,[order.orderId],ports);
+ if(live.result.code!=='OK')throw Error('TEST_PRICE_MASK_LIVE');
+ expect(masked).toEqual(live.result.data.card);
+ expect(maskTodayOrderCard(fullAuth.data,card)).toEqual(card);
+ expect(JSON.stringify(card)).toBe(original);
 });
