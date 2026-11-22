@@ -97,7 +97,9 @@ it('K3/K6 freezes all102 before Graph, blocks early task completion and repairs 
  });
  let taskId:string|undefined;
  try{
-  expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'UNAVAILABLE'});
+  // PL22.11.02:51: the first101 consume this turn; the retained remainder is a
+  // normal follow-up, not a failed second send in the same turn.
+  expect(await withSession(full,()=>sendCustomerMailAction(input))).toMatchObject({code:'OK'});
   retainActualBoundaryBytes([101]);
   const markers=await sql`SELECT task.id::text AS task_id,task.version FROM public.events marker JOIN public.tasks task ON task.tenant_id=marker.tenant_id AND task.client_key::text=marker.id WHERE marker.tenant_id=${tenant} AND marker.event_type='INVOICE_MAIL_REMAINDER_PENDING_V1' AND marker.correlation_id=${input.clientRequestId}::uuid`;
   expect(markers).toHaveLength(1);taskId=markers[0].task_id;
@@ -115,13 +117,27 @@ it('K6 refuses completion of the real task while one frozen original remains uns
  const version=task.task.version;
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:recoveryTaskId,version,note:'TEST cannot hide unsent originals'}))).toMatchObject({code:'CONFLICT'});
 });
-it('K3 repairs the retained remainder with the same request and one physical mail',async()=>{
+it('PL02:51 replay acknowledges the original101 without silently starting a second turn',async()=>{
  const input=firstInput;if(!input||!recoveryTaskId)throw Error('TEST_OVERFLOW_REMAINDER_SOURCE_REQUIRED');
  await requestMailStep('S38-overflow-repair-followup');
  expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId:recoveryTaskId!}))).toMatchObject({code:'OK',task:{status:'offen'}});
+ retainActualBoundaryBytes([]);
+});
+it('PL02:51 the next explicit turn sends the one retained original and the source-bound retry closes its task',async()=>{
+ const input=firstInput;if(!input||!recoveryTaskId)throw Error('TEST_OVERFLOW_REMAINDER_SOURCE_REQUIRED');
+ const source=await withSession(full,()=>getCustomerSummaryAction({customerId}));
+ if(source.code!=='OK')throw Error('TEST_OVERFLOW_REMAINDER_READ_REQUIRED');
+ const action=source.data.nextActionRule?.hauptaktion;
+ if(!action||!('befehl'in action))throw Error('TEST_OVERFLOW_REMAINDER_COMMAND_REQUIRED');
+ const next={...JSON.parse(JSON.stringify(action.befehl.argumente)) as MailCommandArgs,clientRequestId:randomUUID(),subject:input.subject,body:input.body};
+ expect(next.expectedInvoiceIds).toEqual([originals[101]]);
+ await requestMailStep('S38-overflow-next-explicit-turn');
+ expect(await withSession(full,()=>sendCustomerMailAction(next))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>sendCustomerMailAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',data:{replayed:true}});
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:recoveryTaskId!}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
  retainActualBoundaryBytes([1]);
-});it('reads the automatically sent remainder without a second user request',async()=>{
+});it('reads the acknowledged remainder after its next explicit turn',async()=>{
   const after=await withSession(full,()=>getCustomerSummaryAction({customerId}));
   if(after.code!=='OK')throw Error('TEST_OVERFLOW_REMAINING_REQUIRED');
   expect(after.data.invoiceUnsentCount).toBe(0);

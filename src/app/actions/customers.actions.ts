@@ -1,6 +1,6 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
@@ -51,7 +51,8 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
       ? { code: "UNAVAILABLE" as const, message: "Kundenkarte ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  const result=await readCustomerSummary(authorization.data, input,openIntakePredicate());
+  const auth=authorization.data;
+  const result=await readCustomerSummary(auth, input,openIntakePredicate(),()=>readPageReadSettings(auth));
   return result.code==="OK"?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
 
  },readLoggingSettings);

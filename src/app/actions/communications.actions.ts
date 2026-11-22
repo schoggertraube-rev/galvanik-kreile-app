@@ -27,8 +27,8 @@ import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
-import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
-import {recordInvoiceManualHandover,InvoiceManualHandoverConflict,recordInvoiceMailRemainderFailure,freezeInvoiceMailRequest,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
+import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {recordInvoiceManualHandover,InvoiceManualHandoverConflict,recordInvoiceMailRemainderFailure,freezeInvoiceMailRequest,readInvoiceMailRequestSnapshot,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
 import {synchronizeInvoiceMailRemainderTask} from '@/modules/tasks/server-public';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
@@ -99,45 +99,62 @@ function invoiceRemainderKey(tenantId:string,requestId:string,anchor:string){
 /** PL20.11.01:02: acknowledged groups continue through this same sender.
  * A pending group never enters this loop; every child retains its own N5 proof.
  * PL20.11.03:10/A18: this is one explicit user send, not autonomous contact.
- * A customer's automatic-mail opt-out does not cancel that explicit request. */
+ * A customer's automatic-mail opt-out does not cancel that explicit request.
+ * PL22.11.02:51: stop at the tenant's per-turn invoice count; retain complete
+ * immutable groups and the same source-bound remainder task for later turns. */
 export async function sendCustomerMailAction(input:CustomerMailInput):Promise<CustomerMailResult>{
- if(input?.attachment?.kind!=='INVOICE'||input.confirmedResend||input.expectedInvoiceIds?.length!==101)return sendCustomerMailGroup(input);
+ if(input?.attachment?.kind!=='INVOICE'||input.confirmedResend||input.singleInvoice)return sendCustomerMailGroup(input);
  if(!validExpectedInvoiceIds(input)||typeof input.subject!=='string'||typeof input.body!=='string'||typeof input.clientRequestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.clientRequestId))return sendCustomerMailGroup(input);
  const authorizationResult=await authorization();
  if(!authorizationResult.ok)return {code:'UNAUTHENTICATED',message:authorizationResult.message};
  const auth=authorizationResult.data;
  if(!canTransportInvoiceDocument(auth))return sendCustomerMailGroup(input);
+ let turnLimit:number;
+ try{turnLimit=(await readPageReadSettings(auth)).invoiceMailBatchLimit;}
+ catch(error){console.error('[INVOICE_MAIL_SETTINGS_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});return {code:'UNAVAILABLE',message:PAGE_READ_COPY.settingsPending};}
+ if(input.expectedInvoiceIds!.length<Math.min(turnLimit,101))return sendCustomerMailGroup(input);
  const markerId=invoiceRemainderKey(auth.tenantId,input.clientRequestId,'followup');
+ const request={markerId,requestId:input.clientRequestId.toLowerCase(),invoiceId:input.attachment.documentId,expectedIds:input.expectedInvoiceIds!,unreservedOnly:input.targetType==='ORDER'};
  let snapshot:Awaited<ReturnType<typeof freezeInvoiceMailRequest>>;
- try{snapshot=await withPrivilegedTenantTransaction(auth,tx=>freezeInvoiceMailRequest(tx,auth,{markerId,requestId:input.clientRequestId.toLowerCase(),invoiceId:input.attachment!.documentId,expectedIds:input.expectedInvoiceIds!,unreservedOnly:input.targetType==='ORDER'}));}
- catch(error){console.error('[INVOICE_MAIL_REQUEST_SNAPSHOT_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});return {code:'UNAVAILABLE',message:INVOICE_DELIVERY_COPY.remainderPending};}
- if('resend'in snapshot&&snapshot.resend)return sendCustomerMailGroup(input);
- const first=await sendCustomerMailGroup(input,snapshot.invoiceIds);
+ let prior:Awaited<ReturnType<typeof readCommunicationDocumentReceipt>>;
+ try{
+  prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
+  if((prior.code==='OK'||prior.code==='PENDING')&&prior.document.kind==='INVOICE'){
+   const frozen=await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailRequestSnapshot(tx,auth,request));
+   // A legacy immutable group has no remainder request: preserve it in full.
+   if(!frozen)return sendCustomerMailGroup(input,undefined,undefined,prior);
+   snapshot=frozen;
+  }else snapshot=await withPrivilegedTenantTransaction(auth,tx=>freezeInvoiceMailRequest(tx,auth,request));
+ }catch(error){if(error instanceof Error&&['INVOICE_MAIL_REQUEST_LIST_CHANGED','INVOICE_MAIL_REQUEST_ANCHOR_INVALID'].includes(error.message))return sendCustomerMailGroup(input);console.error('[INVOICE_MAIL_REQUEST_SNAPSHOT_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});return {code:'UNAVAILABLE',message:INVOICE_DELIVERY_COPY.remainderPending};}
+ if('resend'in snapshot&&snapshot.resend)return sendCustomerMailGroup(input,undefined,undefined,prior);
+ const first=await sendCustomerMailGroup(input,snapshot.invoiceIds,turnLimit,prior);
  if(first.code!=='OK')return first;
  const taskDependencies={effect:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,actor:AuthorizationSnapshot,effect:import('@/modules/tasks/server-public').TaskEffectRequest)=>recordIntakeTaskEffect(tx,actor,effect,readCustomerProfile)};
- const failed=async(reason:string):Promise<CustomerMailResult>=>{
-  try{await recordInvoiceMailRemainderFailure(auth,{markerId,requestId:input.clientRequestId.toLowerCase(),threadId:first.data.threadId,customerId:first.data.customerId,reason},(tx,key)=>synchronizeInvoiceMailRemainderTask(tx,auth,key,false,taskDependencies));}
-  catch(error){console.error('[INVOICE_MAIL_REMAINDER_PROOF_FAILED]',{name:error instanceof Error?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:null,cause:error&&typeof error==='object'&&'cause'in error&&(error as {cause?:{code?:string}}).cause?.code});}
-  return {code:'UNAVAILABLE',message:INVOICE_DELIVERY_COPY.remainderPending};
+ const queueRemainder=async(reason:string):Promise<boolean>=>{
+  try{return await recordInvoiceMailRemainderFailure(auth,{markerId,requestId:input.clientRequestId.toLowerCase(),threadId:first.data.threadId,customerId:first.data.customerId,reason},(tx,key)=>synchronizeInvoiceMailRemainderTask(tx,auth,key,false,taskDependencies));}
+  catch(error){console.error('[INVOICE_MAIL_REMAINDER_PROOF_FAILED]',{name:error instanceof Error?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z0-9_]+$/.test(error.message)?error.message:null,cause:error&&typeof error==='object'&&'cause'in error&&(error as {cause?:{code?:string}}).cause?.code});return false;}
  };
+ const failed=async(reason:string):Promise<CustomerMailResult>=>{await queueRemainder(reason);return {code:'UNAVAILABLE',message:INVOICE_DELIVERY_COPY.remainderPending};};
  try{
   const remaining=()=>withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailOpenRemainder(tx,auth.tenantId,snapshot.customerId,snapshot.invoiceIds));
-  let rest=await remaining();
-  const maxGroups=Math.ceil(snapshot.invoiceIds.length/101);
-  for(let round=1;rest.length&&round<maxGroups;round++){
-   const group=await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,snapshot.customerId,snapshot.handover,undefined,snapshot.native,false,{snapshotIds:snapshot.invoiceIds}));
+  let rest=await remaining(),processed=snapshot.invoiceIds.length-rest.length;
+  for(let round=1;rest.length&&processed<turnLimit&&round<snapshot.invoiceIds.length;round++){
+   const available=turnLimit-processed;
+   const group=await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,snapshot.customerId,snapshot.handover,undefined,snapshot.native,false,{snapshotIds:snapshot.invoiceIds,maxOriginals:available}));
    if(!group.length)return failed('REMAINDER_NO_PROGRESS');
+   // A saved PREPARE group is indivisible. Its next turn starts with this group.
+   if(group.length>available)break;
    const clientRequestId=invoiceRemainderKey(auth.tenantId,input.clientRequestId,group[0].id);
-   const next=await sendCustomerMailGroup({targetType:'CUSTOMER',targetId:snapshot.customerId,subject:input.subject,body:input.body,clientRequestId,attachment:{kind:'INVOICE',documentId:group[0].id},expectedInvoiceIds:group.map(row=>row.id)},snapshot.invoiceIds);
+   const next=await sendCustomerMailGroup({targetType:'CUSTOMER',targetId:snapshot.customerId,subject:input.subject,body:input.body,clientRequestId,attachment:{kind:'INVOICE',documentId:group[0].id},expectedInvoiceIds:group.map(row=>row.id)},snapshot.invoiceIds,available);
    if(next.code!=='OK')return failed(next.code);
-   const nextRest=await remaining();if(nextRest.length>=rest.length)return failed('REMAINDER_NO_PROGRESS');rest=nextRest;
+   const nextRest=await remaining();if(nextRest.length>=rest.length)return failed('REMAINDER_NO_PROGRESS');rest=nextRest;processed=snapshot.invoiceIds.length-rest.length;
   }
-  if(rest.length)return failed('REMAINDER_NO_PROGRESS');
+  if(rest.length)return await queueRemainder('TURN_LIMIT_REACHED')?first:{code:'UNAVAILABLE',message:INVOICE_DELIVERY_COPY.remainderPending};
   await withPrivilegedTenantTransaction(auth,tx=>synchronizeInvoiceMailRemainderTask(tx,auth,markerId,true,taskDependencies));
   return first;
  }catch(error){console.error('[INVOICE_MAIL_REMAINDER_FAILED]',{name:error instanceof Error?error.name:'UnknownError'});return failed('REMAINDER_SOURCE_UNAVAILABLE');}
 }
-async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readonly string[]):Promise<CustomerMailResult>{
+async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readonly string[],turnLimit?:number,priorReceipt?:Awaited<ReturnType<typeof readCommunicationDocumentReceipt>>):Promise<CustomerMailResult>{
  return observeAction('sendCustomerMailAction',subjectForAction('sendCustomerMailAction',input),async()=>{
  try{
  const authorizationResult=await authorization();
@@ -196,12 +213,12 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
  }
  let attachment,document:CommunicationDocument|undefined;
  let legacyReplaces:LegacyQuoteReplacement|undefined;
- let invoiceGroup:{customerId:string;handover:string|null;native:boolean;unreservedOnly?:boolean;snapshotIds?:readonly string[]}|undefined;
+ let invoiceGroup:{customerId:string;handover:string|null;native:boolean;unreservedOnly?:boolean;snapshotIds?:readonly string[];maxOriginals?:number;anchorId?:string}|undefined;
  if(input.attachment?.kind==='INVOICE'&&!validExpectedInvoiceIds(input)){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
  const reconcileInvoice=(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,threadId:string)=>applyRecoveredInvoiceMailEffects(auth,threadId,(writeTx,value)=>createCanceledInvoiceMailTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)}),tx);
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
  if(input.attachment){
-  const prior=await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
+  const prior=priorReceipt??await readCommunicationDocumentReceipt(auth,input,input.attachment.documentId);
   if(prior.code==='PENDING'){
    const original=prior.document;
    if(input.confirmedResend&&input.clientRequestId!==prior.originalRequestId)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
@@ -247,12 +264,13 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
    attachment={filename:pdf.data.invoiceNumber+'.pdf',contentType:'application/pdf' as const,bytes:new Uint8Array(pdf.data.pdf)};
    document={...selectedDocument,kind:'INVOICE',bundle:[]};
    const selectedIds=input.singleInvoice?[invoice.id]:snapshotIds;
-   invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode,native:invoice.order_id===null,...(selectedIds?{snapshotIds:selectedIds}:{})};
+   invoiceGroup={customerId:invoice.customer_id,handover:invoice.handover_mode,native:invoice.order_id===null,...(selectedIds?{snapshotIds:selectedIds}:{}),...(turnLimit!==undefined?{maxOriginals:turnLimit,anchorId:invoice.id}:{})};
    const resend=await withPrivilegedTenantTransaction(auth,tx=>qualifyInvoiceResend(tx,auth,invoice.id,invoice.customer_id));if(resend)document.resend=resend;
    // An explicit other order can send its own new originals. The customer
    // command still resumes the frozen group exposed by its canonical reader.
    invoiceGroup.unreservedOnly=input.targetType==='ORDER'&&!resend;
-   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null,invoiceGroup!.unreservedOnly,{snapshotIds:selectedIds}))).filter(row=>row.id!==invoice.id);
+   const selectedGroup=invoiceGroup;
+   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null,selectedGroup.unreservedOnly,{snapshotIds:selectedIds,maxOriginals:selectedGroup.maxOriginals,anchorId:selectedGroup.anchorId}))).filter(row=>row.id!==invoice.id);
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
    for(const other of others){
     const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;

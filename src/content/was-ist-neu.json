@@ -1,6 +1,17 @@
 [
   {
     "datum": "2026-11-22",
+    "pr": 258,
+    "seite": "kunden",
+    "ziel": "/customers",
+    "punkte": [
+      "Du versendest Rechnungen in deinen eingestellten Versandtakten.",
+      "Gesicherte Originalgruppen bleiben zusammen; eine Aufgabe hält den Rest fest.",
+      "Du siehst direkt, wenn eine Katalogleistung fehlt oder inaktiv ist."
+    ]
+  },
+  {
+    "datum": "2026-11-22",
     "pr": 257,
     "seite": "auftraege",
     "ziel": "/orders",
