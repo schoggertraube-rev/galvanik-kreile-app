@@ -78,7 +78,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       expect(result.data.userId).toBe("user-1");
       expect(result.data.role).toBe("admin");
       expect(result.data.permissions).not.toContain("perm_sys_diag");
-      expect(Object.keys(result.data.packageSwitches!)).toHaveLength(17);
+      expect(Object.keys(result.data.packageSwitches!)).toHaveLength(19);
     }
     vi.mocked(db.select().from(appUsers).where).mockResolvedValueOnce([{id:'user-1',fullName:'Max Kreile',role:'admin',active:true,packageFlags:null}] as unknown as Array<typeof appUsers.$inferSelect>);
     expect(await resolveAuthorization()).toMatchObject({ok:true,data:{offline24h:false,packageSwitches:Object.fromEntries(PACKAGE_SWITCHES.map(({id})=>[id,false]))}});
