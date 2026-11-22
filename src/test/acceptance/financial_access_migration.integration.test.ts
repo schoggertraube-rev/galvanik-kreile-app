@@ -15,6 +15,22 @@ it('KORR-RECHTE migration expands old grants losslessly, preserves nonfinancial 
  try{
   try{await sql.begin(async tx=>{
    const [before]=await tx`SELECT pg_get_functiondef('private.protect_task_identity()'::regprocedure) AS task_guard,pg_get_functiondef('private.current_user_can_view_finance(text)'::regprocedure) AS finance_guard,(SELECT tgenabled::text FROM pg_trigger WHERE tgrelid='public.tasks'::regclass AND tgname='task_identity') AS enabled,has_function_privilege('anon','private.current_user_can_view_finance(text)','EXECUTE') AS anon,has_function_privilege('authenticated','private.current_user_can_view_finance(text)','EXECUTE') AS authenticated`;
+   // Test adapter only, PL22.11.18:59: retain the current two post-state CHECK
+   // vocabularies while exercising the original historical financial conversion.
+   // No existing grant is hidden/deleted, and the production migration is unchanged.
+   const postChecks=await tx`SELECT c.conname,pg_get_constraintdef(c.oid) AS definition
+    FROM pg_constraint c WHERE (c.conrelid='public.app_user_rights'::regclass AND c.conname='app_user_rights_bereich_chk')
+     OR (c.conrelid='public.tasks'::regclass AND c.conname='tasks_fuer_bereich_check') ORDER BY c.conname`;
+   expect(postChecks).toHaveLength(2);
+   let applicableMigration=migration;
+   for(const [table,name] of [['app_user_rights','app_user_rights_bereich_chk'],['tasks','tasks_fuer_bereich_check']] as const){
+    const check=postChecks.find(row=>row.conname===name);if(!check)throw Error('TEST_CURRENT_POST_CHECK_REQUIRED');
+    const pattern=new RegExp('ALTER TABLE public\\.'+table+' ADD CONSTRAINT '+name+' CHECK \\([\\s\\S]*?\\);','g');
+    const matches=[...applicableMigration.matchAll(pattern)];expect(matches).toHaveLength(1);
+    applicableMigration=applicableMigration.replace(pattern,'ALTER TABLE public.'+table+' ADD CONSTRAINT '+name+' '+check.definition+';');
+   }
+   const unrelatedRights=await tx`SELECT to_jsonb(rights) AS original FROM public.app_user_rights rights
+    WHERE tenant_id<>${tenant} ORDER BY tenant_id,user_id,bereich`;
    // Recreate only the real prior CHECK vocabulary for isolated old-data fixtures.
    // NOT VALID retains unrelated modern rows; all inserted historical rows are checked.
    const oldRights=readFileSync('supabase/migrations/20261116134932_s20_logging_foundation.sql','utf8');
@@ -41,7 +57,12 @@ it('KORR-RECHTE migration expands old grants losslessly, preserves nonfinancial 
     VALUES(${randomUUID()},${tenant},${orderId},'COMMUNICATION_INVOICE_TASK_CREATED_V1','TEST historical price source',${tx.json({taskId:priceTaskId,invoiceId:randomUUID()})}::jsonb,'success',${actor}::uuid,${randomUUID()}::uuid,1)`;
    const tasksBefore=await tx`SELECT row_to_json(task)::jsonb AS original FROM public.tasks task WHERE tenant_id=${tenant} ORDER BY id`;
    const plainBefore=await tx`SELECT bereich,granted_by::text FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${plain}::uuid ORDER BY bereich`;
-   await tx.unsafe(migration);
+   await tx.unsafe(applicableMigration);
+   expect(await tx`SELECT c.conname,pg_get_constraintdef(c.oid) AS definition
+    FROM pg_constraint c WHERE (c.conrelid='public.app_user_rights'::regclass AND c.conname='app_user_rights_bereich_chk')
+     OR (c.conrelid='public.tasks'::regclass AND c.conname='tasks_fuer_bereich_check') ORDER BY c.conname`).toEqual(postChecks);
+   expect(await tx`SELECT to_jsonb(rights) AS original FROM public.app_user_rights rights
+    WHERE tenant_id<>${tenant} ORDER BY tenant_id,user_id,bereich`).toEqual(unrelatedRights);
    expect(await tx`SELECT bereich,granted_by::text FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${actor}::uuid ORDER BY bereich`).toEqual([{bereich:'auftraege',granted_by:actor},{bereich:'buchhaltung',granted_by:plain},{bereich:'preise',granted_by:plain},{bereich:'zahlungen',granted_by:plain}]);
    expect(await tx`SELECT bereich,granted_by::text FROM public.app_user_rights WHERE tenant_id=${tenant} AND user_id=${plain}::uuid ORDER BY bereich`).toEqual(plainBefore);
    const tasksAfter=await tx`SELECT row_to_json(task)::jsonb AS original FROM public.tasks task WHERE tenant_id=${tenant} ORDER BY id`;

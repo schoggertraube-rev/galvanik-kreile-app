@@ -1,0 +1,71 @@
+{
+  "moduleId": "lager",
+  "version": "0.1.0",
+  "owner": "Galvanik Kreile",
+  "publicExports": [
+    "@/modules/lager/public#countLagerPackages",
+    "@/modules/lager/public#countLagerPackageGroups",
+    "@/modules/lager/public#LagerUnit",
+    "@/modules/lager/public#LagerQuantity",
+    "@/modules/lager/public#LagerPackageCount",
+    "@/modules/lager/public#LagerCountResult",
+    "@/modules/lager/public#Stammbefehl",
+    "@/modules/lager/public#Stammauftrag",
+    "@/modules/lager/public#Stammbeleg",
+    "@/modules/lager/public#Stammantwort",
+    "@/modules/lager/server-public#getLagerArtikelZumStichtag",
+    "@/modules/lager/server-public#getLagerMetallstamm",
+    "@/modules/lager/server-public#getLagerMetallkurs",
+    "@/modules/lager/server-public#speichereLagerStammdaten",
+    "@/modules/lager/server-public#bestaetigeLagerEtikettZuordnung",
+    "@/modules/lager/server-public#getLagerEntwuerfeFuerHeute",
+    "@/modules/lager/server-public#getLagerOrte",
+    "@/modules/lager/server-public#readMetallstammInTransaction",
+    "@/modules/lager/server-public#readMetallkursInTransaction",
+    "@/modules/lager/server-public#LagerTaskPorts"
+  ],
+  "capabilities": [
+    "lager.lesen",
+    "lager.buchen",
+    "lager.zaehlen",
+    "lager.stamm",
+    "lager.werte",
+    "lager.inventur_abschliessen"
+  ],
+  "migrations": [
+    "20261122153938_s_lag_p1_stammdaten.sql",
+    "20261122153940_s_lag_p1_stammbefehle.sql",
+    "20261122153942_s_lag_p1_ladezeit.sql"
+  ],
+  "viewsFunctions": [
+    "private.lager_naechste_kurznummer",
+    "private.lager_gebindeversion_schuetzen",
+    "private.lager_stammereignis_anlegen",
+    "public.v_lager_eingangsoriginale_v1",
+    "public.v_lager_stammereignisse_v1",
+    "public.v_lager_artikel_status_v1",
+    "public.v_lager_entwurf_aufgaben_v1",
+    "public.v_lager_lieferanten_v1"
+  ],
+  "ownsTables": [
+    "public.inventory_items",
+    "public.categories",
+    "public.stock_locations",
+    "public.material_short_no_counter",
+    "public.packaging_definitions",
+    "public.handling_units",
+    "public.lager_artikel_kennungen",
+    "public.lager_artikel_dateien",
+    "public.material_prices",
+    "public.metallkurse"
+  ],
+  "events": {
+    "emits": [
+      "LAGER_STAMMBEFEHL_V1",
+      "LAGER_ARTIKEL_AUFGABE_V1"
+    ]
+  },
+  "dependencies": [
+    "tasks"
+  ]
+}

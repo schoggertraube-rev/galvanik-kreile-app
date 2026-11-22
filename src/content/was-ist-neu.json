@@ -11,6 +11,15 @@
   },
   {
     "datum": "2026-11-22",
+    "pr": 265,
+    "seite": "einstellungen",
+    "ziel": "/settings",
+    "punkte": [
+      "Du vergibst das Lagerstammrecht für einzelne Zugänge."
+    ]
+  },
+  {
+    "datum": "2026-11-22",
     "pr": 258,
     "seite": "kunden",
     "ziel": "/customers",

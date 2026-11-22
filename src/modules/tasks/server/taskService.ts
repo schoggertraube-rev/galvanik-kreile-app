@@ -1,3 +1,4 @@
+import {LAGER_STAMM_COPY} from "@/ui/lagerStammCopy";
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
@@ -39,7 +40,7 @@ import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,readClarificationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {canReadTaskArea,canCompleteTaskArea,type AccessArea} from '@/lib/auth/authorizationContract';
+import {canReadTaskArea,canCompleteTaskArea,hasLagerCapability,type AccessArea} from '@/lib/auth/authorizationContract';
 import {invoiceMailRemainderAllowsCompletion,TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest,type TaskCalendarRead} from '../contract';
 
 export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number};
@@ -48,7 +49,7 @@ type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransa
 class Rejected extends Error{constructor(readonly result:TaskFailure){super(result.code);}}
 function reject(code:TaskFailure['code'],message:string):never{throw new Rejected({code,message});}
 const columns=sql`id::text,client_key::text,art,titel,faellig_am::text,to_char(uhrzeit,'HH24:MI') AS uhrzeit,vorlauf_tage,fuer_login::text,fuer_bereich,bezug_typ,bezug_id,item_id::text,notiz,status,erledigt_von::text,erledigt_am::text,erledigt_notiz,erstellt_von::text,erstellt_am::text,version`;
-const refAreas:Partial<Record<TaskReference['type'],AccessArea>>={kunde:'kunden',auftrag:'auftraege',kv:'auftraege',eingang:'eingang',eingangsrechnung:'buchhaltung',reklamation:'auftraege'};
+const refAreas:Partial<Record<TaskReference['type'],AccessArea>>={kunde:'kunden',auftrag:'auftraege',kv:'auftraege',eingang:'eingang',eingangsrechnung:'buchhaltung',reklamation:'auftraege',lagerartikel:'lager.stamm'};
 const allowed=(auth:AuthorizationSnapshot,task:TaskRecord)=>task.erstellt_von===auth.userId||task.fuer_login===auth.userId||task.fuer_bereich!==null&&hasAuthorizationArea(auth,task.fuer_bereich);
 async function reissueTaskSource(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,task:TaskRecord){
  const source=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
@@ -95,7 +96,9 @@ function resultError(error:unknown):TaskFailure{
 }
 export async function saveTask(input:unknown,deps:Dependencies):Promise<TaskResult>{
  const fields=taskValidation(input);if(Object.keys(fields).length)return {code:'VALIDATION_ERROR',message:'Aufgabe ist noch unvollständig.',fields};
- const value=input as TaskSaveInput,auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
+ const value=input as TaskSaveInput;
+ if(value.reference.type==='lagerartikel'||value.forArea==='lager.stamm')return {code:'FORBIDDEN',message:LAGER_STAMM_COPY.aufgabenweg};
+ const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,tx=>persistTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }
 /** Both dialog saves and the goods command use this writer and the caller's transaction. */
@@ -204,6 +207,12 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
   const operationalInvoice=invoiceId!==undefined&&before.bezug_typ==='eingangsrechnung'&&before.bezug_id===invoiceId&&canCompleteTaskArea(auth,'buchhaltung')&&(before.art==='rechnung'||before.art==='aufgabe'&&before.fuer_bereich==='eingang');
   if(!allowed(auth,before)&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  if(before.bezug_typ==='lagerartikel'){
+   if(!hasLagerCapability(auth,'lager.stamm'))reject('FORBIDDEN',LAGER_STAMM_COPY.rechtFehlt);
+   const accepted=await tx.execute(sql`SELECT id FROM public.v_lager_artikel_status_v1
+    WHERE tenant_id=${auth.tenantId} AND id=${before.bezug_id} AND stamm_status='aktiv'`);
+   if(accepted.length!==1)reject('CONFLICT',LAGER_STAMM_COPY.vorAbschluss);
+  }
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!canCompleteTaskArea(auth,'buchhaltung')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
   const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
@@ -414,7 +423,7 @@ function presentTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead):Ext
  const {task,reference,canceledCustomer,pricing,pricingSource,collection,collectionSource,credit,creditSource,reissue,reissueSource,mailRemainder,recollection,invoiceFollowupSource}=source;
  const mayEdit=task?task.status==='offen'&&allowed(auth,task):true;
  if(task&&mayEdit&&source.canceledForEdit.code==='SOURCE_INCOMPLETE')throw Error('TASK_CANCELLATION_READ_INCOMPLETE');
- const canEdit=mayEdit&&(!task||source.canceledForEdit.code==='KNOWN'&&!source.canceledForEdit.value);
+ const canEdit=mayEdit&&(!task||task.bezug_typ!=='lagerartikel')&&(!task||source.canceledForEdit.code==='KNOWN'&&!source.canceledForEdit.value);
   return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,invoiceFollowupSource,...(collection||collectionSource==='SOURCE_INCOMPLETE'?{collectionSource}:{}),...(reissue||reissueSource==="SOURCE_INCOMPLETE"?{reissueSource}:{}),canEdit:canEdit&&collectionSource==='KNOWN'&&!collection&&reissueSource==='KNOWN'&&!reissue&&invoiceFollowupSource==='KNOWN'&&!mailRemainder&&!recollection,canComplete:!!task&&task.status==='offen'&&invoiceMailRemainderAllowsCompletion(invoiceFollowupSource,mailRemainder)&&collectionSource==='KNOWN'&&reissueSource==='KNOWN'&&(reissue?hasAuthorizationArea(auth,'zahlungen'):(canEdit||canceledCustomer!==null))&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'zahlungen')),...(recollection?{completeLabel:E_INVOICE_COPY.collectionRoutingRetry}:collection?{completeLabel:COLLECTION_FOLLOWUP_COPY.retry}:reissue||credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
 }
 
@@ -711,4 +720,39 @@ export async function createIntakeMailFailureTask(tx:PrivilegedTenantTransaction
  // projection. Ordinary dialog writes and reference-reader rights stay unchanged.
  const scopedEffects:Dependencies={...deps,effect:async(nested,actor,input)=>deps.effect(nested,actor,{...input,reference:await context(nested,actor,input.reference,false,true)})};
  return (await persistTask(tx,auth,{clientKey:source.key,version:0,kind:'aufgabe',title:MAIL_IMPORT_COPY.task(id),dueDate:clock.today,time:null,forLogin:null,forArea:'eingang',reference:{type:'eingang',id:source.itemId},note:full+'\n'+source.reason},scopedEffects,false)).task.id;
+}
+
+/** Herkunft ist ausschließlich der im selben Mandanten gespeicherte Lagerbefehl. */
+export async function synchronizeLagerEntwurfTask(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,sourceId:string,deps:Dependencies,
+){
+ const [source]=await tx.execute<{artikelId:string;name:string;status:string;wirkung:string;art:string;heute:string}>(sql`
+  SELECT artikel.id AS "artikelId",artikel.name,artikel.stamm_status AS status,
+    quelle.payload->>'entwurfEffekt' AS wirkung,quelle.payload->>'art' AS art,
+    to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS heute
+  FROM public.v_lager_stammereignisse_v1 quelle
+  JOIN public.v_lager_artikel_status_v1 artikel ON artikel.tenant_id=quelle.tenant_id
+   AND artikel.id=quelle.payload->'beleg'->>'id'
+   AND artikel.stamm_version=(quelle.payload->'beleg'->>'version')::integer
+  WHERE quelle.tenant_id=${auth.tenantId} AND quelle.id=${sourceId} AND quelle.user_id=${auth.userId}::uuid
+ `);
+ if(!source)throw Error('LAGER_ENTWURF_SOURCE_FEHLT');
+ const key=eventKey(source.artikelId,0,'lager-entwurf');
+ if(source.wirkung==='anlegen'&&source.art==='artikel.entwurf'&&source.status==='entwurf'&&hasLagerCapability(auth,'lager.buchen')){
+  const name=Array.from(source.name).slice(0,88).join('');
+  const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',
+   title:LAGER_STAMM_COPY.pruefaufgabe(name),dueDate:source.heute,time:null,
+   forLogin:null,forArea:'lager.stamm',reference:{type:'lagerartikel',id:source.artikelId},note:null};
+  return (await persistTask(tx,auth,value,deps,false,false,false,sourceId)).task.id;
+ }
+ if(source.wirkung==='uebernehmen'&&source.art==='artikel.speichern'&&source.status==='aktiv'&&hasLagerCapability(auth,'lager.stamm')){
+  const [auftrag]=await tx.execute<{id:string;version:number}>(sql`
+   SELECT id::text,version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid
+    AND bezug_typ='lagerartikel' AND bezug_id=${source.artikelId} AND fuer_bereich='lager.stamm' AND status='offen'
+   FOR UPDATE
+  `);
+  if(!auftrag)throw Error('LAGER_ENTWURF_AUFGABE_FEHLT');
+  return (await finishTask(tx,auth,{taskId:auftrag.id,version:auftrag.version,note:null},deps)).task.id;
+ }
+ throw Error('LAGER_ENTWURF_SOURCE_UNGUELTIG');
 }
