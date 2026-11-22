@@ -683,6 +683,26 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     expect(directive).toContainEqual(expect.stringContaining("E2-Projektor muss server-only bleiben"));
   });
 
+  it("E2 batch reader permits exactly the named customer batch export at the one projector root", () => {
+    // Contract-only synthetic modules; no business function or DB is simulated.
+    const projector = "src/lib/server/todayProjection.ts";
+    const source = `${IMP} 'server-only';\n${IMP} { readCustomerProfiles as readProfiles } from '@/modules/customers/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return readProfiles();}\n${EXP} async function rebuildTodayModel(){return readProfiles();}\n`;
+    expect(validTodayProjectorComposition(source)).toBe(true);
+    expect(allowedServerFacadeConsumer(projector, source)).toBe(true);
+    const readModule = {
+      "src/modules/customers/customers.manifest.json": manifest("customers", { publicExports: ["@/modules/customers/server-public#readCustomerProfiles"] }),
+      "src/modules/customers/public.ts": `${EXP} {};\n`,
+      "src/modules/customers/server-public.ts": `${IMP} 'server-only';\n${EXP} {readCustomerProfiles} from './server/readCustomerProfiles';\n`,
+      "src/modules/customers/server/readCustomerProfiles.ts": `${EXP} const readCustomerProfiles=()=>null;\n`,
+    };
+    expect(findingsOf(repo({...readModule,[projector]:source}))).toEqual([]);
+    for (const file of ["src/lib/server/anotherProjection.ts", "src/lib/server/todayProjection2.ts", "src/app/client.tsx", "src/app/api/heute/route.ts"]) {
+      expect(allowedServerFacadeConsumer(file, source), file).toBe(false);
+      expect(findingsOf(repo({...readModule,[file]:source}))).toContainEqual(expect.stringContaining(`${file}:2: Server-Fassade`));
+    }
+    expect(validTodayProjectorComposition(source.replace("{ readCustomerProfiles as readProfiles }", "{ createCustomer as readProfiles }"))).toBe(false);
+  });
+
   it("E2 rejects Action directives, writers, whole facades, re-exports and any additional public API", () => {
     const source = `${IMP} 'server-only';\n${IMP} { readCustomerProfile } from '@/modules/customers/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return readCustomerProfile();}\n${EXP} async function rebuildTodayModel(){return readCustomerProfile();}\n`;
     const invalid = [
