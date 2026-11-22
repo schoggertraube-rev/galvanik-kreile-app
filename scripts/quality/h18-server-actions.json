@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "4f53fa32a202e826c6ba47c196a41d1e4535fb02a8b28bf161f008067b02a9cf",
+  "inventorySha256": "39aeee49c0f7ab399c4a75afe5aa8ebf8d8e19075815333de3864a9f1e43e1fd",
   "testedWriteActions": {
     "src/app/actions/invoices.actions.ts#addOrderToCollectionAction": [
       "src/test/acceptance/s38a_collection.integration.test.ts"
@@ -440,6 +440,15 @@
     ],
     "src/app/actions/orders.actions.ts#readPageReadSettingsAction": [
       "src/test/acceptance/s08_pl2305_quote_followup.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#readOfficeHomeModelAction": [
+      "src/test/acceptance/today_model_qualified_read.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#readTodayHomeRevision": [
+      "src/test/acceptance/today_model_qualified_read.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#readTodayHomePart": [
+      "src/test/acceptance/today_model_qualified_read.integration.test.ts"
     ],
     "src/app/actions/lager.actions.ts#speichereLagerStammdatenAction": [
       "src/test/acceptance/lager_stammdaten.integration.test.ts"

@@ -11,8 +11,10 @@ import {
   type OrdersHomeSource,
 } from "@/modules/orders/public";
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
-import {withPageReadBudget,configurePageReadBudget,withPageReadPhase,withPageReadSourcesReady} from '@/db/readBudget';
-import {readPageReadSettingsAction} from '@/app/actions/orders.actions';
+import {withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
+import {readOfficeHomeModelAction,type TodayModelReader} from '@/app/actions/orders.actions';
+import type {TodayHomePart,TodayHomePartResult} from '@/components/home/OfficeHomeClient';
+import {scheduleTodayProjection} from './todayProjectionSchedule';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
 function toHomeSource(order: OperationalOrder): OrdersHomeSource {
@@ -33,22 +35,33 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   };
 }
 
-export async function loadOfficeHome(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
-  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+export async function loadOfficeHome(authorization: AuthorizationSnapshot,deferLive=false,readModel?:TodayModelReader): Promise<OfficeHomeModel> {
+  if(!readModel)return readOfficeHomeModelAction({deferLive});
+  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization,deferLive,readModel)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
 }
-async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
+async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,deferLive:boolean,readModel:TodayModelReader): Promise<OfficeHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
-    let settingsIncomplete=false;
-    const settingsRead=withPageReadPhase('home.settings',()=>readPageReadSettingsAction()).then(source=>{if(source.code==='OK')configurePageReadBudget(source.settings.queryTimeoutMs);else settingsIncomplete=true;}).catch(()=>{settingsIncomplete=true;});
-    return await withPageReadSourcesReady(settingsRead,async()=>{
-    // One request, one operational source; the Today composition consumes this
-    // exact promise rather than issuing the same full-list query a second time.
-    const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'}));
-    const [orderSource, dashboard] = await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})), withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,new Date(),ordersRead))]);
-    await settingsRead;
-    if(settingsIncomplete)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
+    const now=new Date(),modeled=await readModel(authorization,now,deferLive);
+    let orderSource:{code:'OK';orders:OperationalOrder[]}|{code:'SOURCE_INCOMPLETE'};
+    let dashboard:Awaited<ReturnType<typeof readTodayDashboard>>;
+    let modelRead:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>};
+    if(modeled.code==='OK'){
+      dashboard=modeled.dashboard;
+      orderSource=modeled.operationalSource.code==='OK'?{code:'OK',orders:modeled.operationalSource.data}:{code:'SOURCE_INCOMPLETE'};
+      modelRead={source:'modell',pending:modeled.pending,incomplete:modeled.incomplete,pollMs:modeled.settings.today.todayStalePollMs,rebuild:modeled.needsRebuild,revision:modeled.sourceRevision,revisions:modeled.sourceRevisions};
+      if(modeled.needsRebuild||modeled.pending)await scheduleTodayProjection([authorization.tenantId],modeled.needsRebuild?'rebuild':'refresh');
+    }else{
+      // Only an explicitly selected live path or a known empty model uses the
+      // existing whole live collector. Individual disqualified model rows use
+      // only their canonical live readers inside the model collection.
+      const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'}));
+      [orderSource,dashboard]=await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})),withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,now,ordersRead))]);
+      modelRead={source:modeled.code==='LIVE'?'live':'modell',pending:modeled.code==='EMPTY',incomplete:false,pollMs:modeled.settings.today.todayStalePollMs,rebuild:modeled.code==='EMPTY'};
+      if(modeled.code==='EMPTY')await scheduleTodayProjection([authorization.tenantId],'rebuild');
+    }
+    if(modeled.settings.page===null)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
     const common = {
       cacheLoginScope:await readCacheLoginScope(),
       role: authorization.role,
@@ -56,15 +69,34 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot):
       canWorkOrders: hasAuthorizationArea(authorization, "auftraege"),
       canDelegate: hasAuthorizationArea(authorization, "auftraege"),
       dashboard,
+      modelRead,
     } as const;
     if(orderSource.code!=='OK')return {kind:'partial',projection:null,...common};
-    const projection = buildOrdersHomeProjection(orderSource.orders.map(toHomeSource), new Date().toISOString());
+    let projection:ReturnType<typeof buildOrdersHomeProjection>;
+    try {
+      projection=buildOrdersHomeProjection(orderSource.orders.map(toHomeSource),new Date().toISOString());
+    } catch(error) {
+      if(!(error instanceof Error)||!['ORDERS_HOME_SOURCE_INVALID','ORDERS_HOME_PROJECTION_INVALID'].includes(error.message))throw error;
+      // A legacy/incomplete order cannot form this projection. Preserve the
+      // independently qualified Today dashboard; do not invent a due date.
+      dashboard.datenluecken=[...(dashboard.datenluecken??[]),'ORDERS_HOME_PROJECTION_SOURCE'];
+      modelRead.incomplete=true;
+      return {kind:'partial',projection:null,...common};
+    }
     return orderSource.orders.length === 0
       ? { kind: "empty", ...common, projection }
       : { kind: "data", ...common, projection };
-    });
   } catch(error) {
     console.error('[OFFICE_HOME_READ_FAILED]',{name:error instanceof Error?error.name:'UnknownError',at:error instanceof Error?error.stack?.split('\n').slice(1,4):undefined});
     return { kind: "error", message: "Die aktuellen Auftragsdaten konnten nicht sicher geladen werden." };
   }
+}
+
+/** Same sanitized, actor-bound primary snapshot; no source reread for these
+ * supplementary projections and no private union/model payload in an Action. */
+export function todayHomePartFromModel(model:OfficeHomeModel,part:TodayHomePart):TodayHomePartResult{
+ if(!('dashboard'in model))return {code:'SOURCE_INCOMPLETE',part};
+ if(part==='notices')return {code:'OK',part,missing:[...(model.dashboard.datenluecken??[])]};
+ if(part==='counts')return {code:model.dashboard.datenluecken?.length?'SOURCE_INCOMPLETE':'OK',part};
+ return {code:'SOURCE_INCOMPLETE',part};
 }

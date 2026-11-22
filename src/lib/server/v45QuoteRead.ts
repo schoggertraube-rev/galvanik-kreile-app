@@ -10,6 +10,15 @@ import {readV45QuoteCommand} from './v45QuoteCommandRead';
 import {readV45ActionValues} from './v45ActionValuesRead';
 import {V45_SOURCE_HASHES} from '@/ui/v45.generated';
 import {readV45ObjectActionAbsence} from './v45ObjectActionsRead';
+import {quoteCommandContext,quoteOperationContext} from './quoteAuthorization';
+
+/** Existing quote command capabilities, shared by the live action and model. */
+export function quoteV45Capabilities(auth:AuthorizationSnapshot,purpose:'operations'|'financial'='operations'){
+ const financialContext=quoteCommandContext(auth),operational=quoteOperationContext(auth);
+ const context=purpose==='operations'?operational:financialContext;
+ const financial=financialContext.capabilities.canReadQuote,canEdit=financial&&context.capabilities.canUpdateQuote,canReceive=hasAuthorizationArea(auth,'eingang');
+ return {financial,canEdit,canReceive,commandRights:{'quote.receive':canReceive,'quote.revise':canEdit,'quote.send':hasAuthorizationArea(auth,'mails'),'quote.followup':hasAuthorizationArea(auth,'mails'),'quote.convert':operational.capabilities.canConvertQuote,'quote.accept':operational.capabilities.canReadQuote&&(operational.capabilities.canUpdateQuote||operational.capabilities.canDecideQuote),'quote.extend':operational.capabilities.canReadQuote&&(operational.capabilities.canUpdateQuote||operational.capabilities.canDecideQuote),'quote.return_goods':auth.active}};
+}
 
 /** V45 quoteFacts, projected from the existing validated quote read port.
  * Historical editions never stand in for the current promise. Missing lifecycle

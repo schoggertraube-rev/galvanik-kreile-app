@@ -105,7 +105,11 @@ describe("F1-R0 root route containment", () => {
     expect(adapter).toContain("<OfficeHome");
     const homeAdapter = readFileSync(resolve(process.cwd(), "src/components/home/OfficeHome.tsx"), "utf8");
     expect(homeAdapter).toContain("import {loadOfficeHome} from '@/lib/server/officeHomeRead'");
-    expect(homeAdapter).toContain("model={await loadOfficeHome(authorization)}");
+    // PL22.11.13:57/14:19: genuine RSC streaming replaces the old blocking await.
+    expect(homeAdapter).toContain("const model=loadOfficeHome(authorization,true)");
+    expect(homeAdapter).toContain("<Suspense fallback=");
+    expect(homeAdapter).toContain("model={model}");
+    expect(homeAdapter).toContain("const model=use(source)");
     const home = readFileSync(resolve(process.cwd(), "src/lib/server/officeHomeRead.ts"), "utf8");
     expect(home).toContain("hasAnyAuthorizationArea(authorization)");
     expect(home).toContain('hasAuthorizationArea(authorization, "auftraege")');

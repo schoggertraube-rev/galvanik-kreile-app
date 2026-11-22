@@ -67,10 +67,11 @@ const todayReadProjection=sql`jsonb_build_object(
  'has_todayShadowIntervalMs',to_jsonb(company_settings)?'today_shadow_interval_ms','todayShadowIntervalMs',to_jsonb(company_settings)->'today_shadow_interval_ms',
  'has_todayStalePollMs',to_jsonb(company_settings)?'today_stale_poll_ms','todayStalePollMs',to_jsonb(company_settings)->'today_stale_poll_ms',
  'has_navPrefetchMaxAgeSeconds',to_jsonb(company_settings)?'nav_prefetch_max_age_seconds','navPrefetchMaxAgeSeconds',to_jsonb(company_settings)->'nav_prefetch_max_age_seconds') AS today_read_source`;
-const readFreshPageSettingsSourcesRow=async(tenantId:string)=>withPageReadSettingsSource(async()=>{
- return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{page_read_source:unknown;today_read_source:unknown}>(sql`
+const readPageSettingsSourcesInTransaction=(tx:PrivilegedTenantTransaction,tenantId:string)=>tx.execute<{page_read_source:unknown;today_read_source:unknown}>(sql`
   SELECT ${pageReadProjection},${todayReadProjection}
-  FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`));
+  FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`);
+const readFreshPageSettingsSourcesRow=async(tenantId:string)=>withPageReadSettingsSource(async()=>{
+ return withPrivilegedTenantTransaction({tenantId},tx=>readPageSettingsSourcesInTransaction(tx,tenantId));
 });
 const readPageSettingsSourcesRow=cache(readFreshPageSettingsSourcesRow);
 const readPageReadSettingsRow=cache(async(tenantId:string)=>{
@@ -89,6 +90,17 @@ export async function readPageReadSettings(context:{tenantId:string}){
 
 export async function readTodayReadSettings(context:{tenantId:string;fresh?:true}){
  const rows=await (context.fresh?readFreshPageSettingsSourcesRow:readPageSettingsSourcesRow)(context.tenantId);
+ return todaySettingsFromRows(rows);
+}
+/** Same SQL and parser inside the existing model/settings/actor transaction. */
+export async function readModelPageSettingsInTransaction(tx:PrivilegedTenantTransaction,context:{tenantId:string}){
+ const rows=await withPageReadSettingsSource(()=>readPageSettingsSourcesInTransaction(tx,context.tenantId));
+ const today=todaySettingsFromRows(rows);
+ if(!rows.length)return {today,page:{queryTimeoutMs:DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs,invoiceMailBatchLimit:DEFAULT_PAGE_READ_SETTINGS.invoiceMailBatchLimit}};
+ const page=pageReadSettingsFromCompany(rows[0].page_read_source,DEFAULT_PAGE_READ_SETTINGS);
+ return {today,page:page?.settings??null};
+}
+function todaySettingsFromRows(rows:readonly {today_read_source:unknown}[]){
  if(!rows.length)return {todayReadSource:DEFAULT_PAGE_READ_SETTINGS.todayReadSource,todayRefreshBatchLimit:DEFAULT_PAGE_READ_SETTINGS.todayRefreshBatchLimit,todayRefreshLeaseSeconds:DEFAULT_PAGE_READ_SETTINGS.todayRefreshLeaseSeconds,todayShadowIntervalMs:DEFAULT_PAGE_READ_SETTINGS.todayShadowIntervalMs,todayStalePollMs:DEFAULT_PAGE_READ_SETTINGS.todayStalePollMs,navPrefetchMaxAgeSeconds:DEFAULT_PAGE_READ_SETTINGS.navPrefetchMaxAgeSeconds};
  if(rows.length!==1)throw Error('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
  const settings=todayReadSettingsFromCompany(rows[0].today_read_source,DEFAULT_PAGE_READ_SETTINGS);

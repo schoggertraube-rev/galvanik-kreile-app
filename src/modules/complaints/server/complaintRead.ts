@@ -36,7 +36,12 @@ export async function readComplaintsForAuthorization(auth:AuthorizationSnapshot|
    const actors=await readCaseActorTraces(tx,readAuth,complaints.filter(row=>Number.isSafeInteger(row.version)&&Number(row.version)>0).map(row=>({kind:'complaint' as const,id:row.id,version:row.version!})));
    const reminders=await readComplaintGoodsReminderDates(tx,readAuth,complaints.filter(row=>row.nacharbeitAuftragId&&row.stand==='massnahme_nacharbeit').map(row=>row.id));
    const sent=new Map(reminders.map(row=>[row.complaintId,row.sentAt]));
-   return {code:'OK' as const,complaints:complaints.map(row=>({...row,...(actors.has('complaint:'+row.id)?{actorTrace:actors.get('complaint:'+row.id)}:{}),...(sent.has(row.id)?{goodsReminderSentAt:sent.get(row.id)!}:{})}))};
+   return maskComplaintReadResult(auth,{code:'OK' as const,complaints:complaints.map(row=>({...row,...(actors.has('complaint:'+row.id)?{actorTrace:actors.get('complaint:'+row.id)}:{}),...(sent.has(row.id)?{goodsReminderSentAt:sent.get(row.id)!}:{})}))});
   });
  }catch(error){console.error('[COMPLAINT_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Reklamationen konnten nicht geladen werden. Fehlercode: COMPLAINT_READ_FAILED.'};}
+}
+export function maskComplaintReadResult(auth:AuthorizationSnapshot|AuthorizedReadContext,source:ComplaintReadResult):ComplaintReadResult{
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+ if(source.code!=='OK'||readAuth.canReadArea('zahlungen'))return source;
+ return {...source,complaints:source.complaints.map(row=>({...row,gutschriftBetrag:null,gutschriftNr:null}))};
 }

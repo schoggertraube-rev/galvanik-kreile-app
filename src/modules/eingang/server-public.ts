@@ -4,7 +4,7 @@ export {recordIntakeQuoteEffect,readIntakeQuoteReplyReference} from './server/in
 export {readIntakeHandoverMail,recordIntakeHandoverEffect} from './server/intakeOrderBinding';
 export {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoiceTaskContext} from './server/incomingInvoice';
 export type {InvoiceDependencies} from './server/incomingInvoice';
-export {readIntakeMessages,readIntakeMessagesForAuthorization} from './server/intakeMessages';
+export {readIntakeMessages,readIntakeMessagesForAuthorization,projectIntakeMessageSources} from './server/intakeMessages';
 export {readIntakeAssignment,assignIntakeCustomer,canAssignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from './server/intakeAssignment';
 export {selectIntakeConcern,finishIntakeUse,reopenIntake} from './server/intakeLifecycle';
 export {recordIntakeTaskEffect} from './server/intakeTaskEffect';

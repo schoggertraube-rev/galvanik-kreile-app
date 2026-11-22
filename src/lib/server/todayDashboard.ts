@@ -1,6 +1,9 @@
-import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
+import {createHash} from 'node:crypto';
+import type {TodayReadSettings,PageReadSettings} from '@/modules/fundament/public';
+import {projectTodayOrderSources} from './todayOrderRead';
+import {withPageReadPhase,logPageReadPhase,configurePageReadBudget} from '@/db/readBudget';
 import {readUnsentInvoiceMailGroups} from './communicationDocumentPort';
-import {V45_TEXT,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,SURFACE_ASSIGNMENT_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,SURFACE_ASSIGNMENT_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
 import {suggestOrderPositionSurface,orderPositionSurfaceLabel} from '@/lib/orderPositionContract';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
 import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
@@ -11,10 +14,10 @@ import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentR
 
 import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import type {AuthorizationSnapshot} from "@/lib/server/authorization";
+import {hasAnyAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import {observeTodayModelShadow} from './todayProjectionSchedule';
+import {observeTodayModelShadow,TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS} from './todayProjectionSchedule';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -43,7 +46,7 @@ export type TodayItem = {
   snoozedUntil?: string;
   assignedToName?: string;
   assignmentVersion?: number;
-  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | typeof SITUATION_COPY.quote.openOrder | typeof SURFACE_ASSIGNMENT_COPY.open | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
+  primaryActionLabel?: ReturnType<typeof V45_TEXT.out$action$unsent> | typeof SITUATION_COPY.quote.openOrder | typeof SURFACE_ASSIGNMENT_COPY.open | typeof TODAY_MODEL_COPY.reload | TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen" | "Ergebnis festlegen" | "Gutschrift erteilen" | "Kunde informieren" | "Öffnen" | "Kunde erinnern";
 };
 
 export type TodayCollectionNotice = {
@@ -140,6 +143,11 @@ export async function readTodaySource<T>(tx:PrivilegedTenantTransaction,read:(ne
 /** Keep the canonical reader's limit while retaining one transaction for the whole source. */
 export async function readTodayResponsibilities(auth:AuthorizationSnapshot,ids:readonly string[]){
  return withPrivilegedTenantTransaction(auth,async tx=>{
+  return readTodayResponsibilitiesInTransaction(tx,auth,ids);
+ }).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
+}
+
+export async function readTodayResponsibilitiesInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
   const result=Object.assign(new Map<string,string|null>(),{unavailableOrderIds:[] as string[]});
   for(let offset=0;offset<ids.length;offset+=1000){
    const block=await readTodaySource(tx,nested=>readOrderResponsibilityForToday(nested,auth,ids.slice(offset,offset+1000)));
@@ -148,7 +156,6 @@ export async function readTodayResponsibilities(auth:AuthorizationSnapshot,ids:r
    result.unavailableOrderIds.push(...block.data.unavailableOrderIds);
   }
   return {code:'OK' as const,data:result};
- }).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
 }
 
 /** One source-access mask for the existing live composition and the prepared
@@ -162,7 +169,7 @@ export function todaySourceAccess(auth:Pick<AuthorizedReadContext,'canReadArea'>
  };
 }
 /** Existing tenant-wide money facts; personal preferences and assignments stay live. */
-export async function readTodayMoneySupport(auth:AuthorizationSnapshot|AuthorizedReadContext,today:string,access=todaySourceAccess('canReadArea'in auth?auth:authorizationReadContext(auth))){
+async function readTodayMoneySources(auth:AuthorizationSnapshot|AuthorizedReadContext,today:string,access:ReturnType<typeof todaySourceAccess>){
  const {money:moneyAllowed}=access;
  return withPrivilegedTenantTransaction(auth,async tx=>{
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`
@@ -213,24 +220,37 @@ export async function readTodayMoneySupport(auth:AuthorizationSnapshot|Authorize
 
    return {supportMissing:invoiceMailSource.code!=='OK'?['TODAY_UNSENT_INVOICE_SOURCE']:invoiceMailSource.data.missing,invoiceMailSource,invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[],prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[]};
   }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
-   return {supportMissing:['TODAY_SUPPORT_SOURCE','TODAY_UNSENT_INVOICE_SOURCE'],invoiceMailSource:{code:'SOURCE_INCOMPLETE' as const},invoiceSource:{code:'SOURCE_INCOMPLETE' as const},invoices:[] as InvoiceRow[],prepaymentSource:{code:'SOURCE_INCOMPLETE' as const},prepayments:[] as PrepaymentRow[],collectionSource:{code:'SOURCE_INCOMPLETE' as const},collections:[] as CollectionRow[]};
+   return unknownTodayMoneySupport();
   });
 }
-async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:ReturnType<typeof todaySourceAccess>){
- const {orders:ordersAllowed}=access;
- const [money,person,orders]=await Promise.all([
-  readTodayMoneySupport(auth,today,access),
-  withPrivilegedTenantTransaction(auth,async tx=>{
+export function unknownTodayMoneySupport(){
+ return {supportMissing:['TODAY_SUPPORT_SOURCE','TODAY_UNSENT_INVOICE_SOURCE'],invoiceMailSource:{code:'SOURCE_INCOMPLETE' as const},invoiceSource:{code:'SOURCE_INCOMPLETE' as const},invoices:[] as InvoiceRow[],prepaymentSource:{code:'SOURCE_INCOMPLETE' as const},prepayments:[] as PrepaymentRow[],collectionSource:{code:'SOURCE_INCOMPLETE' as const},collections:[] as CollectionRow[]};
+}
+/** One visibility mask for live SQL results and qualified stored money facts. */
+export function maskTodayMoneySupport(auth:AuthorizationSnapshot|AuthorizedReadContext,source:Awaited<ReturnType<typeof readTodayMoneySources>>){
+ const access=todaySourceAccess('canReadArea'in auth?auth:authorizationReadContext(auth));
+ const invoiceMailSource=access.invoiceMail?source.invoiceMailSource:{code:'OK' as const,data:{groups:[],missing:[]}};
+ const supportMissing=invoiceMailSource.code!=='OK'?['TODAY_UNSENT_INVOICE_SOURCE']:[...invoiceMailSource.data.missing];
+ if((access.money||access.invoiceMail)&&source.supportMissing.includes('TODAY_SUPPORT_SOURCE'))supportMissing.unshift('TODAY_SUPPORT_SOURCE');
+ return {...source,supportMissing,invoiceMailSource,
+  invoiceSource:access.money?source.invoiceSource:{code:'OK' as const,data:[] as InvoiceRow[]},invoices:access.money?source.invoices:[] as InvoiceRow[],
+  prepaymentSource:access.money?source.prepaymentSource:{code:'OK' as const,data:[] as PrepaymentRow[]},prepayments:access.money?source.prepayments:[] as PrepaymentRow[],
+  collectionSource:access.money?source.collectionSource:{code:'OK' as const,data:[] as CollectionRow[]},collections:access.money?source.collections:[] as CollectionRow[]};
+}
+export async function readTodayMoneySupport(auth:AuthorizationSnapshot|AuthorizedReadContext,today:string,access=todaySourceAccess('canReadArea'in auth?auth:authorizationReadContext(auth))){
+ return maskTodayMoneySupport(auth,await readTodayMoneySources(auth,today,access));
+}
+export async function readTodayPersonalSupportInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot){
       const preferencesSource = await readTodaySource(tx,nested=>
         nested.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`));
       const remindersSource = await readTodaySource(tx,nested=>
         nested.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`));
 
    return {supportMissing:[...(preferencesSource.code!=='OK'?['TODAY_PREFERENCES_SOURCE']:[]),...(remindersSource.code!=='OK'?['TODAY_REMINDERS_SOURCE']:[])],preferences:preferencesSource.code==='OK'?preferencesSource.data:[],reminders:remindersSource.code==='OK'?remindersSource.data:[]};
-  }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
-   return {supportMissing:['TODAY_PREFERENCES_SOURCE','TODAY_REMINDERS_SOURCE'],preferences:[] as PreferenceRow[],reminders:[] as ReminderRow[]};
-  }),
-  withPrivilegedTenantTransaction(auth,async tx=>{
+}
+
+export async function readTodayDelegationSupportInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,access:ReturnType<typeof todaySourceAccess>){
+ const {orders:ordersAllowed}=access;
       const delegationSource =
         ordersAllowed ? await readTodaySource(tx,nested=>nested.execute<UserRow>(sql`
           SELECT users.id, users.full_name
@@ -257,6 +277,18 @@ async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:R
       const assignments=assignmentSource.code==='OK'?assignmentSource.data:[];
 
    return {supportMissing:delegationSource.code!=='OK'?['TODAY_DELEGATION_SOURCE']:[],delegationTargets:delegationSource.code==='OK'?delegationSource.data:[],assignmentSourceIncomplete:assignmentSource.code!=='OK'||assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok)};
+}
+
+async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:ReturnType<typeof todaySourceAccess>){
+ const [money,person,orders]=await Promise.all([
+  readTodayMoneySupport(auth,today,access),
+  withPrivilegedTenantTransaction(auth,async tx=>{
+   return readTodayPersonalSupportInTransaction(tx,auth);
+  }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
+   return {supportMissing:['TODAY_PREFERENCES_SOURCE','TODAY_REMINDERS_SOURCE'],preferences:[] as PreferenceRow[],reminders:[] as ReminderRow[]};
+  }),
+  withPrivilegedTenantTransaction(auth,async tx=>{
+   return readTodayDelegationSupportInTransaction(tx,auth,access);
   }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
    return {supportMissing:['TODAY_DELEGATION_SOURCE'],delegationTargets:[] as UserRow[],assignmentSourceIncomplete:true,assignments:[] as AssignmentRow[]};
   }),
@@ -265,12 +297,13 @@ async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:R
 }
 
 export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string};
-export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>): Promise<TodayDashboard> {
-  const diagnosticStarted=Date.now();
-  const calendar=readTodayCalendar(readNow),today=calendar.today;
-  const access=todaySourceAccess(authorizationReadContext(auth));
-  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
-  const quotesRead=(async()=>{
+export function todayResponsibilityIds(auth:AuthorizationSnapshot,orders:Awaited<ReturnType<typeof getOperationalOrders>>,support:Pick<Awaited<ReturnType<typeof readTodaySupport>>,'invoices'|'prepayments'|'invoiceMailSource'>,complaints:ComplaintReadResult|{code:'SOURCE_INCOMPLETE';message:string}){
+ return [...new Set([...orders.map(row=>row.id),...support.invoices.flatMap(row=>row.order_id?[row.order_id]:[]),...support.prepayments.map(row=>row.order_id),
+  ...(complaints.code==='OK'?complaintAttention(complaints.complaints,auth.areas??[]).flatMap(row=>row.orderId?[row.orderId]:[]):[]),
+  ...(support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.flatMap(row=>row.orderId?[row.orderId]:[]):[])])];
+}
+export async function readTodayQuoteSources(graphAllowed:boolean,readAt:Date){
+ const calendar=readTodayCalendar(readAt);
   const quoteList=graphAllowed?await withPageReadPhase('today.quotes',()=>listOpenQuotesAction({purpose:'today'}).catch(()=>({code:'SOURCE_INCOMPLETE' as const}))):{code:'OK' as const,quotes:[]};
   const rows=quoteList.code==='OK'?await Promise.all(quoteList.quotes.map(async quote=>{
     try{
@@ -284,7 +317,17 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     return {quoteId:quote.quoteId,read:null};
   })):[];
   return {quoteList,quoteReads:rows};
-  })();
+}
+
+function readTodayOrderVersionsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string,ids:readonly string[]){
+ return tx.execute<{id:string;version:number}>(sql`SELECT id,version FROM public.orders WHERE tenant_id=${tenantId} AND id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[])`);
+}
+export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
+  const diagnosticStarted=Date.now();
+  const calendar=readTodayCalendar(readNow),today=calendar.today;
+  const access=todaySourceAccess(authorizationReadContext(auth));
+  const {orders:ordersAllowed,messages:graphAllowed}=access;
+  const quotesRead=readTodayQuoteSources(graphAllowed,readNow);
   const tasksRead=graphAllowed?withPageReadPhase('today.tasks',()=>getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]}))):null;
   const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
     withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'})).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
@@ -296,19 +339,48 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   ]);
 
   const orders=orderSource.code==='OK'?orderSource.data:[];
-  const responsibilityIds=[...new Set([
-    ...orders.map(row=>row.id),...support.invoices.flatMap(row=>row.order_id?[row.order_id]:[]),
-    ...support.prepayments.map(row=>row.order_id),
-    ...(complaints.code==='OK'?complaintAttention(complaints.complaints,auth.areas??[]).flatMap(row=>row.orderId?[row.orderId]:[]):[]),
-    ...(support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.flatMap(row=>row.orderId?[row.orderId]:[]):[]),
-  ])];
+  const responsibilityIds=todayResponsibilityIds(auth,orders,support,complaints);
   const responsibilityRead=withPageReadPhase('today.responsibility',()=>readTodayResponsibilities(auth,responsibilityIds));
   logPageReadPhase('today.initial',diagnosticStarted,{rows:orders.length});
-  const sourceNotices:TodayItem[]=[];
-  const retainOrderSourceNotice=(order:{id:string;version:number;orderNumber:string})=>{if(!sourceNotices.some(item=>item.key==='source-order:'+order.id))sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:SITUATION_COPY.quote.openOrder});};
   // One existing App composition owns the narrow bulk U2 projection and
   // its canonical rights/source ports, without complete cards or actor menus.
   const batch=ordersAllowed?await withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:orders.map(order=>order.id)})):null;
+  let versions:Array<{id:string;version:number}>|null=[];
+  if(orders.length){
+    try{
+      versions=await withPageReadPhase('today.versions',()=>withPrivilegedTenantTransaction(auth,tx=>readTodayOrderVersionsInTransaction(tx,auth.tenantId,orders.map(row=>row.id))));
+    }catch{versions=null;}
+  }
+  const {quoteList,quoteReads}=await quotesRead;
+  const taskRead=await tasksRead;
+  const responsibilitySource=await responsibilityRead;
+  return {calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource};
+}
+
+type CollectedTodaySources=Awaited<ReturnType<typeof collectTodaySources>>;
+/** Composition consumes facts, not the live Action's transport metadata. */
+export type TodayDashboardSources=Omit<CollectedTodaySources,'companyLetter'|'quoteList'|'graph'>&{
+ modelStaleOrderIds?:readonly string[];
+ graph:Awaited<ReturnType<import('@/modules/eingang/public').IntakeMessagesPorts['list']>>|{code:'SOURCE_INCOMPLETE';message:string};
+ companyLetter:{code:'OK';companyName?:string}|{code:'FORBIDDEN'|'SOURCE_INCOMPLETE'};
+ quoteList:{code:'OK';quotes:readonly {quoteId:string;version:number}[]}|Exclude<CollectedTodaySources['quoteList'],{code:'OK'}>;
+};
+/** One synchronous composition for the live and later qualified model sources. */
+export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDashboardSources,calendar=sources.calendar):TodayDashboard {
+  const {access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead}=sources;
+  // The existing visible-item pruning is local to this composition. Captured
+  // source facts remain intact for retries and equality comparisons.
+  const responsibilitySource=sources.responsibilitySource.code==='OK'
+    ?{...sources.responsibilitySource,data:Object.assign(new Map(sources.responsibilitySource.data),{unavailableOrderIds:[...sources.responsibilitySource.data.unavailableOrderIds]})}
+    :sources.responsibilitySource;
+  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
+  const today=calendar.today;
+  const orders=orderSource.code==='OK'?orderSource.data:[];
+  const sourceNotices:TodayItem[]=[];
+  const retainOrderSourceNotice=(order:{id:string;version:number;orderNumber:string})=>{if(!sourceNotices.some(item=>item.key==='source-order:'+order.id)){
+   const stale=sources.modelStaleOrderIds?.includes(order.id)===true;
+   sourceNotices.push({key:'source-order:'+order.id,field:'action',kind:'order',orderId:order.id,orderVersion:order.version,title:stale?TODAY_MODEL_COPY.cardRefreshing:PAGE_READ_COPY.orderIncomplete(order.orderNumber),meta:'',urgency:'warning',primaryActionLabel:stale?TODAY_MODEL_COPY.reload:SITUATION_COPY.quote.openOrder});
+  }};
   const cardSources=new Map(batch?.code==='OK'?batch.data.rows.map(row=>[row.orderId,row.result]):[]);
   const orderActionReads=orders.map(order=>{
    const source=cardSources.get(order.id);
@@ -336,14 +408,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
    }
    return row;
   });
-  // Detect a command that changed an order while independent qualified sources
-  // were being read. Never combine different versions into a clickable action.
-  if(orderActionReads.length){
-    try{
-      const versions=await withPageReadPhase('today.versions',()=>withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;version:number}>(sql`SELECT id,version FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(orderActionReads.map(row=>sql`${row.orderId}`),sql`, `)}]::text[])`)));
-      for(const row of orderActionReads)if(!versions.some(current=>current.id===row.orderId&&current.version===row.version))row.read=null;
-    }catch{for(const row of orderActionReads)row.read=null;}
-  }
+  // The existing late read is captured before pure composition. Unknown
+  // versions still invalidate only their own clickable order actions.
+  for(const row of orderActionReads)if(versions===null||!versions.some(current=>current.id===row.orderId&&current.version===row.version))row.read=null;
   // A late version-read failure must not silently remove known orders.
   for(const order of orders)if(orderActionReads.some(row=>row.orderId===order.id&&row.read===null))retainOrderSourceNotice(order);
   const orderActions={code:orderSource.code==='OK'&&orderActionReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
@@ -353,11 +420,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const orderSchedule=projectOrderSchedule(orderActions,calendar);
   // The canonical list and operational U2 card are the only quote sources.
   // Raw financial list objects never escape this server composition.
-  const {quoteList,quoteReads}=await quotesRead;
   const quoteActions={code:quoteList.code==='OK'&&quoteReads.every(row=>row.read!==null)?'OK' as const:'SOURCE_INCOMPLETE' as const,
     rows:quoteReads.flatMap(row=>row.read?[row as TodayQuoteActionRow]:[]),missingQuoteIds:quoteReads.filter(row=>row.read===null).map(row=>row.quoteId)};
 
-  const taskRead=await tasksRead;
   const taskKnown=taskRead?.code==='OK';
   const taskSchedule=projectIntakeTaskSchedule(taskRead&&'rows'in taskRead?taskRead:{code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]},calendar);
 
@@ -450,7 +515,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   const ownTaskKeys=new Set(followupsKnown?quoteFollowups.tasks.filter(task=>task.isMine===true).map(task=>'task:'+task.id):[]);
-  const responsibilitySource=await responsibilityRead;
   if(responsibilitySource.code==='OK'){
     const itemIds=new Set(items.flatMap(item=>item.orderId?[item.orderId]:[]));
     for(const id of responsibilitySource.data.keys())if(!itemIds.has(id))responsibilitySource.data.delete(id);
@@ -530,21 +594,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
 
   if(graphAllowed)for(const task of taskSchedule.rows)if(task.state==='active')mainMissing.push('TODAY_TASK_MAIN_BINDING:'+task.id);
 
-  logPageReadPhase('today.model',diagnosticStarted,{rows:items.length,actions:orderActions.rows.length,missing:orderActions.missingOrderIds.length});
-  await observeTodayModelShadow(auth,today,{
-   orders:ordersAllowed&&orderSource.code==='OK'?orders.length:null,
-   orderCards:ordersAllowed&&batch?.code==='OK'?batch.data.rows.filter(row=>row.result.code==='OK').length:null,
-   messages:graphAllowed&&graph.code==='OK'?graph.messages.length:null,
-   invoices:moneyAllowed&&support.invoiceSource.code==='OK'?support.invoiceSource.data.length:null,
-   prepayments:moneyAllowed&&support.prepaymentSource.code==='OK'?support.prepaymentSource.data.length:null,
-   collections:moneyAllowed&&support.collectionSource.code==='OK'?support.collectionSource.data.length:null,
-   invoiceMailGroups:access.invoiceMail&&support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.length:null,
-   complaints:access.complaints&&complaints.code==='OK'?complaints.complaints.length:null,
-   quoteFollowups:graphAllowed&&quoteFollowups.code==='OK'&&'tasks'in quoteFollowups?quoteFollowups.tasks.length:null,
-   quotes:graphAllowed&&quoteList.code==='OK'?quoteList.quotes.length:null,
-   tasks:graphAllowed&&taskRead&&'rows'in taskRead&&taskRead.code==='OK'?taskRead.rows.length:null,
-   company:access.company&&companyLetter.code==='OK'&&'companyName'in companyLetter?1:null,
-  });
+
   return {
     hauptaktion,hauptaktionsQuelle,
     calendar,
@@ -565,6 +615,32 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
     delegationTargets: support.delegationTargets.map((target) => ({ userId: target.id, displayName: target.full_name })),
     outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message,
   };
+}
+
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>): Promise<TodayDashboard> {
+  const diagnosticStarted=Date.now();
+  const sources=await collectTodaySources(auth,readComplaints,readQuoteFollowups,readNow,operationalSource);
+  const dashboard=composeTodayDashboard(auth,sources,sources.calendar);
+  const {access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,quoteList,taskRead}=sources;
+  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
+  const orders=orderSource.code==='OK'?orderSource.data:[];
+  const calendar=sources.calendar,today=calendar.today;
+  logPageReadPhase('today.model',diagnosticStarted,{rows:dashboard.items.length,actions:dashboard.orderActions?.rows.length??0,missing:dashboard.orderActions?.missingOrderIds.length??0});
+  await observeTodayModelShadow(auth,today,{
+   orders:ordersAllowed&&orderSource.code==='OK'?orders.length:null,
+   orderCards:ordersAllowed&&batch?.code==='OK'?batch.data.rows.filter(row=>row.result.code==='OK').length:null,
+   messages:graphAllowed&&graph.code==='OK'?graph.messages.length:null,
+   invoices:moneyAllowed&&support.invoiceSource.code==='OK'?support.invoiceSource.data.length:null,
+   prepayments:moneyAllowed&&support.prepaymentSource.code==='OK'?support.prepaymentSource.data.length:null,
+   collections:moneyAllowed&&support.collectionSource.code==='OK'?support.collectionSource.data.length:null,
+   invoiceMailGroups:access.invoiceMail&&support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.length:null,
+   complaints:access.complaints&&complaints.code==='OK'?complaints.complaints.length:null,
+   quoteFollowups:graphAllowed&&quoteFollowups.code==='OK'&&'tasks'in quoteFollowups?quoteFollowups.tasks.length:null,
+   quotes:graphAllowed&&quoteList.code==='OK'?quoteList.quotes.length:null,
+   tasks:graphAllowed&&taskRead&&'rows'in taskRead&&taskRead.code==='OK'?taskRead.rows.length:null,
+   company:access.company&&companyLetter.code==='OK'&&'companyName'in companyLetter?1:null,
+  });
+  return dashboard;
 }
 
 export async function saveTodayPreferences(auth: AuthorizationSnapshot, value: unknown) {
@@ -615,4 +691,146 @@ export async function saveTodayReminder(auth: AuthorizationSnapshot, input: { it
     `);
   });
   return { code: "OK" as const, message: decision.message, data: { reminderUntil: decision.until.toISOString() } };
+}
+
+// Qualified model collection shares this one live/compose source contract.
+export type TodayModelSourceRow={
+ kind:string;sourceId:string;status:string;listed:boolean;sourceVersion:number|null;
+ currentVersion:number|null;current:boolean;fresh:boolean;payload:unknown;errorCode:string|null;
+ builtAt:string|null;needsRebuild:boolean;tenantChanged:boolean;sourceSeq:string;builtSeq:string;tenantSeq:string;builtTenantSeq:string;
+};
+/** The caller owns the one settings/model/actor transaction. Stale payloads
+ * never cross this SQL boundary, even if a caller later mishandles freshness.
+ * Original field facts and actor masks are composed by their existing readers. */
+export async function readTodayModelInTransaction(tx:PrivilegedTenantTransaction,context:{tenantId:string},today:string,headersOnly=false){
+ const notHeadersOnly=!headersOnly;
+ return withPageReadPhase('today.model.read',async()=>{
+  const current=sql`source.source_seq=source.built_seq
+   AND source.built_tenant_seq=tenant.tenant_seq AND source.built_day=${today}::date
+   AND source.projector_version=${TODAY_PROJECTOR_VERSION}
+   AND (source.kind<>'order' OR source.listed AND orders.version=source.source_version)`;
+  const rows=await tx.execute<TodayModelSourceRow>(sql`SELECT source.kind,source.source_id AS "sourceId",source.status,source.listed,
+   source.source_seq::text AS "sourceSeq",source.built_seq::text AS "builtSeq",tenant.tenant_seq::text AS "tenantSeq",source.built_tenant_seq::text AS "builtTenantSeq",
+   source.built_tenant_seq IS DISTINCT FROM tenant.tenant_seq AS "tenantChanged",
+   source.source_version AS "sourceVersion",orders.version AS "currentVersion",${current} AS current,(${current} AND source.status='OK') AS fresh,
+   CASE WHEN ${notHeadersOnly} AND ${current} AND source.status IN ('OK','SOURCE_INCOMPLETE') THEN source.payload ELSE NULL END AS payload,source.error_code AS "errorCode",source.built_at::text AS "builtAt",
+   source.built_tenant_seq<>tenant.tenant_seq OR source.built_day IS DISTINCT FROM ${today}::date
+    OR source.projector_version<>${TODAY_PROJECTOR_VERSION} AS "needsRebuild"
+   FROM private.today_tenant_v1 tenant JOIN private.today_source_v1 source ON source.tenant_id=tenant.tenant_id
+   LEFT JOIN public.orders orders ON source.kind='order' AND orders.tenant_id=source.tenant_id AND orders.id=source.source_id
+   WHERE tenant.tenant_id=${context.tenantId} AND (source.source_id='*' OR source.kind='order' AND source.listed)
+   ORDER BY source.kind,source.source_id`);
+  if(!rows.some(row=>row.builtAt!==null))return {code:'EMPTY' as const,rows:[] as TodayModelSourceRow[],needsRebuild:true};
+  return {code:'OK' as const,rows:[...rows],needsRebuild:rows.some(row=>row.needsRebuild)||TODAY_MODEL_LIST_KINDS.some(kind=>!rows.some(row=>row.kind===kind&&row.sourceId==='*'))};
+ },result=>({rows:result.rows.length,fresh:result.rows.filter(row=>row.fresh===true).length,stale:result.rows.filter(row=>row.fresh!==true).length}));
+}
+
+/** Opaque read revision only; never used to grant access or acknowledge a command. */
+export function todayModelRevision(auth:AuthorizationSnapshot,rows:readonly TodayModelSourceRow[],day:string){
+ const access=todaySourceAccess(authorizationReadContext(auth));
+ const visible=(kind:string)=>kind==='order'?access.orders:kind==='orders'?hasAnyAuthorizationArea(auth):kind==='money'?access.money||access.invoiceMail:kind==='company'?access.company:kind==='complaints'?access.complaints:access.messages;
+ return createHash('sha256').update(JSON.stringify({actor:auth.userId,role:auth.role,areas:[...(auth.areas??[])].sort(),permissions:[...auth.permissions].sort(),day,rows:rows.filter(row=>visible(row.kind)).map(row=>[row.kind,row.sourceId,row.sourceSeq,row.builtSeq,row.tenantSeq,row.builtTenantSeq,row.sourceVersion,row.currentVersion,row.status,row.listed,row.current,row.fresh,row.errorCode,row.builtAt,row.needsRebuild,row.tenantChanged])})).digest('hex');
+}
+export function todayModelRevisionMap(auth:AuthorizationSnapshot,rows:readonly TodayModelSourceRow[],day:string){
+ const complete=todayModelRevision(auth,rows,day);
+ // U264 exposes this aggregate to every real login. Its revision therefore
+ // follows the aggregate's epoch even when order details are not permitted.
+ const week=createHash('sha256').update(JSON.stringify({actor:auth.userId,day,source:rows.filter(row=>row.kind==='orders').map(row=>[row.sourceSeq,row.builtSeq,row.tenantSeq,row.builtTenantSeq,row.status])})).digest('hex');
+ return {week,counts:complete,notices:complete};
+}
+export type TodayModelReadPorts={
+ liveComplaints:()=>Promise<TodayDashboardSources['complaints']>;
+ liveFollowups:()=>Promise<TodayDashboardSources['quoteFollowups']>;
+ readSettings:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<{today:TodayReadSettings;page:PageReadSettings|null}>;
+ messages:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['graph'];
+ tasks:(auth:AuthorizationSnapshot,value:unknown)=>NonNullable<TodayDashboardSources['taskRead']>;
+ complaints:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['complaints'];
+ followups:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['quoteFollowups'];
+ quotes:(auth:AuthorizationSnapshot,value:unknown,readAt:Date)=>Pick<TodayDashboardSources,'quoteList'|'quoteReads'>;
+};
+export const modelRecord=(value:unknown):Record<string,unknown>|null=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:null;
+
+/** One transaction owns settings, qualified model rows and the same live actor
+ * kernels. Module masks are bound by the App, never by a second domain reader. */
+export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports:TodayModelReadPorts,readAt=new Date(),deferLive=false){
+ const calendar=readTodayCalendar(readAt),access=todaySourceAccess(authorizationReadContext(auth));
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const settings=await ports.readSettings(tx,auth);
+  if(settings.page!==null)configurePageReadBudget(settings.page.queryTimeoutMs);
+  if(settings.today.todayReadSource==='live')return {code:'LIVE' as const,settings};
+  const model=await withTenantSavepoint(tx,nested=>readTodayModelInTransaction(nested,auth,calendar.today));
+  if(model.code==='EMPTY')return {code:'EMPTY' as const,settings};
+  // PL 22.11 13:43: only these disqualified sources use their canonical
+  // live reader. Healthy model rows remain untouched; a failed live read
+  // retains the explicit gap instead of substituting an empty source.
+  const mustReadLive=(kind:string,id='*')=>model.rows.some(row=>row.kind===kind&&row.sourceId===id&&(row.status==='SOURCE_INCOMPLETE'||row.tenantChanged===true));
+  const live=async<T>(kind:string,known:T,read:()=>Promise<T>):Promise<T>=>{
+   if(deferLive||!mustReadLive(kind))return known;
+   try{return await withPageReadPhase(({orders:'today.orders',messages:'today.graph',money:'today.support',complaints:'today.complaints',quote_followups:'today.followups',tasks:'today.tasks',quotes:'today.quotes',company:'today.company'} as Record<string,string>)[kind],read);}
+   catch{console.error('[TODAY_MODEL_LIVE_FAILED]',{kind,code:'SOURCE_INCOMPLETE'});return known;}
+  };
+  const value=(kind:string)=>{const row=model.rows.find(source=>source.kind===kind&&source.sourceId==='*');return row?.current===true?row.payload:null;};
+  const project=<T>(kind:string,unknown:T,work:(payload:unknown)=>T):T=>{
+   const payload=value(kind);if(payload===null)return unknown;
+   try{return work(payload);}catch{console.error('[TODAY_MODEL_SOURCE_INVALID]',{kind,code:'SOURCE_INCOMPLETE'});return unknown;}
+  };
+  const storedOrders=value('orders');
+  const cachedOperationalSource:TodayDashboardSources['orderSource']=Array.isArray(storedOrders)&&storedOrders.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version))?{code:'OK',data:storedOrders as Extract<TodayDashboardSources['orderSource'],{code:'OK'}>['data']}:{code:'SOURCE_INCOMPLETE'};
+  const operationalSource=hasAnyAuthorizationArea(auth)?await live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'})})):cachedOperationalSource;
+  const orderSource:TodayDashboardSources['orderSource']=access.orders?operationalSource:{code:'OK',data:[]};
+  const orders=orderSource.code==='OK'?orderSource.data:[];
+  const unknownGraph:TodayDashboardSources['graph']={code:'SOURCE_INCOMPLETE',message:PAGE_READ_COPY.sourceIncomplete};
+  const graph=access.messages?await live<TodayDashboardSources['graph']>('messages',project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)),()=>getIntakeMessagesAction('offen')):{code:'FORBIDDEN' as const,message:''};
+  const unknownMoney=unknownTodayMoneySupport();
+  const cachedMoney=maskTodayMoneySupport(auth,project<Parameters<typeof maskTodayMoneySupport>[1]>('money',unknownMoney,payload=>{
+   const row=modelRecord(payload);if(!row||!Array.isArray(row.supportMissing)||!Array.isArray(row.invoices)||!Array.isArray(row.prepayments)||!Array.isArray(row.collections)
+    ||!modelRecord(row.invoiceSource)||!modelRecord(row.prepaymentSource)||!modelRecord(row.collectionSource)||!modelRecord(row.invoiceMailSource))throw Error('TODAY_MODEL_MONEY_INVALID');
+   return row as unknown as Parameters<typeof maskTodayMoneySupport>[1];
+  }));
+  const money=access.money||access.invoiceMail?await live('money',cachedMoney,()=>readTodayMoneySupport(auth,calendar.today)):cachedMoney;
+  const unknownComplaints:TodayDashboardSources['complaints']={code:'SOURCE_INCOMPLETE',message:'TODAY_COMPLAINT_SOURCE'};
+  const complaints=access.complaints?await live<TodayDashboardSources['complaints']>('complaints',project<TodayDashboardSources['complaints']>('complaints',unknownComplaints,payload=>ports.complaints(auth,payload)),ports.liveComplaints):{code:'OK' as const,complaints:[]};
+  const unknownFollowups:TodayDashboardSources['quoteFollowups']={code:'SOURCE_INCOMPLETE',message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};
+  const quoteFollowups=access.messages?await live<TodayDashboardSources['quoteFollowups']>('quote_followups',project<TodayDashboardSources['quoteFollowups']>('quote_followups',unknownFollowups,payload=>ports.followups(auth,payload)),ports.liveFollowups):{code:'OK' as const,tasks:[]};
+  const unknownTasks:NonNullable<TodayDashboardSources['taskRead']>={code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]};
+  const taskRead=access.messages?await live<NonNullable<TodayDashboardSources['taskRead']>>('tasks',project<NonNullable<TodayDashboardSources['taskRead']>>('tasks',unknownTasks,payload=>ports.tasks(auth,payload)),()=>getIntakeTaskAction({calendar:true})):null;
+  const unknownQuotes:Pick<TodayDashboardSources,'quoteList'|'quoteReads'>={quoteList:{code:'SOURCE_INCOMPLETE'},quoteReads:[]};
+  const {quoteList,quoteReads}=access.messages?await live<Pick<TodayDashboardSources,'quoteList'|'quoteReads'>>('quotes',project('quotes',unknownQuotes,payload=>ports.quotes(auth,payload,readAt)),()=>readTodayQuoteSources(true,readAt)):{quoteList:{code:'OK' as const,quotes:[]},quoteReads:[]};
+  const company=modelRecord(value('company')),companyData=modelRecord(company?.company);
+  const cachedCompanyLetter:TodayDashboardSources['companyLetter']=!access.company?{code:'FORBIDDEN'}
+   :company?.code==='OK'&&typeof companyData?.companyName==='string'?{code:'OK',companyName:companyData.companyName}
+   :company?.code==='VALIDATION_ERROR'?{code:'OK'}:{code:'SOURCE_INCOMPLETE'};
+  const companyLetter=access.company?await live<TodayDashboardSources['companyLetter']>('company',cachedCompanyLetter,()=>readPageReadSettingsAction({includeCompanyName:true})):cachedCompanyLetter;
+  const rawRows:Parameters<typeof projectTodayOrderSources>[1]=orders.map(order=>{
+   const row=model.rows.find(source=>source.kind==='order'&&source.sourceId===order.id),payload=modelRecord(row?.payload),result=modelRecord(payload?.result),data=modelRecord(result?.data),card=modelRecord(data?.card);
+   if(row?.fresh===true&&result?.code==='OK'&&card?.id===order.id&&card?.version===order.version&&Array.isArray(data?.records)&&Array.isArray(card?.items))return {orderId:order.id,result:result as unknown as Extract<Parameters<typeof projectTodayOrderSources>[1][number]['result'],{code:'OK'}>};
+   return {orderId:order.id,result:{code:'UNAVAILABLE',message:PAGE_READ_COPY.sourceIncomplete}};
+  });
+  let batch:TodayDashboardSources['batch']=access.orders?{code:'OK',data:{rows:projectTodayOrderSources(auth,rawRows)}}:null;
+  const liveOrderIds=orders.filter(order=>mustReadLive('order',order.id)).map(order=>order.id);
+  if(!deferLive&&access.orders&&liveOrderIds.length){
+   const read=await withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:liveOrderIds}));
+   if(read.code==='OK'&&batch?.code==='OK'){
+    const liveRows=new Map(read.data.rows.map(row=>[row.orderId,row]));
+    batch={code:'OK',data:{rows:batch.data.rows.map(row=>liveRows.get(row.orderId)??row)}};
+   }
+  }
+  const [person,delegation,responsibilitySource]=await Promise.all([
+   readTodayPersonalSupportInTransaction(tx,auth),readTodayDelegationSupportInTransaction(tx,auth,access),
+   readTodayResponsibilitiesInTransaction(tx,auth,todayResponsibilityIds(auth,orders,money,complaints)),
+  ]);
+  const support={...money,...person,...delegation,supportMissing:[...money.supportMissing,...person.supportMissing,...delegation.supportMissing]};
+  let versions:Array<{id:string;version:number}>|null=model.rows.flatMap(row=>row.kind==='order'&&row.currentVersion!==null?[{id:row.sourceId,version:row.currentVersion}]:[]);
+  if(!deferLive&&liveOrderIds.length){
+   try{const current=await readTodayOrderVersionsInTransaction(tx,auth.tenantId,liveOrderIds);
+    versions=[...versions.filter(row=>!liveOrderIds.includes(row.id)),...current];
+   }catch{versions=null;}
+  }
+  const modelStaleOrderIds=orders.flatMap(order=>{const row=model.rows.find(source=>source.kind==='order'&&source.sourceId===order.id);return !row||row.fresh!==true&&row.status!=='SOURCE_INCOMPLETE'?[order.id]:[];});
+  const sources:TodayDashboardSources={calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource,modelStaleOrderIds};
+  const relevant=(kind:string)=>kind==='order'?access.orders:kind==='orders'?hasAnyAuthorizationArea(auth):kind==='money'?access.money||access.invoiceMail:kind==='company'?access.company:kind==='complaints'?access.complaints:access.messages;
+  return {code:'OK' as const,sources,operationalSource,settings,sourceRevision:todayModelRevision(auth,model.rows,calendar.today),sourceRevisions:todayModelRevisionMap(auth,model.rows,calendar.today),needsRebuild:model.needsRebuild,
+   pending:model.needsRebuild||model.rows.some(row=>relevant(row.kind)&&row.fresh!==true&&(deferLive||row.status!=='SOURCE_INCOMPLETE')),
+   incomplete:model.rows.some(row=>relevant(row.kind)&&row.status==='SOURCE_INCOMPLETE')};
+ });
 }

@@ -1179,7 +1179,10 @@ async function interruptNextLoad(page: Page, controlId?: string) {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
     // Keep App Router navigation/asset requests online; fail the actual data read.
-    const isLoad = isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics,targetAction);
+    // Only the independent generic GET refresh is outside the requested field fault.
+    const isLoad = !(request.method() === 'GET' && !targetAction
+      && new URL(request.url()).pathname === '/api/heute/modell')
+      && isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics,targetAction);
     if (!handled && isLoad) {
       handled = true;
       interruptedRequest=request;

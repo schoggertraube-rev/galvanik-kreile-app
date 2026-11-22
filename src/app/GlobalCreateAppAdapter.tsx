@@ -46,13 +46,12 @@ import {getDomainAttachmentOriginalAction,getDomainAttachmentsAction} from '@/ap
 import dynamic from 'next/dynamic';
 import {Button,Hinweis,Toast} from '@/ui/kr';
 import {DIALOG_LOAD_COPY} from '@/ui/situationCatalog';
-import {scheduleIdleRead} from '@/lib/client/scheduleIdleRead';
 import {createDeferredDialogEvents,withDeferredDialogReady,importWithRetry,deferredDialogUnavailable,type DeferredDialogGroup,type DeferredDialogCallbacks} from '@/lib/client/deferredDialogEvents';
 const loadCreate=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.GlobalCreateFlow,'create'),()=>deferredDialogUnavailable('create'));
 const loadMessage=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IntakeMessageDialogs,'message'),()=>deferredDialogUnavailable('message'));
-const loadObject=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IntakeObjectDialogs,'object'),()=>deferredDialogUnavailable('object'));
-const loadInvoice=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IncomingInvoiceDialogs,'invoice'),()=>deferredDialogUnavailable('invoice'));
-const loadComplaint=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.ComplaintDialogs,'complaint'),()=>deferredDialogUnavailable('complaint'));
+const loadObject=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.IntakeObjectDialogs.load();return withDeferredDialogReady(Component,'object');}).catch(()=>deferredDialogUnavailable('object'));
+const loadInvoice=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.IncomingInvoiceDialogs.load();return withDeferredDialogReady(Component,'invoice');}).catch(()=>deferredDialogUnavailable('invoice'));
+const loadComplaint=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.ComplaintDialogs.load();return withDeferredDialogReady(Component,'complaint');}).catch(()=>deferredDialogUnavailable('complaint'));
 function CommunicationUnavailable(){
  useEffect(()=>{console.warn('[DIALOG_CHUNK_LOAD_FAILED]','communication');},[]);
  return <Hinweis ton="warn">{DIALOG_LOAD_COPY.mailUnavailable}<Button text={DIALOG_LOAD_COPY.reload} onClick={()=>location.reload()}/></Hinweis>;
@@ -94,7 +93,7 @@ export function GlobalCreateAppAdapter() {
   const { canAction, hasArea, name, role, areas,offlineScope } = usePermissions();
   const [dialogRequest,setDialogRequest]=useState<{scope:typeof offlineScope}|null>(null);
   const [dialogLoadFailed,setDialogLoadFailed]=useState(false);
-  const dialogsRequested=dialogRequest?.scope===offlineScope;
+  const dialogsRequested=dialogRequest!==null&&dialogRequest.scope===offlineScope;
   const deferredDialogs=useMemo(()=>createDeferredDialogEvents(()=>{if(role&&isAppRole(role))setDialogRequest({scope:offlineScope});}),[offlineScope,role]);
   const receiverReady=useCallback((group:DeferredDialogGroup)=>deferredDialogs.ready(group),[deferredDialogs]);
   const receiverFailed=useCallback((group:DeferredDialogGroup)=>{deferredDialogs.drop(group);console.warn('[DIALOG_CHUNK_LOAD_FAILED]',group);setDialogLoadFailed(true);},[deferredDialogs]);
@@ -102,14 +101,8 @@ export function GlobalCreateAppAdapter() {
     if(!role||!isAppRole(role))return;
     return deferredDialogs.attach();
   },[deferredDialogs,role]);
-  useEffect(()=>{
-    if(!role||!isAppRole(role))return;
-    const cancel=scheduleIdleRead(()=>{
-      setDialogRequest({scope:offlineScope});
-      void Promise.all([loadCreate(),loadMessage(),loadObject(),loadInvoice(),loadComplaint(),loadCommunication()]).catch(()=>console.warn('[DIALOG_PRELOAD_FAILED]'));
-    },1500);
-    return cancel;
-  },[deferredDialogs,role,offlineScope]);
+  // PL22.11.13:57: the existing deferred event transport loads dialog
+  // receivers on the first real open request, never during layout idle.
   const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,...(canAction('createQuote')?{createQuote:(source:{id:string;number:string;customerId:string})=>requestGlobalCreate({intent:'QUOTE',prefill:{sourceComplaint:source}})}:{}),read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,sendReminder:sendeNacharbeitBegleitscheinAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
     addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
