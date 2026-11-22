@@ -95,7 +95,10 @@ const TODAY_PROJECTOR_READ_FACADES = new Map([
   ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction'])],
   ['orders',new Set(['readManualShipping','readManualShippingBatch'])],
   ['accounting',new Set(['readInvoiceVat','readCustomerCreditInTransaction'])],
-  ['customers',new Set(['readCustomerProfile'])],
+  ['customers',new Set([
+    'readCustomerProfile',
+    'readCustomerProfiles', // E2 Batchleser, PL 22.11. 08:1x
+  ])],
   ['quotes',new Set(['listOpenQuotesCommand','readQuoteCommand','readQuoteActors'])],
   ['complaints',new Set(['readComplaintsForAuthorization'])],
   ['eingang',new Set(['readIntakeMessagesForAuthorization'])],
