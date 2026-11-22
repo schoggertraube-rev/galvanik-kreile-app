@@ -181,7 +181,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 - `SURFACE_ASSIGNMENT_COPY.title`: "…" → `work.sign_missing`
 
-## Nur im Bestand (800)
+## Nur im Bestand (801)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -764,6 +764,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COLLECTION_REMINDER_COPY.unclear`: "Dieser Versand ist ungeklärt. Gleiche Ausgangsmail abgleichen, nicht erneut senden."
 - `COLLECTION_REMINDER_COPY.proofUnavailable`: "Der Original-Versandbeleg konnte nicht sicher gelesen werden."
 - `COLLECTION_REMINDER_COPY.preparedConflict`: "Die Sammelerinnerung wurde bereits vorbereitet oder der Auftrag hat sich geändert. Lies den aktuellen Ausgang neu."
+- `ORDER_CONTENT_COPY.catalogMissing`: "Diese Katalogleistung gibt es nicht mehr · wähl eine aus der Liste."
 - `ORDER_ITEM_COMPLETION_COPY.alreadyChanged`: "Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut."
 - `INVOICE_DELIVERY_COPY.manualHandover`: "Schon übergeben"
 - `INVOICE_DELIVERY_COPY.manualHandoverSaved`: "Rechnung übergeben – Beleg gespeichert."
