@@ -10,6 +10,7 @@ import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {readLiveOrderCard,readTodayOrderCards} from '@/lib/server/orderCardRead';
+import {readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
@@ -172,4 +173,30 @@ it('feeds the identical Today card/list kernels with the real actor-free capabil
  const denied=await readTodayOrderCards({...actualCapability,permissions:[]},[orderId]);
  expect(denied.get(orderId)).toMatchObject({code:'FORBIDDEN'});
  expect(await sql`SELECT id::text FROM public.app_users WHERE tenant_id=${tenant} ORDER BY id`).toEqual(before);
+});
+
+
+it('projects the same secured order-photo evidence without an actor and retains the existing evidence gate',async()=>{
+ const actor=await auth(),expected=(await readOrderEvidenceBatch(actor,[orderId])).get(orderId);
+ expect(expected?.code).toBe('OK');if(expected?.code!=='OK')throw Error('TEST_SECURED_EVIDENCE_REQUIRED');
+ expect(expected.data.some(row=>row.source==='ORDER_STATION_ATTACHMENT'&&row.original.state==='VERIFIED'&&row.original.hashAlgorithm==='SHA256'&&row.original.mimeType==='image/png')).toBe(true);
+ let used:ProjectorAuthorization|undefined;
+ const readOnly:TodayProjectionPorts={...ports,readSources:async(capability,keys)=>{
+  used=capability;
+  const ids=keys.filter(key=>key.kind==='order').map(key=>key.sourceId);
+  const [cards,evidence]=await Promise.all([readTodayOrderCards(capability,ids),readOrderEvidenceBatch(capability,ids)]);
+  const result=new Map<string,TodayProjectionResult>();
+  for(const key of keys){
+   const card=cards.get(key.sourceId),proof=evidence.get(key.sourceId);
+   if(key.kind==='order'&&card?.code==='OK'&&proof?.code==='OK')result.set(todaySourceKey(key),{code:'OK',payload:{evidence:proof.data},sourceVersion:card.data.version,listed:true});
+   else result.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
+  }
+  return result;
+ }};
+ expect((await rebuildTodayModel(tenant,readOnly)).code).toBe('OK');
+ expect(used).toBeDefined();if(!used)throw Error('TEST_READONLY_EVIDENCE_CAPABILITY_REQUIRED');
+ const [saved]=await sql`SELECT payload,status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`;
+ expect(saved).toEqual({payload:JSON.parse(JSON.stringify({evidence:expected.data})),status:'OK',fresh:true});
+ expect((await readOrderEvidenceBatch({...used,permissions:[]},[orderId])).get(orderId)).toMatchObject({code:'FORBIDDEN'});
+ expect((await readOrderEvidenceBatch(used,[orderId])).get(orderId)).toEqual(expected);
 });
