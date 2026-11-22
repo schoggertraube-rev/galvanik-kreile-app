@@ -55,6 +55,11 @@ export const DEFAULT_PAGE_READ_SETTINGS={
 type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;queries:PageReadQueryObservation;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
+/** PL22.11.01:55 E0: sending is a command, never a page read. Only its
+ * existing transport leaves this scope; the caller's deadline is restored. */
+export function outsidePageReadBudget<T>(work:()=>Promise<T>):Promise<T>{
+ return budgets.exit(work);
+}
 export const AUTHORIZATION_READ_TIMEOUT_MS=DEFAULT_PAGE_READ_SETTINGS.authorizationTimeoutMs;
 export const isAuthorizationRead=():boolean=>budgets.getStore()?.kind==='authorization';
 /** Start composition immediately, but acquire data connections only after the

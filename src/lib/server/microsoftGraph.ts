@@ -1,5 +1,5 @@
 import "server-only";
-import {pageReadFetchPort,DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
+import {pageReadFetchPort,DEFAULT_PAGE_READ_SETTINGS,outsidePageReadBudget} from '@/db/readBudget';
 import {createHash} from "node:crypto";
 
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
@@ -282,6 +282,7 @@ export async function sendMicrosoftGraphMail(
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
 ): Promise<GraphResult<{ accepted: true }>> {
+  return outsidePageReadBudget<GraphResult<{accepted:true}>>(async()=>{
   const config = readConfig(env);
   if (!config) return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
   try {
@@ -316,6 +317,7 @@ export async function sendMicrosoftGraphMail(
   } catch (error) {
     return unavailable("Die E-Mail konnte nicht sicher an Microsoft 365 übergeben werden.", error);
   }
+  });
 }
 
 /** Resolve an uncertain send by its immutable provider header, never by subject. */
