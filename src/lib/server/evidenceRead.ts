@@ -162,7 +162,7 @@ function mapTargets(value: unknown): EvidenceTargetLink[] {
 
 function mapRecord(
   row: EvidenceViewRow,
-  authorization: AuthorizationSnapshot,
+  authorization: Pick<AuthorizationSnapshot,'tenantId'>,
   requestedTarget: ReadEvidenceTargetInput,
 ): EvidenceReadRecord {
   if (
@@ -267,7 +267,7 @@ function mapRecord(
 
 /** Batch only the existing qualified order evidence projection; no originals
  * are fetched from Storage and a corrupt order cannot erase another order. */
-export async function readOrderEvidenceBatch(authorization:AuthorizationSnapshot,orderIds:readonly string[]):Promise<Map<string,EvidenceReadResult<EvidenceReadRecord[]>>>{
+export async function readOrderEvidenceBatch(authorization:Pick<AuthorizationSnapshot,'tenantId'|'permissions'>,orderIds:readonly string[]):Promise<Map<string,EvidenceReadResult<EvidenceReadRecord[]>>>{
  const result=new Map<string,EvidenceReadResult<EvidenceReadRecord[]>>();
  if(!authorization.permissions.includes('perm_view_leitstand')||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
   for(const id of orderIds)result.set(id,{code:'FORBIDDEN',message:'Nachweise sind nicht erlaubt.'});return result;

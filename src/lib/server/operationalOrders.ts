@@ -10,14 +10,14 @@ import {
 export type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 
 export async function getOperationalOrders(
-  authorization: AuthorizationSnapshot,
+  authorization: Pick<AuthorizationSnapshot,'tenantId'>,
   projection?:{purpose:'today'},
 ): Promise<OperationalOrder[]> {
   return readTenantOperationalOrders(authorization,projection);
 }
 
 export async function getOperationalOrderCount(
-  authorization: AuthorizationSnapshot,
+  authorization: Pick<AuthorizationSnapshot,'tenantId'>,
 ): Promise<number> {
   return readTenantOperationalOrderCount(authorization);
 }

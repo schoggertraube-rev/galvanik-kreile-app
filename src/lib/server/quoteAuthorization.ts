@@ -1,10 +1,15 @@
 import {getAuthorizationActionGrants,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {type AuthorizationSnapshot} from './authorization';
+import {authorizationReadContext,type AuthorizedReadContext,type AuthorizationSnapshot} from './authorization';
+
+/** Same commercial read predicate for a real-session wrapper and a normalized
+ * projector callback; write capabilities still require the original full actor. */
+export function quoteReadContext(authorization:Pick<AuthorizedReadContext,'tenantId'|'canReadArea'>){
+  return {tenantId:authorization.tenantId,capabilities:{canReadQuote:authorization.canReadArea('preise')&&authorization.canReadArea('auftraege')}};
+}
 
 export function quoteCommandContext(authorization: AuthorizationSnapshot) {
   const actionGrants = getAuthorizationActionGrants(authorization);
-  const canReadQuote = hasAuthorizationArea(authorization, "preise")
-    && hasAuthorizationArea(authorization, "auftraege");
+  const {capabilities:{canReadQuote}}=quoteReadContext(authorizationReadContext(authorization));
   return {
     tenantId: authorization.tenantId,
     userId: authorization.userId,

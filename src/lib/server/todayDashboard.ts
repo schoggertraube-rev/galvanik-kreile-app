@@ -1,6 +1,5 @@
 import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import {readUnsentInvoiceMailGroups} from './communicationDocumentPort';
-import {canTransportInvoiceDocument} from './authorization';
 import {V45_TEXT,SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,SURFACE_ASSIGNMENT_COPY} from '@/ui/situationCatalog';
 import {suggestOrderPositionSurface,orderPositionSurfaceLabel} from '@/lib/orderPositionContract';
 import {listOpenQuotesAction,readQuoteAction} from '@/app/actions/quotes.actions';
@@ -12,7 +11,7 @@ import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentR
 
 import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {authorizationReadContext,type AuthorizedReadContext,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
@@ -150,7 +149,18 @@ export async function readTodayResponsibilities(auth:AuthorizationSnapshot,ids:r
  }).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
 }
 
-async function readTodaySupport(auth:AuthorizationSnapshot,today:string,ordersAllowed:boolean,moneyAllowed:boolean){
+/** One source-access mask for the existing live composition and the prepared
+ * model. This only reuses canonical area gates, never constructs an identity. */
+export function todaySourceAccess(auth:Pick<AuthorizedReadContext,'canReadArea'>){
+ const invoiceMail=auth.canReadArea('preise');
+ return {
+  orders:auth.canReadArea('auftraege'),messages:auth.canReadArea('mails'),money:auth.canReadArea('zahlungen'),
+  complaints:(['auftraege','entscheiden','zahlungen','kunden'] as const).some(area=>auth.canReadArea(area)),
+  invoiceMail,company:invoiceMail,
+ };
+}
+async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:ReturnType<typeof todaySourceAccess>){
+ const {orders:ordersAllowed,money:moneyAllowed}=access;
  const [money,person,orders]=await Promise.all([
   withPrivilegedTenantTransaction(auth,async tx=>{
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`
@@ -197,7 +207,7 @@ async function readTodaySupport(auth:AuthorizationSnapshot,today:string,ordersAl
           HAVING count(collection_order.order_id)>0
           ORDER BY collection.monat, customer.name, collection.id
         `)) : {code:'OK' as const,data:[] as CollectionRow[]};
-      const invoiceMailSource=canTransportInvoiceDocument(auth)?await readTodaySource(tx,nested=>readUnsentInvoiceMailGroups(nested,auth.tenantId)):{code:'OK' as const,data:{groups:[],missing:[]}};
+      const invoiceMailSource=access.invoiceMail?await readTodaySource(tx,nested=>readUnsentInvoiceMailGroups(nested,auth.tenantId)):{code:'OK' as const,data:{groups:[],missing:[]}};
 
    return {supportMissing:invoiceMailSource.code!=='OK'?['TODAY_UNSENT_INVOICE_SOURCE']:invoiceMailSource.data.missing,invoiceMailSource,invoiceSource,invoices:invoiceSource.code==='OK'?invoiceSource.data:[],prepaymentSource,prepayments:prepaymentSource.code==='OK'?prepaymentSource.data:[],collectionSource,collections:collectionSource.code==='OK'?collectionSource.data:[]};
   }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
@@ -251,9 +261,8 @@ export type TodayQuoteFollowup={isMine?:boolean;id:string;title:string;dueDate:s
 export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>): Promise<TodayDashboard> {
   const diagnosticStarted=Date.now();
   const calendar=readTodayCalendar(readNow),today=calendar.today;
-  const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
-  const graphAllowed = hasAuthorizationArea(auth, "mails");
-  const moneyAllowed = hasAuthorizationArea(auth, "zahlungen");
+  const access=todaySourceAccess(authorizationReadContext(auth));
+  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
   const quotesRead=(async()=>{
   const quoteList=graphAllowed?await withPageReadPhase('today.quotes',()=>listOpenQuotesAction({purpose:'today'}).catch(()=>({code:'SOURCE_INCOMPLETE' as const}))):{code:'OK' as const,quotes:[]};
   const rows=quoteList.code==='OK'?await Promise.all(quoteList.quotes.map(async quote=>{
@@ -273,10 +282,10 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
     withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'})).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
     withPageReadPhase('today.graph',()=>graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
-    withPageReadPhase('today.support',()=>readTodaySupport(auth,today,ordersAllowed,moneyAllowed)),
-    withPageReadPhase('today.complaints',()=>['auftraege','entscheiden','zahlungen','kunden'].some(area=>hasAuthorizationArea(auth,area as 'auftraege'|'entscheiden'|'zahlungen'|'kunden'))?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]})),
+    withPageReadPhase('today.support',()=>readTodaySupport(auth,today,access)),
+    withPageReadPhase('today.complaints',()=>access.complaints?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]})),
     withPageReadPhase('today.followups',()=>graphAllowed?readQuoteFollowups().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'quote-followups',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};}):Promise.resolve({code:'OK' as const,tasks:[]})),
-    withPageReadPhase('today.company',()=>canTransportInvoiceDocument(auth)?readPageReadSettingsAction({includeCompanyName:true}):Promise.resolve({code:'FORBIDDEN' as const})),
+    withPageReadPhase('today.company',()=>access.company?readPageReadSettingsAction({includeCompanyName:true}):Promise.resolve({code:'FORBIDDEN' as const})),
   ]);
 
   const orders=orderSource.code==='OK'?orderSource.data:[];
