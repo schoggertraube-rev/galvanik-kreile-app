@@ -1,5 +1,14 @@
 [
   {
+    "datum": "2026-11-22",
+    "pr": 257,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Deine ausgewählten Katalogleistungen lassen sich im Auftrag sicher speichern."
+    ]
+  },
+  {
     "datum": "2026-11-21",
     "pr": 255,
     "seite": "kunden",

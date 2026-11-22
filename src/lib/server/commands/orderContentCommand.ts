@@ -332,7 +332,7 @@ export async function changeOrderContent(input: ChangeOrderContentInput,readCust
       }
       if (existing.some((row) => !items.some((item) => item.id === row.id))) return { code: "VALIDATION_ERROR" as const, message: "Positionen dürfen hier nicht gelöscht werden." };
       const catalogIds = [...new Set(items.flatMap((item) => item.catalogServiceId ? [item.catalogServiceId] : []))];
-      const catalog = catalogIds.length ? await tx.execute<CatalogRow>(sql`SELECT id::text AS id, name, surface, unit, net_price_cents, vat_rate_basis_points, active FROM public.catalog_services WHERE tenant_id=${auth.data.tenantId} AND id = ANY(${catalogIds}::uuid[])`) : [];
+      const catalog = catalogIds.length ? await tx.execute<CatalogRow>(sql`SELECT id::text AS id, name, surface, unit, net_price_cents, vat_rate_basis_points, active FROM public.catalog_services WHERE tenant_id=${auth.data.tenantId} AND id = ANY(ARRAY[${sql.join(catalogIds.map(id=>sql`${id}`),sql`, `)}]::uuid[])`) : [];
       if (catalog.length !== catalogIds.length) return { code: "VALIDATION_ERROR" as const, message: "Eine gewählte Katalogleistung ist nicht verfügbar." };
       const services = new Map(catalog.map((service) => [service.id, service]));
       const normalized = items.map((item) => {
