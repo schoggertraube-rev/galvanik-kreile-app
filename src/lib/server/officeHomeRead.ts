@@ -72,7 +72,17 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,d
       modelRead,
     } as const;
     if(orderSource.code!=='OK')return {kind:'partial',projection:null,...common};
-    const projection = buildOrdersHomeProjection(orderSource.orders.map(toHomeSource), new Date().toISOString());
+    let projection:ReturnType<typeof buildOrdersHomeProjection>;
+    try {
+      projection=buildOrdersHomeProjection(orderSource.orders.map(toHomeSource),new Date().toISOString());
+    } catch(error) {
+      if(!(error instanceof Error)||!['ORDERS_HOME_SOURCE_INVALID','ORDERS_HOME_PROJECTION_INVALID'].includes(error.message))throw error;
+      // A legacy/incomplete order cannot form this projection. Preserve the
+      // independently qualified Today dashboard; do not invent a due date.
+      dashboard.datenluecken=[...(dashboard.datenluecken??[]),'ORDERS_HOME_PROJECTION_SOURCE'];
+      modelRead.incomplete=true;
+      return {kind:'partial',projection:null,...common};
+    }
     return orderSource.orders.length === 0
       ? { kind: "empty", ...common, projection }
       : { kind: "data", ...common, projection };

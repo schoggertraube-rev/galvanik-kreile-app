@@ -386,3 +386,25 @@ it('public model Action keeps the real session actor and never serializes privat
   for(const key of ['sources','operationalSource','settings','authorization'])expect(actual).not.toHaveProperty(key);
  });
 });
+
+
+it('retains the known Today dashboard when a TEST cached order cannot form a complete Home projection',async()=>{
+ await readyInvoiceOrder('TEST incomplete Home projection');
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ const baseline=await withSession(full,()=>readOfficeHomeModelAction());
+ if(!('dashboard'in baseline))throw Error('TEST_KNOWN_HOME_REQUIRED');
+ const read=async()=>{const [row]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;if(!row||!Array.isArray(row.row.payload)||!row.row.payload.length)throw Error('TEST_FULL_ORDER_SOURCE_REQUIRED');return row.row;};
+ await withRestoredTestSource({label:'TEST explicit malformed derived Home order, whole-row restoration',read,restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_MODEL_COLUMN_INVALID');
+  const names=columns.map(column=>'"'+column+'"').join(',');
+  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+ }},async()=>{
+  await sql`UPDATE private.today_source_v1 SET payload=jsonb_set(payload,'{0,dueDate}',to_jsonb(''::text)) WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  const actual=await withSession(full,()=>readOfficeHomeModelAction());
+  expect(actual.kind).toBe('partial');
+  if(!('dashboard'in actual))throw Error('TEST_EXISTING_DASHBOARD_MUST_SURVIVE');
+  expect(actual.projection).toBeNull();
+  expect(actual.dashboard.items.map(item=>item.key)).toEqual(baseline.dashboard.items.map(item=>item.key));
+  expect(actual.dashboard.datenluecken).toContain('ORDERS_HOME_PROJECTION_SOURCE');
+ });
+});
