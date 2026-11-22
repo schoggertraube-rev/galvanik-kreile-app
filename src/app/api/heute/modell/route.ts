@@ -2,6 +2,7 @@ import {readTodayHomeRevision,readTodayHomePart} from '@/app/actions/orders.acti
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {resolveAuthorization,hasAnyAuthorizationArea} from '@/lib/server/authorization';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
+import {withPageReadBudget} from '@/db/readBudget';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -13,7 +14,7 @@ export async function GET(request:Request){
  const query=new URL(request.url).searchParams;
  const part=query.get('bereich');
  if(query.get('nur')!=='veraltet'||[...query.keys()].some(key=>key!=='nur'&&key!=='bereich')||query.getAll('nur').length!==1||query.getAll('bereich').length>1||part!==null&&!['week','stock','notices','counts'].includes(part))return new Response(null,{status:400,headers:responseHeaders});
- try{
+ try{return await withPageReadBudget(async()=>{
   const auth=await resolveAuthorization();
   if(!auth.ok)return new Response(null,{status:401,headers:responseHeaders});
   if(!hasAnyAuthorizationArea(auth.data))return new Response(null,{status:403,headers:responseHeaders});
@@ -40,7 +41,7 @@ export async function GET(request:Request){
   // refresh can take longer than an HTTP request and must never hold this GET
   // (or its database slot) open until the platform's runtime limit.
   return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
- }catch{
+ },5_000);}catch{
   console.error('[TODAY_MODEL_READ_FAILED]',{code:'SOURCE_INCOMPLETE'});
   return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});
  }

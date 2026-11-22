@@ -310,7 +310,10 @@ it('conditional real GET skips unchanged composition and reloads after an actual
   const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-09-05',reason:'TEST conditional model actual source sequence',clientEventId:randomUUID()};
   expect((await changeOrderPromisedDueDateAction(command)).code).toBe('OK');
   const changed=await getModelRoute(request());expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(etag);
-  const current=await changed.json();expect(current.model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)).toMatchObject({version:order.version+1});
+  const current=await changed.json();expect(current.model.modelRead.pending).toBe(true);
+  expect((await refreshTodayModel(tenant)).code).toBe('OK');
+  const settled=await getModelRoute(request());expect(settled.status).toBe(200);
+  expect((await settled.json()).model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)).toMatchObject({version:order.version+1});
   expect(await changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(command)))).toMatchObject({code:'OK',replayed:true});
  });
 });
