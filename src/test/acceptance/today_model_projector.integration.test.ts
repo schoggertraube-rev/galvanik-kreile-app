@@ -20,6 +20,7 @@ import {authorizationReadContext,canReadQuoteFollowupsForRead,type AuthorizedRea
 import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 type TodayProjectionPorts=NonNullable<Parameters<typeof refreshTodayModel>[1]>;
 type TodayProjectionResult=Awaited<ReturnType<TodayProjectionPorts['readSources']>> extends ReadonlyMap<string,infer Result>?Result:never;
 const todaySourceKey=(key:Parameters<TodayProjectionPorts['readSources']>[1][number])=>key.kind+':'+key.sourceId;
@@ -229,4 +230,39 @@ it('PL07:32 keeps the canonical invoice transport gate and both source-reader ga
   }
  }
  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
+});
+
+it('does not publish the old active-role union as fresh when the tenant epoch changes before source snapshots',async()=>{
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ const read=()=>sql`SELECT to_jsonb(actor) AS row FROM public.app_users actor WHERE tenant_id=${tenant} ORDER BY id`;
+ await withRestoredTestSource({label:'TEST complete profiles in pre-snapshot epoch race',read,restore:async originals=>{
+  for(const {row} of originals){
+   const columns=Object.keys(row);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_PROFILE_COLUMN_INVALID');
+   const names=columns.map(column=>'"'+column+'"').join(',');
+   await sql`UPDATE public.app_users SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::public.app_users,${sql.json(row)}::jsonb)) WHERE tenant_id=${tenant} AND id=${String(row.id)}::uuid`;
+  }
+ }},async()=>{
+  let sourceReads=0;
+  await rebuildTodayModel(tenant,{...ports,
+   listOrderIds:async capability=>{
+    expect(capability.hasActiveProfiles).toBe(true);
+    // Explicit isolated source race, after the real profile query and before
+    // pending(). No actor, role, card or permission result is fabricated.
+    await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${tenant}`;
+    return (await getOperationalOrders(capability,{purpose:'today'})).map(row=>row.id);
+   },
+   readSources:async(capability,keys)=>{
+    sourceReads++;
+    const ids=keys.filter(key=>key.kind==='order').map(key=>key.sourceId),cards=await readTodayOrderCards(capability,ids);
+    const result=new Map<string,TodayProjectionResult>();
+    for(const key of keys){
+     const card=cards.get(key.sourceId);
+     result.set(todaySourceKey(key),key.kind==='order'&&card?.code==='OK'?{code:'OK',payload:{card:card.data},sourceVersion:card.data.version,listed:true}:{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
+    }
+    return result;
+   },
+  });
+  expect(sourceReads).toBe(0);
+  expect(await sql`SELECT source.built_tenant_seq=tenant.tenant_seq AS fresh FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant USING(tenant_id) WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${orderId}`).toEqual([{fresh:false}]);
+ });
 });

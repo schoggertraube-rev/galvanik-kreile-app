@@ -138,6 +138,7 @@ async function pending(tenantId:string,lease:Lease,limit?:number):Promise<Snapsh
  return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<Snapshot>(sql`SELECT source.kind,source.source_id AS "sourceId",source.source_seq::text AS "sourceSeq",tenant.tenant_seq::text AS "tenantSeq",${lease.day}::text AS day
   FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant ON tenant.tenant_id=source.tenant_id
   WHERE source.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
+   AND tenant.tenant_seq=${lease.tenantSeq}::bigint
    AND (source.source_seq<>source.built_seq OR source.built_tenant_seq<>tenant.tenant_seq OR source.built_day IS DISTINCT FROM ${lease.day}::date
     OR source.projector_version<>${TODAY_PROJECTOR_VERSION} OR source.status IN ('PENDING','SOURCE_INCOMPLETE'))
   ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
@@ -168,6 +169,7 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
    FROM (VALUES ${sql.join(values,sql`, `)}) AS build(kind,source_id,source_seq,tenant_seq,day,status,error_code,payload,source_version,listed),private.today_tenant_v1 tenant
    WHERE source.tenant_id=${tenantId} AND source.kind=build.kind AND source.source_id=build.source_id AND source.source_seq=build.source_seq
     AND tenant.tenant_id=source.tenant_id AND tenant.tenant_seq=build.tenant_seq
+    AND tenant.tenant_seq=${lease.tenantSeq}::bigint
     AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
     AND (build.kind<>'order' OR build.status<>'OK' OR EXISTS(SELECT 1 FROM public.orders orders
       WHERE orders.tenant_id=source.tenant_id AND orders.id=source.source_id AND orders.version=build.source_version))
@@ -205,7 +207,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
    await withPrivilegedTenantTransaction({tenantId},async tx=>{
     if(keys.length)await tx.execute(sql`INSERT INTO private.today_source_v1(tenant_id,kind,source_id)
      SELECT ${tenantId},key.kind,key.id FROM (VALUES ${sql.join(keys.map(key=>sql`(${key.kind}::text,${key.sourceId}::text)`),sql`, `)}) AS key(kind,id)
-     WHERE EXISTS(SELECT 1 FROM private.today_tenant_v1 tenant WHERE tenant.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp())
+     WHERE EXISTS(SELECT 1 FROM private.today_tenant_v1 tenant WHERE tenant.tenant_id=${tenantId} AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp())
      ORDER BY key.kind,key.id ON CONFLICT(tenant_id,kind,source_id) DO UPDATE SET listed=true,source_seq=today_source_v1.source_seq+1`);
     const removed=known.filter(row=>!ids.includes(row.id));
     if(removed.length)await tx.execute(sql`UPDATE private.today_source_v1 source SET listed=false,status='GONE',payload=NULL,source_version=NULL,built_seq=source_seq,
@@ -221,7 +223,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   const rows=await pending(tenantId,lease,rebuild?undefined:settings.todayRefreshBatchLimit);
   let built=0,stale=0;
   for(let offset=0;offset<rows.length;offset+=15){const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports);built+=result.built;stale+=result.stale;}
-  if(rebuild)await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND refresh_lease_until=${lease.token}::timestamptz`));
+  if(rebuild)await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp()`));
   return {code:'OK' as const,built,stale};
  }finally{await release(tenantId,lease);}
 }
