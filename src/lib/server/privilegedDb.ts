@@ -21,7 +21,9 @@ export async function withPrivilegedTenantTransaction<T>(
   const observed=actionObservationActive();
   const result=await db.transaction(async (transaction) => {
     await transaction.execute(
-      sql`SELECT set_config('app.tenant_id', ${authorization.tenantId}, true),set_config('app.today_source_changed','',true)`,
+      observed
+        ? sql`SELECT set_config('app.tenant_id', ${authorization.tenantId}, true),set_config('app.today_source_changed','',true)`
+        : sql`SELECT set_config('app.tenant_id', ${authorization.tenantId}, true)`,
     );
     const value=await work(transaction as PrivilegedTenantTransaction);
     if(!observed)return {value,sourceChanged:false};
