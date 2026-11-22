@@ -62,6 +62,9 @@
     "@/modules/fundament/public#PackageSwitchValues",
     "@/modules/fundament/public#mapPackageSwitchRows",
     "@/modules/fundament/server-public#readPageReadSettings",
+    "@/modules/fundament/server-public#readTodayReadSettings",
+    "@/modules/fundament/public#TodayReadSettings",
+    "@/modules/fundament/public#todayReadSettingsFromCompany",
     "@/modules/fundament/public#PageReadSettings",
     "@/modules/fundament/public#pageReadSettingsFromCompany",
     "@/modules/fundament/public#parsePageReadSettings"
