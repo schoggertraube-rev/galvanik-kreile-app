@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {beforeAll,expect,it,vi,expectTypeOf} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {readLiveOrderCard,readTodayOrderCards} from '@/lib/server/orderCardRead';
@@ -15,6 +15,11 @@ import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {refreshTodayModel,rebuildTodayModel,type ProjectorAuthorization} from '@/lib/server/todayProjection';
+import {APP_ROLES,canTransportInvoiceDocument,normalizeAccessAreasForRole} from '@/lib/auth/authorizationContract';
+import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
+import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} from '@/lib/server/commands/immutableInvoiceCommand';
+import {readInvoiceVat} from '@/modules/accounting/server-public';
+import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 type TodayProjectionPorts=Parameters<typeof refreshTodayModel>[1];
 type TodayProjectionResult=Awaited<ReturnType<TodayProjectionPorts['readSources']>> extends ReadonlyMap<string,infer Result>?Result:never;
 const todaySourceKey=(key:Parameters<TodayProjectionPorts['readSources']>[1][number])=>key.kind+':'+key.sourceId;
@@ -199,4 +204,26 @@ it('projects the same secured order-photo evidence without an actor and retains 
  expect(saved).toEqual({payload:JSON.parse(JSON.stringify({evidence:expected.data})),status:'OK',fresh:true});
  expect((await readOrderEvidenceBatch({...used,permissions:[]},[orderId])).get(orderId)).toMatchObject({code:'FORBIDDEN'});
  expect((await readOrderEvidenceBatch(used,[orderId])).get(orderId)).toEqual(expected);
+});
+it('PL07:32 keeps the canonical invoice transport gate and both source-reader gates equal for every actual role',async()=>{
+ const original=await readyInvoiceOrder('TEST canonical invoice read gates','shipping');
+ const input={orderId:original.orderId,expectedVersion:original.version};
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ for(const role of APP_ROLES){
+  for(const requested of [[],['preise','auftraege']] as const){
+   const rights=normalizeAccessAreasForRole(role,[...requested]);
+   const fixture=await createFixture([...rights],role);
+   const resolved=await withSession(fixture,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_INVOICE_GATE_REAL_AUTH');
+   const canonical=canTransportInvoiceDocument(resolved.data),session=authorizationReadContext(resolved.data),areas=new Set(resolved.data.areas);
+   const projection:AuthorizedReadContext={tenantId:resolved.data.tenantId,permissions:resolved.data.permissions,canReadArea:area=>areas.has(area)};
+   expect(session.canReadArea('preise'),role).toBe(canonical);expect(projection.canReadArea('preise'),role).toBe(canonical);
+   const single=await readInvoiceShippingConsequences(projection,input,readInvoiceVat,readShippingSettingsInTransaction);
+   const batch=await readInvoiceShippingConsequencesBatch(projection,[input],readInvoiceVat,readShippingSettingsInTransaction);
+   expect(single!==undefined,role).toBe(canonical);expect(batch.get(original.orderId)!==undefined,role).toBe(canonical);
+   expect(batch.get(original.orderId),role).toEqual(single);
+   expect(await readInvoiceShippingConsequences(resolved.data,JSON.parse(JSON.stringify(input)),readInvoiceVat,readShippingSettingsInTransaction),role).toEqual(single);
+   expect(await readInvoiceShippingConsequencesBatch(session,[input],readInvoiceVat,readShippingSettingsInTransaction),role).toEqual(batch);
+  }
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
 });
