@@ -64,6 +64,7 @@ const todayReadProjection=sql`jsonb_build_object(
  'has_todayReadSource',to_jsonb(company_settings)?'today_read_source','todayReadSource',to_jsonb(company_settings)->'today_read_source',
  'has_todayRefreshBatchLimit',to_jsonb(company_settings)?'today_refresh_batch_limit','todayRefreshBatchLimit',to_jsonb(company_settings)->'today_refresh_batch_limit',
  'has_todayRefreshLeaseSeconds',to_jsonb(company_settings)?'today_refresh_lease_seconds','todayRefreshLeaseSeconds',to_jsonb(company_settings)->'today_refresh_lease_seconds',
+ 'has_todayShadowIntervalMs',to_jsonb(company_settings)?'today_shadow_interval_ms','todayShadowIntervalMs',to_jsonb(company_settings)->'today_shadow_interval_ms',
  'has_todayStalePollMs',to_jsonb(company_settings)?'today_stale_poll_ms','todayStalePollMs',to_jsonb(company_settings)->'today_stale_poll_ms',
  'has_navPrefetchMaxAgeSeconds',to_jsonb(company_settings)?'nav_prefetch_max_age_seconds','navPrefetchMaxAgeSeconds',to_jsonb(company_settings)->'nav_prefetch_max_age_seconds') AS today_read_source`;
 const readFreshPageSettingsSourcesRow=async(tenantId:string)=>withPageReadSettingsSource(async()=>{
@@ -88,7 +89,7 @@ export async function readPageReadSettings(context:{tenantId:string}){
 
 export async function readTodayReadSettings(context:{tenantId:string;fresh?:true}){
  const rows=await (context.fresh?readFreshPageSettingsSourcesRow:readPageSettingsSourcesRow)(context.tenantId);
- if(!rows.length)return {todayReadSource:DEFAULT_PAGE_READ_SETTINGS.todayReadSource,todayRefreshBatchLimit:DEFAULT_PAGE_READ_SETTINGS.todayRefreshBatchLimit,todayRefreshLeaseSeconds:DEFAULT_PAGE_READ_SETTINGS.todayRefreshLeaseSeconds,todayStalePollMs:DEFAULT_PAGE_READ_SETTINGS.todayStalePollMs,navPrefetchMaxAgeSeconds:DEFAULT_PAGE_READ_SETTINGS.navPrefetchMaxAgeSeconds};
+ if(!rows.length)return {todayReadSource:DEFAULT_PAGE_READ_SETTINGS.todayReadSource,todayRefreshBatchLimit:DEFAULT_PAGE_READ_SETTINGS.todayRefreshBatchLimit,todayRefreshLeaseSeconds:DEFAULT_PAGE_READ_SETTINGS.todayRefreshLeaseSeconds,todayShadowIntervalMs:DEFAULT_PAGE_READ_SETTINGS.todayShadowIntervalMs,todayStalePollMs:DEFAULT_PAGE_READ_SETTINGS.todayStalePollMs,navPrefetchMaxAgeSeconds:DEFAULT_PAGE_READ_SETTINGS.navPrefetchMaxAgeSeconds};
  if(rows.length!==1)throw Error('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
  const settings=todayReadSettingsFromCompany(rows[0].today_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!settings)throw Error('TODAY_READ_SETTINGS_SOURCE_INVALID');

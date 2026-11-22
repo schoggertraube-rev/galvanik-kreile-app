@@ -47,7 +47,7 @@ export function logPageReadQueryObservation(observation:PageReadQueryObservation
  * The native settings contract checks the additive SQL defaults against these. */
 export const DEFAULT_PAGE_READ_SETTINGS={
  queryTimeoutMs:10_000,invoiceMailBatchLimit:101,
- todayReadSource:'modell',todayRefreshBatchLimit:20,todayRefreshLeaseSeconds:30,todayStalePollMs:1500,navPrefetchMaxAgeSeconds:60,
+ todayReadSource:'modell',todayRefreshBatchLimit:20,todayRefreshLeaseSeconds:30,todayShadowIntervalMs:60000,todayStalePollMs:1500,navPrefetchMaxAgeSeconds:60,
  authorizationTimeoutMs:1000,authorizationPoolSize:2,authorizationIdleTimeoutSeconds:300,
  get graphTimeoutMs(){return this.queryTimeoutMs;},
 } as const;

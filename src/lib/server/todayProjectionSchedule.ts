@@ -10,7 +10,8 @@ export const TODAY_PROJECTOR_VERSION=1;
 export const TODAY_MODEL_LIST_KINDS=['orders','messages','money','complaints','quote_followups','quotes','tasks','company'] as const;
 
 type Mode='refresh'|'rebuild';
-type Jobs={scheduled:boolean;tenants:Map<string,Mode>};
+type Shadow={auth:{tenantId:string};today:string;live:Counts};
+type Jobs={scheduled:boolean;tenants:Map<string,Mode>;shadows:Map<string,Shadow>};
 // Keyed only by Next's actual request-local headers object. No header value is
 // read, no authorization is cached, and the weak entry dies with that request.
 const requests=new WeakMap<object,Jobs>();
@@ -18,17 +19,25 @@ const requests=new WeakMap<object,Jobs>();
 /** One native after job per request; a later stale-day shadow read upgrades an
  * already registered bounded refresh to rebuild instead of competing for its lease. */
 export async function scheduleTodayProjection(tenantIds:readonly string[],mode:Mode){
+ return queueTodayWork(tenantIds,mode);
+}
+async function queueTodayWork(tenantIds:readonly string[],mode?:Mode,shadow?:Shadow){
  try{
   const request=await headers();
   let jobs=requests.get(request);
-  if(!jobs){jobs={scheduled:false,tenants:new Map()};requests.set(request,jobs);}
-  for(const tenantId of tenantIds)if(mode==='rebuild'||!jobs.tenants.has(tenantId))jobs.tenants.set(tenantId,mode);
+  if(!jobs){jobs={scheduled:false,tenants:new Map(),shadows:new Map()};requests.set(request,jobs);}
+  if(mode)for(const tenantId of tenantIds)if(mode==='rebuild'||!jobs.tenants.has(tenantId))jobs.tenants.set(tenantId,mode);
+  if(shadow)jobs.shadows.set(shadow.auth.tenantId,shadow);
   if(jobs.scheduled)return;
   const pending=jobs;
   after(()=>outsidePageReadBudget(async()=>{
    const {refreshTodayModel,rebuildTodayModel}=await import('./todayProjection');
-   for(const [tenantId,requested] of pending.tenants){
-    try{await (requested==='rebuild'?rebuildTodayModel(tenantId):refreshTodayModel(tenantId));}
+   for(const tenantId of new Set([...pending.tenants.keys(),...pending.shadows.keys()])){
+    const requested=pending.tenants.get(tenantId),shadow=pending.shadows.get(tenantId);
+    try{
+     if(shadow)await refreshTodayModel(tenantId,undefined,{shadow:{today:shadow.today,live:shadow.live},requestedMode:requested});
+     else await (requested==='rebuild'?rebuildTodayModel(tenantId):refreshTodayModel(tenantId));
+    }
     catch{console.error('[TODAY_PROJECTOR_REFRESH_FAILED]',{code:'SOURCE_INCOMPLETE'});}
    }
   }));
@@ -46,7 +55,19 @@ const count=(path:string[])=>{
 /** Dark diagnostic only. No model data replaces the live dashboard. Query and
  * log carry counts, never original payloads, money values, names or identities. */
 export async function observeTodayModelShadow(auth:{tenantId:string},today:string,live:Counts){
+ // Capture count-only inputs now; all settings/claim/comparison SQL runs after
+ // response close in the same coalesced native job as command refreshes.
+ return queueTodayWork([],undefined,{auth:{tenantId:auth.tenantId},today,live:{...live}});
+}
+/** The sole projector composition root supplies the actual setting. */
+export async function compareTodayModelShadow(auth:{tenantId:string},today:string,live:Counts,intervalMs:number):Promise<boolean>{
  try{
+  const slot=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`INSERT INTO private.today_tenant_v1(tenant_id,shadow_checked_at)
+   VALUES(${auth.tenantId},statement_timestamp())
+   ON CONFLICT(tenant_id) DO UPDATE SET shadow_checked_at=EXCLUDED.shadow_checked_at
+   WHERE today_tenant_v1.shadow_checked_at IS NULL OR today_tenant_v1.shadow_checked_at<=statement_timestamp()-interval '1 millisecond'*${intervalMs}
+   RETURNING tenant_id`));
+  if(!slot.length)return false;
   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<ShadowRow>(sql`
    SELECT source.kind,
     source.status='OK' AND source.source_seq=source.built_seq AND source.built_tenant_seq=tenant.tenant_seq
@@ -75,6 +96,6 @@ export async function observeTodayModelShadow(auth:{tenantId:string},today:strin
   if(model.orders!==null&&live.orderCards!==null)model.orderCards=rows.filter(row=>row.kind==='order'&&row.fresh===true).length;
   const keys=Object.keys(live),comparable=keys.filter(key=>live[key]!==null&&model[key]!==null);
   console.info('[TODAY_MODEL_SHADOW]',JSON.stringify({version:TODAY_PROJECTOR_VERSION,live,model,compared:comparable.length,different:comparable.filter(key=>live[key]!==model[key]).length,unknown:keys.length-comparable.length,stale:rows.filter(row=>row.fresh!==true).length}));
-  if(!rows.length||rows.some(row=>row.rebuild===true))await scheduleTodayProjection([auth.tenantId],'rebuild');
- }catch{console.error('[TODAY_MODEL_SHADOW_FAILED]',{code:'SOURCE_INCOMPLETE'});}
+  return !rows.length||rows.some(row=>row.rebuild===true);
+ }catch{console.error('[TODAY_MODEL_SHADOW_FAILED]',{code:'SOURCE_INCOMPLETE'});return false;}
 }

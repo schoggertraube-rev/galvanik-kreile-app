@@ -46,6 +46,114 @@ const ports:TodayProjectionPorts={
 };
 beforeAll(async()=>{orderId=(await readyInvoiceOrder('TEST Today worker source')).orderId;});
 
+it('PL11:36 renews a real short lease across a longer native source read and retains single ownership',async()=>{
+ const read=async()=>{const [company]=await sql`SELECT to_jsonb(company) AS row FROM public.company_settings company WHERE tenant_id=${tenant}`;if(!company)throw Error('TEST_LEASE_SETTINGS_REQUIRED');return company.row;};
+ await withRestoredTestSource({label:'TEST full short lease settings',read,restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_LEASE_COLUMN_INVALID');
+  const names=columns.map(column=>'"'+column+'"').join(',');
+  await sql`UPDATE public.company_settings SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::public.company_settings,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND id=${String(original.id)}`;
+ }},async()=>{
+  await sql`UPDATE public.company_settings SET today_refresh_lease_seconds=1 WHERE tenant_id=${tenant}`;
+  let delayed=false;
+  const result=await rebuildTodayModel(tenant,{...ports,readSources:async(...args)=>{
+   if(!delayed){
+    delayed=true;
+    const [initial]=await sql`SELECT refresh_lease_until::text AS token FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`;
+    await sql`SELECT pg_sleep(1.4)`;
+    expect(await sql`SELECT refresh_lease_until>${initial.token}::timestamptz AS renewed,refresh_lease_until>statement_timestamp() AS valid FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{renewed:true,valid:true}]);
+    expect(await refreshTodayModel(tenant,ports)).toEqual({code:'BUSY',built:0,stale:0});
+   }
+   return ports.readSources(...args);
+  }});
+  expect(result.code).toBe('OK');expect(result.built).toBeGreaterThan(0);expect(result.stale).toBe(0);
+  expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
+ });
+});
+
+it('PL11:36 reads incomplete rows again only on rebuild while changed known sources still refresh',async()=>{
+ expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
+ const incomplete=await sql`SELECT kind||':'||source_id AS key FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='SOURCE_INCOMPLETE'`;
+ expect(incomplete.length).toBeGreaterThan(0);
+ const visits:string[]=[];
+ const counted:TodayProjectionPorts={...ports,readSources:async(...args)=>{visits.push(...args[1].map(todaySourceKey));return ports.readSources(...args);}};
+ expect(await refreshTodayModel(tenant,counted)).toMatchObject({code:'OK',built:0,stale:0});
+ expect(visits).toEqual([]);
+ const source=await readLiveOrderCard(await auth(),{orderId});if(source.code!=='OK')throw Error('TEST_KNOWN_CARD_REQUIRED');
+ expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId,expectedVersion:source.data.version,dueDate:'2027-08-02',reason:'TEST incomplete rows stay for rebuild',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ expect((await refreshTodayModel(tenant,counted)).code).toBe('OK');
+ expect(visits).toContain('order:'+orderId);
+ expect(visits.some(key=>incomplete.some(row=>row.key===key))).toBe(false);
+ visits.length=0;
+ expect((await rebuildTodayModel(tenant,counted)).code).toBe('OK');
+ expect(visits).toEqual(expect.arrayContaining(incomplete.map(row=>row.key)));
+});
+
+it('PL11:36 locks the tenant before source keys when rebuild and a real command overlap in both start orders',async()=>{
+ const waitFor=async(kind:'writer'|'projector')=>{
+  for(let attempt=0;attempt<100;attempt++){
+   const rows=await sql`SELECT activity.pid,pg_blocking_pids(activity.pid) AS blockers,
+    EXISTS(SELECT 1 FROM pg_locks held WHERE held.pid=activity.pid AND held.locktype='tuple' AND held.granted AND held.relation='private.today_tenant_v1'::regclass) AS "waitingOnTenant"
+    FROM pg_stat_activity activity
+    WHERE wait_event_type='Lock' AND pid<>pg_backend_pid() AND
+     CASE WHEN ${kind}='writer' THEN query LIKE '%FROM private.update_order_promised_due_date_v1%'
+      ELSE query LIKE 'UPDATE private.today_source_v1 source%' OR query LIKE 'SELECT 1 FROM private.today_tenant_v1%' OR query LIKE 'SELECT source.kind,%' END`;
+   if(rows.length===1)return rows[0] as {pid:number;blockers:number[];waitingOnTenant:boolean};
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  throw Error('TEST_ACTUAL_LOCK_NOT_OBSERVED_'+kind);
+ };
+ for(const writerFirst of [true,false]){
+  const order=await readyInvoiceOrder('TEST projector writer '+String(writerFirst));
+  expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
+  await sql`UPDATE private.today_source_v1 SET built_at=statement_timestamp() WHERE tenant_id=${tenant}`;
+  await sql`UPDATE private.today_source_v1 SET built_at='2000-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  await sql`UPDATE private.today_source_v1 SET built_at='2001-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='money' AND source_id='*'`;
+  let entered!:()=>void,publish!:()=>void,probeReady!:()=>void,releaseProbe!:()=>void;
+  const reading=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{publish=resolve;});
+  const locked=new Promise<void>(resolve=>{probeReady=resolve;}),unlock=new Promise<void>(resolve=>{releaseProbe=resolve;});
+  const build=rebuildTodayModel(tenant,{...ports,readSources:async(...args)=>{
+   const values=await ports.readSources(...args);
+   if(args[1].some(key=>key.kind==='order'&&key.sourceId===order.orderId)){entered();await gate;}
+   return values;
+  }});
+  await reading;
+  let probePid=0;
+  // Lock-only TEST probe; no business value or invalidation rule is changed.
+  const probe=sql.begin(async tx=>{
+   const [backend]=await tx`SELECT pg_backend_pid() AS pid`;probePid=backend.pid;
+   await tx`SELECT 1 FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='money' AND source_id='*' FOR UPDATE`;
+   probeReady();await unlock;
+  });
+  await locked;
+  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-22',reason:'TEST actual projector lock order',clientEventId:randomUUID()};
+  let command:ReturnType<typeof changeOrderPromisedDueDateAction>|undefined;
+  try{
+   if(writerFirst){
+    command=withSession(full,()=>changeOrderPromisedDueDateAction(input));
+    const writer=await waitFor('writer');publish();
+    const projector=await waitFor('projector');
+    expect(projector.waitingOnTenant).toBe(true);
+    expect(projector.blockers).toContain(writer.pid);
+    expect(projector.blockers).not.toContain(probePid);
+   }else{
+    publish();const projector=await waitFor('projector');
+    command=withSession(full,()=>changeOrderPromisedDueDateAction(input));
+    const writer=await waitFor('writer');
+    expect(writer.waitingOnTenant).toBe(true);
+    expect(writer.blockers).toContain(projector.pid);
+    expect(writer.blockers).not.toContain(probePid);
+   }
+   releaseProbe();
+   const [projected,written]=await Promise.all([build,command]);
+   expect(projected.code).toBe('OK');expect(written.code).toBe('OK');
+   expect(await sql`SELECT count(*)::integer AS count FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId} AND event_type='ORDER_PROMISED_DUE_DATE_CHANGED_V1'`).toEqual([{count:1}]);
+   const [state]=await sql`SELECT source.source_seq>source.built_seq AS stale,source.source_version=orders.version AS current FROM private.today_source_v1 source JOIN public.orders orders ON orders.tenant_id=source.tenant_id AND orders.id=source.source_id WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${order.orderId}`;
+   expect(state.stale||state.current).toBe(true);
+   expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
+  }finally{publish();releaseProbe();await Promise.allSettled([build,probe,...(command?[command]:[])]);}
+ }
+});
+
 it('uses read-only union capabilities and publishes actual card versions with count-only refresh diagnostics',async()=>{
  expectTypeOf<ProjectorAuthorization>().not.toExtend<AuthorizationSnapshot>();
  const before=await sql`SELECT id::text FROM public.app_users WHERE tenant_id=${tenant} ORDER BY id`;
@@ -65,6 +173,7 @@ it('uses read-only union capabilities and publishes actual card versions with co
 });
 
 it('allows only one live lease and releases it after the actual reader completes',async()=>{
+ await sql`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${orderId}`;
  let entered!:()=>void,release!:()=>void;const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
  const first=refreshTodayModel(tenant,{...ports,readSources:async(...args)=>{entered();await gate;return ports.readSources(...args);}});
  try{await started;expect(await refreshTodayModel(tenant,ports)).toEqual({code:'BUSY',built:0,stale:0});}
@@ -94,7 +203,7 @@ it('does not publish an old card when a real promised-date command commits betwe
 
 it('contains a real SQL group failure, splits it and retains the other actual reader result',async()=>{
  await sql`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${orderId}`;
- const result=await refreshTodayModel(tenant,{...ports,readSources:async(capability,keys)=>{
+ const result=await rebuildTodayModel(tenant,{...ports,readSources:async(capability,keys)=>{
   if(keys.some(key=>key.kind==='money'))await sql`SELECT 1/0 AS test_strict_source_failure`;
   return ports.readSources(capability,keys);
  }});
@@ -104,6 +213,7 @@ it('contains a real SQL group failure, splits it and retains the other actual re
 });
 
 it('does not let an expired worker publish or clear the replacement worker lease',async()=>{
+ await sql`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${orderId}`;
  let firstEntered!:()=>void,firstRelease!:()=>void,secondEntered!:()=>void,secondRelease!:()=>void;
  const firstStarted=new Promise<void>(resolve=>{firstEntered=resolve;}),firstGate=new Promise<void>(resolve=>{firstRelease=resolve;});
  const secondStarted=new Promise<void>(resolve=>{secondEntered=resolve;}),secondGate=new Promise<void>(resolve=>{secondRelease=resolve;});
@@ -130,11 +240,11 @@ it('splits a failed set-based SQL publish and marks only the affected source inc
   expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='orders'`).toEqual([{status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ROW_FAILED'}]);
   expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
  }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${guard} ON private.today_source_v1`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${guard}()`);}
- expect((await refreshTodayModel(tenant,ports)).code).toBe('OK');
+ expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
  expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='orders'`).toEqual([{status:'OK',error_code:null}]);
 });
 
-it('reads the persisted single-row batch limit and does not let one incomplete list starve all other sources',async()=>{
+it('reads the persisted single-row batch limit and skips incomplete rows until rebuild',async()=>{
  // Explicit schema configuration probe in this isolated TEST tenant.
  await sql`UPDATE public.company_settings SET today_refresh_batch_limit=1 WHERE tenant_id=${tenant}`;
  expect((await readTodayReadSettings({tenantId:tenant})).todayRefreshBatchLimit).toBe(1);
@@ -142,8 +252,12 @@ it('reads the persisted single-row batch limit and does not let one incomplete l
  const bounded:TodayProjectionPorts={...ports,readSources:async(capability,keys)=>{
   expect(keys).toHaveLength(1);visits.push(todaySourceKey(keys[0]));return ports.readSources(capability,keys);
  }};
- for(let attempt=0;attempt<9;attempt++)expect((await refreshTodayModel(tenant,bounded)).code).toBe('OK');
- expect(new Set(visits).size).toBe(9);
+ const [pending]=await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status<>'SOURCE_INCOMPLETE'`;
+ expect(pending.count).toBeGreaterThan(1);
+ for(let attempt=0;attempt<pending.count;attempt++)expect((await refreshTodayModel(tenant,bounded)).code).toBe('OK');
+ expect(new Set(visits).size).toBe(pending.count);
+ expect(await refreshTodayModel(tenant,bounded)).toMatchObject({code:'OK',built:0,stale:0});
+ expect(visits).toHaveLength(pending.count);
  expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
 });
 

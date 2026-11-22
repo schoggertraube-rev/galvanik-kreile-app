@@ -6,7 +6,8 @@ import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,createFixture,withSession} from '../../../e2e/ablauf/replayHarness';
+import {recordUserLastSeenForLogin} from '@/lib/server/userLastSeen';
 import {sql as sqlDrizzle} from 'drizzle-orm';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {randomUUID} from 'node:crypto';
@@ -51,6 +52,23 @@ it('ignores unchanged role/name/active fields during a PIN-only app-user update'
  const before=await sql`SELECT tenant_seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`;
  await sql`UPDATE public.app_users SET pin_hash=pin_hash WHERE tenant_id=${tenant}`;
  expect(await sql`SELECT tenant_seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual(before);
+});
+
+it('PL11:36 completes the actual login-seen writer and PIN-only update while the Today tenant is locked',async()=>{
+ const before=await sql`SELECT tenant_seq::text FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`;
+ const sources=await sql`SELECT kind,source_id,source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
+ let entered!:()=>void,release!:()=>void;
+ const started=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{release=resolve;});
+ const holder=sql.begin(async tx=>{await tx`SELECT 1 FROM private.today_tenant_v1 WHERE tenant_id=${tenant} FOR UPDATE`;entered();await gate;});
+ await started;
+ const login=withSession(full,()=>recordUserLastSeenForLogin());
+ try{
+  const outcome=await Promise.race([login,new Promise<'TEST_WAITED_ON_MODEL'>(resolve=>setTimeout(()=>resolve('TEST_WAITED_ON_MODEL'),750))]);
+  expect(outcome).toMatchObject({code:'OK'});
+  await sql`UPDATE public.app_users SET pin_hash=pin_hash WHERE tenant_id=${tenant}`;
+ }finally{release();await holder;await login;}
+ expect(await sql`SELECT tenant_seq::text FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual(before);
+ expect(await sql`SELECT kind,source_id,source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`).toEqual(sources);
 });
 
 it('explicitly classifies every production versioned constant and keeps unknown event types tenant-stale',async()=>{

@@ -8,8 +8,8 @@ type Reporter=(authorization:AuthorizationSnapshot|null,event:TechnicalEvent)=>P
 // The real resolver publishes the exact snapshot that the business command already received.
 const scope=new AsyncLocalStorage<{authorization:AuthorizationSnapshot|null;attempted:boolean;report?:Reporter;failures:Set<string>;tenantTransactions:Map<string,number>}>();
 export function actionObservationActive(){return scope.getStore()!==undefined;}
-/** Actual transaction entry only, including SQL-function writers. No command
- * result, claimed actor or SQL-text heuristic is used as a write substitute. */
+/** A committed transaction whose actual invalidator changed source_seq.
+ * Reads, epoch-only changes and rolled-back marks never schedule a refresh. */
 export function observeTenantTransaction(tenantId:string){
  const current=scope.getStore();
  if(current)current.tenantTransactions.set(tenantId,(current.tenantTransactions.get(tenantId)??0)+1);
