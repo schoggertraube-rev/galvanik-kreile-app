@@ -50,7 +50,7 @@ export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{cu
 }
 
 /** Immutable notice/collection receipts determine the original generation. */
-export async function readDispatchResponseScope(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,threadId:string){
+export async function readDispatchResponseScope(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,threadId:string){
      const notices=await tx.execute<{order_id:string;freeze_id:string}>(sql`SELECT notice.order_id,frozen_header.id::text AS freeze_id FROM public.events notice JOIN public.events sent ON sent.tenant_id=notice.tenant_id AND sent.event_type='COMMUNICATION_DOCUMENT_SENT_V1' AND sent.payload->>'threadId'=${threadId} AND sent.status='success' AND sent.user_id=notice.user_id AND sent.payload->>'intent'=notice.payload->>'intent'
       JOIN private.order_freezes frozen_header ON frozen_header.tenant_id=notice.tenant_id AND frozen_header.order_id=notice.order_id AND frozen_header.id::text=notice.payload->'receipt'->>'freezeId'
       WHERE notice.tenant_id=${auth.tenantId} AND notice.event_type='ORDER_CUSTOMER_INFORMED_V1' AND notice.status='success' AND notice.payload->'receipt'->>'threadId'=${threadId} AND notice.payload->'receipt'->>'orderId'=notice.order_id AND notice.payload->'receipt'->>'actorId'=notice.user_id::text`);

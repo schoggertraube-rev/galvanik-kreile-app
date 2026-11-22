@@ -1,3 +1,4 @@
+import {authorizationReadContext,type AuthorizedReadContext} from './authorizationReadContext';
 import 'server-only';
 import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 import {createHash,randomUUID} from 'node:crypto';
@@ -16,7 +17,7 @@ const hash=(value:unknown)=>createHash('sha256').update(canonicalJson(value)).di
 function sourceKey(customerId:string,handover:string,proof:Proof){const h=hash([customerId,handover,proof.itemId,proof.threadId,proof.originalSha256,proof.freezes.slice().sort((a,b)=>(a.orderId+a.freezeId).localeCompare(b.orderId+b.freezeId))]);return `${h.slice(0,8)}-${h.slice(8,12)}-5${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`;}
 
 /** Validate only the narrowly projected original evidence, never mail text. */
-async function qualify(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:DispatchReplyReceipt){
+async function qualify(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,receipt:DispatchReplyReceipt){
  const proof=receipt.proof;
  if(!proof||!Array.isArray(proof.freezes)||!proof.freezes.length||!Number.isFinite(Date.parse(proof.receivedAt))||!/^[a-f0-9]{64}$/.test(proof.originalSha256))throw Error('DISPATCH_REPLY_PROOF_INVALID');
  const originals=await tx.execute<{customer_id:string;received_at:Date|string;reply_chain:{source:string;status:string;originalSha256:string;inReplyTo:string[]};proof_ok:boolean}>(sql`SELECT customer_id,received_at,reply_chain,proof_ok FROM private.v_intake_reply_evidence_v1 WHERE tenant_id=${auth.tenantId} AND item_id=${proof.itemId}`);
@@ -29,7 +30,7 @@ async function qualify(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot
  if(hash(sorted(scope))!==hash(sorted(proof.freezes))||JSON.stringify([...new Set(scope.map(row=>row.orderId))].sort())!==JSON.stringify(proof.orderIds.slice().sort()))throw Error('DISPATCH_REPLY_FREEZE_INVALID');
 }
 
-export async function readDispatchReplyReceipt(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string){
+export async function readDispatchReplyReceipt(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,eventId:string){
  const rows=await tx.execute<{id:string;user_id:string;client_event_id:string;created_at:Date|string;status:string;event_schema_version:number;payload:{receipt:DispatchReplyReceipt;sha256:string}}>(sql`SELECT id,user_id::text,client_event_id::text,(created_at AT TIME ZONE 'UTC')::text AS created_at,status,event_schema_version,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${eventId} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'`);
  const row=rows[0],receipt=row?.payload?.receipt;
  if(rows.length!==1||!receipt||row.status!=='success'||row.event_schema_version!==1||row.id!==receipt.eventId||row.user_id!==receipt.actorId||new Date(row.created_at).toISOString()!==receipt.recordedAt||row.payload.sha256!==hash(receipt)||row.client_event_id!==sourceKey(receipt.customerId,receipt.handover,receipt.proof))throw Error('DISPATCH_REPLY_RECEIPT_INVALID');
@@ -68,7 +69,7 @@ export async function recordReplyTaskEnd(tx:PrivilegedTenantTransaction,auth:Aut
  VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1',${reply.note},'success',${auth.userId}::uuid,1,${JSON.stringify({...context,replyEventId:reply.eventId,version:tasks[0].version,note:reply.note})}::jsonb) RETURNING id`);
  if(saved.length!==1||saved[0].id!==id)throw Error('DISPATCH_REPLY_TASK_END_NOT_SAVED');
 }
-export async function readReplyTaskEnd(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+export async function readReplyTaskEnd(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,taskId:string){
  const rows=await tx.execute<{id:string;user_id:string;proof_ok:boolean;payload:{replyEventId:string;taskId:string;version:number;note:string;meta?:unknown;documentId?:string;documentSha256?:string;letterKey?:string}}>(sql`SELECT event.id,event.user_id::text,event.payload,
  (event.status='success' AND event.event_schema_version=1 AND task.status='erledigt' AND task.erledigt_am IS NOT NULL AND task.version=(event.payload->>'version')::integer AND task.erledigt_von=event.user_id AND task.erledigt_notiz=event.payload->>'note') AS proof_ok
  FROM public.events event JOIN public.tasks task ON task.tenant_id=event.tenant_id AND task.id::text=event.payload->>'taskId' WHERE event.tenant_id=${auth.tenantId} AND event.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1' AND event.payload->>'taskId'=${taskId}`);
@@ -103,7 +104,7 @@ export async function collectionTaskHasReplySource(tx:PrivilegedTenantTransactio
  return !!meta&&meta.customerId===receipt.customerId&&meta.handover===receipt.handover&&!!freezes?.length&&(freezes.every(proof=>receipt.proof.freezes.some(source=>source.orderId===proof.orderId&&source.freezeId===proof.freezeId))||await postalReplyReplacementProved(tx,auth,taskId,receipt));
 }
 /** A partial postal task can end only after its exact unaffected original replacement exists in this transaction. */
-export async function postalReplyReplacementProved(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,reply:DispatchReplyReceipt){
+export async function postalReplyReplacementProved(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,taskId:string,reply:DispatchReplyReceipt){
  type Prepared={document:{id:string;sha256:string;pdfBase64:string};taskId:string;meta:{customerId:string;handover:string;stageKey:string;orders:Array<{id:string}>;storageOrigin:{freezes:Proof['freezes']};replacesForReply?:{documentId:string;replyEventId:string}}};
  const old=await tx.execute<{payload:Prepared}>(sql`SELECT payload FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND status='success' AND event_schema_version=1 AND payload->>'channel'='post' AND payload->>'taskId'=${taskId}`);
  if(old.length!==1)return false;const source=old[0].payload;
@@ -116,7 +117,7 @@ export async function postalReplyReplacementProved(tx:PrivilegedTenantTransactio
  return replacement.taskId!==taskId&&replacement.meta.customerId===reply.customerId&&replacement.meta.handover===reply.handover&&hash(key(expected))===hash(key(replacement.meta.storageOrigin.freezes))&&hash(expected.map(proof=>proof.orderId).sort())===hash(replacement.meta.orders.map(order=>order.id).sort())&&bytes.subarray(0,5).toString()==='%PDF-'&&createHash('sha256').update(bytes).digest('hex')===replacement.document.sha256;
 }
 
-export async function postalAppointmentReplacementProved(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string,appointmentEventId:string){
+export async function postalAppointmentReplacementProved(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,taskId:string,appointmentEventId:string){
  type Prepared={document:{id:string;sha256:string;pdfBase64:string};taskId:string;meta:{customerId:string;handover:string;stageKey:string;orders:Array<{id:string}>;storageOrigin:{freezes:Proof['freezes']};replacesForAppointment?:{documentId:string;appointmentEventId:string}}};
  const {readPickupAppointmentReceiptInTransaction}=await import('./pickupAppointmentPort');
  const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,appointmentEventId);
@@ -151,14 +152,14 @@ async function collectionTaskRemainder(tx:PrivilegedTenantTransaction,auth:Autho
  if(!numbers||numbers.length!==remaining.length||numbers.some(number=>!number))throw Error('REPLY_TASK_REMAINDER_INVALID');
  return {freezes:remaining,note:source.event_type.startsWith('ORDER_COLLECTION_CALL_')?DISPATCH_CALL_COPY.note+numbers.join(', '):COLLECTION_REMINDER_COPY.finalTaskNote(numbers)};
 }
-export async function qualifyReplyRestriction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,before:Proof['freezes'],after:Proof['freezes']){
+export async function qualifyReplyRestriction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,eventId:string,before:Proof['freezes'],after:Proof['freezes']){
  const reply=await readDispatchReplyReceipt(tx,auth,eventId),expected=before.filter(proof=>!reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
  const key=(values:Proof['freezes'])=>values.map(proof=>proof.orderId+':'+proof.freezeId).sort();
  if(!expected.length||expected.length===before.length||JSON.stringify(key(expected))!==JSON.stringify(key(after)))throw Error('REPLY_TASK_RESTRICTION_INVALID');
 }
 /** A hint selects the existing qualified reader; it never determines the task's scope itself. */
-export async function readCollectionTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
- if(!hasAuthorizationArea(auth,'auftraege'))return null;
+export async function readCollectionTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,taskId:string){
+ if(!('canReadArea'in auth?auth:authorizationReadContext(auth)).canReadArea('auftraege'))return null;
  const rows=await tx.execute<{event_type:string}>(sql`SELECT event_type FROM public.events WHERE tenant_id=${auth.tenantId} AND payload->>'taskId'=${taskId} AND (payload->>'replyEventId' IS NOT NULL OR payload->>'appointmentEventId' IS NOT NULL) AND event_type IN ('ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') ORDER BY created_at DESC,id DESC LIMIT 1`);
  if(!rows.length)return null;
  if(rows[0].event_type==='ORDER_COLLECTION_CALL_UPDATED_V1'){const {readDispatchTaskCurrentOrder}=await import('./dispatchCallPort');return readDispatchTaskCurrentOrder(tx,auth,taskId);}

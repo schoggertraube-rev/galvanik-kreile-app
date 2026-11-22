@@ -6,7 +6,7 @@ import {readActorNames} from '@/lib/server/caseActorRead';
 import type {CaseActorTrace,CaseActorEvidence} from '@/lib/domain/caseActorContract';
 
 /** Called after the owner has checked capture/invoice visibility; original audit rows stay here. */
-export async function readIntakeActorTraces(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[],invoiceId?:string){
+export async function readIntakeActorTraces(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,ids:readonly string[],invoiceId?:string){
  if(ids.length>1000||ids.some(id=>!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)))throw Error('INTAKE_ACTOR_IDS_INVALID');
  if(invoiceId!==undefined&&(ids.length!==1||!/[0-9a-f-]{36}/i.test(invoiceId)))throw Error('INVOICE_ACTOR_ID_INVALID');
  if(!ids.length)return new Map<string,CaseActorTrace>();

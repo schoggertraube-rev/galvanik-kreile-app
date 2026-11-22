@@ -157,7 +157,22 @@ const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
 
 export type PickupPaymentReadContext={orderId:string;mode:string|null;station:string};
 
-export function canReadPaymentSummary(authorization: AuthorizationSnapshot,context?:PickupPaymentReadContext): boolean {
+/** Read-only facts from a real active-profile row, never a command identity. */
+export type PaymentReadProfile=Pick<AuthorizationSnapshot,'tenantId'|'active'|'permissions'|'areas'|'role'>;
+/** The session and projector bind the very same canonical financial predicate.
+ * The callback retains the actual pickup context; it is not a payment grant. */
+export type PaymentReadAuthorization=Readonly<{
+ tenantId:string;
+ canReadSummary:(context?:PickupPaymentReadContext)=>boolean;
+ canReadOrderStates:boolean;
+}>;
+export function paymentReadAuthorization(profile:PaymentReadProfile):PaymentReadAuthorization{
+ return {tenantId:profile.tenantId,canReadSummary:context=>canReadPaymentSummary(profile,context),
+  canReadOrderStates:canReadPaymentSummary(profile)||getAuthorizationActionGrants(profile).confirmPayment};
+}
+
+export function canReadPaymentSummary(authorization: AuthorizationSnapshot|PaymentReadProfile|PaymentReadAuthorization,context?:PickupPaymentReadContext): boolean {
+  if('canReadSummary'in authorization)return authorization.canReadSummary(context);
   return authorization.active === true
     && authorization.tenantId === KREILE_TENANT_SLUG
     && (authorization.permissions.includes("perm_view_prices")||hasAuthorizationArea(authorization,"zahlungen")
@@ -205,7 +220,7 @@ export function isPaymentMethod(value: unknown): value is PaymentMethod {
 }
 
 /** Visibility gate for financial consumers; a pickup context never grants another order. */
-export function mapPaymentSummaryRow(row:PaymentSummaryRow,authorization:AuthorizationSnapshot,context?:PickupPaymentReadContext):PaymentSummary{
+export function mapPaymentSummaryRow(row:PaymentSummaryRow,authorization:AuthorizationSnapshot|PaymentReadAuthorization,context?:PickupPaymentReadContext):PaymentSummary{
  if(!canReadPaymentSummary(authorization,context))throw Error('PAYMENT_SUMMARY_INTEGRITY_INVALID');
  if(context!==undefined&&context.orderId!==row.order_id){
   if(row.order_id!==null||!parseInvoiceCollectionOriginal(row.collection_source).members.some(member=>member.orderId===context.orderId))throw Error('PAYMENT_SUMMARY_INTEGRITY_INVALID');
@@ -305,7 +320,7 @@ export function mapPaymentSummaryEvidenceRow(row:PaymentSummaryRow,tenantId:stri
 
 export function mapOrderPaymentStateRow(
   row: OrderPaymentStateRow,
-  authorization: AuthorizationSnapshot,
+  authorization: AuthorizationSnapshot|PaymentReadAuthorization,
 ): OrderPaymentState {
   const orderVersion = toSafeInteger(row.order_version, "ORDER_PAYMENT_STATE_VERSION_INVALID");
   const paymentModeVersion = toSafeInteger(

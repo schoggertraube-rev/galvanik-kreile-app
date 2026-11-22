@@ -13,7 +13,10 @@ import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
 import {quoteCommandContext,quoteReadContext} from '@/lib/server/quoteAuthorization';
 import {todaySourceAccess} from '@/lib/server/todayDashboard';
-import {createQuoteAction} from '@/app/actions/quotes.actions';
+import {createQuoteAction,readQuoteDefaultsAction,changeQuoteLifecycleAction,getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
+import {saveQuoteSettingsAction} from '@/app/actions/settings.actions';
+import {saveIntakeTaskAction,getIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {reklamationAusfuehrenAction,getComplaints} from '@/app/actions/complaints.actions';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
@@ -26,6 +29,10 @@ import {readShippingSettingsInTransaction} from '@/modules/fundament/server-publ
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readManualShipping,readManualShippingBatch} from '@/modules/orders/server-public';
 import {readOrdersInformed,readOrderInformed} from '@/lib/server/orderReleaseRead';
+import {confirmPaymentAction,setPaymentModeAction,getOrderPaymentStateAction} from '@/app/actions/payments.actions';
+import {getPaymentState,getPaymentStatesBatch,readPaymentSummary} from '@/lib/server/paymentSummaryRead';
+import {paymentReadAuthorization,type PaymentReadProfile,type PaymentReadAuthorization} from '@/lib/server/paymentContract';
+import {readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 let prepared:Awaited<ReturnType<typeof readyInvoiceOrder>>;
 let quoteId:string,quoteVersion:number;
@@ -145,6 +152,82 @@ it('projects the same persisted phone notice, release and collection sources for
    if(session.canReadArea('zahlungen'))expect(actual.overdueInvoiceIds).toEqual([]);
    else expect(actual.overdueInvoiceIds).toBeUndefined();
   }else expect(actual).toEqual({code:'FORBIDDEN'});
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
+});
+it('keeps actual payment and pickup-cashier predicates unchanged without adding a command identity to the read kernel',async()=>{
+ expectTypeOf<PaymentReadAuthorization>().not.toExtend<AuthorizationSnapshot>();
+ const cashOrder=await readyInvoiceOrder('TEST payment callback kernel');
+ const initialAuth=await withSession(full,()=>resolveAuthorization());if(!initialAuth.ok)throw Error('TEST_PAYMENT_INITIAL_AUTH');
+ const initial=await getPaymentState(initialAuth.data,cashOrder.orderId);if(initial.code!=='OK'||!initial.data.payment)throw Error('TEST_PAYMENT_INITIAL_SOURCE');
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:cashOrder.orderId,paymentMode:'abholung',expectedVersion:initial.data.paymentModeVersion,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const cashier=await createFixture(['auftraege','kassieren']);
+ const input={invoiceId:cashOrder.invoice.invoiceId,amount:1000,method:'bar' as const,expectedVersion:initial.data.payment.paymentVersion,expectedOpenAmountCents:initial.data.payment.openAmountCents,clientEventId:randomUUID()};
+ const paid=await withSession(cashier,()=>confirmPaymentAction(input));expect(paid).toMatchObject({code:'OK',replayed:false});if(paid.code!=='OK')throw Error('TEST_PAYMENT_REAL_RECEIPT');
+ expect(await withSession(cashier,()=>confirmPaymentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:paid.receipt});
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ for(const profile of [...profiles,{name:'payments only',rights:['zahlungen'],role:'meister' as const},{name:'cashier only',rights:['kassieren'],role:'meister' as const},{name:'orders and cashier',rights:['auftraege','kassieren'],role:'meister' as const}]){
+  const fixture=profile.rights===null?full:await createFixture(profile.rights,profile.role);
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_PAYMENT_READ_AUTH');
+  // These are the actual resolved active-profile facts, not a made-up role,
+  // user or session. The resulting callback has neither role nor actor ID.
+  const source:PaymentReadProfile={tenantId:result.data.tenantId,active:result.data.active,permissions:result.data.permissions,areas:result.data.areas,role:result.data.role};
+  const session=paymentReadAuthorization(result.data),projection=paymentReadAuthorization(source);
+  expect(projection).not.toHaveProperty('userId');expect(projection).not.toHaveProperty('role');
+  const readCredit=authorizationReadContext(result.data).canReadArea('zahlungen')?((tx:Parameters<typeof readCustomerCreditInTransaction>[0],tenantId:string,customerId:string)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile)):undefined;
+  const summary=await readPaymentSummary(result.data);expect(await readPaymentSummary(session)).toEqual(summary);expect(await readPaymentSummary(projection)).toEqual(summary);
+  for(const ids of [[],[cashOrder.orderId],[cashOrder.orderId,prepared.orderId],[cashOrder.orderId,cashOrder.orderId]]){
+   const expected=await getPaymentStatesBatch(result.data,ids,readCredit);
+   expect(await getPaymentStatesBatch(session,ids,readCredit)).toEqual(expected);
+   const actual=await getPaymentStatesBatch(projection,ids,readCredit);expect(actual).toEqual(expected);expect(actual.size).toBe(new Set(ids).size);
+   for(const orderId of new Set(ids))expect(await getPaymentState(projection,JSON.parse(JSON.stringify(orderId)),readCredit)).toEqual(actual.get(orderId));
+  }
+  expect(await getPaymentState(projection,'invalid id',readCredit)).toEqual(await getPaymentState(result.data,'invalid id',readCredit));
+  const actual=await getPaymentState(projection,cashOrder.orderId,readCredit);
+  expect(await withSession(fixture,()=>getOrderPaymentStateAction({orderId:cashOrder.orderId}))).toEqual(actual);
+  if(profile.name==='orders and cashier'){
+   expect(actual).toMatchObject({code:'OK',data:{payment:{invoiceId:cashOrder.invoice.invoiceId,openAmountCents:initial.data.payment.openAmountCents-1000,paymentVersion:paid.receipt.paymentVersion}}});
+   expect(await getPaymentState(projection,prepared.orderId)).toMatchObject({code:'FORBIDDEN'});expect(summary).toMatchObject({code:'FORBIDDEN'});
+  }
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
+});
+it('keeps quote followup assignments factual and derives personal sorting only for the actual login',async()=>{
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_FOLLOWUP_FULL_AUTH');
+ expect(await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,authorizationReadContext(auth.data)))).toEqual([]);
+ const defaults=await withSession(full,()=>readQuoteDefaultsAction());if(defaults.code!=='OK')throw Error('TEST_FOLLOWUP_DEFAULTS');
+ expect(await withSession(full,()=>saveQuoteSettingsAction({clientEventId:randomUUID(),expectedUpdatedAt:defaults.settings.updatedAt,setupCents:defaults.settings.setupCents,materialCents:defaults.settings.materialCents,followupDays:1,validityDays:14}))).toMatchObject({code:'OK'});
+ const assignee=await createFixture(['mails','preise']);
+ const [clock]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1)::text AS yesterday`;
+ const taskIds:string[]=[],quoteIds:string[]=[];
+ for(let index=0;index<2;index++){
+  const created=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId:prepared.customerId,dueDate:'2027-05-15',note:'TEST canonical followup source',positions:[{name:'TEST followup part '+index,quantity:1,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:10000,lineTotalCents:10000}]}));
+  if(created.code!=='OK')throw Error('TEST_FOLLOWUP_QUOTE');quoteIds.push(created.quote.quoteId);
+  // Real documented manual lifecycle evidence, not a physical printer test.
+  const sent={quoteId:created.quote.quoteId,expectedVersion:created.quote.version,edition:1,action:'sent' as const,channel:'druck' as const,evidence:'TEST documented manual quote handover',clientEventId:randomUUID()};
+  expect(await withSession(full,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>changeQuoteLifecycleAction(JSON.parse(JSON.stringify(sent))))).toMatchObject({code:'OK',replayed:true});
+  const [task]=await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${tenant} AND bezug_typ='kv' AND bezug_id=${created.quote.quoteId}`;if(!task)throw Error('TEST_REAL_FOLLOWUP_TASK');taskIds.push(task.id);
+  const read=await withSession(full,()=>getIntakeTaskAction({taskId:task.id}));if(read.code!=='OK'||!read.task)throw Error('TEST_FOLLOWUP_TASK_READ');const value=read.task;
+  const input={clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:'TEST interner Preis 123,45 €',dueDate:clock.yesterday,time:value.uhrzeit,forLogin:index===0?full.actorId:assignee.actorId,forArea:null,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz};
+  expect(await withSession(full,()=>saveIntakeTaskAction(input))).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>saveIntakeTaskAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ }
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ for(const fixture of [full,assignee,await createFixture(['mails']),await createFixture(['auftraege'],'werkstatt')]){
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_FOLLOWUP_AUTH');const areas=result.data.areas;if(!Array.isArray(areas))throw Error('TEST_FOLLOWUP_AREAS');
+  const session=authorizationReadContext(result.data),projection:AuthorizedReadContext={tenantId:result.data.tenantId,permissions:result.data.permissions,canReadArea:area=>areas.includes(area)};
+  const expected=await withPrivilegedTenantTransaction(result.data,tx=>readQuoteFollowupTasksForToday(tx,result.data));
+  const raw=await withPrivilegedTenantTransaction(projection,tx=>readQuoteFollowupTasksForToday(tx,projection));
+  expect(await withPrivilegedTenantTransaction(session,tx=>readQuoteFollowupTasksForToday(tx,session))).toEqual(raw);
+  for(const row of raw){expect(row).not.toHaveProperty('isMine');expect(row).not.toHaveProperty('currentLogin');}
+  expect(raw.map(({assignedLogin,...row})=>({...row,isMine:assignedLogin===result.data.userId})).sort((left,right)=>Number(right.isMine)-Number(left.isMine))).toEqual(expected);
+  if(session.canReadArea('mails')){
+   expect(raw.map(row=>row.id).sort()).toEqual([...taskIds].sort());expect(raw.map(row=>row.quoteId).sort()).toEqual([...quoteIds].sort());
+   expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toEqual({code:'OK',tasks:expected});
+   for(const row of raw){if(session.canReadArea('preise'))expect(row.title).toBe('TEST interner Preis 123,45 €');else expect(row.title).not.toContain('123,45');}
+   if(fixture.actorId===full.actorId||fixture.actorId===assignee.actorId)expect(expected[0]).toMatchObject({isMine:true});
+  }else{expect(raw).toEqual([]);expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'FORBIDDEN'});}
  }
  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
 });

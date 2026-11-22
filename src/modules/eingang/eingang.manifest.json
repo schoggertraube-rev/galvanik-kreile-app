@@ -135,6 +135,7 @@
     "@/modules/eingang/server-public#GoodsReceiptResult",
     "@/modules/eingang/server-public#GoodsReceiptDependencies",
     "@/modules/eingang/server-public#readIntakeMessages",
+    "@/modules/eingang/server-public#readIntakeMessagesForAuthorization",
     "@/modules/eingang/public#IntakeMessages",
     "@/modules/eingang/public#IntakeMessagesPorts",
     "@/modules/eingang/server-public#readIntakeAssignment",

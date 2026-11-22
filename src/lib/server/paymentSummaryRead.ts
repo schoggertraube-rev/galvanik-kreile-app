@@ -3,10 +3,11 @@ import "server-only";
 import {readOpenOrderComplaint,readOpenOrderComplaintsBatch} from './orderReleaseRead';
 
 import { sql } from "drizzle-orm";
-import {getAuthorizationActionGrants} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {
   canReadPaymentSummary,
+  paymentReadAuthorization,
+  type PaymentReadAuthorization,
   mapOrderPaymentStateRow,
   mapPaymentSummaryRow,
   readOrderPaymentSummaries,
@@ -57,9 +58,10 @@ function logReadFailure(label: string, error: unknown): void {
 }
 
 export async function readPaymentSummary(
-  authorization: AuthorizationSnapshot,
+  authorization: AuthorizationSnapshot|PaymentReadAuthorization,
 ): Promise<PaymentSummaryReadResult> {
-  if (!canReadPaymentSummary(authorization)) {
+  const readAuth='canReadSummary'in authorization?authorization:paymentReadAuthorization(authorization);
+  if (!canReadPaymentSummary(readAuth)) {
     return { code: "FORBIDDEN", message: "Zahlungsübersicht ist mit dieser Rolle nicht erlaubt." };
   }
 
@@ -72,7 +74,7 @@ export async function readPaymentSummary(
         LIMIT 251
       `);
       if (rows.length > 250) throw new Error("PAYMENT_SUMMARY_AMBIGUOUS");
-      return rows.map((row) => mapPaymentSummaryRow(row, authorization));
+      return rows.map((row) => mapPaymentSummaryRow(row, readAuth));
     });
     return { code: "OK", data };
   } catch (error) {
@@ -84,7 +86,7 @@ export async function readPaymentSummary(
 type PaymentStateSourceRow=OrderPaymentStateRow & {credit_customer_id:string;customer_overdue_invoice_ids:string[]};
 type CreditSourceRead=(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>;
 
-async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,rows:PaymentStateSourceRow[],complaint:Awaited<ReturnType<typeof readOpenOrderComplaint>>,readCredit?:CreditSourceRead){
+async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:PaymentReadAuthorization,rows:PaymentStateSourceRow[],complaint:Awaited<ReturnType<typeof readOpenOrderComplaint>>,readCredit?:CreditSourceRead){
       if (rows.length === 0) return null;
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_PAYMENT_STATE_AMBIGUOUS");
       if (!Array.isArray(rows[0].customer_overdue_invoice_ids) || rows[0].customer_overdue_invoice_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/.test(id))) throw new Error("ORDER_CUSTOMER_DEBT_STATE_INVALID");
@@ -115,7 +117,7 @@ async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:
       }
       return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
 }
-async function readPaymentStateGroup(authorization:AuthorizationSnapshot,orderIds:string[],readCredit?:CreditSourceRead){
+async function readPaymentStateGroup(authorization:PaymentReadAuthorization,orderIds:string[],readCredit?:CreditSourceRead){
  return withPrivilegedTenantTransaction(authorization,async tx=>{
   const grouped=new Map<string,PaymentStateSourceRow[]>(orderIds.map(orderId=>[orderId,[]]));
   {
@@ -150,8 +152,9 @@ async function readPaymentStateGroup(authorization:AuthorizationSnapshot,orderId
   return result;
  });
 }
-export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot,orderIds:readonly string[],readCredit?:CreditSourceRead):Promise<Map<string,OrderPaymentStateReadResult>>{
- const result=new Map<string,OrderPaymentStateReadResult>(),valid:string[]=[],allowed=canReadPaymentSummary(authorization)||getAuthorizationActionGrants(authorization).confirmPayment;
+export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot|PaymentReadAuthorization,orderIds:readonly string[],readCredit?:CreditSourceRead):Promise<Map<string,OrderPaymentStateReadResult>>{
+ const readAuth='canReadSummary'in authorization?authorization:paymentReadAuthorization(authorization);
+ const result=new Map<string,OrderPaymentStateReadResult>(),valid:string[]=[],allowed=readAuth.canReadOrderStates;
  for(const orderId of new Set(orderIds)){
   if(typeof orderId!=="string"||!ORDER_ID_PATTERN.test(orderId)){result.set(orderId,{code:"VALIDATION_ERROR",message:"Ungültige Zahlungsabfrage."});continue;}
   if(!allowed){result.set(orderId,{code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."});continue;}
@@ -159,7 +162,7 @@ export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot,
  }
  const read=async(ids:string[]):Promise<void>=>{
   if(!ids.length)return;
-  try{const rows=await readPaymentStateGroup(authorization,ids,readCredit);for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");result.set(orderId,value);}}
+  try{const rows=await readPaymentStateGroup(readAuth,ids,readCredit);for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");result.set(orderId,value);}}
   catch(error){
    if(ids.length>1){const middle=Math.floor(ids.length/2);await read(ids.slice(0,middle));await read(ids.slice(middle));return;}
    logReadFailure("getPaymentState database error",error);result.set(ids[0],{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."});
@@ -167,7 +170,7 @@ export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot,
  };
  await read(valid);return result;
 }
-export async function getPaymentState(authorization:AuthorizationSnapshot,orderId:unknown,readCredit?:CreditSourceRead):Promise<OrderPaymentStateReadResult>{
+export async function getPaymentState(authorization:AuthorizationSnapshot|PaymentReadAuthorization,orderId:unknown,readCredit?:CreditSourceRead):Promise<OrderPaymentStateReadResult>{
  if(typeof orderId!=="string"||!ORDER_ID_PATTERN.test(orderId))return {code:"VALIDATION_ERROR",message:"Ungültige Zahlungsabfrage."};
  const rows=await getPaymentStatesBatch(authorization,[orderId],readCredit);
  return rows.get(orderId)??{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."};

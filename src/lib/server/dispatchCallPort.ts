@@ -17,7 +17,7 @@ type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKe
 type Created={payload:{meta:CallMeta;taskId:string};user_id:string;correlation_id:string;originalOrderIds?:string[]};
 type CallTask={id:string;client_key:string;art:string;bezug_typ:string;bezug_id:string|null;status:string;erstellt_von:string;erledigt_von:string|null;erledigt_am:string|null;erledigt_notiz:string|null;version:number};
 const failure=(code:TaskFailure['code'],message:string):TaskFailure=>({code,message});
-async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+async function source(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,taskId:string){
  const rows=await tx.execute<Created&{proof_ok:boolean;created_at:string}>(sql`SELECT payload,user_id::text,correlation_id::text,(created_at AT TIME ZONE 'UTC')::text AS created_at,(status='success' AND event_schema_version=1 AND client_event_id::text=payload->'meta'->>'stageKey' AND correlation_id IS NOT NULL) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND payload->>'taskId'=${taskId}`);
  if(rows.length>1)throw Error('DISPATCH_CALL_SOURCE_AMBIGUOUS');const created=rows[0];if(!created)return null;
  if(!created.proof_ok)throw Error('DISPATCH_CALL_SOURCE_INVALID');
@@ -27,13 +27,13 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  for(const update of updates){const meta=update.payload.meta;if(!update.proof_ok||update.correlation_id!==created.correlation_id||meta.customerId!==created.payload.meta.customerId||meta.handover!==created.payload.meta.handover||meta.stageKey!==created.payload.meta.stageKey||meta.due!==created.payload.meta.due)throw Error('DISPATCH_CALL_UPDATE_INVALID');if(update.payload.replyEventId)await qualifyReplyRestriction(tx,auth,update.payload.replyEventId,created.payload.meta.freezes,meta.freezes);if(update.payload.appointmentEventId){if(update.payload.replyEventId)throw Error('DISPATCH_CALL_UPDATE_ORIGIN_AMBIGUOUS');await qualifyAppointmentRestriction(tx,auth,update.payload.appointmentEventId,created.payload.meta.freezes,meta.freezes);}created.payload=update.payload;}
  return {...created,originalOrderIds,startedAt:new Date(created.created_at).toISOString()};
 }
-async function task(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,lock=false){
+async function task(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,id:string,lock=false){
  const rows=await tx.execute<CallTask>(sql`SELECT id::text,client_key::text,art,bezug_typ,bezug_id,status,erstellt_von::text,erledigt_von::text,erledigt_am::text,erledigt_notiz,version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid ${lock?sql`FOR UPDATE`:sql``}`);
  return rows.length===1?rows[0]:null;
 }
 function validTask(record:CallTask,created:Created){return record.client_key===created.payload.meta.stageKey&&record.art==='rueckruf'&&record.bezug_typ==='auftrag'&&record.bezug_id!==null&&(created.originalOrderIds??created.payload.meta.orderIds).includes(record.bezug_id)&&record.erstellt_von===created.user_id;}
 
-export async function handedOverProofs(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderIds:readonly string[]){
+export async function handedOverProofs(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,orderIds:readonly string[]){
  const rows=await tx.execute<{orderId:string;eventId:string}>(sql`SELECT orders.id AS "orderId",proof.id::text AS "eventId" FROM public.orders orders
   JOIN LATERAL(SELECT event.id FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id
    AND event.event_type IN ('ORDER_PICKED_UP_V1','ORDER_PICKED_UP_V2','ORDER_PICKED_UP_V3','ORDER_PICKED_UP_V4') AND event.status='success' AND event.user_id IS NOT NULL
@@ -58,7 +58,7 @@ export async function finishDispatchCallsAfterGoodsOut(tx:PrivilegedTenantTransa
  }
 }
 
-async function qualifiedTaskState(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,created:Created){
+async function qualifiedTaskState(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,created:Created){
  const record=await task(tx,auth,created.payload.taskId);
  if(!record||!validTask(record,created))throw Error('DISPATCH_CALL_TASK_INVALID');
  const results=await tx.execute<{payload:{result:'reached'|'notReached'|'noLongerNeeded';version:number;note:string|null;goodsOutProofs?:Array<{orderId:string;eventId:string}>};user_id:string;proof_ok:boolean}>(sql`SELECT payload,user_id::text,
@@ -158,7 +158,7 @@ export async function readDispatchCallRequirement(auth:AuthorizationSnapshot,tas
  });
 }
 /** Current ware of the original task; the stored historical reference stays immutable. */
-export async function readDispatchTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+export async function readDispatchTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,taskId:string){
  const created=await source(tx,auth,taskId);if(!created)throw Error('DISPATCH_TASK_REFERENCE_MISSING');
  await qualifiedTaskState(tx,auth,created);
  if(!created.payload.meta.orderIds.length)throw Error('DISPATCH_TASK_REFERENCE_EMPTY');

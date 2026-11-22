@@ -20,7 +20,7 @@ export function pickupStorageDue(date:string,policy:DispatchPolicy|null|undefine
  if(!pause||!storage)throw Error('PICKUP_STORAGE_CALENDAR_INVALID');
  return pause>storage?pause:storage;
 }
-export async function qualifyStorageOrigin(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,origin:StorageOrigin){
+export async function qualifyStorageOrigin(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,origin:StorageOrigin){
  const identities=[origin.callTaskId,origin.appointmentEventId,origin.replyEventId].filter(Boolean);
  if(identities.length!==1)throw Error('STORAGE_ORIGIN_NOT_UNIQUE');
  if(identities.some(id=>!uuid.test(id!)))throw Error('STORAGE_ORIGIN_ID_INVALID');
@@ -101,7 +101,7 @@ export async function setOrderPickupAppointment(auth:AuthorizationSnapshot,input
  });}catch(error){console.error('[PICKUP_APPOINTMENT_WRITE_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.unavailable};}
 }
 /** Historical appointment proof remains valid after a later agreed date. */
-export async function readPickupAppointmentReceiptInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string){
+export async function readPickupAppointmentReceiptInTransaction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,eventId:string){
  const rows=await tx.execute<Row>(sql`SELECT ${selection} FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${eventId} AND event_type='ORDER_PICKUP_APPOINTMENT_SET_V1'`);
  if(rows.length!==1)throw Error('PICKUP_APPOINTMENT_PROOF_MISSING');
  return qualify(rows[0]);
@@ -133,7 +133,7 @@ export async function readOrderPickupAppointmentInTransaction(tx:PrivilegedTenan
 }
 
 /** A task may retain only the freezes not covered by this actual appointment. */
-export async function qualifyAppointmentRestriction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string,before:StorageOrigin['freezes'],after:StorageOrigin['freezes']){
+export async function qualifyAppointmentRestriction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,eventId:string,before:StorageOrigin['freezes'],after:StorageOrigin['freezes']){
  const appointment=await readPickupAppointmentReceiptInTransaction(tx,auth,eventId);
  const expected=before.filter(proof=>proof.orderId!==appointment.orderId||proof.freezeId!==appointment.freezeId);
  const key=(values:StorageOrigin['freezes'])=>values.map(proof=>proof.orderId+':'+proof.freezeId).sort();
