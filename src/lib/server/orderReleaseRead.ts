@@ -2,8 +2,8 @@ import 'server-only';
 import {sql,type SQL} from 'drizzle-orm';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
-import type {AuthorizationSnapshot} from './authorization';
-import {hasAuthorizationArea,canTransportInvoiceDocument} from '@/lib/auth/authorizationContract';
+import {authorizationReadContext,type AuthorizationSnapshot,type AuthorizedReadContext} from './authorization';
+import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {createHash,randomUUID} from 'node:crypto';
 import {readCommunicationDeliveryFailures} from './communicationDeliveryPort';
 import {invoiceAlreadySent} from './communicationDocumentPort';
@@ -54,13 +54,13 @@ export async function markOrderInformedByPhone(auth:AuthorizationSnapshot,input:
 type InformedSourceRow={payload:{receipt:InformedReceipt};proof_ok:boolean};
 type InformedOrderRow={customer_id:string;station:string;version:number;handover_mode:'pickup'|'shipping'|null;allowed:boolean;invoice_state:string;invoice_id:string|null;payment_allowed:boolean|null;frozen_at:string|null;freeze_id:string|null;goods_out_event_id:string|null;debt_ids:string[]};
 type InformedComplaint=Awaited<ReturnType<typeof readOpenOrderComplaint>>;
-async function readInformedCohort(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string,handover:'pickup'|'shipping'|null){
+async function readInformedCohort(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,customerId:string,handover:'pickup'|'shipping'|null){
  return (await import('./communicationDocumentPort')).readInvoiceMailCohort(tx,auth.tenantId,customerId,handover);
 }
 type InformedCohort=Awaited<ReturnType<typeof readInformedCohort>>;
 
 
-async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>,failures:Awaited<ReturnType<typeof readCommunicationDeliveryFailures>>,collectionState:Awaited<ReturnType<typeof import('./commands/recordGoodsOutCommand').readOrderCollectionStateInTransaction>>|undefined){
+async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:AuthorizedReadContext,orderId:string,rows:InformedSourceRow[],order:InformedOrderRow[],complaint:InformedComplaint,readCohort:(customerId:string,handover:'pickup'|'shipping'|null)=>Promise<InformedCohort>,failures:Awaited<ReturnType<typeof readCommunicationDeliveryFailures>>,collectionState:Awaited<ReturnType<typeof import('./commands/recordGoodsOutCommand').readOrderCollectionStateInTransaction>>|undefined){
   if(rows.length>1000||rows.some(row=>row.proof_ok!==true||!Number.isFinite(Date.parse(row.payload.receipt.recordedAt))))throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
   if(order.length!==1)return {code:'NOT_FOUND' as const};
   const failedThreads=new Set(failures.map(proof=>proof.threadId));
@@ -70,7 +70,7 @@ async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:Authoriz
   const failedDelivery=latest?.threadId?failures.find(proof=>proof.threadId===latest.threadId)??null:null;
   const current=order[0];
   if(collectionState===undefined)throw Error('COLLECTION_PLAN_SOURCE_MISSING');
-  const invoiceMailOriginals=canTransportInvoiceDocument(auth)&&current.station==='fertig'?(await readCohort(current.customer_id,current.handover_mode)).map(row=>({id:row.id,orderId:row.order_id,version:row.aggregate_version})):undefined;
+  const invoiceMailOriginals=auth.canReadArea('preise')&&current.station==='fertig'?(await readCohort(current.customer_id,current.handover_mode)).map(row=>({id:row.id,orderId:row.order_id,version:row.aggregate_version})):undefined;
   let invoiceMailQueued=invoiceMailOriginals===undefined?undefined:false;
   if(invoiceMailOriginals?.length===101&&current.invoice_id!==null&&!invoiceMailOriginals.some(row=>row.id===current.invoice_id)){
    const proof=await tx.execute<{unsent:boolean}>(sql`SELECT NOT ${invoiceAlreadySent(auth.tenantId,sql`${current.invoice_id}::uuid`)} AS unsent`);
@@ -81,12 +81,12 @@ async function qualifyOrderInformed(tx:PrivilegedTenantTransaction,auth:Authoriz
   const ampel:'rot'|'gelb'|'gruen'|null=current.station==='fertig'?(!informed||complaint||!current.allowed&&current.debt_ids.length?'rot':current.allowed?'gruen':'gelb'):null;
   return {code:'OK' as const,informed,firstInformed,mailThreadIds:[...new Set(rows.flatMap(row=>row.payload.receipt.channel==='mail'&&row.payload.receipt.threadId?[row.payload.receipt.threadId]:[]))],ampel,
    orderVersion:current.version,collectionState,invoiceMailOriginals,invoiceMailQueued,handover:current.handover_mode,releaseAllowed:current.allowed,frozenAt:current.frozen_at,freezeId:current.freeze_id,invoiceState:current.invoice_state,paymentReady:typeof current.payment_allowed==='boolean'?current.payment_allowed:undefined,responseSince:rows[0]?.payload.receipt.recordedAt??null,failedDelivery:failedDelivery?{threadId:failedDelivery.threadId,recordedAt:failedDelivery.recordedAt}:null,
-   blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:hasAuthorizationArea(auth,'zahlungen')?current.debt_ids:undefined};
+   blockReason,complaintIds:complaint?.complaintIds??[],overdueInvoiceIds:auth.canReadArea('zahlungen')?current.debt_ids:undefined};
 
 }
 type InformedRead=Awaited<ReturnType<typeof qualifyOrderInformed>>|{code:'UNAVAILABLE'}|{code:'FORBIDDEN'};
 /** One native transaction for a qualified set. A SQL error is rolled back before isolating that set. */
-async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string[]){
+async function readOrderInformedGroup(auth:AuthorizedReadContext,orderIds:string[]){
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const receipts=new Map<string,InformedSourceRow[]>(orderIds.map(id=>[id,[]]));
   const orders=new Map<string,InformedOrderRow[]>(orderIds.map(id=>[id,[]]));
@@ -126,17 +126,18 @@ async function readOrderInformedGroup(auth:AuthorizationSnapshot,orderIds:string
   return result;
  });
 }
-export async function readOrdersInformed(auth:AuthorizationSnapshot,orderIds:readonly string[]):Promise<Map<string,InformedRead>>{
+export async function readOrdersInformed(auth:AuthorizationSnapshot|AuthorizedReadContext,orderIds:readonly string[]):Promise<Map<string,InformedRead>>{
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
  const result=new Map<string,InformedRead>(),ids=[...new Set(orderIds)];
- if(!hasAuthorizationArea(auth,'auftraege')){for(const id of ids)result.set(id,{code:'FORBIDDEN'});return result;}
+ if(!readAuth.canReadArea('auftraege')){for(const id of ids)result.set(id,{code:'FORBIDDEN'});return result;}
  const read=async(group:string[]):Promise<void>=>{
   if(!group.length)return;
-  try{const rows=await readOrderInformedGroup(auth,group);for(const id of group){const value=rows.get(id);if(!value)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');result.set(id,value);}}
+  try{const rows=await readOrderInformedGroup(readAuth,group);for(const id of group){const value=rows.get(id);if(!value)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');result.set(id,value);}}
   catch(error){if(group.length===1){console.error('[ORDER_NOTIFICATION_READ_FAILED]',error);result.set(group[0],{code:'UNAVAILABLE'});return;}const half=Math.ceil(group.length/2);await read(group.slice(0,half));await read(group.slice(half));}
  };
  await read(ids);return result;
 }
-export async function readOrderInformed(auth:AuthorizationSnapshot,orderId:string){
+export async function readOrderInformed(auth:AuthorizationSnapshot|AuthorizedReadContext,orderId:string){
  const result=await readOrdersInformed(auth,[orderId]);return result.get(orderId)??{code:'UNAVAILABLE' as const};
 }
 

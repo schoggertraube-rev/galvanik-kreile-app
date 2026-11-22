@@ -17,7 +17,7 @@ import {createQuoteAction} from '@/app/actions/quotes.actions';
 import {reklamationAusfuehrenAction,getComplaints} from '@/app/actions/complaints.actions';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
-import {setOrderPickupAppointmentAction,getManualShippingAction} from '@/app/actions/orders.actions';
+import {setOrderPickupAppointmentAction,getManualShippingAction,markOrderInformedByPhoneAction} from '@/app/actions/orders.actions';
 import {readOrderPickupAppointment,readOrderPickupAppointmentInTransaction} from '@/lib/server/pickupAppointmentPort';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch,readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
@@ -25,6 +25,7 @@ import {readInvoiceVat} from '@/modules/accounting/public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readManualShipping,readManualShippingBatch} from '@/modules/orders/server-public';
+import {readOrdersInformed,readOrderInformed} from '@/lib/server/orderReleaseRead';
 import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 let prepared:Awaited<ReturnType<typeof readyInvoiceOrder>>;
 let quoteId:string,quoteVersion:number;
@@ -113,6 +114,37 @@ it('reads actual manual shipment originals and address fields through one shippi
    expect(await withSession(fixture,()=>getManualShippingAction({orderId:shipping.orderId}))).toEqual(actual);
   }else expect(actual).toMatchObject({code:'FORBIDDEN',reason:'SHIPPING_FORBIDDEN'});
   expect(await readManualShipping(projection,'invalid id',ports)).toEqual(await readManualShipping(result.data,'invalid id',ports));
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
+});
+it('projects the same persisted phone notice, release and collection sources for each read callback',async()=>{
+ const input={orderId:prepared.orderId,expectedVersion:prepared.version,clientEventId:randomUUID()};
+ const created=await withSession(full,()=>markOrderInformedByPhoneAction(input));expect(created).toMatchObject({code:'OK',replayed:false});
+ if(created.code!=='OK')throw Error('TEST_INFORMED_ORIGINAL_REQUIRED');
+ expect(await withSession(full,()=>markOrderInformedByPhoneAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ const absent=randomUUID(),ids=[prepared.orderId,absent];
+ for(const profile of [...profiles,{name:'orders and prices',rights:['auftraege','preise'],role:'meister' as const},{name:'orders and payments',rights:['auftraege','zahlungen'],role:'meister' as const}]){
+  const fixture=profile.rights===null?full:await createFixture(profile.rights,profile.role);
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_INFORMED_READ_AUTH');
+  const areas=result.data.areas;if(!Array.isArray(areas))throw Error('TEST_INFORMED_AREAS_REQUIRED');
+  const session=authorizationReadContext(result.data),projection:AuthorizedReadContext={tenantId:result.data.tenantId,permissions:result.data.permissions,canReadArea:area=>areas.includes(area)};
+  for(const scope of [[],ids.slice(0,1),ids,[...ids,prepared.orderId]]){
+   const expected=await readOrdersInformed(result.data,scope);
+   expect(await readOrdersInformed(session,scope)).toEqual(expected);
+   const actual=await readOrdersInformed(projection,scope);expect(actual).toEqual(expected);
+   expect(actual.size).toBe(new Set(scope).size);
+   for(const orderId of new Set(scope))expect(await readOrderInformed(projection,JSON.parse(JSON.stringify(orderId)))).toEqual(actual.get(orderId));
+  }
+  const actual=await readOrderInformed(projection,prepared.orderId);
+  if(actual.code==='OK'){
+   expect(actual.informed).toMatchObject({orderId:prepared.orderId,actorId:full.actorId,channel:'telefon',threadId:null});
+   expect(actual.collectionState).toMatchObject({orderId:prepared.orderId,orderVersion:prepared.version,collectionPlanned:false,collectionPrepared:false});
+   if(session.canReadArea('preise'))expect(actual.invoiceMailOriginals?.some(original=>original.id===prepared.invoice.invoiceId)).toBe(true);
+   else expect(actual.invoiceMailOriginals).toBeUndefined();
+   if(session.canReadArea('zahlungen'))expect(actual.overdueInvoiceIds).toEqual([]);
+   else expect(actual.overdueInvoiceIds).toBeUndefined();
+  }else expect(actual).toEqual({code:'FORBIDDEN'});
  }
  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
 });
