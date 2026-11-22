@@ -46,6 +46,30 @@ const ports:TodayProjectionPorts={
 };
 beforeAll(async()=>{orderId=(await readyInvoiceOrder('TEST Today worker source')).orderId;});
 
+it('PL11:36 renews a real short lease across a longer native source read and retains single ownership',async()=>{
+ const read=async()=>{const [company]=await sql`SELECT to_jsonb(company) AS row FROM public.company_settings company WHERE tenant_id=${tenant}`;if(!company)throw Error('TEST_LEASE_SETTINGS_REQUIRED');return company.row;};
+ await withRestoredTestSource({label:'TEST full short lease settings',read,restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_LEASE_COLUMN_INVALID');
+  const names=columns.map(column=>'"'+column+'"').join(',');
+  await sql`UPDATE public.company_settings SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::public.company_settings,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND id=${String(original.id)}`;
+ }},async()=>{
+  await sql`UPDATE public.company_settings SET today_refresh_lease_seconds=1 WHERE tenant_id=${tenant}`;
+  let delayed=false;
+  const result=await rebuildTodayModel(tenant,{...ports,readSources:async(...args)=>{
+   if(!delayed){
+    delayed=true;
+    const [initial]=await sql`SELECT refresh_lease_until::text AS token FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`;
+    await sql`SELECT pg_sleep(1.4)`;
+    expect(await sql`SELECT refresh_lease_until>${initial.token}::timestamptz AS renewed,refresh_lease_until>statement_timestamp() AS valid FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{renewed:true,valid:true}]);
+    expect(await refreshTodayModel(tenant,ports)).toEqual({code:'BUSY',built:0,stale:0});
+   }
+   return ports.readSources(...args);
+  }});
+  expect(result.code).toBe('OK');expect(result.built).toBeGreaterThan(0);expect(result.stale).toBe(0);
+  expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
+ });
+});
+
 it('PL11:36 reads incomplete rows again only on rebuild while changed known sources still refresh',async()=>{
  expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
  const incomplete=await sql`SELECT kind||':'||source_id AS key FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='SOURCE_INCOMPLETE'`;

@@ -88,6 +88,9 @@ it('PL08:59 refuses to manufacture payment or task facts when no actual active p
   for(const row of rows)expect(row).toMatchObject({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING',payload:null});
   await sql`UPDATE public.app_users SET active=true WHERE tenant_id=${tenant} AND id=${readonly.actorId}::uuid`;
   expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+  const unavailable=await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' ORDER BY source_id`;
+  expect(unavailable).toHaveLength(2);
+  for(const row of unavailable)expect(row).toEqual({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ORDER_LIST_UNAVAILABLE'});
   const denied=await sql`SELECT kind,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind IN ('orders','quotes','tasks') ORDER BY kind`;
   expect(denied).toEqual([
    {kind:'orders',payload:{code:'FORBIDDEN'}},

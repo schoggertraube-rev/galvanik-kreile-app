@@ -19,7 +19,7 @@ import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
 import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS} from './todayProjectionSchedule';
+import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS,compareTodayModelShadow} from './todayProjectionSchedule';
 type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
@@ -37,6 +37,30 @@ type TodayProjectionPorts={
 const todaySourceKey=(key:TodaySourceKey)=>key.kind+':'+key.sourceId;
 type Snapshot=TodaySourceKey&{sourceSeq:string;tenantSeq:string;day:string};
 type Lease={token:string;tenantSeq:string;day:string};
+const leaseWrites=new WeakMap<Lease,Promise<void>>();
+/** Renewal and the short publishing phases share one per-worker write queue.
+ * A changing lease token is never raced by this worker's own publication. */
+function withLeaseWrite<T>(lease:Lease,work:()=>Promise<T>):Promise<T>{
+ const next=(leaseWrites.get(lease)??Promise.resolve()).then(work);
+ leaseWrites.set(lease,next.then(()=>undefined,()=>undefined));
+ return next;
+}
+function keepLeaseAlive(tenantId:string,lease:Lease,seconds:number){
+ let stopped=false,owned=true,timer:ReturnType<typeof setTimeout>|undefined;
+ let running:Promise<void>=Promise.resolve();
+ const schedule=()=>{timer=setTimeout(()=>{
+  running=withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
+   await tx.execute(sql`SELECT 1 FROM private.today_tenant_v1 WHERE tenant_id=${tenantId} FOR UPDATE`);
+   const rows=await tx.execute<{token:string}>(sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=clock_timestamp()+interval '1 second'*${seconds}
+    WHERE tenant_id=${tenantId} AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>clock_timestamp()
+    RETURNING refresh_lease_until::text AS token`);
+   if(rows.length!==1)throw Error('TODAY_PROJECTOR_LEASE_LOST');
+   lease.token=rows[0].token;
+  })).catch(()=>{owned=false;console.error('[TODAY_PROJECTOR_LEASE_LOST]',{code:'SOURCE_INCOMPLETE'});}).finally(()=>{if(!stopped&&owned)schedule();});
+ },Math.max(1,Math.floor(seconds*1000/3)));};
+ schedule();
+ return {isOwned:()=>owned,stop:async()=>{stopped=true;if(timer)clearTimeout(timer);await running;}};
+}
 
 /** Canonical area/role policy over the existing active user/rights source.
  * No new app_user, session, role, write grant or synthetic actor is created. */
@@ -183,7 +207,7 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
    ${result.code==='OK'&&row.kind==='order'?result.sourceVersion:null}::integer,${result.code==='OK'&&row.kind==='order'?result.listed:null}::boolean)`;
  });
  try{
-  const saved=await withPrivilegedTenantTransaction({tenantId},async tx=>{
+  const saved=await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
    await lockProjectionSources(tx,tenantId,rows);
    return tx.execute(sql`UPDATE private.today_source_v1 source
    SET payload=build.payload,status=build.status,error_code=build.error_code,
@@ -198,7 +222,7 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
     AND (build.kind<>'order' OR build.status<>'OK' OR EXISTS(SELECT 1 FROM public.orders orders
       WHERE orders.tenant_id=source.tenant_id AND orders.id=source.source_id AND orders.version=build.source_version))
    RETURNING source.source_id`);
-  });
+  }));
   return {built:saved.length,stale:rows.length-saved.length};
  }catch{
   // A failed group rolls back natively before it is split. Normal operation is
@@ -222,6 +246,7 @@ async function projectGroup(auth:ProjectorAuthorization,lease:Lease,rows:readonl
 async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean){
  const settings=await ports.readSettings({tenantId}),lease=await claim(tenantId,settings);
  if(!lease)return {code:'BUSY' as const,built:0,stale:0};
+ const heartbeat=keepLeaseAlive(tenantId,lease,settings.todayRefreshLeaseSeconds);
  try{
   const auth=await projectorAuthorization(tenantId);
   if(rebuild){
@@ -229,7 +254,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
    const ids=await ports.listOrderIds(auth);
    if(ids.some(id=>typeof id!=='string'||!id.length||id.length>128)||new Set(ids).size!==ids.length)throw Error('TODAY_PROJECTOR_ORDER_LIST_INVALID');
    const keys:TodaySourceKey[]=[...TODAY_LIST_KINDS.map(kind=>({kind,sourceId:'*'})),...ids.map(sourceId=>({kind:'order' as const,sourceId}))];
-   await withPrivilegedTenantTransaction({tenantId},async tx=>{
+   await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
     await lockProjectionSources(tx,tenantId,[...keys,...known.map(row=>({kind:'order' as const,sourceId:row.id}))]);
     if(keys.length)await tx.execute(sql`INSERT INTO private.today_source_v1(tenant_id,kind,source_id)
      SELECT ${tenantId},key.kind,key.id FROM (VALUES ${sql.join(keys.map(key=>sql`(${key.kind}::text,${key.sourceId}::text)`),sql`, `)}) AS key(kind,id)
@@ -242,17 +267,30 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
      WHERE source.tenant_id=${tenantId} AND source.kind='order' AND source.source_id=old.id AND source.source_seq=old.seq
       AND EXISTS(SELECT 1 FROM private.today_tenant_v1 tenant WHERE tenant.tenant_id=${tenantId} AND tenant.tenant_seq=${lease.tenantSeq}::bigint
        AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp())`);
-   });
+   }));
   }
   // Freeze this finite worklist. Writes that race this build remain stale for
   // the next bounded refresh; neither failures nor writers cause a rebuild loop.
-  const rows=await pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit);
+  const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit));
   let built=0,stale=0;
-  for(let offset=0;offset<rows.length;offset+=15){const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports);built+=result.built;stale+=result.stale;}
-  if(rebuild)await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp()`));
+  for(let offset=0;offset<rows.length;offset+=15){
+   if(!heartbeat.isOwned()){stale+=rows.length-offset;break;}
+   const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports);built+=result.built;stale+=result.stale;
+  }
+  if(rebuild)await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp()`)));
   return {code:'OK' as const,built,stale};
- }finally{await release(tenantId,lease);}
+ }finally{await heartbeat.stop();await release(tenantId,lease);}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
-export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts())=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
+export const refreshTodayModel=async(tenantId:string,ports:TodayProjectionPorts=productivePorts(),observation?:{shadow:{today:string;live:Record<string,number|null>};requestedMode?:'refresh'|'rebuild'})=>{
+ if(observation){
+  // Keep the settings reader in this one approved composition root. Merely
+  // comparing a shadow is not a command refresh and never claims its lease.
+  const settings=await ports.readSettings({tenantId});
+  const rebuild=await compareTodayModelShadow({tenantId},observation.shadow.today,observation.shadow.live,settings.todayShadowIntervalMs);
+  if(!rebuild&&!observation.requestedMode)return {code:'OK' as const,built:0,stale:0};
+  return withPageReadPhase('today.refresh',()=>runProjection(tenantId,{...ports,readSettings:async()=>settings},rebuild||observation.requestedMode==='rebuild'),projectionCounts);
+ }
+ return withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
+};
 export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts())=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
