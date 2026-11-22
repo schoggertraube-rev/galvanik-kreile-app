@@ -34,21 +34,21 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   };
 }
 
-export async function loadOfficeHome(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
-  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+export async function loadOfficeHome(authorization: AuthorizationSnapshot,deferLive=false): Promise<OfficeHomeModel> {
+  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization,deferLive)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
 }
-async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
+async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,deferLive=false): Promise<OfficeHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
-    const now=new Date(),modeled=await readModelTodayHome(authorization,now);
+    const now=new Date(),modeled=await readModelTodayHome(authorization,now,deferLive);
     let orderSource:{code:'OK';orders:OperationalOrder[]}|{code:'SOURCE_INCOMPLETE'};
     let dashboard:Awaited<ReturnType<typeof readTodayDashboard>>;
-    let modelRead:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string};
+    let modelRead:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>};
     if(modeled.code==='OK'){
       dashboard=modeled.dashboard;
       orderSource=modeled.operationalSource.code==='OK'?{code:'OK',orders:modeled.operationalSource.data}:{code:'SOURCE_INCOMPLETE'};
-      modelRead={source:'modell',pending:modeled.pending,incomplete:modeled.incomplete,pollMs:modeled.settings.today.todayStalePollMs,rebuild:modeled.needsRebuild,revision:modeled.sourceRevision};
+      modelRead={source:'modell',pending:modeled.pending,incomplete:modeled.incomplete,pollMs:modeled.settings.today.todayStalePollMs,rebuild:modeled.needsRebuild,revision:modeled.sourceRevision,revisions:modeled.sourceRevisions};
       if(modeled.needsRebuild||modeled.pending)await scheduleTodayProjection([authorization.tenantId],modeled.needsRebuild?'rebuild':'refresh');
     }else{
       // Only an explicitly selected live path or a known empty model uses the

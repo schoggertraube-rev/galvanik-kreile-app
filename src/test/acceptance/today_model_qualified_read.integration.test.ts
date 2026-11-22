@@ -1,11 +1,20 @@
+// @vitest-environment node
+
+import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {maskOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
+import {maskTodayOrderCard} from '@/lib/server/orderCardRead';
+import {readTodayOrderSources,type TodayOrderReadPorts} from '@/lib/server/todayOrderRead';
+import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
+import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
+import {readManualShippingBatch} from '@/modules/orders/server-public';
+import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
 import {DEFAULT_PAGE_READ_SETTINGS,pageReadQueryObservation,withPageReadBudget} from '@/db/readBudget';
 import {randomUUID} from 'node:crypto';
-// @vitest-environment node
 // Actual TEST Actions/Auth/DB/Storage; derived-cache faults are restored whole.
 import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -238,6 +247,11 @@ it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s so
   expect(qualification.rows.find(row=>row.kind==='messages')).toMatchObject({fresh:false});
   const output=vi.spyOn(console,'info');
   try{
+   const first=await withSession(full,()=>withPageReadBudget(()=>readModelTodayHome(resolved.data,now,true),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
+   expect(first.code).toBe('OK');if(first.code!=='OK')throw Error('TEST_FIRST_MODEL_REQUIRED');
+   expect(first.pending).toBe(true);expect(first.sources.graph.code).toBe('SOURCE_INCOMPLETE');
+   expect(output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase)).not.toContain('today.graph');
+   output.mockClear();
    const current=await withSession(full,()=>withPageReadBudget(()=>readModelTodayHome(resolved.data,now),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
    expect(current.code).toBe('OK');if(current.code!=='OK')throw Error('TEST_TARGETED_LIVE_RESULT');
    expect(current.dashboard).toEqual(baseline.dashboard);
@@ -267,5 +281,67 @@ it('conditional real GET skips unchanged composition and reloads after an actual
   const changed=await getModelRoute(request());expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(etag);
   const current=await changed.json();expect(current.model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)).toMatchObject({version:order.version+1});
   expect(await changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(command)))).toMatchObject({code:'OK',replayed:true});
+ });
+});
+
+// Own unmerged kernel cases consolidated, original bodies byte-identical.
+const ports:TodayOrderReadPorts={
+ readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
+ readCredit:(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),
+ readShipments:(auth,ids,readSettings)=>readManualShippingBatch(auth,ids,{readSettings,readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,readAllocation:(tx,tenantId,customerId,input)=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)}),
+};
+
+it('applies the same price mask to captured real card facts and the current restricted reader without mutating the original',async()=>{
+ const order=await readyInvoiceOrder('TEST shared price mask');
+ const fullAuth=await withSession(full,()=>resolveAuthorization());if(!fullAuth.ok)throw Error('TEST_PRICE_MASK_FULL_AUTH');
+ const [source]=await readTodayOrderSources(fullAuth.data,[order.orderId],ports);
+ if(source.result.code!=='OK')throw Error('TEST_PRICE_MASK_SOURCE');
+ const card=source.result.data.card,original=JSON.stringify(card);
+ expect(card.items.some(item=>item.unitPriceCents!==null)).toBe(true);
+ const reader=await createFixture(['auftraege'],'werkstatt');
+ const actual=await withSession(reader,()=>resolveAuthorization());if(!actual.ok)throw Error('TEST_PRICE_MASK_READER_AUTH');
+ const masked=maskTodayOrderCard(actual.data,card);
+ expect(masked.items.every(item=>item.unitPriceCents===null&&item.vatRateBasisPoints===null&&item.extraWork.every(line=>line.hourlyRateCents===null&&line.amountCents===null))).toBe(true);
+ if(masked.freeze)expect(masked.freeze).toMatchObject({hourlyRateCents:null,totalAmountCents:null});
+ const [live]=await readTodayOrderSources(actual.data,[order.orderId],ports);
+ if(live.result.code!=='OK')throw Error('TEST_PRICE_MASK_LIVE');
+ expect(masked).toEqual(live.result.data.card);
+ expect(maskTodayOrderCard(fullAuth.data,card)).toEqual(card);
+ expect(JSON.stringify(card)).toBe(original);
+});
+
+it('keeps real payment and release evidence while masking credit for a price-only actor through the same reader gate',async()=>{
+ const order=await readyInvoiceOrder('TEST shared payment credit mask');
+ const fullAuth=await withSession(full,()=>resolveAuthorization());if(!fullAuth.ok)throw Error('TEST_CREDIT_MASK_FULL_AUTH');
+ const [source]=await readTodayOrderSources(fullAuth.data,[order.orderId],ports);
+ if(source.result.code!=='OK'||source.result.data.payment?.code!=='OK')throw Error('TEST_CREDIT_MASK_SOURCE');
+ const payment=source.result.data.payment,original=JSON.stringify(payment);
+ expect(payment.data.creditApplication).toBeDefined();
+ const reader=await createFixture(['auftraege','preise']);
+ const actual=await withSession(reader,()=>resolveAuthorization());if(!actual.ok)throw Error('TEST_CREDIT_MASK_READER_AUTH');
+ const masked=maskOrderPaymentCredit(actual.data,payment);
+ if(masked.code!=='OK')throw Error('TEST_CREDIT_MASK_RESULT');
+ expect(masked.data).not.toHaveProperty('creditApplication');
+ expect(masked.data.payment).toEqual(payment.data.payment);
+ expect(masked.data.complaintHold).toEqual(payment.data.complaintHold);
+ expect(masked.data.customerDeliveryBlock).toEqual(payment.data.customerDeliveryBlock);
+ const [live]=await readTodayOrderSources(actual.data,[order.orderId],ports);
+ if(live.result.code!=='OK')throw Error('TEST_CREDIT_MASK_LIVE');
+ expect(masked).toEqual(live.result.data.payment);
+ expect(maskOrderPaymentCredit(fullAuth.data,payment)).toEqual(payment);
+ expect(JSON.stringify(payment)).toBe(original);
+});
+
+it('streamed week reads the actual aggregate without money rights and stock stays explicitly unbound',async()=>{
+ const actor=await createFixture(['mails'],'buero');
+ await withSession(actor,async()=>{
+  const {getProductionWeekAction}=await import('@/app/actions/orders.actions');
+  const original=await getProductionWeekAction();expect(original.code).toBe('OK');
+  const week=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=week'));
+  expect(week.status).toBe(200);const result=await week.json();
+  expect(result.result).toEqual({code:'OK',part:'week',data:original.code==='OK'?original.data:undefined});
+  expect(Object.keys(result.result.data).sort()).toEqual(['currentlyUnpricedItemCount','netCents','weekEndExclusive','weekStart']);
+  const stock=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=stock'));
+  expect((await stock.json()).result).toEqual({code:'SOURCE_INCOMPLETE',part:'stock'});
  });
 });

@@ -731,6 +731,13 @@ export function todayModelRevision(auth:AuthorizationSnapshot,rows:readonly Toda
  const visible=(kind:string)=>kind==='order'?access.orders:kind==='orders'?hasAnyAuthorizationArea(auth):kind==='money'?access.money||access.invoiceMail:kind==='company'?access.company:kind==='complaints'?access.complaints:access.messages;
  return createHash('sha256').update(JSON.stringify({actor:auth.userId,role:auth.role,areas:[...(auth.areas??[])].sort(),permissions:[...auth.permissions].sort(),day,rows:rows.filter(row=>visible(row.kind)).map(row=>[row.kind,row.sourceId,row.sourceSeq,row.builtSeq,row.tenantSeq,row.builtTenantSeq,row.sourceVersion,row.currentVersion,row.status,row.listed,row.current,row.fresh,row.errorCode,row.builtAt,row.needsRebuild,row.tenantChanged])})).digest('hex');
 }
+export function todayModelRevisionMap(auth:AuthorizationSnapshot,rows:readonly TodayModelSourceRow[],day:string){
+ const complete=todayModelRevision(auth,rows,day);
+ // U264 exposes this aggregate to every real login. Its revision therefore
+ // follows the aggregate's epoch even when order details are not permitted.
+ const week=createHash('sha256').update(JSON.stringify({actor:auth.userId,day,source:rows.filter(row=>row.kind==='orders').map(row=>[row.sourceSeq,row.builtSeq,row.tenantSeq,row.builtTenantSeq,row.status])})).digest('hex');
+ return {week,counts:complete,notices:complete};
+}
 export type TodayModelReadPorts={
  liveComplaints:()=>Promise<TodayDashboardSources['complaints']>;
  liveFollowups:()=>Promise<TodayDashboardSources['quoteFollowups']>;
@@ -745,7 +752,7 @@ export const modelRecord=(value:unknown):Record<string,unknown>|null=>value!==nu
 
 /** One transaction owns settings, qualified model rows and the same live actor
  * kernels. Module masks are bound by the App, never by a second domain reader. */
-export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports:TodayModelReadPorts,readAt=new Date()){
+export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports:TodayModelReadPorts,readAt=new Date(),deferLive=false){
  const calendar=readTodayCalendar(readAt),access=todaySourceAccess(authorizationReadContext(auth));
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const settings=await ports.readSettings(tx,auth);
@@ -758,7 +765,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   // retains the explicit gap instead of substituting an empty source.
   const mustReadLive=(kind:string,id='*')=>model.rows.some(row=>row.kind===kind&&row.sourceId===id&&(row.status==='SOURCE_INCOMPLETE'||row.tenantChanged===true));
   const live=async<T>(kind:string,known:T,read:()=>Promise<T>):Promise<T>=>{
-   if(!mustReadLive(kind))return known;
+   if(deferLive||!mustReadLive(kind))return known;
    try{return await withPageReadPhase(({orders:'today.orders',messages:'today.graph',money:'today.support',complaints:'today.complaints',quote_followups:'today.followups',tasks:'today.tasks',quotes:'today.quotes',company:'today.company'} as Record<string,string>)[kind],read);}
    catch{console.error('[TODAY_MODEL_LIVE_FAILED]',{kind,code:'SOURCE_INCOMPLETE'});return known;}
   };
@@ -801,7 +808,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   });
   let batch:TodayDashboardSources['batch']=access.orders?{code:'OK',data:{rows:projectTodayOrderSources(auth,rawRows)}}:null;
   const liveOrderIds=orders.filter(order=>mustReadLive('order',order.id)).map(order=>order.id);
-  if(access.orders&&liveOrderIds.length){
+  if(!deferLive&&access.orders&&liveOrderIds.length){
    const read=await withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:liveOrderIds}));
    if(read.code==='OK'&&batch?.code==='OK'){
     const liveRows=new Map(read.data.rows.map(row=>[row.orderId,row]));
@@ -814,7 +821,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   ]);
   const support={...money,...person,...delegation,supportMissing:[...money.supportMissing,...person.supportMissing,...delegation.supportMissing]};
   let versions:Array<{id:string;version:number}>|null=model.rows.flatMap(row=>row.kind==='order'&&row.currentVersion!==null?[{id:row.sourceId,version:row.currentVersion}]:[]);
-  if(liveOrderIds.length){
+  if(!deferLive&&liveOrderIds.length){
    try{const current=await readTodayOrderVersionsInTransaction(tx,auth.tenantId,liveOrderIds);
     versions=[...versions.filter(row=>!liveOrderIds.includes(row.id)),...current];
    }catch{versions=null;}
@@ -822,8 +829,8 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const modelStaleOrderIds=orders.flatMap(order=>{const row=model.rows.find(source=>source.kind==='order'&&source.sourceId===order.id);return !row||row.fresh!==true&&row.status!=='SOURCE_INCOMPLETE'?[order.id]:[];});
   const sources:TodayDashboardSources={calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource,modelStaleOrderIds};
   const relevant=(kind:string)=>kind==='order'?access.orders:kind==='orders'?hasAnyAuthorizationArea(auth):kind==='money'?access.money||access.invoiceMail:kind==='company'?access.company:kind==='complaints'?access.complaints:access.messages;
-  return {code:'OK' as const,sources,operationalSource,settings,sourceRevision:todayModelRevision(auth,model.rows,calendar.today),needsRebuild:model.needsRebuild,
-   pending:model.needsRebuild||model.rows.some(row=>relevant(row.kind)&&row.status!=='SOURCE_INCOMPLETE'&&row.fresh!==true),
+  return {code:'OK' as const,sources,operationalSource,settings,sourceRevision:todayModelRevision(auth,model.rows,calendar.today),sourceRevisions:todayModelRevisionMap(auth,model.rows,calendar.today),needsRebuild:model.needsRebuild,
+   pending:model.needsRebuild||model.rows.some(row=>relevant(row.kind)&&row.fresh!==true&&(deferLive||row.status!=='SOURCE_INCOMPLETE')),
    incomplete:model.rows.some(row=>relevant(row.kind)&&row.status==='SOURCE_INCOMPLETE')};
  });
 }

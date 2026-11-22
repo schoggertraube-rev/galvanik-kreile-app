@@ -4,7 +4,7 @@ import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
 import {canTransportInvoiceDocument} from '@/lib/server/authorization';
-import {canReadOrderPaymentCredit} from '@/lib/server/authorizationReadContext';
+import {canReadOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
 /** Existing settings read; invoice transport may also request its sender name. */

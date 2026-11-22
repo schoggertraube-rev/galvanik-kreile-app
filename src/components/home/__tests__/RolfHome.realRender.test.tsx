@@ -25,7 +25,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
   }),
 }));
 
-import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
+import { dayLineParts, TodayStreamedRegion, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
 import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
 import type {OfficeHomeModel} from '../OfficeHomeClient';
 
@@ -420,4 +420,30 @@ it('controlled return to a fresh model checks its scoped revision and keeps unch
  expect(headers.get('If-None-Match')).toBe('"'+'a'.repeat(64)+'"');expect(headers.get('X-Kreile-Login-Scope')).toBe('TEST-poll-scope');
  expect(screen.getAllByText('TEST unchanged visible content')[0]).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
  fireEvent.focus(window);await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
+});
+
+// Isolated promise/React transport proof, not an Auth/DB or full Next claim.
+it('streams independent regions while the primary Today list remains interactive',async()=>{
+ let finishWeek!:(value:import('../OfficeHomeClient').TodayHomePartResult)=>void;
+ let finishNotices!:(value:import('../OfficeHomeClient').TodayHomePartResult)=>void;
+ const week=new Promise<import('../OfficeHomeClient').TodayHomePartResult>(resolve=>{finishWeek=resolve;});
+ const notices=new Promise<import('../OfficeHomeClient').TodayHomePartResult>(resolve=>{finishNotices=resolve;});
+ const click=vi.fn();
+ await act(async()=>{render(<><button onClick={click}>TEST primary remains usable</button><TodayStreamedRegion part="week" source={week} scope="TEST-stream-scope"/><TodayStreamedRegion part="notices" source={notices} scope="TEST-stream-scope"/></>);});
+ fireEvent.click(screen.getByRole('button',{name:'TEST primary remains usable'}));expect(click).toHaveBeenCalledTimes(1);
+ expect(screen.getAllByText(TODAY_MODEL_COPY.partLoading)).toHaveLength(2);
+ const regions=[...document.querySelectorAll<HTMLElement>('[data-today-region]')];expect(regions.every(region=>region.style.minBlockSize==='8rem')).toBe(true);
+ await act(async()=>{finishNotices({code:'OK',part:'notices',missing:[]});await Promise.resolve();});
+ expect(screen.getByText(TODAY_MODEL_COPY.noNotices)).toBeVisible();expect(screen.getAllByText(TODAY_MODEL_COPY.partLoading)).toHaveLength(1);
+ await act(async()=>{finishWeek({code:'OK',part:'week',data:{weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:12345,currentlyUnpricedItemCount:0}});await Promise.resolve();});
+ expect(screen.getByText(/123,45/)).toBeVisible();expect(screen.queryByText(TODAY_MODEL_COPY.partLoading)).toBeNull();
+ expect(regions.every(region=>region.style.minBlockSize==='8rem')).toBe(true);
+});
+it('retries only the failed streamed region and does not replace the primary model',async()=>{
+ const source=Promise.resolve({code:'SOURCE_INCOMPLETE' as const,part:'week' as const});
+ const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(JSON.stringify({code:'OK',scope:'TEST-stream-scope',result:{code:'OK',part:'week',data:{weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:56789,currentlyUnpricedItemCount:0}}}),{status:200}));vi.stubGlobal('fetch',fetch);
+ await act(async()=>{render(<><p>TEST known primary</p><TodayStreamedRegion part="week" source={source} scope="TEST-stream-scope"/></>);});
+ fireEvent.click(screen.getByRole('button',{name:TODAY_MODEL_COPY.partReload}));
+ await screen.findByText(/567,89/);expect(fetch).toHaveBeenCalledTimes(1);expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet&bereich=week');
+ expect(screen.getByText('TEST known primary')).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Synthetic client permissions and rejected chunk loading only. No Auth/DB action is run.
-import {cleanup,render,screen,waitFor} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
 import type {ComponentType} from 'react';
 const actions=vi.hoisted(()=>({called:[] as string[]}));
@@ -38,6 +38,9 @@ afterEach(()=>{cleanup();vi.restoreAllMocks();});
 it('254 K1 keeps the real adapter and surrounding tree visible when dialog chunk imports reject',async()=>{
  const warning=vi.spyOn(console,'warn').mockImplementation(()=>{});
  render(<><p>SYNTHETISCH übrige Arbeitsfläche</p><GlobalCreateAppAdapter/></>);
+ // PL22.11.13:57: chunks are requested by a real open event, never layout idle.
+ expect(warning).not.toHaveBeenCalled();
+ fireEvent(window,new CustomEvent('path1:global-create-open',{cancelable:true}));
  expect(await screen.findByText(DIALOG_LOAD_COPY.unavailable)).toBeVisible();
  expect(screen.getByRole('button',{name:DIALOG_LOAD_COPY.reload})).toBeVisible();
  expect(screen.getByText('SYNTHETISCH übrige Arbeitsfläche')).toBeVisible();

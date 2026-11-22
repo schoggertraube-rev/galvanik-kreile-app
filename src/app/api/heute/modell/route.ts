@@ -1,4 +1,4 @@
-import {readTodayHomeRevision} from '@/app/actions/todayModel.actions';
+import {readTodayHomeRevision,readTodayHomePart} from '@/app/actions/todayModel.actions';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {resolveAuthorization,hasAnyAuthorizationArea} from '@/lib/server/authorization';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
@@ -12,7 +12,8 @@ const responseHeaders={'Cache-Control':'private, no-store','Vary':'Cookie'};
  * claim or new write route; only the existing derived single-flight worker. */
 export async function GET(request:Request){
  const query=new URL(request.url).searchParams;
- if(query.get('nur')!=='veraltet'||[...query.keys()].some(key=>key!=='nur')||query.getAll('nur').length!==1)return new Response(null,{status:400,headers:responseHeaders});
+ const part=query.get('bereich');
+ if(query.get('nur')!=='veraltet'||[...query.keys()].some(key=>key!=='nur'&&key!=='bereich')||query.getAll('nur').length!==1||query.getAll('bereich').length>1||part!==null&&!['week','stock','notices','counts'].includes(part))return new Response(null,{status:400,headers:responseHeaders});
  try{
   const auth=await resolveAuthorization();
   if(!auth.ok)return new Response(null,{status:401,headers:responseHeaders});
@@ -20,7 +21,18 @@ export async function GET(request:Request){
   const conditional=request.headers.get('If-None-Match');
   if(conditional&&/^"[a-f0-9]{64}"$/.test(conditional)&&request.headers.get('X-Kreile-Login-Scope')===await readCacheLoginScope()){
    const current=await readTodayHomeRevision(auth.data);
-   if(current&&!current.pending&&conditional==='"'+current.revision+'"')return new Response(null,{status:304,headers:{...responseHeaders,ETag:conditional}});
+   if(current&&!current.pending&&conditional==='"'+(part?current.revisions[part as keyof typeof current.revisions]:current.revision)+'"')return new Response(null,{status:304,headers:{...responseHeaders,ETag:conditional}});
+  }
+  if(part){
+   const before=await readTodayHomeRevision(auth.data);
+   const selected=part as import('@/components/home/OfficeHomeClient').TodayHomePart;
+   const read=await readTodayHomePart(auth.data,selected);
+   const current=await readTodayHomeRevision(auth.data),revision=current?.revisions[part as keyof typeof current.revisions];
+   // The supplementary value cannot claim a newer source revision than the
+   // snapshot read. A concurrent command leaves only this region unknown.
+   const stable=before?.revisions[part as keyof typeof before.revisions]===revision;
+   const result=stable?read:{code:'SOURCE_INCOMPLETE' as const,part:selected};
+   return Response.json({code:'OK',result,scope:await readCacheLoginScope(),...(stable?{revision}:{})},{headers:{...responseHeaders,...(stable&&revision?{ETag:'"'+revision+'"'}:{})}});
   }
   const before=await loadOfficeHome(auth.data);
   if(!('dashboard'in before))return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});

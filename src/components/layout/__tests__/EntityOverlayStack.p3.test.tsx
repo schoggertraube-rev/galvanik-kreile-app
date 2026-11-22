@@ -24,35 +24,35 @@ import { useOverlayStore } from "@/lib/overlayStore";
 beforeEach(() => useOverlayStore.setState({ stack: [], orderStack: [] }));
 
 describe("P3 shared entity overlay/backstack", () => {
-  it("keeps quote -> customer and back on the same stack", () => {
+  it("keeps quote -> customer and back on the same stack", async () => {
     render(<EntityOverlayStack />);
     act(() => useOverlayStore.getState().openQuote("quote-1"));
-    expect(screen.getByTestId("mock-quote-card")).toHaveTextContent("quote-1");
+    expect(await screen.findByTestId("mock-quote-card")).toHaveTextContent("quote-1");
     fireEvent.click(screen.getByRole("button", { name: "Kunde öffnen" }));
-    expect(screen.getByTestId("mock-customer-card")).toHaveTextContent("customer-1");
+    expect(await screen.findByTestId("mock-customer-card")).toHaveTextContent("customer-1");
     fireEvent.click(screen.getByRole("button", { name: "Zurück" }));
-    expect(screen.getByTestId("mock-quote-card")).toHaveTextContent("quote-1");
+    expect(await screen.findByTestId("mock-quote-card")).toHaveTextContent("quote-1");
   });
-  it("keeps Home -> order -> customer -> order and every back step on one stack", () => {
+  it("keeps Home -> order -> customer -> order and every back step on one stack", async () => {
     render(<EntityOverlayStack />);
     act(() => useOverlayStore.getState().openOrder("order-1"));
-    expect(screen.getByTestId("mock-order-card")).toHaveTextContent("order-1");
+    expect(await screen.findByTestId("mock-order-card")).toHaveTextContent("order-1");
     fireEvent.click(screen.getByRole("button", { name: "Kunde öffnen" }));
-    expect(screen.getByTestId("mock-customer-card")).toHaveTextContent("customer-1");
+    expect(await screen.findByTestId("mock-customer-card")).toHaveTextContent("customer-1");
     fireEvent.click(screen.getByRole("button", { name: "Auftrag öffnen" }));
-    expect(screen.getByTestId("mock-order-card")).toHaveTextContent("order-2");
+    expect(await screen.findByTestId("mock-order-card")).toHaveTextContent("order-2");
     fireEvent.click(screen.getByRole("button", { name: "Zurück" }));
-    expect(screen.getByTestId("mock-customer-card")).toHaveTextContent("customer-1");
+    expect(await screen.findByTestId("mock-customer-card")).toHaveTextContent("customer-1");
     fireEvent.click(screen.getByRole("button", { name: "Zurück" }));
-    expect(screen.getByTestId("mock-order-card")).toHaveTextContent("order-1");
+    expect(await screen.findByTestId("mock-order-card")).toHaveTextContent("order-1");
   });
 
-  it("opens customer -> active order and closes to the originating customer", () => {
+  it("opens customer -> active order and closes to the originating customer", async () => {
     render(<EntityOverlayStack />);
     act(() => useOverlayStore.getState().openCustomer("customer-1"));
     fireEvent.click(screen.getByRole("button", { name: "Auftrag öffnen" }));
-    expect(screen.getByTestId("mock-order-card")).toHaveTextContent("order-2");
+    expect(await screen.findByTestId("mock-order-card")).toHaveTextContent("order-2");
     fireEvent.click(screen.getByRole("button", { name: "Zurück" }));
-    expect(screen.getByTestId("mock-customer-card")).toHaveTextContent("customer-1");
+    expect(await screen.findByTestId("mock-customer-card")).toHaveTextContent("customer-1");
   });
 });

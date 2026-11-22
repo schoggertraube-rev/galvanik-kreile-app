@@ -1,10 +1,16 @@
 "use client";
 import {createPortal} from "react-dom";
 import {useOverlayStore} from "@/lib/overlayStore";
-import {OrderCardAppAdapter} from "@/app/orders/OrderCardAppAdapter";
-import {QuoteCardAppAdapter} from "@/app/quotes/QuoteCardAppAdapter";
-import {CustomerCardAppAdapter} from "@/app/customers/CustomerCardAppAdapter";
-import {KrApp,useKrGeraet} from "@/ui/kr";
+import {KrApp,useKrGeraet,Button,Hinweis} from "@/ui/kr";
+import dynamic from 'next/dynamic';
+import type {ComponentProps} from 'react';
+import {importWithRetry} from '@/lib/client/deferredDialogEvents';
+import {DIALOG_LOAD_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+function EntityLoadFailure(){return <Hinweis ton="warn">{DIALOG_LOAD_COPY.unavailable}<Button text={DIALOG_LOAD_COPY.reload} onClick={()=>location.reload()}/></Hinweis>;}
+const options={ssr:false,loading:()=> <p role="status">{PAGE_READ_COPY.loading}</p>};
+const OrderCardAppAdapter=dynamic<ComponentProps<typeof import('@/app/orders/OrderCardAppAdapter').OrderCardAppAdapter>>(()=>importWithRetry(()=>import('@/app/orders/OrderCardAppAdapter')).then(module=>module.OrderCardAppAdapter,()=>EntityLoadFailure),options);
+const QuoteCardAppAdapter=dynamic<ComponentProps<typeof import('@/app/quotes/QuoteCardAppAdapter').QuoteCardAppAdapter>>(()=>importWithRetry(()=>import('@/app/quotes/QuoteCardAppAdapter')).then(module=>module.QuoteCardAppAdapter,()=>EntityLoadFailure),options);
+const CustomerCardAppAdapter=dynamic<ComponentProps<typeof import('@/app/customers/CustomerCardAppAdapter').CustomerCardAppAdapter>>(()=>importWithRetry(()=>import('@/app/customers/CustomerCardAppAdapter')).then(module=>module.CustomerCardAppAdapter,()=>EntityLoadFailure),options);
 
 export function EntityOverlayStack(){
  const device=useKrGeraet();

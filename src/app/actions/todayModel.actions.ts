@@ -9,7 +9,7 @@ import type {QuoteReadback} from '@/modules/quotes/public';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {quoteV45Capabilities,readV45QuoteRule,v45QuoteFacts} from '@/lib/server/v45QuoteRead';
-import {readTodaySourcesFromModel,readTodayModelInTransaction,todayModelRevision,modelRecord,type TodayModelReadPorts} from '@/lib/server/todayDashboard';
+import {readTodaySourcesFromModel,readTodayModelInTransaction,todayModelRevision,todayModelRevisionMap,modelRecord,type TodayModelReadPorts} from '@/lib/server/todayDashboard';
 import {composeTodayDashboard,type TodayDashboardSources} from '@/lib/server/todayDashboard';
 import {withPageReadPhase} from '@/db/readBudget';
 
@@ -59,8 +59,8 @@ const ports:TodayModelReadPorts={
  },
 };
 
-export async function readModelTodayHome(auth:AuthorizationSnapshot,readAt=new Date()){
- const result=await readTodaySourcesFromModel(auth,ports,readAt);
+export async function readModelTodayHome(auth:AuthorizationSnapshot,readAt=new Date(),deferLive=false){
+ const result=await readTodaySourcesFromModel(auth,ports,readAt,deferLive);
  if(result.code!=='OK')return result;
  const dashboard=await withPageReadPhase('today.model.compose',async()=>composeTodayDashboard(auth,result.sources,result.sources.calendar),value=>({rows:value.items.length,missing:value.orderActions?.missingOrderIds.length??0}));
  return {...result,dashboard};
@@ -77,6 +77,23 @@ export async function readTodayHomeRevision(auth:AuthorizationSnapshot){
   const day=readTodayCalendar(new Date()).today,model=await readTodayModelInTransaction(tx,auth,day,true);
   if(model.code!=='OK')return null;
   const pending=model.needsRebuild||model.rows.some(row=>!row.fresh);
-  return {revision:todayModelRevision(auth,model.rows,day),pending};
+  return {revision:todayModelRevision(auth,model.rows,day),pending,revisions:todayModelRevisionMap(auth,model.rows,day)};
  });
+}
+
+export async function readTodayHomePart(auth:AuthorizationSnapshot,part:import('@/components/home/OfficeHomeClient').TodayHomePart,existing?:import('@/components/home/OfficeHomeClient').OfficeHomeModel):Promise<import('@/components/home/OfficeHomeClient').TodayHomePartResult>{
+ try{
+ if(part==='week'){
+  const {readProductionWeek}=await import('@/lib/server/productionSnapshotPort');
+  const result=await readProductionWeek(auth);
+  return result.code==='OK'?{code:'OK',part,data:result.data}:{code:'SOURCE_INCOMPLETE',part};
+ }
+ // No Lager reader is installed on this main. R1: no mock inventory, inferred
+ // zero or parallel stock table; bind the approved package's facade when merged.
+ if(part==='stock')return {code:'SOURCE_INCOMPLETE',part};
+ const model=existing??await (await import('@/lib/server/officeHomeRead')).loadOfficeHome(auth);
+ if(!('dashboard'in model))return {code:'SOURCE_INCOMPLETE',part};
+ if(part==='notices')return {code:'OK',part,missing:[...(model.dashboard.datenluecken??[])]};
+ return {code:model.dashboard.datenluecken?.length?'SOURCE_INCOMPLETE':'OK',part};
+ }catch{console.error('[TODAY_REGION_SOURCE_FAILED]',{part,code:'SOURCE_INCOMPLETE'});return {code:'SOURCE_INCOMPLETE',part};}
 }
