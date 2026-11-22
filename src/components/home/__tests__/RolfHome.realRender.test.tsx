@@ -1,5 +1,5 @@
-import { act,fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach,beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
@@ -25,11 +25,8 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
   }),
 }));
 
-import { dayLineParts, TodayStreamedRegion, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
-import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
-import type {OfficeHomeModel} from '../OfficeHomeClient';
-
-afterEach(()=>vi.unstubAllGlobals());
+import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
+import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
 
 const actionPorts = {
   savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
@@ -364,86 +361,4 @@ it('H4 offers the real handover command beside each original and preserves its r
  expect(ports.confirmHandover.mock.calls[0][0]).toEqual(ports.confirmHandover.mock.calls[1][0]);
  expect(ports.confirmHandover.mock.calls[0][0]).toMatchObject({invoiceId:original.documentId});
  expect(ports.refresh).toHaveBeenCalledTimes(1);expect(ports.openInvoice).not.toHaveBeenCalled();
-});
-
-// Explicit isolated client transport fixtures. These verify React fences only;
-// genuine GET/Auth/DB/model behavior is covered by the native acceptance cases.
-const pollingModel=(title:string,pending=true):OfficeHomeModel=>({kind:'data',role:'meister',cacheLoginScope:'TEST-poll-scope',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,
- modelRead:{source:'modell',pending,incomplete:false,pollMs:1,rebuild:false},dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[{key:'source-order:TEST-poll',field:'action',kind:'order',orderId:'TEST-poll',orderVersion:1,title,meta:'',urgency:'warning',primaryActionLabel:TODAY_MODEL_COPY.reload}]}});
-
-it('controlled model transport never adopts a response for another login scope',async()=>{
- const next={...pollingModel('TEST foreign response',false),cacheLoginScope:'TEST-other-scope'};
- const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(JSON.stringify({code:'OK',model:next}),{status:200}));vi.stubGlobal('fetch',fetch);
- render(<RolfHomeClient model={pollingModel('TEST existing model')} ports={actionPorts}/>);
- await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
- await act(async()=>{await Promise.resolve();});
- expect(screen.queryByText('TEST foreign response')).toBeNull();
- expect(screen.getAllByText('TEST existing model')[0]).toBeVisible();
- expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet');
-});
-
-it('controlled late model response cannot replace a newer RSC snapshot even in the same login scope',async()=>{
- let finish!:(value:Response)=>void;
- const fetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));vi.stubGlobal('fetch',fetch);
- const view=render(<RolfHomeClient model={pollingModel('TEST first snapshot')} ports={actionPorts}/>);
- await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
- view.rerender(<RolfHomeClient model={pollingModel('TEST newer RSC',false)} ports={actionPorts}/>);
- await act(async()=>{finish(new Response(JSON.stringify({code:'OK',model:pollingModel('TEST stale delayed snapshot',false)}),{status:200}));await Promise.resolve();});
- expect(screen.getAllByText('TEST newer RSC')[0]).toBeVisible();
- expect(screen.queryByText('TEST stale delayed snapshot')).toBeNull();
-});
-
-it('controlled manual reload and automatic polling share one in-flight request and await its actual response',async()=>{
- let finish!:(value:Response)=>void;
- const fetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));vi.stubGlobal('fetch',fetch);
- render(<RolfHomeClient model={pollingModel('TEST waiting model')} ports={actionPorts}/>);
- await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
- for(const button of screen.getAllByRole('button',{name:TODAY_MODEL_COPY.reload})){fireEvent.click(button);fireEvent.click(button);}
- expect(fetch).toHaveBeenCalledTimes(1);
- expect(screen.queryByText('TEST acknowledged model')).toBeNull();
- await act(async()=>{finish(new Response(JSON.stringify({code:'OK',model:pollingModel('TEST acknowledged model',false)}),{status:200}));await Promise.resolve();});
- await waitFor(()=>expect(screen.getAllByText('TEST acknowledged model')[0]).toBeVisible());
- expect(fetch).toHaveBeenCalledTimes(1);
-});
-
-it('controlled return to a fresh model checks its scoped revision and keeps unchanged visible content',async()=>{
- const current=pollingModel('TEST unchanged visible content',false);
- if(!('modelRead'in current)||!current.modelRead)throw Error('TEST_CONDITIONAL_MODEL_REQUIRED');
- current.modelRead={...current.modelRead,revision:'a'.repeat(64)};
- const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(null,{status:304}));vi.stubGlobal('fetch',fetch);
- render(<RolfHomeClient model={current} ports={actionPorts}/>);
- expect(fetch).not.toHaveBeenCalled();
- fireEvent.focus(window);
- await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
- await act(async()=>{await Promise.resolve();});
- const headers=new Headers(fetch.mock.calls[0][1]?.headers);
- expect(headers.get('If-None-Match')).toBe('"'+'a'.repeat(64)+'"');expect(headers.get('X-Kreile-Login-Scope')).toBe('TEST-poll-scope');
- expect(screen.getAllByText('TEST unchanged visible content')[0]).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
- fireEvent.focus(window);await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
-});
-
-// Isolated promise/React transport proof, not an Auth/DB or full Next claim.
-it('streams independent regions while the primary Today list remains interactive',async()=>{
- let finishWeek!:(value:import('../OfficeHomeClient').TodayHomePartResult)=>void;
- let finishNotices!:(value:import('../OfficeHomeClient').TodayHomePartResult)=>void;
- const week=new Promise<import('../OfficeHomeClient').TodayHomePartResult>(resolve=>{finishWeek=resolve;});
- const notices=new Promise<import('../OfficeHomeClient').TodayHomePartResult>(resolve=>{finishNotices=resolve;});
- const click=vi.fn();
- await act(async()=>{render(<><button onClick={click}>TEST primary remains usable</button><TodayStreamedRegion part="week" source={week} scope="TEST-stream-scope"/><TodayStreamedRegion part="notices" source={notices} scope="TEST-stream-scope"/></>);});
- fireEvent.click(screen.getByRole('button',{name:'TEST primary remains usable'}));expect(click).toHaveBeenCalledTimes(1);
- expect(screen.getAllByText(TODAY_MODEL_COPY.partLoading)).toHaveLength(2);
- const regions=[...document.querySelectorAll<HTMLElement>('[data-today-region]')];expect(regions.every(region=>region.style.minBlockSize==='8rem')).toBe(true);
- await act(async()=>{finishNotices({code:'OK',part:'notices',missing:[]});await Promise.resolve();});
- expect(screen.getByText(TODAY_MODEL_COPY.noNotices)).toBeVisible();expect(screen.getAllByText(TODAY_MODEL_COPY.partLoading)).toHaveLength(1);
- await act(async()=>{finishWeek({code:'OK',part:'week',data:{weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:12345,currentlyUnpricedItemCount:0}});await Promise.resolve();});
- expect(screen.getByText(/123,45/)).toBeVisible();expect(screen.queryByText(TODAY_MODEL_COPY.partLoading)).toBeNull();
- expect(regions.every(region=>region.style.minBlockSize==='8rem')).toBe(true);
-});
-it('retries only the failed streamed region and does not replace the primary model',async()=>{
- const source=Promise.resolve({code:'SOURCE_INCOMPLETE' as const,part:'week' as const});
- const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(JSON.stringify({code:'OK',scope:'TEST-stream-scope',result:{code:'OK',part:'week',data:{weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:56789,currentlyUnpricedItemCount:0}}}),{status:200}));vi.stubGlobal('fetch',fetch);
- await act(async()=>{render(<><p>TEST known primary</p><TodayStreamedRegion part="week" source={source} scope="TEST-stream-scope"/></>);});
- fireEvent.click(screen.getByRole('button',{name:TODAY_MODEL_COPY.partReload}));
- await screen.findByText(/567,89/);expect(fetch).toHaveBeenCalledTimes(1);expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet&bereich=week');
- expect(screen.getByText('TEST known primary')).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
 });

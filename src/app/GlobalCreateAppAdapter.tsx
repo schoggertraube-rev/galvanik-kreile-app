@@ -47,11 +47,11 @@ import dynamic from 'next/dynamic';
 import {Button,Hinweis,Toast} from '@/ui/kr';
 import {DIALOG_LOAD_COPY} from '@/ui/situationCatalog';
 import {createDeferredDialogEvents,withDeferredDialogReady,importWithRetry,deferredDialogUnavailable,type DeferredDialogGroup,type DeferredDialogCallbacks} from '@/lib/client/deferredDialogEvents';
-const loadCreate=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.GlobalCreateFlow,'create'),()=>deferredDialogUnavailable('create'));
-const loadMessage=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IntakeMessageDialogs,'message'),()=>deferredDialogUnavailable('message'));
-const loadObject=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IntakeObjectDialogs,'object'),()=>deferredDialogUnavailable('object'));
-const loadInvoice=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.IncomingInvoiceDialogs,'invoice'),()=>deferredDialogUnavailable('invoice'));
-const loadComplaint=()=>importWithRetry(()=>import('@/modules/eingang/public')).then(module=>withDeferredDialogReady(module.ComplaintDialogs,'complaint'),()=>deferredDialogUnavailable('complaint'));
+const loadCreate=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.GlobalCreateFlow.load();return withDeferredDialogReady(Component,'create');}).catch(()=>deferredDialogUnavailable('create'));
+const loadMessage=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.IntakeMessageDialogs.load();return withDeferredDialogReady(Component,'message');}).catch(()=>deferredDialogUnavailable('message'));
+const loadObject=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.IntakeObjectDialogs.load();return withDeferredDialogReady(Component,'object');}).catch(()=>deferredDialogUnavailable('object'));
+const loadInvoice=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.IncomingInvoiceDialogs.load();return withDeferredDialogReady(Component,'invoice');}).catch(()=>deferredDialogUnavailable('invoice'));
+const loadComplaint=()=>importWithRetry(async()=>{const entry=await import('@/modules/eingang/public');const Component=await entry.ComplaintDialogs.load();return withDeferredDialogReady(Component,'complaint');}).catch(()=>deferredDialogUnavailable('complaint'));
 function CommunicationUnavailable(){
  useEffect(()=>{console.warn('[DIALOG_CHUNK_LOAD_FAILED]','communication');},[]);
  return <Hinweis ton="warn">{DIALOG_LOAD_COPY.mailUnavailable}<Button text={DIALOG_LOAD_COPY.reload} onClick={()=>location.reload()}/></Hinweis>;
