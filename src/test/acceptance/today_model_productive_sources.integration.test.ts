@@ -54,3 +54,23 @@ it('keeps the real partial company result retryable while all other known source
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
  expect(await sql`SELECT status,payload->>'code' AS code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='company'`).toEqual([{status:'OK',code:'OK'}]);
 });
+
+it('PL08:59 refuses to manufacture payment or task facts when no actual active profile remains',async()=>{
+ const read=()=>sql`SELECT to_jsonb(actor) AS row FROM public.app_users actor WHERE tenant_id=${tenant} ORDER BY id`;
+ await withRestoredTestSource({label:'TEST productive projector complete active profiles',read,restore:async originals=>{
+  for(const {row} of originals){
+   const columns=Object.keys(row);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_PROFILE_COLUMN_INVALID');
+   const names=columns.map(column=>'"'+column+'"').join(',');
+   await sql`UPDATE public.app_users SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::public.app_users,${sql.json(row)}::jsonb)) WHERE tenant_id=${tenant} AND id=${String(row.id)}::uuid`;
+  }
+ }},async()=>{
+  // Explicit isolated TEST source boundary; no alternate identity or auth path.
+  await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${tenant}`;
+  expect((await refreshTodayModel(tenant)).code).toBe('OK');
+  const rows=await sql`SELECT kind,status,error_code,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
+  expect(rows).toHaveLength(10);
+  for(const row of rows)expect(row).toMatchObject({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING',payload:null});
+ });
+ expect((await refreshTodayModel(tenant)).code).toBe('OK');
+ expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK'`).toEqual([{count:10}]);
+});

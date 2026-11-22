@@ -8,7 +8,7 @@ import {readManualHandoverSource} from '@/lib/server/orderHandoverSourcePort';
 import {ORDER_HANDOVER_COPY} from '@/ui/situationCatalog';
 import {canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
 import {MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
-import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
+import {canReadQuoteFollowupsForRead} from '@/lib/server/authorizationReadContext';
 import {readProductionPricingRetrySource,readProductionPricingRetryKeys} from '@/lib/server/productionSnapshotPort';
 import {readCancellationCreditSource} from '@/lib/server/commands/customerCreditCommand';
 import {readInvoiceReissueSource} from '@/lib/server/commands/immutableInvoiceCommand';
@@ -416,7 +416,7 @@ export function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,au
 export function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizedReadContext,today?:string):Promise<QuoteFollowupTaskSource[]>;
 export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,today=berlinCalendarDay()){
  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
- if(!('canReadArea'in auth?readAuth.canReadArea('mails'):canReadQuoteFollowups(auth)))return [];
+ if(!canReadQuoteFollowupsForRead(auth))return [];
  const tasks=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND bezug_typ='kv' AND art='aufgabe' AND status='offen' AND faellig_am<=${today}::date ORDER BY faellig_am,id`);
  // Narrow shared projection only: exact canonical followup key and live quote
  // are verified below. Generic task read/edit authority is unchanged.

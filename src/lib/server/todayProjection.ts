@@ -25,7 +25,7 @@ const TODAY_LIST_KINDS=['orders','messages','money','complaints','quote_followup
 type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
-export type ProjectorAuthorization=Readonly<{tenantId:string;areas:readonly AccessArea[];permissions:readonly PermissionKey[];canReadArea:(area:AccessArea)=>boolean;canReadTaskArea:(area:AccessArea|null)=>boolean;payment:PaymentReadAuthorization;canReadOperationalQuotes:boolean;[projectionBrand]:true}>;
+export type ProjectorAuthorization=Readonly<{tenantId:string;areas:readonly AccessArea[];permissions:readonly PermissionKey[];canReadArea:(area:AccessArea)=>boolean;canReadTaskArea:(area:AccessArea|null)=>boolean;payment:PaymentReadAuthorization;canReadOperationalQuotes:boolean;hasActiveProfiles:boolean;[projectionBrand]:true}>;
 type TodaySourceKey=Readonly<{kind:TodaySourceKind;sourceId:string}>;
 type TodayProjectionResult=
  | {code:'OK';payload:unknown;sourceVersion?:number;listed?:boolean}
@@ -59,7 +59,7 @@ async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthoriz
  const paymentProfiles=profiles.map(paymentReadAuthorization);
  return Object.freeze({tenantId,areas:union,permissions:Object.freeze([...getPermissionsForAreas(union)]),canReadArea:(area:AccessArea)=>areas.has(area),canReadTaskArea:(area:AccessArea|null)=>profiles.some(profile=>canReadTaskArea(profile,area)),
   payment:{tenantId,canReadSummary:context=>paymentProfiles.some(profile=>profile.canReadSummary(context)),canReadOrderStates:paymentProfiles.some(profile=>profile.canReadOrderStates)},
-  canReadOperationalQuotes:profiles.some(profile=>profile.active),[projectionBrand]:true as const});
+  canReadOperationalQuotes:profiles.some(profile=>profile.active),hasActiveProfiles:profiles.length>0,[projectionBrand]:true as const});
 }
 
 /** Per-run composition of the productive readers. No session/actor is forged;
@@ -75,6 +75,9 @@ function productivePorts():TodayProjectionPorts{
  const known=(result:{code:string})=>result.code==='OK'||result.code==='FORBIDDEN';
  return {readSettings:readTodayReadSettings,listOrderIds:async auth=>(await orders(auth)).map(row=>row.id),
   readSources:async(auth,keys)=>{
+   // PL08:59: absence of an actual active profile is not a zero-valued
+   // financial/task result. Keep every section unavailable for the live escape.
+   if(!auth.hasActiveProfiles)return new Map(keys.map(key=>[todaySourceKey(key),{code:'SOURCE_INCOMPLETE' as const,errorCode:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING'}]));
    const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(new Date()).today;
    const orderKeys=keys.filter(key=>key.kind==='order');
    if(orderKeys.length){

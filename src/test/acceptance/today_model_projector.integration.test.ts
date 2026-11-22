@@ -15,8 +15,8 @@ import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {refreshTodayModel,rebuildTodayModel,type ProjectorAuthorization} from '@/lib/server/todayProjection';
-import {APP_ROLES,canTransportInvoiceDocument,normalizeAccessAreasForRole} from '@/lib/auth/authorizationContract';
-import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
+import {APP_ROLES,canReadQuoteFollowups,canTransportInvoiceDocument,normalizeAccessAreasForRole} from '@/lib/auth/authorizationContract';
+import {authorizationReadContext,canReadQuoteFollowupsForRead,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
@@ -210,12 +210,15 @@ it('PL07:32 keeps the canonical invoice transport gate and both source-reader ga
  const input={orderId:original.orderId,expectedVersion:original.version};
  const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
  for(const role of APP_ROLES){
-  for(const requested of [[],['preise','auftraege']] as const){
+  for(const requested of [[],['preise','auftraege','mails']] as const){
    const rights=normalizeAccessAreasForRole(role,[...requested]);
    const fixture=await createFixture([...rights],role);
    const resolved=await withSession(fixture,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_INVOICE_GATE_REAL_AUTH');
    const canonical=canTransportInvoiceDocument(resolved.data),session=authorizationReadContext(resolved.data),areas=new Set(resolved.data.areas);
    const projection:AuthorizedReadContext={tenantId:resolved.data.tenantId,permissions:resolved.data.permissions,canReadArea:area=>areas.has(area)};
+   expect(session.canReadArea('mails'),role).toBe(canReadQuoteFollowups(resolved.data));
+   expect(canReadQuoteFollowupsForRead(resolved.data),role).toBe(canReadQuoteFollowups(resolved.data));
+   expect(canReadQuoteFollowupsForRead(projection),role).toBe(canReadQuoteFollowups(resolved.data));
    expect(session.canReadArea('preise'),role).toBe(canonical);expect(projection.canReadArea('preise'),role).toBe(canonical);
    const single=await readInvoiceShippingConsequences(projection,input,readInvoiceVat,readShippingSettingsInTransaction);
    const batch=await readInvoiceShippingConsequencesBatch(projection,[input],readInvoiceVat,readShippingSettingsInTransaction);
