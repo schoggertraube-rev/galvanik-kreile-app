@@ -147,11 +147,11 @@ async function release(tenantId:string,lease:Lease){
  await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=NULL
   WHERE tenant_id=${tenantId} AND refresh_lease_until=${lease.token}::timestamptz`));
 }
-async function pending(tenantId:string,lease:Lease,limit?:number):Promise<Snapshot[]>{
+async function pending(tenantId:string,lease:Lease,rebuild:boolean,limit?:number):Promise<Snapshot[]>{
  return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<Snapshot>(sql`SELECT source.kind,source.source_id AS "sourceId",source.source_seq::text AS "sourceSeq",tenant.tenant_seq::text AS "tenantSeq",${lease.day}::text AS day
   FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant ON tenant.tenant_id=source.tenant_id
   WHERE source.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
-   AND tenant.tenant_seq=${lease.tenantSeq}::bigint
+   AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND (${rebuild} OR source.status<>'SOURCE_INCOMPLETE')
    AND (source.source_seq<>source.built_seq OR source.built_tenant_seq<>tenant.tenant_seq OR source.built_day IS DISTINCT FROM ${lease.day}::date
     OR source.projector_version<>${TODAY_PROJECTOR_VERSION} OR source.status IN ('PENDING','SOURCE_INCOMPLETE'))
   ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
@@ -246,7 +246,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   }
   // Freeze this finite worklist. Writes that race this build remain stale for
   // the next bounded refresh; neither failures nor writers cause a rebuild loop.
-  const rows=await pending(tenantId,lease,rebuild?undefined:settings.todayRefreshBatchLimit);
+  const rows=await pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit);
   let built=0,stale=0;
   for(let offset=0;offset<rows.length;offset+=15){const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports);built+=result.built;stale+=result.stale;}
   if(rebuild)await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp()`));

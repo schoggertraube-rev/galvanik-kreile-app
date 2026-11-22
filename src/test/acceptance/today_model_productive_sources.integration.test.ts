@@ -66,7 +66,7 @@ it('keeps the real partial company result retryable while all other known source
   expect(company).toMatchObject({status:'SOURCE_INCOMPLETE',payload:{code:'VALIDATION_ERROR',missingFields:['street']}});
   expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'company' AND status='OK'`).toEqual([{count:9}]);
  });
- expect((await refreshTodayModel(tenant)).code).toBe('OK');
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  expect(await sql`SELECT status,payload->>'code' AS code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='company'`).toEqual([{status:'OK',code:'OK'}]);
 });
 
@@ -87,7 +87,7 @@ it('PL08:59 refuses to manufacture payment or task facts when no actual active p
   expect(rows).toHaveLength(10);
   for(const row of rows)expect(row).toMatchObject({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING',payload:null});
   await sql`UPDATE public.app_users SET active=true WHERE tenant_id=${tenant} AND id=${readonly.actorId}::uuid`;
-  expect((await refreshTodayModel(tenant)).code).toBe('OK');
+  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
   const denied=await sql`SELECT kind,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind IN ('orders','quotes','tasks') ORDER BY kind`;
   expect(denied).toEqual([
    {kind:'orders',payload:{code:'FORBIDDEN'}},
@@ -95,7 +95,7 @@ it('PL08:59 refuses to manufacture payment or task facts when no actual active p
    {kind:'tasks',payload:expect.objectContaining({code:'FORBIDDEN'})},
   ]);
  });
- expect((await refreshTodayModel(tenant)).code).toBe('OK');
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK'`).toEqual([{count:10}]);
 });
 
