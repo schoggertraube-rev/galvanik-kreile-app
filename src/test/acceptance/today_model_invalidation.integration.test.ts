@@ -7,7 +7,10 @@ import {execFileSync} from 'node:child_process';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {sql as sqlDrizzle} from 'drizzle-orm';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {randomUUID} from 'node:crypto';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 it('creates only private tenant-keyed derived sources with no public read or delete privilege',async()=>{
  const tables=await sql`SELECT c.relname,c.relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='private' AND c.relname IN ('today_source_v1','today_tenant_v1') ORDER BY c.relname`;
@@ -112,4 +115,72 @@ it('marks two actual order sources in a fixed order under concurrent reversed in
  await Promise.all([probe(ids),probe([...ids].reverse())]);
  expect(await sql`SELECT to_jsonb(orders) AS row FROM public.orders orders WHERE tenant_id=${tenant} AND id IN (${ids[0]},${ids[1]}) ORDER BY id`).toEqual(original);
  expect(await sql`SELECT to_jsonb(model) AS row FROM private.today_source_v1 model WHERE tenant_id=${tenant} ORDER BY kind,source_id`).toEqual(source);
+});
+
+it('does not invert model locks between disjoint order and configuration source transactions',async()=>{
+ // Rollback-only schema probe: all business rows touched by the two writers
+ // are disjoint. Any cycle below belongs to the derived invalidation locks.
+ const first=await readyInvoiceOrder('TEST order config lock first'),second=await readyInvoiceOrder('TEST order config lock second');
+ const snapshot=async()=>({
+  orders:await sql`SELECT to_jsonb(orders) AS row FROM public.orders orders WHERE tenant_id=${tenant} ORDER BY id`,
+  users:await sql`SELECT to_jsonb(actor) AS row FROM public.app_users actor WHERE tenant_id=${tenant} ORDER BY id`,
+  firm:await sql`SELECT to_jsonb(firm) AS row FROM public.company_settings firm WHERE tenant_id=${tenant} ORDER BY id`,
+  sources:await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} ORDER BY kind,source_id`,
+  epochs:await sql`SELECT to_jsonb(epoch) AS row FROM private.today_tenant_v1 epoch WHERE tenant_id=${tenant}`,
+ });
+ const original=await snapshot(),rollback=Symbol('TEST rollback disjoint source locks'),application='TEST_today_lock_'+randomUUID();
+ let beginSecond!:()=>void,secondStarted!:()=>void,secondFirstDone=false;
+ const firstReady=new Promise<void>(resolve=>{beginSecond=resolve;}),secondReady=new Promise<void>(resolve=>{secondStarted=resolve;});
+ const a=sql.begin(async tx=>{
+  await tx`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${first.orderId}`;
+  beginSecond();await secondReady;
+  let observed=false;
+  for(let attempt=0;attempt<100;attempt++){
+   if(secondFirstDone){observed=true;break;}
+   const state=await withPrivilegedTenantTransaction({tenantId:tenant},observer=>observer.execute<{waiting:boolean}>(sqlDrizzle`SELECT wait_event_type='Lock' AS waiting FROM pg_stat_activity WHERE application_name=${application}`));
+   if(state.some(row=>row.waiting)){observed=true;break;}
+   await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  if(!observed)throw Error('TEST_SECOND_SOURCE_LOCK_NOT_OBSERVED');
+  await tx`UPDATE public.company_settings SET company_name=company_name WHERE tenant_id=${tenant}`;
+  throw rollback;
+ });
+ const b=sql.begin(async tx=>{
+  await firstReady;
+  await tx`SELECT set_config('application_name',${application},true)`;secondStarted();
+  await tx`UPDATE public.app_users SET full_name='TEST disjoint source lock probe' WHERE tenant_id=${tenant} AND id=${full.actorId}::uuid`;
+  secondFirstDone=true;
+  await tx`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${second.orderId}`;
+  throw rollback;
+ });
+ const outcomes=await Promise.allSettled([a,b]);
+ try{for(const outcome of outcomes){if(outcome.status!=='rejected')throw Error('TEST_PROBE_MUST_ROLL_BACK');if(outcome.reason!==rollback)throw outcome.reason;}}
+ finally{expect(await snapshot()).toEqual(original);}
+});
+
+// Existing two E1 feature-scope cases relocated byte-for-byte; no assertion removed.
+it('uses the existing tenant_features.tenant key for insert/update/delete invalidation',async()=>{
+ const [before]=await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`;
+ await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES(${tenant},'E01',true)`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+1}]);
+ await sql`UPDATE public.tenant_features SET enabled=false WHERE tenant=${tenant} AND feature_id='E01'`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+2}]);
+ await sql`DELETE FROM public.tenant_features WHERE tenant=${tenant} AND feature_id='E01'`;
+ expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+3}]);
+});
+
+it('invalidates every already built tenant for the existing global feature_flags source and rolls all changes back',async()=>{
+ const other=tenant+'-secondary';
+ await sql`INSERT INTO private.today_tenant_v1(tenant_id) VALUES(${other})`;
+ const before=await sql`SELECT tenant_id,tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id IN (${tenant},${other}) ORDER BY tenant_id`;
+ const flags=await sql`SELECT to_jsonb(flag) AS row FROM public.feature_flags flag ORDER BY id`;
+ expect(flags.length).toBeGreaterThan(0);
+ const rollback=new Error('TEST_ROLLBACK_GLOBAL_FLAG_AND_ALL_MARKS');
+ await expect(sql.begin(async tx=>{
+  await tx`UPDATE public.feature_flags SET enabled=enabled WHERE id=(SELECT id FROM public.feature_flags ORDER BY id LIMIT 1)`;
+  expect(await tx`SELECT tenant_id,tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id IN (${tenant},${other}) ORDER BY tenant_id`).toEqual(before.map(row=>({...row,seq:row.seq+1})));
+  throw rollback;
+ })).rejects.toBe(rollback);
+ expect(await sql`SELECT to_jsonb(flag) AS row FROM public.feature_flags flag ORDER BY id`).toEqual(flags);
+ expect(await sql`SELECT tenant_id,tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id IN (${tenant},${other}) ORDER BY tenant_id`).toEqual(before);
 });
