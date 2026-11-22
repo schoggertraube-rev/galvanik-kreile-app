@@ -14,7 +14,7 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import {observeTodayModelShadow} from './todayModelShadow';
+import {observeTodayModelShadow} from './todayProjectionSchedule';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
