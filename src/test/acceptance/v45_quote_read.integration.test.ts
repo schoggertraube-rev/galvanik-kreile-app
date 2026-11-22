@@ -1,5 +1,5 @@
 // @vitest-environment node
-import {it,expect,vi} from 'vitest';
+import {it,expect,vi,expectTypeOf} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -7,6 +7,8 @@ import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarn
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {v45QuoteFacts} from '@/lib/server/v45QuoteRead';
+import {quoteCommandContext} from '@/lib/server/quoteAuthorization';
+import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 import {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction} from '@/app/actions/quotes.actions';
 
 it('reads actual KV editions after commands, retains unknown evidence and exposes no prices to an operational login',async()=>{
@@ -48,4 +50,33 @@ it('reads actual KV editions after commands, retains unknown evidence and expose
  // Explicit synthetic unaccepted boundary; the stored accepted promise stays unchanged.
  expect(v45QuoteFacts({...reread.quote,lifecycle:{...reread.quote.lifecycle!,acceptedEdition:null,acceptedAt:null,acceptanceEvidence:null}},new Date('2027-05-31T22:30:00Z'))).toMatchObject({expired:true});
  expect(v45QuoteFacts(reread.quote,new Date('2027-05-31T21:30:00Z'))).toMatchObject({expired:false});
+});
+
+
+it('reads the same actual quote/list/actor sources with a read capability that cannot be a command context',async()=>{
+ type ReadContext=Parameters<typeof readQuoteCommand>[0];
+ expectTypeOf<ReadContext>().not.toExtend<QuoteCommandContext>();
+ const customerId=await customerFixture('TEST Today readonly KV source');
+ const created=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId,dueDate:'2027-05-15',validUntil:'2027-05-31',note:'TEST readonly original',positions:[{name:'TEST readonly quote part',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:12345,lineTotalCents:24690}]}));
+ if(created.code!=='OK')throw Error('TEST_READONLY_QUOTE_CREATE:'+created.code);
+ const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_READONLY_AUTH_REQUIRED');
+ const command=quoteCommandContext(resolved.data),context:ReadContext={tenantId:command.tenantId,capabilities:{canReadQuote:command.capabilities.canReadQuote}};
+ expect(context).not.toHaveProperty('userId');expect(context.capabilities).not.toHaveProperty('canCreateQuote');
+ const input={quoteId:created.quote.quoteId},actorInput={...input,version:created.quote.version};
+ const [expectedQuote,expectedList,expectedActors]=await Promise.all([readQuoteCommand(command,input),listOpenQuotesCommand(command,customerId),readQuoteActors(command,actorInput)]);
+ const before=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ expect(await readQuoteCommand(context,input)).toEqual(expectedQuote);
+ expect(await listOpenQuotesCommand(context,customerId)).toEqual(expectedList);
+ expect(await readQuoteActors(context,actorInput)).toEqual(expectedActors);
+ expect(expectedActors).toMatchObject({code:'OK',trace:{createdBy:{userId:resolved.data.userId}}});
+ const denied:ReadContext={tenantId:context.tenantId,capabilities:{canReadQuote:false}};
+ expect(await readQuoteCommand(denied,input)).toMatchObject({code:'FORBIDDEN'});
+ expect(await listOpenQuotesCommand(denied,customerId)).toMatchObject({code:'FORBIDDEN'});
+ expect(await readQuoteActors(denied,actorInput)).toMatchObject({code:'FORBIDDEN'});
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(before);
+ const sent={...input,expectedVersion:created.quote.version,edition:1,clientEventId:randomUUID(),action:'sent' as const,channel:'druck' as const,evidence:'TEST real readonly source handover'};
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>changeQuoteLifecycleAction(JSON.parse(JSON.stringify(sent))))).toMatchObject({code:'OK',replayed:true});
+ const current=await readQuoteCommand(context,input);expect(current).toMatchObject({code:'OK',quote:{version:created.quote.version+1,lifecycle:{sentEdition:1}}});
+ expect(await readQuoteCommand(context,JSON.parse(JSON.stringify(input)))).toEqual(current);
 });

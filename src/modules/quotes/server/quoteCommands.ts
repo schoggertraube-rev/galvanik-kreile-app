@@ -16,6 +16,7 @@ import type {
   CreateQuoteResult,
   PrepareQuoteConversionResult,
   QuoteCommandContext,
+  QuoteReadContext,
   QuoteConversionReceipt,
   QuoteOrderInput,
   QuotePosition,
@@ -468,7 +469,9 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
   }
 }
 
-export async function readQuoteCommand(authorization: QuoteCommandContext, input: { quoteId: string }): Promise<ReadQuoteResult> {
+export function readQuoteCommand(authorization: QuoteCommandContext, input: { quoteId: string }): Promise<ReadQuoteResult>;
+export function readQuoteCommand(authorization: QuoteReadContext, input: { quoteId: string }): Promise<ReadQuoteResult>;
+export async function readQuoteCommand(authorization: QuoteReadContext|QuoteCommandContext, input: { quoteId: string }): Promise<ReadQuoteResult> {
   if (!plainObject(input) || !exactKeys(input, ["quoteId"]) || typeof input.quoteId !== "string" || !UUID_PATTERN.test(input.quoteId)) return { code: "VALIDATION_ERROR", message: "KV-Kennung ist ungültig." };
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht gelesen werden." };
   try {
@@ -483,7 +486,9 @@ export async function readQuoteCommand(authorization: QuoteCommandContext, input
 }
 
 /** Lists only the caller's tenant-bound draft aggregates. */
-export async function listOpenQuotesCommand(authorization: QuoteCommandContext, customerId?:string,changedSince?:string): Promise<ListOpenQuotesResult> {
+export function listOpenQuotesCommand(authorization: QuoteCommandContext, customerId?:string,changedSince?:string): Promise<ListOpenQuotesResult>;
+export function listOpenQuotesCommand(authorization: QuoteReadContext, customerId?:string,changedSince?:string): Promise<ListOpenQuotesResult>;
+export async function listOpenQuotesCommand(authorization: QuoteReadContext|QuoteCommandContext, customerId?:string,changedSince?:string): Promise<ListOpenQuotesResult> {
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Offene KVs dürfen mit dieser Rolle nicht gelesen werden." };
   if(customerId!==undefined&&!UUID_PATTERN.test(customerId))return {code:'VALIDATION_ERROR',message:'Kunde ist ungültig.'};
   if(changedSince!==undefined&&(typeof changedSince!=='string'||!Number.isFinite(Date.parse(changedSince))||new Date(changedSince).toISOString()!==changedSince))return {code:'VALIDATION_ERROR',message:OFFLINE_DEVICE_READ_COPY.invalidWindow};
