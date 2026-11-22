@@ -304,17 +304,9 @@ export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise
   if(!inherited){const settings=await readPageReadSettingsAction();if(settings.code==='OK')configurePageReadBudget(settings.settings.queryTimeoutMs);}
   const authorization=await withPageReadPhase('action.auth',()=>resolveOrderCardAuthorization());if(!authorization.ok)return authorization.result;
   const auth=authorization.data;
-  const [{readTodayOrderSources},{readV45OrderRule}]=await Promise.all([import('@/lib/server/todayOrderRead'),import('@/lib/server/v45OrderRead')]);
+  const {readTodayOrderSources,projectTodayOrderSources}=await import('@/lib/server/todayOrderRead');
   const sources=await readTodayOrderSources(auth,input.orderIds,await todayOrderSourcePorts());
-  const rows=sources.map(({orderId,result})=>{
-   if(result.code!=='OK')return {orderId,result};
-   const {card,records,shipping,informed,payment,shipment,appointment}=result.data;
-   try{
-    const nextActionRule=readV45OrderRule(auth,card,informed?{orderId:card.id,value:informed}:undefined,{orderId:card.id,records},{shipping,payment,shipment});
-    return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:appointment,nextActionRule}}};
-   }
-   catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
-  });
+  const rows=projectTodayOrderSources(auth,sources);
   logPageReadPhase('action.model',diagnosticStarted,{requested:input.orderIds.length,ok:rows.filter(row=>row.result.code==='OK').length,failed:rows.filter(row=>row.result.code!=='OK').length});
   return {code:'OK',data:{rows}};
  },DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);

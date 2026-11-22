@@ -7,6 +7,10 @@ import type {PrivilegedTenantTransaction} from './privilegedDb';
 import type {InvoiceVatReader,CustomerCreditResult} from '@/modules/accounting/public';
 import type {ShippingSettings} from '@/modules/fundament/public';
 import type {ManualShippingReadResult} from '@/modules/orders/public';
+import {canTransportInvoiceDocument} from '@/lib/auth/authorizationContract';
+import {maskTodayOrderCard} from './orderCardRead';
+import {maskOrderPaymentCredit} from './paymentSummaryRead';
+import {readV45OrderRule} from './v45OrderRead';
 
 type ShippingRead=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<ShippingSettings|null>;
 /** Only the authorized App/approved projector composition binds module readers. */
@@ -19,6 +23,20 @@ export type TodayOrderReadPorts={
 
 /** Complete existing Today source composition, before actor-bound V45 rules. */
 export type TodayOrderReadAuthorization=AuthorizedReadContext&Readonly<{payment:PaymentReadAuthorization}>;
+/** One actor projection for the live source and the qualified stored source.
+ * This performs no SQL and never returns the unmasked projector card. */
+export function projectTodayOrderSources(auth:AuthorizationSnapshot,sources:Awaited<ReturnType<typeof readTodayOrderSources>>){
+ return sources.map(({orderId,result})=>{
+  if(result.code!=='OK')return {orderId,result};
+  const raw=result.data,card=maskTodayOrderCard(auth,raw.card);
+  const shipping=canTransportInvoiceDocument(auth)?raw.shipping:undefined;
+  const payment=raw.payment===undefined?undefined:maskOrderPaymentCredit(auth,raw.payment);
+  try{
+   const nextActionRule=readV45OrderRule(auth,card,raw.informed?{orderId:card.id,value:raw.informed}:undefined,{orderId:card.id,records:raw.records},{shipping,payment,shipment:raw.shipment});
+   return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:raw.appointment,nextActionRule}}};
+  }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
+ });
+}
 export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrderReadAuthorization,orderIds:string[],ports:TodayOrderReadPorts){
   const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
   const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,orderIds))]);

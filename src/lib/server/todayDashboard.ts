@@ -140,6 +140,11 @@ export async function readTodaySource<T>(tx:PrivilegedTenantTransaction,read:(ne
 /** Keep the canonical reader's limit while retaining one transaction for the whole source. */
 export async function readTodayResponsibilities(auth:AuthorizationSnapshot,ids:readonly string[]){
  return withPrivilegedTenantTransaction(auth,async tx=>{
+  return readTodayResponsibilitiesInTransaction(tx,auth,ids);
+ }).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
+}
+
+export async function readTodayResponsibilitiesInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]){
   const result=Object.assign(new Map<string,string|null>(),{unavailableOrderIds:[] as string[]});
   for(let offset=0;offset<ids.length;offset+=1000){
    const block=await readTodaySource(tx,nested=>readOrderResponsibilityForToday(nested,auth,ids.slice(offset,offset+1000)));
@@ -148,7 +153,6 @@ export async function readTodayResponsibilities(auth:AuthorizationSnapshot,ids:r
    result.unavailableOrderIds.push(...block.data.unavailableOrderIds);
   }
   return {code:'OK' as const,data:result};
- }).catch(()=>({code:'SOURCE_INCOMPLETE' as const}));
 }
 
 /** One source-access mask for the existing live composition and the prepared
@@ -216,21 +220,17 @@ export async function readTodayMoneySupport(auth:AuthorizationSnapshot|Authorize
    return {supportMissing:['TODAY_SUPPORT_SOURCE','TODAY_UNSENT_INVOICE_SOURCE'],invoiceMailSource:{code:'SOURCE_INCOMPLETE' as const},invoiceSource:{code:'SOURCE_INCOMPLETE' as const},invoices:[] as InvoiceRow[],prepaymentSource:{code:'SOURCE_INCOMPLETE' as const},prepayments:[] as PrepaymentRow[],collectionSource:{code:'SOURCE_INCOMPLETE' as const},collections:[] as CollectionRow[]};
   });
 }
-async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:ReturnType<typeof todaySourceAccess>){
- const {orders:ordersAllowed}=access;
- const [money,person,orders]=await Promise.all([
-  readTodayMoneySupport(auth,today,access),
-  withPrivilegedTenantTransaction(auth,async tx=>{
+export async function readTodayPersonalSupportInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot){
       const preferencesSource = await readTodaySource(tx,nested=>
         nested.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`));
       const remindersSource = await readTodaySource(tx,nested=>
         nested.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`));
 
    return {supportMissing:[...(preferencesSource.code!=='OK'?['TODAY_PREFERENCES_SOURCE']:[]),...(remindersSource.code!=='OK'?['TODAY_REMINDERS_SOURCE']:[])],preferences:preferencesSource.code==='OK'?preferencesSource.data:[],reminders:remindersSource.code==='OK'?remindersSource.data:[]};
-  }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
-   return {supportMissing:['TODAY_PREFERENCES_SOURCE','TODAY_REMINDERS_SOURCE'],preferences:[] as PreferenceRow[],reminders:[] as ReminderRow[]};
-  }),
-  withPrivilegedTenantTransaction(auth,async tx=>{
+}
+
+export async function readTodayDelegationSupportInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,access:ReturnType<typeof todaySourceAccess>){
+ const {orders:ordersAllowed}=access;
       const delegationSource =
         ordersAllowed ? await readTodaySource(tx,nested=>nested.execute<UserRow>(sql`
           SELECT users.id, users.full_name
@@ -257,6 +257,18 @@ async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:R
       const assignments=assignmentSource.code==='OK'?assignmentSource.data:[];
 
    return {supportMissing:delegationSource.code!=='OK'?['TODAY_DELEGATION_SOURCE']:[],delegationTargets:delegationSource.code==='OK'?delegationSource.data:[],assignmentSourceIncomplete:assignmentSource.code!=='OK'||assignments.some(row=>!row.integrity_ok),assignments:assignments.filter(row=>row.integrity_ok)};
+}
+
+async function readTodaySupport(auth:AuthorizationSnapshot,today:string,access:ReturnType<typeof todaySourceAccess>){
+ const [money,person,orders]=await Promise.all([
+  readTodayMoneySupport(auth,today,access),
+  withPrivilegedTenantTransaction(auth,async tx=>{
+   return readTodayPersonalSupportInTransaction(tx,auth);
+  }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
+   return {supportMissing:['TODAY_PREFERENCES_SOURCE','TODAY_REMINDERS_SOURCE'],preferences:[] as PreferenceRow[],reminders:[] as ReminderRow[]};
+  }),
+  withPrivilegedTenantTransaction(auth,async tx=>{
+   return readTodayDelegationSupportInTransaction(tx,auth,access);
   }).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'support',name:error instanceof Error?error.name:'UnknownError'});
    return {supportMissing:['TODAY_DELEGATION_SOURCE'],delegationTargets:[] as UserRow[],assignmentSourceIncomplete:true,assignments:[] as AssignmentRow[]};
   }),
