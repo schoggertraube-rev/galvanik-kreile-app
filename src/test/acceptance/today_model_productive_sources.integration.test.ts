@@ -3,7 +3,7 @@
 import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
+import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {rebuildTodayModel,refreshTodayModel} from '@/lib/server/todayProjection';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
@@ -56,6 +56,7 @@ it('keeps the real partial company result retryable while all other known source
 });
 
 it('PL08:59 refuses to manufacture payment or task facts when no actual active profile remains',async()=>{
+ const readonly=await createFixture([],'readonly');
  const read=()=>sql`SELECT to_jsonb(actor) AS row FROM public.app_users actor WHERE tenant_id=${tenant} ORDER BY id`;
  await withRestoredTestSource({label:'TEST productive projector complete active profiles',read,restore:async originals=>{
   for(const {row} of originals){
@@ -70,6 +71,14 @@ it('PL08:59 refuses to manufacture payment or task facts when no actual active p
   const rows=await sql`SELECT kind,status,error_code,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
   expect(rows).toHaveLength(10);
   for(const row of rows)expect(row).toMatchObject({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING',payload:null});
+  await sql`UPDATE public.app_users SET active=true WHERE tenant_id=${tenant} AND id=${readonly.actorId}::uuid`;
+  expect((await refreshTodayModel(tenant)).code).toBe('OK');
+  const denied=await sql`SELECT kind,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind IN ('orders','quotes','tasks') ORDER BY kind`;
+  expect(denied).toEqual([
+   {kind:'orders',payload:{code:'FORBIDDEN'}},
+   {kind:'quotes',payload:{list:{code:'FORBIDDEN',message:'Offene KVs dürfen mit dieser Rolle nicht gelesen werden.'}}},
+   {kind:'tasks',payload:expect.objectContaining({code:'FORBIDDEN'})},
+  ]);
  });
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
  expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK'`).toEqual([{count:10}]);

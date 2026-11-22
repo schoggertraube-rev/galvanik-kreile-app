@@ -16,7 +16,7 @@ import {readTodayOrderSources,type TodayOrderReadPorts} from './todayOrderRead';
 import {readLiveOrderCardSource} from './orderCardRead';
 import {getOperationalOrders} from './operationalOrders';
 import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
-import {readTodayMoneySupport} from './todayDashboard';
+import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 
@@ -78,7 +78,7 @@ function productivePorts():TodayProjectionPorts{
    // PL08:59: absence of an actual active profile is not a zero-valued
    // financial/task result. Keep every section unavailable for the live escape.
    if(!auth.hasActiveProfiles)return new Map(keys.map(key=>[todaySourceKey(key),{code:'SOURCE_INCOMPLETE' as const,errorCode:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING'}]));
-   const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(new Date()).today;
+   const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(new Date()).today,access=todaySourceAccess(auth);
    const orderKeys=keys.filter(key=>key.kind==='order');
    if(orderKeys.length){
     const rows=await readTodayOrderSources(auth,orderKeys.map(key=>key.sourceId),orderPorts);
@@ -94,7 +94,7 @@ function productivePorts():TodayProjectionPorts{
     try{
      let result:TodayProjectionResult;
      switch(key.kind){
-      case 'orders':result=source(await orders(auth));break;
+      case 'orders':result=source(access.orders?await orders(auth):{code:'FORBIDDEN'});break;
       case 'messages':{const read=await readIntakeMessagesForAuthorization(auth,'offen');result=source(read,known(read));break;}
       case 'complaints':{const read=await readComplaintsForAuthorization(auth);result=source(read,known(read));break;}
       case 'company':{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise')});result=source(read,known(read));break;}
@@ -104,7 +104,7 @@ function productivePorts():TodayProjectionPorts{
       case 'quotes':{
        // The live Today list uses the existing operational read capability;
        // financial masking and all actor-bound U2 commands remain live.
-       const context={tenantId:auth.tenantId,capabilities:{canReadQuote:auth.canReadOperationalQuotes}};
+       const context={tenantId:auth.tenantId,capabilities:{canReadQuote:auth.canReadOperationalQuotes&&access.messages}};
        const list=await listOpenQuotesCommand(context);
        if(list.code!=='OK'){result=source({list},known(list));break;}
        const cards=await Promise.all(list.quotes.map(async quote=>{

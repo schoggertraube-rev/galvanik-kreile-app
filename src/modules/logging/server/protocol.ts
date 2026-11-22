@@ -5,6 +5,8 @@ import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/auth
 import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {after} from 'next/server';
+import {outsidePageReadBudget} from '@/db/readBudget';
 import type {TechnicalEvent,TechnicalLogRow,ClickLogRow,LogFilter,LogSubject,LogReason,LoggingSettingsReader} from '../public';
 
 // PL16.11: instance-local loss is explicitly accepted at cold start. Not a second log source.
@@ -130,6 +132,7 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
 export async function observeAction<T>(name:string,subject:LogSubject,work:()=>Promise<T>,readSettings:LoggingSettingsReader,options:{errorIdentifier?:string}={}):Promise<T>{
  if(actionObservationActive())return work();
  return withActionObservation(async readAuthorization=>{
+ try{
  // A rejected input is not a verified object reference (and may contain secrets).
  // The command itself remains the known subject when a supplied ID is malformed.
  const source=subject&&uuid.test(subject.id)?subject:{type:'action',id:name};
@@ -164,5 +167,21 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
  }
  if(auth&&slowMs!==null&&durationMs>slowMs)await logTechnical(auth,{type:'slow',command:name,subject:source,durationMs});
  return result;
+ }finally{
+  // Once per enclosing Action, after its business transaction and response.
+  // A scheduling/runtime failure cannot roll back or replace the main result;
+  // the trigger-owned pending marker remains for the next live escape/rebuild.
+  const tenants=[...readAuthorization().tenantTransactions.keys()];
+  if(tenants.length){
+   try{after(()=>outsidePageReadBudget(async()=>{
+    const {refreshTodayModel}=await import('@/lib/server/todayProjection');
+    for(const tenantId of tenants){
+     try{await refreshTodayModel(tenantId);}
+     catch{console.error('[TODAY_PROJECTOR_REFRESH_FAILED]',{code:'SOURCE_INCOMPLETE'});}
+    }
+   }));}
+   catch{console.error('[TODAY_PROJECTOR_SCHEDULE_FAILED]',{code:'SOURCE_INCOMPLETE'});}
+  }
+ }
  },logTechnical);
 }

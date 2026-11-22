@@ -6,8 +6,14 @@ type Reporter=(authorization:AuthorizationSnapshot|null,event:TechnicalEvent)=>P
 
 // Observation only: no cache, replacement identity or permission decision.
 // The real resolver publishes the exact snapshot that the business command already received.
-const scope=new AsyncLocalStorage<{authorization:AuthorizationSnapshot|null;attempted:boolean;report?:Reporter;failures:Set<string>}>();
+const scope=new AsyncLocalStorage<{authorization:AuthorizationSnapshot|null;attempted:boolean;report?:Reporter;failures:Set<string>;tenantTransactions:Map<string,number>}>();
 export function actionObservationActive(){return scope.getStore()!==undefined;}
+/** Actual transaction entry only, including SQL-function writers. No command
+ * result, claimed actor or SQL-text heuristic is used as a write substitute. */
+export function observeTenantTransaction(tenantId:string){
+ const current=scope.getStore();
+ if(current)current.tenantTransactions.set(tenantId,(current.tenantTransactions.get(tenantId)??0)+1);
+}
 /** Only the snapshot already returned by the real resolver in this Action. */
 export function readObservedAuthorization(){return scope.getStore()?.authorization??null;}
 /** Defer caught diagnostics until the enclosing business work has settled. */
@@ -24,7 +30,7 @@ export function observeAuthorizationAttempt(){const current=scope.getStore();if(
 export function observeResolvedAuthorization(authorization:AuthorizationSnapshot){
  const current=scope.getStore();if(current)current.authorization=authorization;
 }
-export function withActionObservation<T>(work:(read:()=>{authorization:AuthorizationSnapshot|null;attempted:boolean;failures:ReadonlySet<string>})=>Promise<T>,report?:Reporter):Promise<T>{
- const current={authorization:null as AuthorizationSnapshot|null,attempted:false,report,failures:new Set<string>()};
+export function withActionObservation<T>(work:(read:()=>{authorization:AuthorizationSnapshot|null;attempted:boolean;failures:ReadonlySet<string>;tenantTransactions:ReadonlyMap<string,number>})=>Promise<T>,report?:Reporter):Promise<T>{
+ const current={authorization:null as AuthorizationSnapshot|null,attempted:false,report,failures:new Set<string>(),tenantTransactions:new Map<string,number>()};
  return scope.run(current,()=>work(()=>current));
 }

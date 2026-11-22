@@ -3,6 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import {observeTenantTransaction} from './actionObservation';
 
 type TenantAuthorization = Pick<AuthorizationSnapshot, "tenantId">;
 
@@ -21,6 +22,7 @@ export async function withPrivilegedTenantTransaction<T>(
     await transaction.execute(
       sql`SELECT set_config('app.tenant_id', ${authorization.tenantId}, true)`,
     );
+    observeTenantTransaction(authorization.tenantId);
     return work(transaction as PrivilegedTenantTransaction);
   });
 }
