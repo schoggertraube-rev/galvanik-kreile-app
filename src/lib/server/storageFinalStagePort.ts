@@ -18,7 +18,7 @@ type Letter=NonNullable<StorageEligibility['letter']>;
 type Meta={customerId:string;handover:string;letterKey:string;threadId:string|null;postalDocumentId?:string;recipientId:string;due:string;orders:Array<{id:string;number:string;version:number}>;freezes:Letter['freezes']};
 type Source={payload:{meta:Meta;taskId:string};user_id:string;proof_ok:boolean};
 function finalKey(letterKey:string){const h=createHash('sha256').update('storage-final:'+letterKey).digest('hex');return h.slice(0,8)+'-'+h.slice(8,12)+'-5'+h.slice(13,16)+'-8'+h.slice(17,20)+'-'+h.slice(20,32);}
-async function verifyLetter(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,origin:{threadId:string|null;postalDocumentId?:string;customerId:string;letterKey:string}){
+async function verifyLetter(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,origin:{threadId:string|null;postalDocumentId?:string;customerId:string;letterKey:string}){
  if(origin.postalDocumentId){if(origin.threadId!==null)throw Error('STORAGE_LETTER_CHANNEL_INVALID');return verifyPostalDispatch(tx,auth,{customerId:origin.customerId,letterKey:origin.letterKey,documentId:origin.postalDocumentId});}
  if(!origin.threadId)throw Error('STORAGE_LETTER_SOURCE_MISSING');
   const proof=await tx.execute(sql`SELECT sent.id FROM public.events sent JOIN public.events prepared ON prepared.tenant_id=sent.tenant_id AND prepared.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND prepared.payload->>'threadId'=${origin.threadId} AND prepared.payload->'meta'=sent.payload->'meta' AND prepared.correlation_id=sent.correlation_id AND prepared.user_id=sent.user_id AND prepared.status='success' AND prepared.event_schema_version=1
@@ -27,7 +27,7 @@ async function verifyLetter(tx:PrivilegedTenantTransaction,auth:AuthorizationSna
    WHERE sent.tenant_id=${auth.tenantId} AND sent.event_type='ORDER_COLLECTION_REMINDER_SENT_V1' AND sent.status='success' AND sent.event_schema_version=1 AND sent.payload->>'threadId'=${origin.threadId} AND sent.payload->'meta'->>'stage'='E4' AND sent.payload->'meta'->>'stageKey'=${origin.letterKey}`);
   if(proof.length!==1||(await readCommunicationDeliveryFailures(tx,auth,[origin.threadId])).length)throw Error('STORAGE_FINAL_LETTER_INVALID');
 }
-async function receipt(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,letterKey:string){
+async function receipt(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,letterKey:string){
  const rows=await tx.execute<Source>(sql`SELECT payload,user_id::text,(status='success' AND event_schema_version=1 AND client_event_id::text=${finalKey(letterKey)} AND correlation_id::text=${letterKey}) AS proof_ok FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND correlation_id=${letterKey}::uuid`);
  if(!rows.length)return null;if(rows.length!==1||!rows[0].proof_ok)throw Error('STORAGE_FINAL_SOURCE_INVALID');
  const row=rows[0],meta=row.payload.meta;
@@ -59,7 +59,7 @@ export async function readStorageFinalTaskState(auth:AuthorizationSnapshot,lette
  });
 }
 /** Resolve the qualified remaining ware, retaining the original task and original letter. */
-export async function readFinalTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string){
+export async function readFinalTaskCurrentOrder(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,taskId:string){
  const rows=await tx.execute<{key:string}>(sql`SELECT correlation_id::text AS key FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND payload->>'taskId'=${taskId}`);
  if(rows.length!==1)throw Error('FINAL_TASK_REFERENCE_SOURCE_INVALID');
  const current=await receipt(tx,auth,rows[0].key);if(!current?.payload.meta.orders.length)throw Error('FINAL_TASK_REFERENCE_EMPTY');

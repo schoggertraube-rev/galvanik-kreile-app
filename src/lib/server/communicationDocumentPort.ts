@@ -1,3 +1,4 @@
+import {authorizationReadContext,type AuthorizedReadContext} from './authorizationReadContext';
 import {parseInvoiceCollectionOriginal,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import 'server-only';
 import type {CommunicationOriginal} from './communicationOriginalPort';
@@ -437,7 +438,7 @@ function invoiceMailRemainderProofSource(tenantId:string){
    AND marker.payload->>'customerId'=thread.customer_id AND prepared.payload->'document'->>'kind'='INVOICE'`;
 }
 
-export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string){
+export async function readInvoiceMailRemainderFailure(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,markerId:string){
  const rows=await tx.execute<{customerId:string;actorId:string;requestId:string;threadId:string;reason:string}>(sql`SELECT "customerId","actorId","requestId","threadId",reason FROM (${invoiceMailRemainderProofSource(auth.tenantId)}) proof WHERE marker_id=${markerId}`);
  if(!rows.length){const marker=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${markerId} AND event_type='INVOICE_MAIL_REMAINDER_PENDING_V1'`);if(!marker.length)return null;}
  if(rows.length!==1||!rows[0].reason)throw Error('INVOICE_MAIL_REMAINDER_SOURCE_INVALID');
@@ -580,11 +581,11 @@ export async function applyRecoveredInvoiceMailEffects(auth:AuthorizationSnapsho
  return existingTx?work(existingTx):withPrivilegedTenantTransaction(auth,work);
 }
 
-export async function isCanceledInvoiceMailTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){
+export async function isCanceledInvoiceMailTask(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,id:string){
  const rows=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='COMMUNICATION_INVOICE_TASK_CREATED_V1' AND payload->>'taskId'=${id} LIMIT 1`);return rows.length>0;
 }
-export async function readCanceledInvoiceTaskCompletion(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){
- if(!hasAuthorizationArea(auth,'preise'))return null;
+export async function readCanceledInvoiceTaskCompletion(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,id:string){
+ if(!('canReadArea'in auth?auth:authorizationReadContext(auth)).canReadArea('preise'))return null;
  const rows=await tx.execute<{customer_name:string}>(sql`SELECT customer.name AS customer_name FROM public.events source
   JOIN public.invoices invoice ON invoice.tenant_id=source.tenant_id AND invoice.id::text=source.payload->>'invoiceId' AND invoice.status='cancelled'
   JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
