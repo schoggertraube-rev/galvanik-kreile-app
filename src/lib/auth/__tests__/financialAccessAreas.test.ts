@@ -12,7 +12,7 @@ const profile=(areas:readonly AccessArea[])=>({role:'werkstatt' as const,areas})
 const financial:readonly AccessArea[]=['preise','zahlungen','buchhaltung'];
 describe('KORR-RECHTE-GELD independent financial scopes',()=>{
  it('keeps the existing operational areas and all three distinct financial checkboxes',()=>{
-  expect(ACCESS_AREAS).toEqual(['auftraege','eingang','kunden','preise','zahlungen','buchhaltung','kassieren','mails','entscheiden','einstellungen','logins','wartung','statistik_alle','protokoll']);
+  expect(ACCESS_AREAS).toEqual(['auftraege','lager.stamm','eingang','kunden','preise','zahlungen','buchhaltung','kassieren','mails','entscheiden','einstellungen','logins','wartung','statistik_alle','protokoll']);
   expect(ACCESS_AREA_LABELS.preise).toEqual({text:'Preise & Rechnungen',sub:'Preise in KV, Auftrag und Rechnung; Rechnung ausstellen und senden'});
   expect(ACCESS_AREA_LABELS.zahlungen).toEqual({text:'Zahlungen & Mahnungen',sub:'Zahlungen buchen, offene Posten, Mahnung, Storno, Guthaben'});
   expect(ACCESS_AREA_LABELS.buchhaltung).toEqual({text:'Buchhaltung & Zahlen',sub:'Eingangsrechnungen, Buchhaltung, Kontostand, Auswertungen, Export'});
