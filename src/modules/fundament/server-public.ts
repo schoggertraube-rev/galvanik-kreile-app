@@ -21,3 +21,11 @@ export { isFeatureEnabled, readTenantFeatures, setTenantFeature } from "./server
 export type { TenantFeatureContext } from "./server/tenantFeaturePort";
 
 export {readMailboxFetchState,writeMailboxFetchState} from "./server/systemSettingsPort";
+
+export {readLagerEinstellungen,readAusschussBerechnenInTransaction,readKanalAnhangGrenzen,readBetriebMessgrenzenInTransaction,
+  readNacharbeitUrsachenInTransaction,
+  readBetriebswaechterEinstellungenInTransaction,readMahnEinstellungenInTransaction,readZahlungsmusterEinstellungenInTransaction,readMetallkursEinstellungenInTransaction,readBeraterzeitKalkulationInTransaction,
+  readFirmenakzentInTransaction,readAbweichungskategorienInTransaction,readZielwerteInTransaction,readKanalFristenInTransaction,
+  readQ6EinstellungenInTransaction,readErkennungsEinstellungenInTransaction,readSuchaliasGruppenInTransaction,
+  readEnergiePauschaleInTransaction} from "./server/s16dSpurDSettingsPort";
+export type {LagerEinstellungen,KanalAnhangGrenzen} from "./server/s16dSpurDSettingsPort";

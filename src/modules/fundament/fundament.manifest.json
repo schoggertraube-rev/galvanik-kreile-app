@@ -68,7 +68,27 @@
     "@/modules/fundament/public#todayReadSettingsFromCompany",
     "@/modules/fundament/public#PageReadSettings",
     "@/modules/fundament/public#pageReadSettingsFromCompany",
-    "@/modules/fundament/public#parsePageReadSettings"
+    "@/modules/fundament/public#parsePageReadSettings",
+    "@/modules/fundament/server-public#readLagerEinstellungen",
+    "@/modules/fundament/server-public#readAusschussBerechnenInTransaction",
+    "@/modules/fundament/server-public#readKanalAnhangGrenzen",
+    "@/modules/fundament/server-public#readBetriebMessgrenzenInTransaction",
+    "@/modules/fundament/server-public#readNacharbeitUrsachenInTransaction",
+    "@/modules/fundament/server-public#readBetriebswaechterEinstellungenInTransaction",
+    "@/modules/fundament/server-public#readMahnEinstellungenInTransaction",
+    "@/modules/fundament/server-public#readZahlungsmusterEinstellungenInTransaction",
+    "@/modules/fundament/server-public#readMetallkursEinstellungenInTransaction",
+    "@/modules/fundament/server-public#readBeraterzeitKalkulationInTransaction",
+    "@/modules/fundament/server-public#readFirmenakzentInTransaction",
+    "@/modules/fundament/server-public#readAbweichungskategorienInTransaction",
+    "@/modules/fundament/server-public#readZielwerteInTransaction",
+    "@/modules/fundament/server-public#readKanalFristenInTransaction",
+    "@/modules/fundament/server-public#readQ6EinstellungenInTransaction",
+    "@/modules/fundament/server-public#readErkennungsEinstellungenInTransaction",
+    "@/modules/fundament/server-public#readSuchaliasGruppenInTransaction",
+    "@/modules/fundament/server-public#readEnergiePauschaleInTransaction",
+    "@/modules/fundament/server-public#LagerEinstellungen",
+    "@/modules/fundament/server-public#KanalAnhangGrenzen"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
@@ -82,7 +102,8 @@
     "20261107193000_kv_v04_content_editions.sql",
     "20261110034000_output_dispatch_policy.sql",
     "20261114034003_shipment_fee_setting.sql",
-    "20261117154638_package_feature_switch_defaults.sql"
+    "20261117154638_package_feature_switch_defaults.sql",
+    "20261122235000_einstellungen_s16d_spur_d_felder.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [
