@@ -6,7 +6,7 @@ import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
 import type {ListOpenQuotesResult} from '@/modules/quotes/public';
-import {canReadQuoteFollowups} from '@/lib/auth/authorizationContract';
+import {canReadQuoteFollowupsForRead} from '@/lib/server/authorizationReadContext';
 import {createInitialOrderPrintJobs} from '@/modules/orders/server-public';
 import {quoteCommandContext,quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
@@ -228,7 +228,7 @@ export async function listOpenQuotesAction(input?:{purpose:'today'|'device'}) {
     return result.code==='OK'?{code:'OK' as const,quotes:result.quotes.map(({quoteId,version,updatedAt})=>({quoteId,version,updatedAt})),serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
   }
   if(input?.purpose==='today'){
-    if(!canReadQuoteFollowups(authorization.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
+    if(!canReadQuoteFollowupsForRead(authorization.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
     const result=await listOpenQuotesCommand(quoteOperationContext(authorization.data));
     return result.code==='OK'?{code:'OK' as const,quotes:result.quotes.map(({quoteId,version})=>({quoteId,version}))}:result;
   }
@@ -476,7 +476,7 @@ export async function getQuoteFollowupsForTodayAction(){
  return observeAction('getQuoteFollowupsForTodayAction',subjectForAction('getQuoteFollowupsForTodayAction',undefined),async()=>{
  noStore();
  try{const auth=await resolveAuthorization();const denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
-  if(!canReadQuoteFollowups(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
+  if(!canReadQuoteFollowupsForRead(auth.data))return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
   const tasks=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data));
   return {code:'OK' as const,tasks};
  }catch(error){console.error('[QUOTE_FOLLOWUP_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Nachfassaufgaben konnten nicht geladen werden.'};}

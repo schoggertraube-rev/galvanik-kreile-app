@@ -2,7 +2,7 @@
 // Explicit synthetic rows and RSC dispatcher; production cache implementation is React's own.
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {readPageReadSettings,readCompanyLetterSettings} from '../server/systemSettingsPort';
+import {readPageReadSettings,readTodayReadSettings,readCompanyLetterSettings} from '../server/systemSettingsPort';
 
 type Dispatcher={getCacheForType:<T>(factory:()=>T)=>T};
 const test=vi.hoisted(()=>({
@@ -37,6 +37,27 @@ beforeEach(()=>{
  test.settings.mockResolvedValue([{page_read_source:{hasQueryTimeout:true,hasInvoiceBatchLimit:true,queryTimeoutMs:10000,invoiceMailBatchLimit:101}}]);
 });
 afterEach(()=>vi.restoreAllMocks());
+
+it('uses the same cached settings query for the old page reader and the dark model reader',async()=>{
+ const model={todayReadSource:'modell',todayRefreshBatchLimit:20,todayRefreshLeaseSeconds:30,todayShadowIntervalMs:60000,todayStalePollMs:1500,navPrefetchMaxAgeSeconds:60};
+ const today_read_source={...model,...Object.fromEntries(Object.keys(model).map(key=>['has_'+key,true]))};
+ test.settings.mockResolvedValue([{page_read_source:{hasQueryTimeout:true,hasInvoiceBatchLimit:true,queryTimeoutMs:10000,invoiceMailBatchLimit:101},today_read_source}]);
+ await render(async()=>{
+  expect(await readTodayReadSettings({tenantId:KREILE_TENANT_SLUG})).toEqual(model);
+  expect(await readPageReadSettings({tenantId:KREILE_TENANT_SLUG})).toEqual({queryTimeoutMs:10000,invoiceMailBatchLimit:101});
+  expect(test.settings).toHaveBeenCalledOnce();
+ });
+});
+
+it('uses model startup defaults only for the known missing schema and rejects partial or malformed present values',async()=>{
+ const flags={has_todayReadSource:false,has_todayRefreshBatchLimit:false,has_todayRefreshLeaseSeconds:false,has_todayShadowIntervalMs:false,has_todayStalePollMs:false,has_navPrefetchMaxAgeSeconds:false};
+ test.settings.mockResolvedValue([{today_read_source:flags}]);
+ expect(await readTodayReadSettings({tenantId:KREILE_TENANT_SLUG})).toEqual({todayReadSource:'modell',todayRefreshBatchLimit:20,todayRefreshLeaseSeconds:30,todayShadowIntervalMs:60000,todayStalePollMs:1500,navPrefetchMaxAgeSeconds:60});
+ test.settings.mockResolvedValue([{today_read_source:{...flags,has_todayReadSource:true,todayReadSource:'modell'}}]);
+ await expect(readTodayReadSettings({tenantId:KREILE_TENANT_SLUG})).rejects.toThrow('TODAY_READ_SETTINGS_SOURCE_INVALID');
+ test.settings.mockResolvedValue([{today_read_source:flags},{today_read_source:flags}]);
+ await expect(readTodayReadSettings({tenantId:KREILE_TENANT_SLUG})).rejects.toThrow('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
+});
 
 it('shares page settings only for the same tenant in the same render and rereads actions',async()=>{
  await render(async()=>{

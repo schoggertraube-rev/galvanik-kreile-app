@@ -47,6 +47,7 @@ export function logPageReadQueryObservation(observation:PageReadQueryObservation
  * The native settings contract checks the additive SQL defaults against these. */
 export const DEFAULT_PAGE_READ_SETTINGS={
  queryTimeoutMs:10_000,invoiceMailBatchLimit:101,
+ todayReadSource:'modell',todayRefreshBatchLimit:20,todayRefreshLeaseSeconds:30,todayShadowIntervalMs:60000,todayStalePollMs:1500,navPrefetchMaxAgeSeconds:60,
  authorizationTimeoutMs:1000,authorizationPoolSize:2,authorizationIdleTimeoutSeconds:300,
  get graphTimeoutMs(){return this.queryTimeoutMs;},
 } as const;
@@ -309,7 +310,7 @@ export function logPageReadPhase(phase:string,startedAt:number,counts:Readonly<R
   console.info('[PAGE_READ_PHASE]',JSON.stringify({phase,durationMs:Math.max(0,now-startedAt),offsetMs:budget?startedAt-budget.startedAt:null,counts:safeCounts,codes:[...codes],reasons:[...reasons],names:[...names],budgetKind:budget?.kind??(budget?'page':'unscoped'),remainingMs:budget?Math.max(0,budget.deadline-now):null}));
  }catch{console.error('[PAGE_READ_DIAGNOSTIC_FAILED]');}
 }
-export async function withPageReadPhase<T>(phase:string,work:()=>PromiseLike<T>|T):Promise<T>{
+export async function withPageReadPhase<T>(phase:string,work:()=>PromiseLike<T>|T,resultCounts?:(value:T)=>Record<string,number>):Promise<T>{
  const started=Date.now();let value:T;
  // Technical savepoint timing belongs to its caller's SQL station. Assimilate
  // lazy queries inside the diagnostic context without cloning their budget.
@@ -326,5 +327,6 @@ export async function withPageReadPhase<T>(phase:string,work:()=>PromiseLike<T>|
    else{const ok:unknown=Object.getOwnPropertyDescriptor(value,'ok')?.value;if(typeof ok==='boolean')counts={ok:ok?1:0,failed:ok?0:1};}
   }
  }catch{counts={metadata_failed:1};}
+ if(resultCounts){try{counts=resultCounts(value);}catch{counts={metadata_failed:1};}}
  logPageReadPhase(phase,started,counts);return value;
 }
