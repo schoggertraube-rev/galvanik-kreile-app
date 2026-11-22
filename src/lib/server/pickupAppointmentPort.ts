@@ -3,7 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {type AuthorizationSnapshot} from './authorization';
+import {authorizationReadContext,type AuthorizationSnapshot,type AuthorizedReadContext} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readReadyNotificationContext} from './orderReleaseRead';
 import {PICKUP_APPOINTMENT_COPY as copy} from '@/ui/situationCatalog';
@@ -69,7 +69,7 @@ function qualify(row:Row){
  if(!r||row.status!=='success'||row.event_schema_version!==1||r.eventId!==row.id||r.orderId!==row.order_id||r.actorId!==row.user_id||r.clientEventId!==row.client_event_id||row.correlation_id!==row.client_event_id||!uuid.test(r.freezeId)||!Number.isSafeInteger(r.orderVersion)||r.orderVersion<1||row.aggregate_version!==r.orderVersion||!validDay(r.date)||!channels.includes(r.channel)||!Number.isFinite(Date.parse(r.recordedAt))||new Date(row.created_at).toISOString()!==r.recordedAt||!(r.previousEventId===null||uuid.test(r.previousEventId))||digest(r)!==p.receiptSha256||digest({orderId:r.orderId,expectedVersion:r.orderVersion,previousEventId:r.previousEventId,date:r.date,channel:r.channel,clientEventId:r.clientEventId})!==p.intent)throw Error('PICKUP_APPOINTMENT_RECEIPT_INVALID');
  return r;
 }
-async function latest(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
+async function latest(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,orderId:string){
  const rows=await tx.execute<Row>(sql`SELECT ${selection} FROM public.events WHERE tenant_id=${auth.tenantId} AND order_id=${orderId} AND event_type='ORDER_PICKUP_APPOINTMENT_SET_V1' ORDER BY created_at DESC,id DESC LIMIT 1`);
  return rows.length?qualify(rows[0]):null;
 }
@@ -115,17 +115,19 @@ export async function storageTaskHasAppointmentSource(tx:PrivilegedTenantTransac
    AND NOT EXISTS(SELECT 1 FROM public.events narrowed WHERE narrowed.tenant_id=${auth.tenantId} AND narrowed.event_type='ORDER_STORAGE_FINAL_TASK_UPDATED_V1' AND narrowed.payload->>'taskId'=${taskId} AND NOT narrowed.payload->'meta'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb))`);
  return source.length===1;
 }
-export async function readOrderPickupAppointment(auth:AuthorizationSnapshot,orderId:string){
- if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
+export async function readOrderPickupAppointment(auth:AuthorizationSnapshot|AuthorizedReadContext,orderId:string){
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+ if(!readAuth.canReadArea('auftraege'))return {code:'FORBIDDEN' as const};
  if(typeof orderId!=='string'||!uuid.test(orderId))return {code:'VALIDATION_ERROR' as const};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>({code:'OK' as const,appointment:await readOrderPickupAppointmentInTransaction(tx,auth,orderId)}));
+ try{return await withPrivilegedTenantTransaction(readAuth,async tx=>({code:'OK' as const,appointment:await readOrderPickupAppointmentInTransaction(tx,readAuth,orderId)}));
  }catch(error){console.error('[PICKUP_APPOINTMENT_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const};}
 }
-export async function readOrderPickupAppointmentInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
-  if(!hasAuthorizationArea(auth,'auftraege'))throw Error('PICKUP_APPOINTMENT_FORBIDDEN');
-  const receipt=await latest(tx,auth,orderId);
+export async function readOrderPickupAppointmentInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,orderId:string){
+  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+  if(!readAuth.canReadArea('auftraege'))throw Error('PICKUP_APPOINTMENT_FORBIDDEN');
+  const receipt=await latest(tx,readAuth,orderId);
   if(!receipt)return null;
-  const current=await tx.execute<{freeze_id:string}>(sql`SELECT f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${auth.tenantId} AND o.id=${orderId} AND o.handover_mode='pickup' AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
+  const current=await tx.execute<{freeze_id:string}>(sql`SELECT f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${readAuth.tenantId} AND o.id=${orderId} AND o.handover_mode='pickup' AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
   return current[0]?.freeze_id===receipt.freezeId?receipt:null;
 }
 

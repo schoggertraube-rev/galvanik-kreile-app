@@ -17,6 +17,9 @@ import {createQuoteAction} from '@/app/actions/quotes.actions';
 import {reklamationAusfuehrenAction,getComplaints} from '@/app/actions/complaints.actions';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
+import {setOrderPickupAppointmentAction} from '@/app/actions/orders.actions';
+import {readOrderPickupAppointment,readOrderPickupAppointmentInTransaction} from '@/lib/server/pickupAppointmentPort';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 let prepared:Awaited<ReturnType<typeof readyInvoiceOrder>>;
 let quoteId:string,quoteVersion:number;
@@ -25,6 +28,36 @@ beforeAll(async()=>{
  const result=await withSession(full,()=>createQuoteAction({clientEventId:randomUUID(),customerId:prepared.customerId,dueDate:'2027-05-15',validUntil:'2027-05-31',note:'TEST kernel original',positions:[{name:'TEST kernel part',quantity:2,material:'Messing',surfaceRequested:'verchromen',unitPriceCents:12345,lineTotalCents:24690}]}));
  if(result.code!=='OK')throw Error('TEST_KERNEL_QUOTE_REQUIRED:'+result.code);
  quoteId=result.quote.quoteId;quoteVersion=result.quote.version;
+});
+
+it('keeps the actual pickup agreement, actor and freeze identical through both read callbacks and fresh retries',async()=>{
+ const input={orderId:prepared.orderId,expectedVersion:prepared.version,previousEventId:null,date:'2027-06-10',channel:'telefon' as const,clientEventId:randomUUID()};
+ const before=await sql`SELECT due_date,version FROM public.orders WHERE tenant_id=${tenant} AND id=${prepared.orderId}`;
+ const created=await withSession(full,()=>setOrderPickupAppointmentAction(input));
+ expect(created,JSON.stringify(created)).toMatchObject({code:'OK',replayed:false});
+ if(created.code!=='OK')throw Error('TEST_KERNEL_APPOINTMENT_REQUIRED');
+ expect(await withSession(full,()=>setOrderPickupAppointmentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,receipt:created.receipt});
+ expect(await sql`SELECT due_date,version FROM public.orders WHERE tenant_id=${tenant} AND id=${prepared.orderId}`).toEqual(before);
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ for(const profile of profiles){
+  const fixture=profile.rights===null?full:await createFixture(profile.rights,profile.role);
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_PICKUP_READ_AUTH');
+  const areas=result.data.areas;if(!Array.isArray(areas))throw Error('TEST_PICKUP_AREAS_REQUIRED');
+  const session=authorizationReadContext(result.data),projection:AuthorizedReadContext={tenantId:result.data.tenantId,permissions:result.data.permissions,canReadArea:area=>areas.includes(area)};
+  const expected=await readOrderPickupAppointment(result.data,prepared.orderId);
+  expect(await readOrderPickupAppointment(session,prepared.orderId)).toEqual(expected);
+  const actual=await readOrderPickupAppointment(projection,prepared.orderId);expect(actual).toEqual(expected);
+  expect(await readOrderPickupAppointment(projection,JSON.parse(JSON.stringify(prepared.orderId)))).toEqual(actual);
+  expect(await readOrderPickupAppointment(projection,'invalid')).toEqual({code:session.canReadArea('auftraege')?'VALIDATION_ERROR':'FORBIDDEN'});
+  if(actual.code==='OK'){
+   expect(actual.appointment).toEqual(created.receipt);
+   expect(await withPrivilegedTenantTransaction(projection,tx=>readOrderPickupAppointmentInTransaction(tx,projection,prepared.orderId))).toEqual(created.receipt);
+  }else {
+   expect(actual).toEqual({code:'FORBIDDEN'});
+   await expect(withPrivilegedTenantTransaction(projection,tx=>readOrderPickupAppointmentInTransaction(tx,projection,prepared.orderId))).rejects.toThrow('PICKUP_APPOINTMENT_FORBIDDEN');
+  }
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
 });
 const profiles:Array<{name:string;rights:string[]|null;role:'meister'|'werkstatt'}>=[
  {name:'all canonical areas',rights:null,role:'meister'},
