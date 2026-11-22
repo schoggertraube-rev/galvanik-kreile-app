@@ -12,7 +12,8 @@ import {
 } from "@/modules/orders/public";
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
 import {withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
-import {readModelTodayHome} from '@/app/actions/todayModel.actions';
+import {readOfficeHomeModelAction,type TodayModelReader} from '@/app/actions/orders.actions';
+import type {TodayHomePart,TodayHomePartResult} from '@/components/home/OfficeHomeClient';
 import {scheduleTodayProjection} from './todayProjectionSchedule';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 
@@ -34,14 +35,15 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   };
 }
 
-export async function loadOfficeHome(authorization: AuthorizationSnapshot,deferLive=false): Promise<OfficeHomeModel> {
-  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization,deferLive)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+export async function loadOfficeHome(authorization: AuthorizationSnapshot,deferLive=false,readModel?:TodayModelReader): Promise<OfficeHomeModel> {
+  if(!readModel)return readOfficeHomeModelAction({deferLive});
+  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization,deferLive,readModel)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
 }
-async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,deferLive=false): Promise<OfficeHomeModel> {
+async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,deferLive:boolean,readModel:TodayModelReader): Promise<OfficeHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
-    const now=new Date(),modeled=await readModelTodayHome(authorization,now,deferLive);
+    const now=new Date(),modeled=await readModel(authorization,now,deferLive);
     let orderSource:{code:'OK';orders:OperationalOrder[]}|{code:'SOURCE_INCOMPLETE'};
     let dashboard:Awaited<ReturnType<typeof readTodayDashboard>>;
     let modelRead:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>};
@@ -78,4 +80,13 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,d
     console.error('[OFFICE_HOME_READ_FAILED]',{name:error instanceof Error?error.name:'UnknownError',at:error instanceof Error?error.stack?.split('\n').slice(1,4):undefined});
     return { kind: "error", message: "Die aktuellen Auftragsdaten konnten nicht sicher geladen werden." };
   }
+}
+
+/** Same sanitized, actor-bound primary snapshot; no source reread for these
+ * supplementary projections and no private union/model payload in an Action. */
+export function todayHomePartFromModel(model:OfficeHomeModel,part:TodayHomePart):TodayHomePartResult{
+ if(!('dashboard'in model))return {code:'SOURCE_INCOMPLETE',part};
+ if(part==='notices')return {code:'OK',part,missing:[...(model.dashboard.datenluecken??[])]};
+ if(part==='counts')return {code:model.dashboard.datenluecken?.length?'SOURCE_INCOMPLETE':'OK',part};
+ return {code:'SOURCE_INCOMPLETE',part};
 }

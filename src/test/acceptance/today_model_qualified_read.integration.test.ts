@@ -16,14 +16,14 @@ import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
-import {resolveAuthorization} from '@/lib/server/authorization';
+import {resolveAuthorization,hasAnyAuthorizationArea} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readTodayModelInTransaction} from '@/lib/server/todayDashboard';
 import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
 import {rebuildTodayModel,refreshTodayModel} from '@/lib/server/todayProjection';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
-import {readModelTodayHome} from '@/app/actions/todayModel.actions';
+import {readOfficeHomeModelAction,readTodayHomeRevision,readTodayHomePart} from '@/app/actions/orders.actions';
 import {readTodayDashboard,collectTodaySources,composeTodayDashboard} from '@/lib/server/todayDashboard';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
@@ -34,6 +34,24 @@ import {reklamationAusfuehrenAction} from '@/app/actions/complaints.actions';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
 import {APP_ROLES,normalizeAccessAreasForRole,type AccessArea} from '@/lib/auth/authorizationContract';
 import {GET as getModelRoute} from '@/app/api/heute/modell/route';
+
+
+// Public Action always resolves the actual request actor and its server clock.
+// This adapter only checks/narrows the sanitized DTO, never injects an identity.
+async function readModelForCurrentSession(deferLive=false){
+ const model=await readOfficeHomeModelAction({deferLive});
+ if(!('dashboard'in model)||!model.modelRead||!model.dashboard.calendar)throw Error('TEST_AUTHENTICATED_HOME_MODEL_REQUIRED');
+ return {code:'OK' as const,dashboard:model.dashboard,pending:model.modelRead.pending,incomplete:model.modelRead.incomplete,model};
+}
+function withoutReadClock(dashboard:import('@/lib/server/todayDashboard').TodayDashboard){
+ expect(dashboard.calendar).toBeTruthy();
+ return {...dashboard,calendar:{...dashboard.calendar,readStartedAt:undefined}};
+}
+
+// This file's H18 classification is backed by an executable local-DB guard,
+// in addition to the shared harness's stricter tenant and database guard.
+const replayDatabase=process.env.DATABASE_URL;
+if(!replayDatabase||replayDatabase!==process.env.H18_EXPECTED_DATABASE_URL||new URL(replayDatabase).hostname!=='127.0.0.1')throw Error('TODAY_MODEL_DEDICATED_REPLAY_REQUIRED');
 
 const profiles=new Map<string,Awaited<ReturnType<typeof createFixture>>>();
 const customProfiles:Array<{key:string;areas:AccessArea[]}>=[
@@ -101,10 +119,10 @@ it('retains current partial list evidence without calling it fresh or discarding
 
 it('E-G1 first full real profile composes the same dashboard from qualified model and live sources',async()=>{
  const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_MODEL_COMPOSITION_AUTH_REQUIRED');
- const now=new Date();expect((await rebuildTodayModel(tenant)).code).toBe('OK');
- const modeled=await withSession(full,()=>readModelTodayHome(resolved.data,now));
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ const modeled=await withSession(full,()=>readModelForCurrentSession());
  expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_MODEL_COMPOSITION_REQUIRED');
- const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,now));
+ const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt)));
  expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  expect(modeled.pending).toBe(false);expect(modeled.incomplete).toBe(false);
 });
@@ -141,9 +159,16 @@ it.each([...APP_ROLES.map(role=>'role-'+role),...customProfiles.map(profile=>pro
  const fixture=profiles.get(key);if(!fixture)throw Error('TEST_G1_PROFILE_NOT_CREATED_'+key);
  await withSession(fixture,async()=>{
   const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_G1_ACTUAL_PROFILE_AUTH');
-  const now=new Date(),modeled=await readModelTodayHome(auth.data,now);
+  // A role without actual granted areas has the same established empty-access
+  // Home and denied GET as before E-C; never manufacture grants to fill a card.
+  if(!hasAnyAuthorizationArea(auth.data)){
+   expect(await readOfficeHomeModelAction()).toEqual({kind:'no_areas'});
+   expect((await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet'))).status).toBe(403);
+   return;
+  }
+  const modeled=await readModelForCurrentSession();
   expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_G1_MODEL_REQUIRED');
-  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,now);
+  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt));
   expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  });
 });
@@ -233,7 +258,7 @@ it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s so
  const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_TARGETED_LIVE_AUTH');
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const now=new Date();
- const baseline=await withSession(full,()=>readModelTodayHome(resolved.data,now));
+ const baseline=await withSession(full,()=>readModelForCurrentSession());
  expect(baseline.code).toBe('OK');if(baseline.code!=='OK')throw Error('TEST_TARGETED_MODEL_REQUIRED');
  const read=async()=>{const [source]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;if(!source)throw Error('TEST_TARGETED_MODEL_SOURCE');return source.row;};
  await withRestoredTestSource({label:'TEST complete targeted model source '+fault,read,restore:async original=>{
@@ -247,17 +272,18 @@ it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s so
   expect(qualification.rows.find(row=>row.kind==='messages')).toMatchObject({fresh:false});
   const output=vi.spyOn(console,'info');
   try{
-   const first=await withSession(full,()=>withPageReadBudget(()=>readModelTodayHome(resolved.data,now,true),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
+   const first=await withSession(full,()=>withPageReadBudget(()=>readModelForCurrentSession(true),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
    expect(first.code).toBe('OK');if(first.code!=='OK')throw Error('TEST_FIRST_MODEL_REQUIRED');
-   expect(first.pending).toBe(true);expect(first.sources.graph.code).toBe('SOURCE_INCOMPLETE');
+   expect(first.pending).toBe(true);expect(first.dashboard.messageActions?.code).toBe('SOURCE_INCOMPLETE');
    expect(output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase)).not.toContain('today.graph');
    output.mockClear();
-   const current=await withSession(full,()=>withPageReadBudget(()=>readModelTodayHome(resolved.data,now),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
+   const current=await withSession(full,()=>withPageReadBudget(()=>readModelForCurrentSession(),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
    expect(current.code).toBe('OK');if(current.code!=='OK')throw Error('TEST_TARGETED_LIVE_RESULT');
-   expect(current.dashboard).toEqual(baseline.dashboard);
+   expect(withoutReadClock(current.dashboard)).toEqual(withoutReadClock(baseline.dashboard));
+   expect(Date.parse(current.dashboard.calendar!.readStartedAt)).toBeGreaterThanOrEqual(Date.parse(baseline.dashboard.calendar!.readStartedAt));
    const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
    expect(phases.filter(phase=>['today.orders','today.graph','today.support','today.complaints','today.followups','today.tasks','today.quotes','today.company','today.batch'].includes(phase))).toEqual(['today.graph']);
-   expect(current.sources.batch).toEqual(baseline.sources.batch);
+   expect(current.dashboard.orderActions).toEqual(baseline.dashboard.orderActions);
   }finally{output.mockRestore();}
  });
 });
@@ -343,5 +369,17 @@ it('streamed week reads the actual aggregate without money rights and stock stay
   expect(Object.keys(result.result.data).sort()).toEqual(['currentlyUnpricedItemCount','netCents','weekEndExclusive','weekStart']);
   const stock=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=stock'));
   expect((await stock.json()).result).toEqual({code:'SOURCE_INCOMPLETE',part:'stock'});
+ });
+});
+
+it('public model Action keeps the real session actor and never serializes private model sources',async()=>{
+ const anonymous=await withRequest('',()=>readOfficeHomeModelAction());expect(anonymous).toMatchObject({kind:'denied'});expect(anonymous).not.toHaveProperty('dashboard');
+ await withSession(full,async()=>{
+  const rejected=await readOfficeHomeModelAction({deferLive:false,authorization:{tenantId:'TEST-forged',role:'admin'}} as unknown as {deferLive:boolean});
+  expect(rejected).toMatchObject({kind:'error'});expect(rejected).not.toHaveProperty('dashboard');
+  const actual=await readOfficeHomeModelAction();expect('dashboard'in actual).toBe(true);
+  const revision=await readTodayHomeRevision();expect(revision?.revision).toMatch(/^[a-f0-9]{64}$/);
+  const week=await readTodayHomePart('week');expect(week).toMatchObject({code:'OK',part:'week'});
+  for(const key of ['sources','operationalSource','settings','authorization'])expect(actual).not.toHaveProperty(key);
  });
 });

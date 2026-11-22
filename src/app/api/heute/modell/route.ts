@@ -1,4 +1,4 @@
-import {readTodayHomeRevision,readTodayHomePart} from '@/app/actions/todayModel.actions';
+import {readTodayHomeRevision,readTodayHomePart} from '@/app/actions/orders.actions';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {resolveAuthorization,hasAnyAuthorizationArea} from '@/lib/server/authorization';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
@@ -20,14 +20,14 @@ export async function GET(request:Request){
   if(!hasAnyAuthorizationArea(auth.data))return new Response(null,{status:403,headers:responseHeaders});
   const conditional=request.headers.get('If-None-Match');
   if(conditional&&/^"[a-f0-9]{64}"$/.test(conditional)&&request.headers.get('X-Kreile-Login-Scope')===await readCacheLoginScope()){
-   const current=await readTodayHomeRevision(auth.data);
+   const current=await readTodayHomeRevision();
    if(current&&!current.pending&&conditional==='"'+(part?current.revisions[part as keyof typeof current.revisions]:current.revision)+'"')return new Response(null,{status:304,headers:{...responseHeaders,ETag:conditional}});
   }
   if(part){
-   const before=await readTodayHomeRevision(auth.data);
+   const before=await readTodayHomeRevision();
    const selected=part as import('@/components/home/OfficeHomeClient').TodayHomePart;
-   const read=await readTodayHomePart(auth.data,selected);
-   const current=await readTodayHomeRevision(auth.data),revision=current?.revisions[part as keyof typeof current.revisions];
+   const read=await readTodayHomePart(selected);
+   const current=await readTodayHomeRevision(),revision=current?.revisions[part as keyof typeof current.revisions];
    // The supplementary value cannot claim a newer source revision than the
    // snapshot read. A concurrent command leaves only this region unknown.
    const stable=before?.revisions[part as keyof typeof before.revisions]===revision;

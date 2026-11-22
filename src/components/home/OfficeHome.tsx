@@ -1,6 +1,7 @@
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
+import {todayHomePartFromModel} from '@/lib/server/officeHomeRead';
 import {Suspense,use} from 'react';
-import {readTodayHomePart} from '@/app/actions/todayModel.actions';
+import {readTodayHomePart} from '@/app/actions/orders.actions';
 import {TODAY_MODEL_COPY} from '@/ui/situationCatalog';
 import {SeitenKopf} from '@/ui/kr';
 export {loadOfficeHome} from '@/lib/server/officeHomeRead';
@@ -13,13 +14,13 @@ import {assignOrderTaskAction,handBackOrderTaskAction} from '@/app/actions/order
  * Canonical supplementary readers start after that primary model is available. */
 export function OfficeHome({ authorization }: { authorization: AuthorizationSnapshot }) {
  const model=loadOfficeHome(authorization,true);
- return <Suspense fallback={<section data-testid="today-primary-loading"><SeitenKopf titel={TODAY_MODEL_COPY.homeTitle}/><p role="status">{TODAY_MODEL_COPY.mainRefreshing}</p></section>}><TodayPrimary authorization={authorization} source={model}/></Suspense>;
+ return <Suspense fallback={<section data-testid="today-primary-loading"><SeitenKopf titel={TODAY_MODEL_COPY.homeTitle}/><p role="status">{TODAY_MODEL_COPY.mainRefreshing}</p></section>}><TodayPrimary source={model}/></Suspense>;
 }
-function TodayPrimary({authorization,source}:{authorization:AuthorizationSnapshot;source:ReturnType<typeof loadOfficeHome>}){
+function TodayPrimary({source}:{source:ReturnType<typeof loadOfficeHome>}){
  const model=use(source);
  const streams='dashboard'in model&&model.modelRead?.source==='modell'?{
-  week:readTodayHomePart(authorization,'week',model),stock:readTodayHomePart(authorization,'stock',model),
-  counts:readTodayHomePart(authorization,'counts',model),notices:readTodayHomePart(authorization,'notices',model),
+  week:readTodayHomePart('week'),stock:readTodayHomePart('stock'),
+  counts:Promise.resolve(todayHomePartFromModel(model,'counts')),notices:Promise.resolve(todayHomePartFromModel(model,'notices')),
  }:undefined;
  return <OfficeHomeClient model={model} streams={streams} ports={{
     savePreferences: saveTodayPreferencesAction,
