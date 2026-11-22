@@ -77,7 +77,20 @@ function productivePorts():TodayProjectionPorts{
    // financial/task result. Keep every section unavailable for the live escape.
    if(!auth.hasActiveProfiles)return new Map(keys.map(key=>[todaySourceKey(key),{code:'SOURCE_INCOMPLETE' as const,errorCode:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING'}]));
    const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(new Date()).today,access=todaySourceAccess(auth);
-   const orderKeys=keys.filter(key=>key.kind==='order');
+   const requestedOrderKeys=keys.filter(key=>key.kind==='order');
+   const orderKeys:TodaySourceKey[]=[];
+   if(requestedOrderKeys.length){
+    let listedIds:ReadonlySet<string>|null=null;
+    if(access.orders){
+     try{listedIds=new Set((await orders(auth)).map(row=>row.id));}
+     catch{console.error('[TODAY_PROJECTOR_ORDER_LIST_FAILED]',{code:'SOURCE_INCOMPLETE'});}
+    }
+    for(const key of requestedOrderKeys){
+     if(listedIds===null)values.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_ORDER_LIST_UNAVAILABLE'});
+     else if(!listedIds.has(key.sourceId))values.set(todaySourceKey(key),{code:'GONE'});
+     else orderKeys.push(key);
+    }
+   }
    if(orderKeys.length){
     const rows=await readTodayOrderSources(auth,orderKeys.map(key=>key.sourceId),orderPorts);
     await Promise.all(rows.map(async row=>{

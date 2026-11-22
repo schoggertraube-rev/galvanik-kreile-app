@@ -16,8 +16,14 @@ import {rebuildTodayModel,refreshTodayModel} from '@/lib/server/todayProjection'
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readLiveOrderCard} from '@/lib/server/orderCardRead';
+import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
+import {getComplaints} from '@/app/actions/complaints.actions';
+import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
+import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
+
+
 
 it('rebuilds all eight real list sources and both real order sources without any session or injected source port',async()=>{
  const pickup=await readyInvoiceOrder('TEST productive projector pickup');
@@ -115,4 +121,27 @@ it('uses fresh background firm settings after the real RSC cache already read th
    expect(await sql`SELECT payload->'company'->>'companyName' AS name FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='company'`).toEqual([{name:'TEST current background sender'}]);
   }finally{internals.A=previous;}
  });
+});
+
+it('PL11:36 removes an existing TEST-only order outside the canonical Today membership and keeps shadow counts equal',async()=>{
+ const order=await readyInvoiceOrder('TEST canonical excluded source');
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ // Existing U288 fixture metadata: the canonical view excludes source=test.
+ // A picked-up order is still in that view, so its membership is not invented.
+ await sql`UPDATE public.orders SET source='test' WHERE tenant_id=${tenant} AND id=${order.orderId}`;
+ const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-23',reason:'TEST command on a hidden TEST fixture',clientEventId:globalThis.crypto.randomUUID()};
+ expect(await withSession(full,()=>changeOrderPromisedDueDateAction(input))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_MEMBERSHIP_AUTH');
+ const listed=await getOperationalOrders(resolved.data,{purpose:'today'});
+ expect(listed.some(row=>row.id===order.orderId)).toBe(false);
+ expect((await refreshTodayModel(tenant)).code).toBe('OK');
+ expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);
+ const output=vi.spyOn(console,'info');
+ try{
+  await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction),true);
+  const records=output.mock.calls.filter(call=>call[0]==='[TODAY_MODEL_SHADOW]').map(call=>JSON.parse(String(call[1])));
+  expect(records.at(-1)).toMatchObject({different:0});
+  expect(records.at(-1).model.orderCards).toBe(listed.length);
+ }finally{output.mockRestore();}
 });
