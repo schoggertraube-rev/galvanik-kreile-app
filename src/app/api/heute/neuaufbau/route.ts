@@ -1,8 +1,8 @@
 import {createHash,timingSafeEqual} from 'node:crypto';
-import {outsidePageReadBudget,withPageReadBudget} from '@/db/readBudget';
+import {outsidePageReadBudget} from '@/db/readBudget';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {resolveAuthorization} from '@/lib/server/authorization';
-import {readTodayRebuildBudgetMs,rebuildTodayModel} from '@/lib/server/todayProjection';
+import {rebuildTodayModel} from '@/lib/server/todayProjection';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -25,8 +25,7 @@ export async function GET(request:Request){
   }catch{return new Response(null,{status:401});}
  }
  try{
-  const budgetMs=await outsidePageReadBudget(()=>withPageReadBudget(()=>readTodayRebuildBudgetMs(tenantId),5000));
-  const result=await outsidePageReadBudget(()=>withPageReadBudget(()=>rebuildTodayModel(tenantId),budgetMs));
+  const result=await outsidePageReadBudget(()=>rebuildTodayModel(tenantId,undefined,{bounded:true}));
   return new Response(null,{status:result.code==='BUSY'?409:result.code==='INCOMPLETE'||result.stale>0?503:204,headers:{'Cache-Control':'private, no-store'}});
  }catch{
   console.error('[TODAY_PROJECTOR_REBUILD_FAILED]',{code:'SOURCE_INCOMPLETE'});

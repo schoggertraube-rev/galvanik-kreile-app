@@ -1,6 +1,6 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {assertPageReadBudgetActive,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
+import {assertPageReadBudgetActive,configurePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import type {TodayReadSettings} from '@/modules/fundament/public';
 import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
@@ -309,5 +309,12 @@ export const refreshTodayModel=async(tenantId:string,ports:TodayProjectionPorts=
  }
  return withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
 };
-export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts())=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
-export const readTodayRebuildBudgetMs=async(tenantId:string)=>Math.min((await readTodayReadSettings({tenantId,fresh:true})).todayRefreshLeaseSeconds*1000,240_000);
+export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
+ const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
+ if(!options?.bounded)return run();
+ return withPageReadBudget(async()=>{
+  const settings=await readTodayReadSettings({tenantId,fresh:true});
+  configurePageReadBudget(Math.min(settings.todayRefreshLeaseSeconds*1000,240_000));
+  return run();
+ },5000);
+};
