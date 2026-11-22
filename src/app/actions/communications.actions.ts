@@ -214,6 +214,15 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
  let attachment,document:CommunicationDocument|undefined;
  let legacyReplaces:LegacyQuoteReplacement|undefined;
  let invoiceGroup:{customerId:string;handover:string|null;native:boolean;unreservedOnly?:boolean;snapshotIds?:readonly string[];maxOriginals?:number;anchorId?:string}|undefined;
+ let invoiceExpectedForTurn:readonly string[]|undefined;
+ const expectedForInvoiceTurn=(ids:readonly string[])=>{
+  if(turnLimit===undefined)return input.expectedInvoiceIds!;
+  if(!snapshotIds)throw Error('INVOICE_MAIL_REQUEST_SNAPSHOT_INVALID');
+  const turnIds=new Set(ids);
+  // Only this authenticated frozen request may retain consent outside its
+  // unchanged transport original. Unknown outside IDs remain a hard mismatch.
+  return input.expectedInvoiceIds!.filter(id=>turnIds.has(id)||!snapshotIds.includes(id));
+ };
  if(input.attachment?.kind==='INVOICE'&&!validExpectedInvoiceIds(input)){const original=await readInvoicePdf(auth,input.attachment.documentId,'original');if(original.code!=='OK')return original;return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.data.invoiceNumber)};}
  const reconcileInvoice=(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,threadId:string)=>applyRecoveredInvoiceMailEffects(auth,threadId,(writeTx,value)=>createCanceledInvoiceMailTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)}),tx);
  const additionalAttachments:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
@@ -234,7 +243,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
    }else{
    if(original.kind!=='INVOICE'||input.attachment.kind!=='INVOICE')return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
    const invoices=[original,...original.bundle??[]];
-   if(JSON.stringify(invoices.map(row=>row.id).sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'CONFLICT' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.number)};
+   if(JSON.stringify(invoices.map(row=>row.id).sort())!==JSON.stringify(expectedForInvoiceTurn(invoices.map(row=>row.id)).slice().sort()))return {code:'CONFLICT' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(original.number)};
    const originals:import('@/lib/server/microsoftGraph').GraphMailAttachment[]=[];
    for(const invoice of invoices){
     const pdf=await readPreparedInvoiceTransportOriginal(auth,{...input,clientRequestId:prior.originalRequestId},original,invoice);
@@ -249,7 +258,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
   if(prior.code==='OK'){
    if('mailOnly'in prior&&prior.mailOnly)await withPrivilegedTenantTransaction(auth,tx=>reconcileInvoice(tx,prior.data.threadId));
    if(prior.document.kind!==input.attachment.kind)return {code:'CONFLICT' as const,message:'Die Versandkennung gehört zu einer anderen Belegart.'};
-   if(prior.document.kind==='INVOICE'&&JSON.stringify([prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]].sort())!==JSON.stringify(input.expectedInvoiceIds!.slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(prior.document.number)};
+   if(prior.document.kind==='INVOICE'){const ids=[prior.document.id,...prior.document.bundle?.map(row=>row.id)??[]];if(JSON.stringify(ids.sort())!==JSON.stringify(expectedForInvoiceTurn(ids).slice().sort()))return {code:'VALIDATION_ERROR' as const,message:INVOICE_DELIVERY_COPY.expectedListMissing(prior.document.number)};}
    return prior.document.kind==='QUOTE'?confirmQuoteDelivery(input,prior.document,{code:'OK',data:prior.data}):{code:'OK' as const,data:prior.data};
   }
   if(prior.code==='PENDING'&&!legacyReplaces)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.unclear};
@@ -270,7 +279,15 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
    // command still resumes the frozen group exposed by its canonical reader.
    invoiceGroup.unreservedOnly=input.targetType==='ORDER'&&!resend;
    const selectedGroup=invoiceGroup;
-   const others=(await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null,selectedGroup.unreservedOnly,{snapshotIds:selectedIds,maxOriginals:selectedGroup.maxOriginals,anchorId:selectedGroup.anchorId}))).filter(row=>row.id!==invoice.id);
+   const cohort=await withPrivilegedTenantTransaction(auth,tx=>readInvoiceMailCohort(tx,auth.tenantId,invoice.customer_id,invoice.handover_mode,resend?.originals.map(row=>row.id),invoice.order_id===null,selectedGroup.unreservedOnly,{snapshotIds:selectedIds,maxOriginals:selectedGroup.maxOriginals,anchorId:selectedGroup.anchorId}));
+   const others=cohort.filter(row=>row.id!==invoice.id);
+   if(turnLimit!==undefined){
+    // PL22.11.04:34 K1: consent outside this turn belongs to the immutable
+    // request remainder. An ID outside that snapshot stays in the expected list
+    // so the same locked checker still reports it as removed with its real number.
+    // Unconfirmed added rows remain absent here and fail the same added check.
+    invoiceExpectedForTurn=expectedForInvoiceTurn(cohort.map(row=>row.id));
+   }
    if(others.length>100)return {code:'VALIDATION_ERROR' as const,message:'Zu viele offene Belege für eine einzelne Sammel-Mail. Es wurde nichts gesendet.'};
    for(const other of others){
     const original=await readInvoicePdf(auth,other.id,'original');if(original.code!=='OK')return original;
@@ -303,7 +320,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
   }
   if(!invoiceGroup)throw Error('INVOICE_GROUP_MISSING');
   if(snapshot.resend){const qualified=await qualifyInvoiceResend(tx,auth,snapshot.id,invoiceGroup!.customerId,recipient);if(JSON.stringify(qualified)!==JSON.stringify(snapshot.resend)||!snapshot.resend.originals.every(original=>[snapshot,...snapshot.bundle??[]].some(row=>row.id===original.id&&row.sha256===original.sha256)))return false;}
-  await assertInvoiceMailCohort(tx,auth.tenantId,invoiceGroup,input.expectedInvoiceIds!,[snapshot.id,...snapshot.bundle?.map(row=>row.id)??[]],snapshot.resend?.originals.map(row=>row.id));
+  await assertInvoiceMailCohort(tx,auth.tenantId,invoiceGroup,invoiceExpectedForTurn??input.expectedInvoiceIds!,[snapshot.id,...snapshot.bundle?.map(row=>row.id)??[]],snapshot.resend?.originals.map(row=>row.id));
   return true;
  }:undefined});
  return sent.code==='OK'&&document?.kind==='QUOTE'?confirmQuoteDelivery(input,document,sent):sent;
