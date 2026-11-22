@@ -37,6 +37,7 @@ import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,readClarificationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {canReadTaskArea,canCompleteTaskArea,type AccessArea} from '@/lib/auth/authorizationContract';
 import {invoiceMailRemainderAllowsCompletion,TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest,type TaskCalendarRead} from '../contract';
@@ -367,14 +368,21 @@ export async function syncQuoteFollowupTask(tx:PrivilegedTenantTransaction,auth:
  return (await persistTask(tx,auth,value,deps)).task.faellig_am;
 }
 function quoteFollowupTitle(name:string,number:string){const customer=name.length>120?name.slice(0,119)+'…':name;return 'Bei '+customer+' wegen KV '+number+' nachfragen';}
-export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,today=berlinCalendarDay()){
- if(!canReadQuoteFollowups(auth))return [];
+type QuoteFollowupTaskSource={id:string;title:string;dueDate:string;quoteId:string;quoteNumber:string;customerName:string;assignedLogin:string|null};
+type QuoteFollowupTaskToday=Omit<QuoteFollowupTaskSource,'assignedLogin'>&{isMine:boolean};
+export function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,today?:string):Promise<QuoteFollowupTaskToday[]>;
+export function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizedReadContext,today?:string):Promise<QuoteFollowupTaskSource[]>;
+export async function readQuoteFollowupTasksForToday(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,today=berlinCalendarDay()){
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+ if(!('canReadArea'in auth?readAuth.canReadArea('mails'):canReadQuoteFollowups(auth)))return [];
  const tasks=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND bezug_typ='kv' AND art='aufgabe' AND status='offen' AND faellig_am<=${today}::date ORDER BY faellig_am,id`);
  // Narrow shared projection only: exact canonical followup key and live quote
  // are verified below. Generic task read/edit authority is unchanged.
  const candidates=tasks.filter(task=>taskUuid(task.bezug_id));
  const facts=await readQuoteFollowupFacts(tx,auth.tenantId,[...new Set(candidates.map(task=>task.bezug_id!))]);
- return candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [{id:task.id,title:hasAuthorizationArea(auth,'preise')?task.titel:quoteFollowupTitle(quote.customerName,quote.number),dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,isMine:task.fuer_login===auth.userId}];}).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
+ const sources=candidates.flatMap(task=>{const quote=facts.find(row=>row.id===task.bezug_id);if(!quote||!quote.integrity)throw Error('QUOTE_FOLLOWUP_CONTEXT_INVALID');if(quote.stage!=='versendet'||task.client_key!==eventKey(quote.id,quote.edition,'quote-followup'))return [];return [{id:task.id,title:readAuth.canReadArea('preise')?task.titel:quoteFollowupTitle(quote.customerName,quote.number),dueDate:task.faellig_am,quoteId:quote.id,quoteNumber:quote.number,customerName:quote.customerName,assignedLogin:task.fuer_login}];});
+ if('canReadArea'in auth)return sources;
+ return sources.map(({assignedLogin,...source})=>({...source,isMine:assignedLogin===auth.userId})).sort((left,right)=>Number(right.isMine)-Number(left.isMine));
 }
 
 /** Only the persisted physical command can create this normal shared clarification task. */
