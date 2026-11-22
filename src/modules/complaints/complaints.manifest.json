@@ -8,6 +8,7 @@
     "@/modules/complaints/public#ComplaintReadResult",
     "@/modules/complaints/public#createComplaintRepository",
     "@/modules/complaints/server-public#readComplaints",
+    "@/modules/complaints/server-public#readComplaintsForAuthorization",
     "@/modules/complaints/public#COMPLAINT_DEFECTS",
     "@/modules/complaints/public#validComplaintCommand",
     "@/modules/complaints/public#ComplaintCommand",

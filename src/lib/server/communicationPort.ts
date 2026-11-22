@@ -9,7 +9,7 @@ import "server-only";
 import { randomUUID,createHash } from "node:crypto";
 import {InvoiceMailListChanged,InvoiceAlreadySent,appendCommunicationDocument,communicationDocumentBody,communicationDocumentIntent,readCommunicationDocumentReceipt,assertLegacyQuoteReplacement,type LegacyQuoteReplacement,type CommunicationDocument} from './communicationDocumentPort';
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import type { AuthorizationSnapshot,AuthorizedReadContext } from "@/lib/server/authorization";
 import {hasAuthorizationArea,canTransportInvoiceDocument} from '@/lib/server/authorization';
 import {INVOICE_DELIVERY_COPY,MAIL_REQUEST_CONFLICT_COPY,COLLECTION_REMINDER_COPY} from '@/ui/situationCatalog';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -29,8 +29,8 @@ export async function readComplaintGoodsReminderContext(auth:AuthorizationSnapsh
   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{complaintId:string;version:number;orderId:string;number:string;customerName:string;complaintNumber:string}>(sql`SELECT complaint_id AS "complaintId",version,nacharbeit_auftrag_id AS "orderId",rework_order_number AS number,source_customer_name AS "customerName",nummer AS "complaintNumber" FROM public.v_complaint_rework_context_v1 WHERE tenant_id=${auth.tenantId} AND nacharbeit_auftrag_id=${orderId} AND stand='massnahme_nacharbeit' AND rework_ware='erwartet'`));
   return rows.length===1?rows[0]:null;
 }
-export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb').PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]) {
-  if(!ids.length||!hasAuthorizationArea(auth,'kunden'))return [];
+export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb').PrivilegedTenantTransaction,auth:AuthorizedReadContext,ids:readonly string[]) {
+  if(!ids.length||!auth.canReadArea('kunden'))return [];
   return tx.execute<{complaintId:string;sentAt:string}>(sql`SELECT complaint.complaint_id AS "complaintId",max(thread.updated_at)::text AS "sentAt"
     FROM public.v_complaint_rework_context_v1 complaint JOIN public.communication_threads thread ON thread.tenant_id=complaint.tenant_id AND thread.order_id=complaint.nacharbeit_auftrag_id AND thread.customer_id=complaint.customer_id
     JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.summary='Reklamation '||complaint.complaint_id||' · Begleitschein'

@@ -14,6 +14,9 @@ import {readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
 import {quoteCommandContext,quoteReadContext} from '@/lib/server/quoteAuthorization';
 import {todaySourceAccess} from '@/lib/server/todayDashboard';
 import {createQuoteAction} from '@/app/actions/quotes.actions';
+import {reklamationAusfuehrenAction,getComplaints} from '@/app/actions/complaints.actions';
+import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
+import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
 import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 let prepared:Awaited<ReturnType<typeof readyInvoiceOrder>>;
 let quoteId:string,quoteVersion:number;
@@ -28,6 +31,7 @@ const profiles:Array<{name:string;rights:string[]|null;role:'meister'|'werkstatt
  {name:'orders without prices',rights:['auftraege'],role:'werkstatt'},
  {name:'prices without orders',rights:['preise'],role:'meister'},
  {name:'mail without money',rights:['mails'],role:'meister'},
+ {name:'decision without prices',rights:['entscheiden'],role:'meister'},
 ];
 it.each(profiles)('keeps session/projector callbacks equal for $name and cannot become a command identity',async profile=>{
  expectTypeOf<AuthorizedReadContext>().not.toExtend<AuthorizationSnapshot>();
@@ -61,4 +65,37 @@ it.each(profiles)('keeps session/projector callbacks equal for $name and cannot 
   expect(evidence.data.some(row=>row.source==='ORDER_STATION_ATTACHMENT'&&row.original.state==='VERIFIED'&&row.original.hashAlgorithm==='SHA256')).toBe(true);
  }
  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(before);
+});
+
+
+it('keeps the complete complaint reader and real credit values equal through session/projector area callbacks',async()=>{
+ const order=await readyInvoiceOrder('TEST complaint read callback'),photo=await storeOrderPhoto(order.orderId);
+ const input={action:'aufnehmen' as const,clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST original complaint read source',photoIds:[photo],goodsReturn:'ja' as const};
+ const recorded=await withSession(full,()=>reklamationAusfuehrenAction(input));expect(recorded).toMatchObject({code:'OK'});if(recorded.code!=='OK')throw Error('TEST_REAL_COMPLAINT_SOURCE:'+JSON.stringify(recorded));
+ expect(await withSession(full,()=>reklamationAusfuehrenAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
+ const decider=await createFixture(['auftraege','entscheiden','zahlungen']);
+ const decision=await withSession(decider,()=>reklamationAusfuehrenAction({action:'entscheiden',clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:recorded.receipt.version,assessment:'berechtigt',measure:'gutschrift',reason:'TEST recorded actual credit decision',creditCents:null}));
+ expect(decision,JSON.stringify(decision)).toMatchObject({code:'OK'});if(decision.code!=='OK')throw Error('TEST_REAL_COMPLAINT_DECISION:'+JSON.stringify(decision));
+ const creditNumber='TEST-KERNEL-'+randomUUID().slice(0,8);
+ const credit=await withSession(decider,()=>reklamationAusfuehrenAction({action:'gutschrift',clientKey:randomUUID(),complaintId:recorded.receipt.complaintId,version:decision.receipt.version,creditCents:1000,creditNumber}));
+ expect(credit,JSON.stringify(credit)).toMatchObject({code:'OK'});if(credit.code!=='OK')throw Error('TEST_REAL_COMPLAINT_CREDIT:'+JSON.stringify(credit));
+ const filter={complaintId:recorded.receipt.complaintId};
+ for(const profile of [...profiles,{name:'payments',rights:['zahlungen'],role:'meister' as const},{name:'customer',rights:['kunden'],role:'meister' as const}]){
+  const fixture=profile.rights===null?full:await createFixture(profile.rights,profile.role);
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_COMPLAINT_READ_AUTH');
+  const areas=result.data.areas;if(!Array.isArray(areas))throw Error('TEST_COMPLAINT_AREAS_REQUIRED');
+  const context=authorizationReadContext(result.data),projection:AuthorizedReadContext={tenantId:result.data.tenantId,permissions:result.data.permissions,canReadArea:area=>areas.includes(area)};
+  const before=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+  const expected=await withSession(fixture,()=>getComplaints(filter));
+  expect(await readComplaintsForAuthorization(context,filter)).toEqual(expected);
+  const actual=await readComplaintsForAuthorization(projection,filter);expect(actual).toEqual(expected);
+  expect(await readComplaintsForAuthorization(projection,JSON.parse(JSON.stringify(filter)))).toEqual(actual);
+  if(actual.code==='OK'){
+   expect(actual.complaints).toHaveLength(1);const row=actual.complaints[0];
+   expect(row).toMatchObject({id:recorded.receipt.complaintId,version:credit.receipt.version,actorTrace:{createdBy:{userId:full.actorId},lastActor:{userId:decider.actorId}}});
+   if(context.canReadArea('zahlungen')){expect(Number(row.gutschriftBetrag)*100).toBe(1000);expect(row.gutschriftNr).toBe(creditNumber);}
+   else {expect(row.gutschriftBetrag).toBeNull();expect(row.gutschriftNr).toBeNull();}
+  }else expect(actual.code).toBe('FORBIDDEN');
+  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(before);
+ }
 });
