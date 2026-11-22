@@ -2,7 +2,7 @@ import {cache} from 'react';
 import {DEFAULT_PAGE_READ_SETTINGS,withPageReadSettingsSource} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {parsePageReadSettings,pageReadSettingsFromCompany} from '../public';
+import {parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany} from '../public';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
@@ -60,17 +60,34 @@ const pageReadProjection=sql`jsonb_build_object(
  'hasInvoiceBatchLimit',to_jsonb(company_settings) ? 'rechnung_mail_grenze',
  'queryTimeoutMs',to_jsonb(company_settings)->'seiten_abfrage_ms',
  'invoiceMailBatchLimit',to_jsonb(company_settings)->'rechnung_mail_grenze') AS page_read_source`;
-const readPageReadSettingsRow=cache(async(tenantId:string)=>withPageReadSettingsSource(async()=>{
- const rows=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{page_read_source:unknown}>(sql`
-  SELECT ${pageReadProjection}
+const todayReadProjection=sql`jsonb_build_object(
+ 'has_todayReadSource',to_jsonb(company_settings)?'today_read_source','todayReadSource',to_jsonb(company_settings)->'today_read_source',
+ 'has_todayRefreshBatchLimit',to_jsonb(company_settings)?'today_refresh_batch_limit','todayRefreshBatchLimit',to_jsonb(company_settings)->'today_refresh_batch_limit',
+ 'has_todayRefreshLeaseSeconds',to_jsonb(company_settings)?'today_refresh_lease_seconds','todayRefreshLeaseSeconds',to_jsonb(company_settings)->'today_refresh_lease_seconds',
+ 'has_todayStalePollMs',to_jsonb(company_settings)?'today_stale_poll_ms','todayStalePollMs',to_jsonb(company_settings)->'today_stale_poll_ms',
+ 'has_navPrefetchMaxAgeSeconds',to_jsonb(company_settings)?'nav_prefetch_max_age_seconds','navPrefetchMaxAgeSeconds',to_jsonb(company_settings)->'nav_prefetch_max_age_seconds') AS today_read_source`;
+const readPageSettingsSourcesRow=cache(async(tenantId:string)=>withPageReadSettingsSource(async()=>{
+ return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{page_read_source:unknown;today_read_source:unknown}>(sql`
+  SELECT ${pageReadProjection},${todayReadProjection}
   FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`));
+}));
+const readPageReadSettingsRow=cache(async(tenantId:string)=>{
+ const rows=await readPageSettingsSourcesRow(tenantId);
  if(rows.length!==1)throw Error('PAGE_READ_SETTINGS_SOURCE_INCOMPLETE');
  const source=pageReadSettingsFromCompany(rows[0].page_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!source)throw Error('PAGE_READ_SETTINGS_SOURCE_INVALID');
  return source.settings;
-}));
+});
 export async function readPageReadSettings(context:{tenantId:string}){
  return readPageReadSettingsRow(context.tenantId);
+}
+export async function readTodayReadSettings(context:{tenantId:string}){
+ const rows=await readPageSettingsSourcesRow(context.tenantId);
+ if(!rows.length)return {todayReadSource:DEFAULT_PAGE_READ_SETTINGS.todayReadSource,todayRefreshBatchLimit:DEFAULT_PAGE_READ_SETTINGS.todayRefreshBatchLimit,todayRefreshLeaseSeconds:DEFAULT_PAGE_READ_SETTINGS.todayRefreshLeaseSeconds,todayStalePollMs:DEFAULT_PAGE_READ_SETTINGS.todayStalePollMs,navPrefetchMaxAgeSeconds:DEFAULT_PAGE_READ_SETTINGS.navPrefetchMaxAgeSeconds};
+ if(rows.length!==1)throw Error('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
+ const settings=todayReadSettingsFromCompany(rows[0].today_read_source,DEFAULT_PAGE_READ_SETTINGS);
+ if(!settings)throw Error('TODAY_READ_SETTINGS_SOURCE_INVALID');
+ return settings;
 }
 
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown };

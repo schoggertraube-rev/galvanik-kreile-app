@@ -69,6 +69,18 @@ export {PACKAGE_SWITCHES,mapPackageSwitchRows} from "./featureCatalog";
 export type {PackageSwitchId,PackageSwitchValues} from "./featureCatalog";
 
 export type PageReadSettings={queryTimeoutMs:number;invoiceMailBatchLimit:number};
+/** E-B: same company source, kept separate from the existing two-field editor. */
+export type TodayReadSettings={todayReadSource:'modell'|'live';todayRefreshBatchLimit:number;todayRefreshLeaseSeconds:number;todayStalePollMs:number;navPrefetchMaxAgeSeconds:number};
+export function todayReadSettingsFromCompany(value:unknown,defaults:Readonly<TodayReadSettings>):TodayReadSettings|null{
+ if(value===null||typeof value!=='object'||Array.isArray(value))return null;
+ const source=value as Record<string,unknown>;
+ const fields=['todayReadSource','todayRefreshBatchLimit','todayRefreshLeaseSeconds','todayStalePollMs','navPrefetchMaxAgeSeconds'] as const;
+ const present=fields.map(key=>source['has_'+key]);
+ if(present.every(value=>value===false))return {todayReadSource:defaults.todayReadSource,todayRefreshBatchLimit:defaults.todayRefreshBatchLimit,todayRefreshLeaseSeconds:defaults.todayRefreshLeaseSeconds,todayStalePollMs:defaults.todayStalePollMs,navPrefetchMaxAgeSeconds:defaults.navPrefetchMaxAgeSeconds};
+ if(!present.every(value=>value===true)||!['modell','live'].includes(String(source.todayReadSource)))return null;
+ for(const key of fields.slice(1))if(!Number.isSafeInteger(source[key])||Number(source[key])<1||Number(source[key])>2147483647)return null;
+ return {todayReadSource:source.todayReadSource as 'modell'|'live',todayRefreshBatchLimit:Number(source.todayRefreshBatchLimit),todayRefreshLeaseSeconds:Number(source.todayRefreshLeaseSeconds),todayStalePollMs:Number(source.todayStalePollMs),navPrefetchMaxAgeSeconds:Number(source.navPrefetchMaxAgeSeconds)};
+}
 export function parsePageReadSettings(value:unknown):PageReadSettings|null{
   if(value===null||typeof value!=='object'||Array.isArray(value))return null;
   const row=value as Record<string,unknown>;
