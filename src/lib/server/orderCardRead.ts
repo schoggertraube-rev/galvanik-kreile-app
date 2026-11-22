@@ -109,6 +109,8 @@ export type LiveOrderCard = {
   agreementHint: InactiveCustomerAgreementHint | null;
 };
 
+export type LiveOrderCardSource=Omit<LiveOrderCard,'assignment'>&{assignment:Omit<OrderTaskAssignmentState,'isAssignedToCurrentUser'>|null};
+
 export type ExtraWorkMasterData = {
   currentRate: null | {
     id: string;
@@ -474,8 +476,8 @@ function mapExtraWork(row: ExtraWorkRow, tenantId: string): OrderCardExtraWork &
 
 function mapAssignment(
   row: AssignmentRow,
-  authorization: AuthorizationSnapshot,
-): OrderTaskAssignmentState {
+  authorization: Pick<AuthorizationSnapshot,'tenantId'>,
+): Omit<OrderTaskAssignmentState,'isAssignedToCurrentUser'> {
   if (
     row.integrity_ok !== true
     || row.tenant_id !== authorization.tenantId
@@ -508,7 +510,6 @@ function mapAssignment(
     handedBackAt: toNullableIso(row.handed_back_at),
     assignmentVersion: row.order_version,
     dueAt: toNullableIso(row.due_date),
-    isAssignedToCurrentUser: row.active && row.assigned_to === authorization.userId,
   };
 }
 
@@ -886,10 +887,18 @@ export async function readTodayOrderCards(authorization:TodayOrderReadAuthorizat
  }
 }
 
-export async function readLiveOrderCard(
-  authorization: AuthorizationSnapshot,
+/** Keep personal assignment derived only from the actual logged-in actor. */
+export async function readLiveOrderCard(authorization:AuthorizationSnapshot,input:{orderId:string}):Promise<OrderCardReadResult<LiveOrderCard>>{
+ const source=await readLiveOrderCardSource(authorization,input);
+ if(source.code!=='OK')return source;
+ const assignment=source.data.assignment;
+ return {code:'OK',data:{...source.data,assignment:assignment?{...assignment,isAssignedToCurrentUser:assignment.active&&assignment.assignedTo===authorization.userId}:null}};
+}
+
+export async function readLiveOrderCardSource(
+  authorization: Pick<AuthorizationSnapshot,'tenantId'|'permissions'>,
   input: { orderId: string },
-): Promise<OrderCardReadResult<LiveOrderCard>> {
+): Promise<OrderCardReadResult<LiveOrderCardSource>> {
   if (!hasExactKeys(input, ["orderId"]) || !validId(input.orderId)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Auftragskennung." };
   }
@@ -1113,7 +1122,7 @@ export async function readLiveOrderCard(
         freeze: canReadMoney || !mappedFreeze ? mappedFreeze : { ...mappedFreeze, hourlyRateCents: null, totalAmountCents: null },
         agreement,
         agreementHint,
-      } satisfies LiveOrderCard;
+      } satisfies LiveOrderCardSource;
     });
     return data === null
       ? { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." }
