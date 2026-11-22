@@ -3,6 +3,10 @@ import {after} from 'next/server';
 import {headers} from 'next/headers';
 import {outsidePageReadBudget} from '@/db/readBudget';
 
+/** Shared background-model contract: worker, freshness checks and scheduler. */
+export const TODAY_PROJECTOR_VERSION=1;
+export const TODAY_MODEL_LIST_KINDS=['orders','messages','money','complaints','quote_followups','quotes','tasks','company'] as const;
+
 type Mode='refresh'|'rebuild';
 type Jobs={scheduled:boolean;tenants:Map<string,Mode>};
 // Keyed only by Next's actual request-local headers object. No header value is

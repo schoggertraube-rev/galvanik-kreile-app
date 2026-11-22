@@ -1,8 +1,7 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {TODAY_PROJECTOR_VERSION} from '@/lib/today/todayModelContract';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
-import {scheduleTodayProjection} from './todayProjectionSchedule';
+import {TODAY_PROJECTOR_VERSION,scheduleTodayProjection} from './todayProjectionSchedule';
 
 type Counts=Record<string,number|null>;
 type ShadowRow={kind:string;fresh:boolean;rebuild:boolean;counts:Counts};
