@@ -20,6 +20,9 @@ import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
 import {setOrderPickupAppointmentAction} from '@/app/actions/orders.actions';
 import {readOrderPickupAppointment,readOrderPickupAppointmentInTransaction} from '@/lib/server/pickupAppointmentPort';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} from '@/lib/server/commands/immutableInvoiceCommand';
+import {readInvoiceVat} from '@/modules/accounting/public';
+import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readQuoteCommand,listOpenQuotesCommand,readQuoteActors,type QuoteCommandContext} from '@/modules/quotes/server-public';
 let prepared:Awaited<ReturnType<typeof readyInvoiceOrder>>;
 let quoteId:string,quoteVersion:number;
@@ -56,6 +59,33 @@ it('keeps the actual pickup agreement, actor and freeze identical through both r
    expect(actual).toEqual({code:'FORBIDDEN'});
    await expect(withPrivilegedTenantTransaction(projection,tx=>readOrderPickupAppointmentInTransaction(tx,projection,prepared.orderId))).rejects.toThrow('PICKUP_APPOINTMENT_FORBIDDEN');
   }
+ }
+ expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
+});
+it('shares qualified shipping-invoice consequences and original numbers for zero, one and several actual orders without a write',async()=>{
+ const shipping=await readyInvoiceOrder('TEST shipping consequence kernel','shipping');
+ const inputs=[prepared,shipping].map(order=>({orderId:order.orderId,expectedVersion:order.version}));
+ const events=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
+ for(const profile of profiles){
+  const fixture=profile.rights===null?full:await createFixture(profile.rights,profile.role);
+  const result=await withSession(fixture,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_SHIPPING_READ_AUTH');
+  const areas=result.data.areas;if(!Array.isArray(areas))throw Error('TEST_SHIPPING_AREAS_REQUIRED');
+  const session=authorizationReadContext(result.data),projection:AuthorizedReadContext={tenantId:result.data.tenantId,permissions:result.data.permissions,canReadArea:area=>areas.includes(area)};
+  for(const scope of [[],inputs.slice(0,1),inputs]){
+   const expected=await readInvoiceShippingConsequencesBatch(result.data,scope,readInvoiceVat,readShippingSettingsInTransaction);
+   expect(await readInvoiceShippingConsequencesBatch(session,scope,readInvoiceVat,readShippingSettingsInTransaction)).toEqual(expected);
+   const actual=await readInvoiceShippingConsequencesBatch(projection,scope,readInvoiceVat,readShippingSettingsInTransaction);expect(actual).toEqual(expected);
+   expect(actual.size).toBe(scope.length);
+   for(const input of scope){
+    expect(await readInvoiceShippingConsequences(projection,JSON.parse(JSON.stringify(input)),readInvoiceVat,readShippingSettingsInTransaction)).toEqual(actual.get(input.orderId));
+    if(session.canReadArea('preise'))expect(actual.get(input.orderId)).toMatchObject({code:'OK',orderId:input.orderId,orderVersion:input.expectedVersion,additionalInvoices:[],reissueWithoutShipping:null});
+    else expect(actual.get(input.orderId)).toBeUndefined();
+   }
+  }
+  const stale={...inputs[0],expectedVersion:inputs[0].expectedVersion+1};
+  const expected=await readInvoiceShippingConsequences(result.data,stale,readInvoiceVat,readShippingSettingsInTransaction);
+  expect(await readInvoiceShippingConsequences(projection,stale,readInvoiceVat,readShippingSettingsInTransaction)).toEqual(expected);
+  if(session.canReadArea('preise'))expect(expected).toMatchObject({code:'SOURCE_INCOMPLETE',datenluecken:['SHIPPING_INVOICE_SOURCE']});
  }
  expect(await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`).toEqual(events);
 });
