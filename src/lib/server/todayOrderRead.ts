@@ -1,7 +1,7 @@
 import 'server-only';
 import {withPageReadPhase} from '@/db/readBudget';
 import type {AuthorizationSnapshot} from './authorization';
-import {authorizationReadContext,type AuthorizedReadContext} from './authorizationReadContext';
+import {authorizationReadContext,canReadOrderPaymentCredit,type AuthorizedReadContext} from './authorizationReadContext';
 import type {PaymentReadAuthorization} from './paymentContract';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 import type {InvoiceVatReader,CustomerCreditResult} from '@/modules/accounting/public';
@@ -22,10 +22,10 @@ export type TodayOrderReadAuthorization=AuthorizedReadContext&Readonly<{payment:
 export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrderReadAuthorization,orderIds:string[],ports:TodayOrderReadPorts){
   const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
   const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,orderIds))]);
-  const [{readInvoiceShippingConsequencesBatch},{readOrdersInformed},{readOrderPickupAppointment},{getPaymentStatesBatch}]=await Promise.all([
+  const [{readInvoiceShippingConsequencesBatch},{readOrdersInformed},{readOrderPickupAppointment},{getPaymentStatesBatch,maskOrderPaymentCredit}]=await Promise.all([
    import('@/lib/server/commands/immutableInvoiceCommand'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/paymentSummaryRead')]);
   const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
-  const readCredit=readAuth.canReadArea('zahlungen')?ports.readCredit:undefined;
+  const readCredit=canReadOrderPaymentCredit(readAuth)?ports.readCredit:undefined;
   // One qualified settings snapshot for both read branches in this Action only;
   // writers and later requests still use the fresh canonical reader.
   let shippingSettings:ReturnType<TodayOrderReadPorts['readSettings']>|undefined;
@@ -46,7 +46,7 @@ export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrde
     const [shipping,informed,payment,shipment,appointment]=await Promise.all([
      shippingReads.then(rows=>{if(!rows.has(card.id))throw Error('SHIPPING_PROPOSAL_BATCH_SOURCE_MISSING');return rows.get(card.id);}),
      card.station==='fertig'?informedReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_NOTIFICATION_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
-     card.station==='fertig'?paymentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_PAYMENT_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
+     card.station==='fertig'?paymentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_PAYMENT_BATCH_SOURCE_MISSING');return maskOrderPaymentCredit(readAuth,value);}):Promise.resolve(undefined),
      card.handoverMode==='shipping'?shipmentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('MANUAL_SHIPPING_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
      card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
     ]);

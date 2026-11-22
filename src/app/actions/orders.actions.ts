@@ -4,7 +4,7 @@ import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
 import {canTransportInvoiceDocument} from '@/lib/server/authorization';
-import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
+import {canReadOrderPaymentCredit} from '@/lib/server/authorizationReadContext';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
 /** Existing settings read; invoice transport may also request its sender name. */
@@ -351,7 +351,7 @@ async function readLiveOrderCardForPage(
       import('@/modules/fundament/server-public'),import('@/modules/orders/server-public'),import('@/modules/tasks/server-public'),
       import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead'),
     ]);
-    const readCredit=hasAuthorizationArea(authorization.data,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
+    const readCredit=canReadOrderPaymentCredit(authorization.data)?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
       const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
       return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
     }:undefined;

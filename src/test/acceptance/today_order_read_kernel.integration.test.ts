@@ -9,6 +9,7 @@ import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {authorizationReadContext} from '@/lib/server/authorizationReadContext';
 import {paymentReadAuthorization} from '@/lib/server/paymentContract';
+import {maskOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
 import {maskTodayOrderCard,readLiveOrderCard,readLiveOrderCardSource} from '@/lib/server/orderCardRead';
 import {readTodayOrderSources,type TodayOrderReadAuthorization,type TodayOrderReadPorts} from '@/lib/server/todayOrderRead';
 import {readV45OrderRule} from '@/lib/server/v45OrderRead';
@@ -89,4 +90,26 @@ it('applies the same price mask to captured real card facts and the current rest
  expect(masked).toEqual(live.result.data.card);
  expect(maskTodayOrderCard(fullAuth.data,card)).toEqual(card);
  expect(JSON.stringify(card)).toBe(original);
+});
+
+it('keeps real payment and release evidence while masking credit for a price-only actor through the same reader gate',async()=>{
+ const order=await readyInvoiceOrder('TEST shared payment credit mask');
+ const fullAuth=await withSession(full,()=>resolveAuthorization());if(!fullAuth.ok)throw Error('TEST_CREDIT_MASK_FULL_AUTH');
+ const [source]=await readTodayOrderSources(fullAuth.data,[order.orderId],ports);
+ if(source.result.code!=='OK'||source.result.data.payment?.code!=='OK')throw Error('TEST_CREDIT_MASK_SOURCE');
+ const payment=source.result.data.payment,original=JSON.stringify(payment);
+ expect(payment.data.creditApplication).toBeDefined();
+ const reader=await createFixture(['auftraege','preise']);
+ const actual=await withSession(reader,()=>resolveAuthorization());if(!actual.ok)throw Error('TEST_CREDIT_MASK_READER_AUTH');
+ const masked=maskOrderPaymentCredit(actual.data,payment);
+ if(masked.code!=='OK')throw Error('TEST_CREDIT_MASK_RESULT');
+ expect(masked.data).not.toHaveProperty('creditApplication');
+ expect(masked.data.payment).toEqual(payment.data.payment);
+ expect(masked.data.complaintHold).toEqual(payment.data.complaintHold);
+ expect(masked.data.customerDeliveryBlock).toEqual(payment.data.customerDeliveryBlock);
+ const [live]=await readTodayOrderSources(actual.data,[order.orderId],ports);
+ if(live.result.code!=='OK')throw Error('TEST_CREDIT_MASK_LIVE');
+ expect(masked).toEqual(live.result.data.payment);
+ expect(maskOrderPaymentCredit(fullAuth.data,payment)).toEqual(payment);
+ expect(JSON.stringify(payment)).toBe(original);
 });

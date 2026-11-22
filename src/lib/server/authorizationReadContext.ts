@@ -16,3 +16,7 @@ export function authorizationReadContext(authorization:AuthorizationSnapshot):Au
 export function canReadQuoteFollowupsForRead(authorization:AuthorizationSnapshot|Pick<AuthorizedReadContext,'canReadArea'>){
  return 'canReadArea'in authorization?authorization.canReadArea('mails'):canReadQuoteFollowups(authorization);
 }
+/** Existing credit visibility, shared by the live reader and its model mask. */
+export function canReadOrderPaymentCredit(authorization:AuthorizationSnapshot|Pick<AuthorizedReadContext,'canReadArea'>){
+ return 'canReadArea'in authorization?authorization.canReadArea('zahlungen'):hasAuthorizationArea(authorization,'zahlungen');
+}
