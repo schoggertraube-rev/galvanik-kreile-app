@@ -9,6 +9,32 @@ export const APP_ROLES = [
 
 export type AppRole = typeof APP_ROLES[number];
 
+export type LagerCapability =
+  | "lager.lesen"
+  | "lager.buchen"
+  | "lager.zaehlen"
+  | "lager.stamm"
+  | "lager.werte"
+  | "lager.inventur_abschliessen";
+
+/** P0 role defaults at the canonical rights seam; stamm still needs its login area. */
+const LAGER_ROLE_CAPABILITIES: Record<AppRole, readonly LagerCapability[]> = {
+  developer: [],
+  admin: ["lager.lesen", "lager.buchen", "lager.zaehlen", "lager.stamm", "lager.werte", "lager.inventur_abschliessen"],
+  meister: ["lager.lesen", "lager.buchen", "lager.zaehlen", "lager.stamm"],
+  buero: ["lager.lesen", "lager.buchen", "lager.zaehlen", "lager.stamm"],
+  werkstatt: ["lager.lesen", "lager.buchen", "lager.zaehlen", "lager.stamm"],
+  readonly: ["lager.lesen"],
+};
+
+export function hasLagerCapability(
+  authorization: Parameters<typeof hasAuthorizationArea>[0] & { active: boolean },
+  capability: LagerCapability,
+): boolean {
+  if (!authorization.active || !LAGER_ROLE_CAPABILITIES[authorization.role].includes(capability)) return false;
+  return capability !== "lager.stamm" || hasAuthorizationArea(authorization, "lager.stamm");
+}
+
 export type PermissionKey =
   | "perm_sys_toggles"
   | "perm_sys_diag"
@@ -40,6 +66,7 @@ export const QUOTE_OPERATION_ACTION_IDS:readonly string[]=['quote.accept','quote
 
 export const ACCESS_AREAS = [
   "auftraege",
+  "lager.stamm",
   "eingang",
   "kunden",
   "preise",
@@ -58,6 +85,7 @@ export const ACCESS_AREAS = [
 export type AccessArea = typeof ACCESS_AREAS[number];
 
 export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string }> = {
+  "lager.stamm": { text: "Lagerstammdaten", sub: "Artikel, Rubriken und Gebinde pflegen" },
   auftraege: { text: "Aufträge & Werkstatt", sub: "sehen, Fertig melden, Mehrarbeit, Fotos" },
   eingang: { text: "Neu erfassen & Kunde anlegen" },
   kunden: { text: "Kunden & Kontakt" },
@@ -78,13 +106,14 @@ export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> 
   developer: ["einstellungen", "logins", "wartung", "protokoll"],
   admin: ACCESS_AREAS.filter((area) => area !== "wartung" && area !== "entscheiden"),
   meister: ["auftraege", "eingang", "kunden", "preise", "zahlungen", "buchhaltung", "mails", "einstellungen", "kassieren", "logins", "entscheiden"],
-  buero: ["auftraege", "eingang", "kunden", "preise", "zahlungen", "mails", "einstellungen"],
+  buero: ["lager.stamm", "auftraege", "eingang", "kunden", "preise", "zahlungen", "mails", "einstellungen"],
   werkstatt: ["auftraege", "eingang", "kunden"],
   readonly: [],
 };
 
 const DEVELOPER_BUSINESS_AREAS = [
   "auftraege",
+  "lager.stamm",
   "eingang",
   "kunden",
   "preise",
@@ -102,7 +131,7 @@ const BLOCKED_ACCESS_AREAS_BY_ROLE: Record<AppRole, readonly AccessArea[]> = {
   meister: [],
   buero: [],
   werkstatt: [],
-  readonly: [],
+  readonly: ["lager.stamm"],
 };
 
 const FIXED_ACCESS_AREAS_BY_ROLE: Record<AppRole, readonly AccessArea[]> = {
@@ -138,6 +167,7 @@ export function getFixedAccessAreasForRole(role: AppRole): readonly AccessArea[]
 const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
   protokoll: [],
   statistik_alle: [],
+  "lager.stamm": [],
   auftraege: ["perm_op_status", "perm_op_risk", "perm_op_photos", "perm_op_qa", "perm_view_leitstand"],
   eingang: ["perm_data_orders"],
   kunden: ["perm_data_customers", "perm_view_customers"],
@@ -207,7 +237,7 @@ export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationA
 
 /** PL17.11 13:01: financial task recipients do not grant their contents to another area. */
 export function canReadTaskArea(auth:Parameters<typeof hasAuthorizationArea>[0],area:AccessArea|null){
- return area!=='preise'&&area!=='zahlungen'&&area!=='buchhaltung'||hasAuthorizationArea(auth,area);
+ return area!=='preise'&&area!=='zahlungen'&&area!=='buchhaltung'&&area!=='lager.stamm'||hasAuthorizationArea(auth,area);
 }
 /** KORR-232 K3: the same target-area gate for task commands and their buttons. */
 export function canCompleteTaskArea(auth:Parameters<typeof hasAuthorizationArea>[0],area:AccessArea){

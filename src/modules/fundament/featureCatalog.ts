@@ -83,6 +83,14 @@ export const PACKAGE_SWITCHES = [
     "defaultEnabled": false
   },
   {
+    "id": "p3_lager_inventur",
+    "defaultEnabled": false
+  },
+  {
+    "id": "p4_lager",
+    "defaultEnabled": false
+  },
+  {
     "id": "p4_ausgang",
     "defaultEnabled": false
   },

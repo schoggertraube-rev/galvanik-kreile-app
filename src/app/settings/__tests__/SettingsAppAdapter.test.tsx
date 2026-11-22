@@ -136,7 +136,7 @@ describe("Gregor system administration composition", () => {
     const gregorOrders = screen.getByLabelText("Aufträge & Werkstatt für Gregor");
     expect(gregorOrders).not.toBeChecked();
     expect(gregorOrders).toBeDisabled();
-    expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(9);
+    expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(10);
     for(const area of ['Preise & Rechnungen','Zahlungen & Mahnungen','Buchhaltung & Zahlen']){
       const right=screen.getByLabelText(`${area} für Gregor`);expect(right).not.toBeChecked();expect(right).toBeDisabled();
     }
