@@ -65,8 +65,18 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
    const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
    const sources=await Promise.all(messages.map(async row=>{const priority=readFallbackMessagePriority(row);const capture=priority.code==='OK'&&priority.rank===3?await intakeCaptureSnapshot(auth,row.id):undefined;return {row,priority,capture};}));
-   if('canReadArea'in auth)return {code:'OK' as const,messages:sources.map(({row,priority})=>({...row,fallbackPriority:priority,actorTrace:actors.get(row.id)})),captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}])};
-   return {code:'OK' as const,messages:sources.map(({row,priority,capture})=>({...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture),actorTrace:actors.get(row.id)})),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+   const source={code:'OK' as const,messages:sources.map(({row,priority})=>({...row,fallbackPriority:priority,actorTrace:actors.get(row.id)})),captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}])};
+   return 'canReadArea'in auth?source:projectIntakeMessageSources(auth,source);
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
+}
+/** The existing personal U2 projection is shared with qualified model facts. */
+export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:IntakeMessageSourcesResult):IntakeMessagesResult{
+ if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
+ if(source.code!=='OK')return source;
+ return {code:'OK',messages:source.messages.map(row=>{
+  const priority=row.fallbackPriority??readFallbackMessagePriority(row);
+  const capture=source.captures.find(value=>value.itemId===row.id)?.value;
+  return {...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture)};
+ }),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
 }

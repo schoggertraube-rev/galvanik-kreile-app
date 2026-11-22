@@ -1,10 +1,10 @@
 "use client";
 import dynamic from 'next/dynamic';
 const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
-import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { Suspense,use,useCallback,useEffect,useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { confirmInvoiceHandoverAction,listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -18,7 +18,7 @@ import { IntakeDraftList } from "@/modules/eingang/public";
 import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";
 import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
+type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>} };
 export type OfficeHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & OfficeIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & OfficeIdentity)
@@ -26,6 +26,9 @@ export type OfficeHomeModel =
   | { kind: "no_areas" }
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
+export type TodayHomePart='week'|'stock'|'notices'|'counts';
+export type TodayHomePartResult={code:'SOURCE_INCOMPLETE';part:TodayHomePart}|{code:'OK';part:'week';data:{weekStart:string;weekEndExclusive:string;netCents:number;currentlyUnpricedItemCount:number}}|{code:'OK';part:'notices';missing:string[]}|{code:'OK';part:'counts'};
+export type TodayHomeStreams=Record<TodayHomePart,Promise<TodayHomePartResult>>;
 type BasicResult = { code: string; message?: string };
 type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
 type MailPreview = { id: string; subject: string; senderName: string; senderAddress: string|null; receivedAt: string|null; preview: string; body: string };
@@ -50,7 +53,9 @@ function actionType(item: TodayItem): HandlungsArt { return item.urgency === "co
 function reminderLabel(value: string) { return `Aufgeschoben bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))} · zählt weiter mit`; }
 function assignmentDeadline(value?: string) { return value ? `Frist ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`))}` : "bis erledigt"; }
 
-export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
+export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
+  const [polled,setPolled]=useState<{base:OfficeHomeModel;value:OfficeHomeModel}|null>(null);
+  const model=polled?.base===initialModel?polled.value:initialModel;
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
   const { hasArea, loading: permissionsLoading } = usePermissions();
@@ -71,6 +76,44 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const [mailId, setMailId] = useState<string | null>(null);
   const [mailPreview, setMailPreview] = useState<MailPreview | null>(null);
   const [mailMessage, setMailMessage] = useState("");
+  const modelPoll=useRef<((changed?:boolean)=>Promise<void>)|null>(null);
+  useEffect(()=>{
+    if(!('dashboard'in initialModel)||!initialModel.modelRead||!initialModel.cacheLoginScope)return;
+    const scope=initialModel.cacheLoginScope,controller=new AbortController();
+    let stopped=false,running=false,rerun=false,timer:ReturnType<typeof setTimeout>|undefined,revision=initialModel.modelRead.revision;
+    const poll=async(changed=false)=>{
+      if(stopped)return;if(running){if(changed)rerun=true;return;}
+      running=true;if(timer)clearTimeout(timer);
+      try{
+      let nextDelay=initialModel.modelRead!.pollMs,again=true;
+      try{
+        const response=await fetch('/api/heute/modell?nur=veraltet',{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{'X-Kreile-Login-Scope':scope,...(revision?{'If-None-Match':'"'+revision+'"'}:{})}});
+        if(response.status===401||response.status===403)return;
+        if(response.status===304){again=false;return;}
+        if(!response.ok)throw Error('TODAY_MODEL_READ_UNAVAILABLE');
+        const result=await response.json() as {code?:string;model?:OfficeHomeModel};
+        if(stopped)return;
+        if(result.code!=='OK'||!result.model||!('dashboard'in result.model))throw Error('TODAY_MODEL_RESPONSE_INCOMPLETE');
+        if(result.model.cacheLoginScope!==scope)return;
+        const next=result.model;
+        revision=next.modelRead?.revision;
+        setPolled({base:initialModel,value:next});
+        again=next.modelRead?.pending===true;
+        if(next.modelRead)nextDelay=next.modelRead.pollMs;
+      }catch{
+        if(stopped||controller.signal.aborted)return;
+        setMessage(PAGE_READ_COPY.sourceIncomplete);
+      }
+      if(!stopped&&again)timer=setTimeout(()=>{void poll();},nextDelay);
+      }finally{running=false;if(rerun&&!stopped){rerun=false;queueMicrotask(()=>{void poll();});}}
+    };
+    modelPoll.current=poll;
+    const resume=()=>{if(document.visibilityState==='visible')void poll(true);};
+    window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);
+    if(initialModel.modelRead.pending)timer=setTimeout(()=>{void poll();},initialModel.modelRead.pollMs);
+    return ()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);stopped=true;controller.abort();if(timer)clearTimeout(timer);if(modelPoll.current===poll)modelPoll.current=null;};
+  },[initialModel]);
+  const refreshToday=()=>{if(modelPoll.current)void modelPoll.current(true);else router.refresh();};
   const openMail = async (graphMessageId: string) => {
     setMailId(graphMessageId);
     setMailPreview(null);
@@ -92,7 +135,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       setMailMessage("Die Mail konnte nicht sicher gelesen werden.");
     }
   };
-  const primary = (item: TodayItem) => { if(item.invoiceMail){setInvoiceMail(item.invoiceMail);}else if((item.kind==='complaint'||item.kind==='task')&&item.target){const handled=!window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:item.target.screen,arg:item.target.arg}}));if(!handled)setMessage(item.kind==='task'?'Aufgabe konnte nicht geöffnet werden · sie bleibt gespeichert.':'Aktion konnte nicht geöffnet werden · Reklamation bleibt offen.');}else if (item.kind === "order" && item.orderId) { if(item.surfaceAssignments?.length) openOrder(item.orderId,"surface"); else openOrder(item.orderId); } else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
+  const primary = (item: TodayItem) => { if(item.key.startsWith('source-order:')&&item.primaryActionLabel===TODAY_MODEL_COPY.reload){if(modelPoll.current)void modelPoll.current();else router.refresh();return;} if(item.invoiceMail){setInvoiceMail(item.invoiceMail);}else if((item.kind==='complaint'||item.kind==='task')&&item.target){const handled=!window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:item.target.screen,arg:item.target.arg}}));if(!handled)setMessage(item.kind==='task'?'Aufgabe konnte nicht geöffnet werden · sie bleibt gespeichert.':'Aktion konnte nicht geöffnet werden · Reklamation bleibt offen.');}else if (item.kind === "order" && item.orderId) { if(item.surfaceAssignments?.length) openOrder(item.orderId,"surface"); else openOrder(item.orderId); } else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
   const dashboardItems = model.kind === "data" || model.kind === "empty" || model.kind==='partial' ? model.dashboard.items : [];
   const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({
@@ -119,7 +162,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
     const id=item.invoiceMail.documentId,prior=invoiceHandoverRequests.current.get(id);
     if(prior?.busy)return;
     const request={key:prior?.key??crypto.randomUUID(),busy:true};invoiceHandoverRequests.current.set(id,request);
-    try{const result=await confirmInvoiceHandoverAction({invoiceId:id,clientRequestId:request.key});setMessage(result.message);if(result.code==='OK')router.refresh();}
+    try{const result=await confirmInvoiceHandoverAction({invoiceId:id,clientRequestId:request.key});setMessage(result.message);if(result.code==='OK')refreshToday();}
     catch{setMessage(INVOICE_DELIVERY_COPY.manualHandoverFailed);}
     finally{request.busy=false;}
   };
@@ -128,7 +171,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
     aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, specId: item.kind === "order" ? "hbmehr.auftrag-offnen" : undefined, onClick: () => primary(item) }, ...(item.invoiceMail?[{text:INVOICE_DELIVERY_COPY.manualHandover,icon:"check" as const,onClick:()=>void confirmInvoiceHandover(item)}]:[]), { text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }, ...(canDelegate && item.kind === "order" && model.dashboard.delegationTargets.length > 0 ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
     onOeffnen: () => primary(item), onWeitere: () => setMore(item),
   }); });
-  const saveReminder = async (mode: TodayReminderMode) => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setMessage(result.message ?? "Erinnerung gespeichert"); setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
+  const saveReminder = async (mode: TodayReminderMode) => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setMessage(result.message ?? "Erinnerung gespeichert"); setLater(null); refreshToday(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
   const delegate = async (target: TodayDashboard["delegationTargets"][number]) => {
     if (!more?.orderId || !more.orderVersion) return;
     const { key, orderId, orderVersion, dueDate } = more;
@@ -139,7 +182,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       setDelegated((current) => ({ ...current, [key]: { name: target.displayName, version: result.receipt?.aggregateVersion ?? orderVersion + 1, dueDate } }));
       setMessage(`Bei ${target.displayName} · ${assignmentDeadline(dueDate)} · Rückgängig`);
       setMore(null);
-      router.refresh();
+      refreshToday();
     } else setMessage(result.message ?? "Zuweisung nicht gespeichert.");
   };
   const fieldHasContent = (field: TodayItem["field"]) => entries(field).length > 0 || (field === "money" && collectionNotices.length > 0);
@@ -184,7 +227,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}
-    {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Heute zu tun bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); router.refresh(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
+    {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Heute zu tun bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); refreshToday(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
     {!dashboardHasVisibleContent && !customize && !model.dashboard.outlookMessage && model.kind!=="partial" ? <Zustand art="leer" text={companyHasOrders ? "Nichts offen" : "Noch keine Aufträge erfasst."} aktion={!companyHasOrders && canStartOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
       {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage)).map(fieldCard)}
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
@@ -198,4 +241,51 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
     </div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel">{more.invoiceMail?<Button text={INVOICE_DELIVERY_COPY.manualHandover} icon="check" onClick={()=>{setMore(null);void confirmInvoiceHandover(more);}}/>:model.dashboard.delegationTargets.map((target) => <Button key={target.userId} data-spec-id="hbmehr.weitergeben" text={`an ${target.displayName} geben`} icon="handoff" disabled={busy} onClick={() => void delegate(target)} />)}<Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
+}
+
+function TodayRegionFrame({part,children}:{part:TodayHomePart;children:React.ReactNode}){
+ return <div data-today-region={part} style={{minBlockSize:'8rem'}}><Kachel titel={TODAY_MODEL_COPY.regionTitles[part]}>{children}</Kachel></div>;
+}
+export function TodayStreamedRegion(props:{part:TodayHomePart;source:Promise<TodayHomePartResult>;revision?:string;scope?:string;knownCounts?:boolean;children?:React.ReactNode}){
+ return <Suspense fallback={<TodayRegionFrame part={props.part}><p role="status">{TODAY_MODEL_COPY.partLoading}</p><Button text={TODAY_MODEL_COPY.partReload} disabled/></TodayRegionFrame>}><TodayRegionRead {...props}/></Suspense>;
+}
+function TodayRegionRead({part,source,revision,scope,knownCounts,children}:{part:TodayHomePart;source:Promise<TodayHomePartResult>;revision?:string;scope?:string;knownCounts?:boolean;children?:React.ReactNode}){
+ const original=use(source);
+ const [entry,setEntry]=useState<{source:typeof source;value:TodayHomePartResult}|null>(null),[pending,setPending]=useState(false);
+ const value=entry?.source===source?entry.value:original;
+ const running=useRef<AbortController|null>(null),previous=useRef({source,revision}),etag=useRef(revision),wanted=useRef(revision);
+ useLayoutEffect(()=>{wanted.current=revision;},[revision]);
+ const nextRead=useRef<()=>void>(()=>{});
+ const reload=useCallback(async()=>{
+  if(running.current||!scope)return;
+  const controller=new AbortController(),requested=wanted.current;running.current=controller;setPending(true);
+  try{
+   const headers:Record<string,string>={'X-Kreile-Login-Scope':scope};if(etag.current)headers['If-None-Match']='"'+etag.current+'"';
+   const response=await fetch('/api/heute/modell?nur=veraltet&bereich='+part,{credentials:'same-origin',cache:'no-store',headers,signal:controller.signal});
+   if(controller.signal.aborted)return;
+   if(response.status===304)return;
+   if(!response.ok)throw Error('TODAY_REGION_SOURCE_INCOMPLETE');
+   const result=await response.json() as {code?:string;scope?:string;revision?:string;result?:TodayHomePartResult};
+   if(controller.signal.aborted||result.scope!==scope||requested!==wanted.current)return;
+   const candidate=result.result;
+   if(result.code!=='OK'||!candidate||candidate.part!==part||!['OK','SOURCE_INCOMPLETE'].includes(candidate.code)
+    ||candidate.code==='OK'&&candidate.part==='week'&&(!Number.isSafeInteger(candidate.data?.netCents)||!Number.isSafeInteger(candidate.data?.currentlyUnpricedItemCount))
+    ||candidate.code==='OK'&&candidate.part==='notices'&&(!Array.isArray(candidate.missing)||!candidate.missing.every(item=>typeof item==='string')))throw Error('TODAY_REGION_RESPONSE_INCOMPLETE');
+   etag.current=result.revision;setEntry({source,value:candidate});
+  }catch{
+   if(!controller.signal.aborted)setEntry({source,value:{code:'SOURCE_INCOMPLETE',part}});
+  }finally{if(running.current===controller){running.current=null;setPending(false);if(!controller.signal.aborted&&requested!==wanted.current)queueMicrotask(()=>nextRead.current());}}
+ },[part,source,scope]);
+ useLayoutEffect(()=>{nextRead.current=()=>{void reload();};},[reload]);
+ useEffect(()=>()=>{running.current?.abort();running.current=null;},[source,scope]);
+ useEffect(()=>{
+  if(previous.current.source!==source){previous.current={source,revision};etag.current=revision;return;}
+  if(revision&&previous.current.revision!==revision){previous.current.revision=revision;void reload();}
+ },[source,revision,reload]);
+ let content:React.ReactNode;
+ if(value.code!=='OK')content=<>{part==='counts'&&knownCounts?children:null}<p role="status">{TODAY_MODEL_COPY.partFailed}</p><Button text={TODAY_MODEL_COPY.partReload} disabled={pending} onClick={()=>void reload()}/></>;
+ else if(value.part==='week')content=<><p>{new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(value.data.netCents/100)}</p>{value.data.currentlyUnpricedItemCount>0?<p>{TODAY_MODEL_COPY.unpriced(value.data.currentlyUnpricedItemCount)}</p>:null}</>;
+ else if(value.part==='notices')content=<p>{value.missing.length?PAGE_READ_COPY.partial:TODAY_MODEL_COPY.noNotices}</p>;
+ else content=children;
+ return <TodayRegionFrame part={part}>{content}</TodayRegionFrame>;
 }

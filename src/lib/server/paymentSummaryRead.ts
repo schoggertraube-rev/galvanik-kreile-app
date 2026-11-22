@@ -1,9 +1,11 @@
+import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {formatEuro} from '@/lib/domain/formatEuro';
 import "server-only";
 import {readOpenOrderComplaint,readOpenOrderComplaintsBatch} from './orderReleaseRead';
 
 import { sql } from "drizzle-orm";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {type AuthorizedReadContext} from './authorizationReadContext';
 import {
   canReadPaymentSummary,
   paymentReadAuthorization,
@@ -34,6 +36,20 @@ export type OrderPaymentStateReadResult =
   | { code: "UNAVAILABLE"; message: string };
 
 const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+/** Credit belongs only to the existing payment area. Other payment facts and
+ * their physical release blocks remain exactly the already qualified result. */
+/** Existing credit visibility, shared by the live reader and its model mask. */
+export function canReadOrderPaymentCredit(authorization:AuthorizationSnapshot|Pick<AuthorizedReadContext,'canReadArea'>){
+ return 'canReadArea'in authorization?authorization.canReadArea('zahlungen'):hasAuthorizationArea(authorization,'zahlungen');
+}
+
+export function maskOrderPaymentCredit(authorization:AuthorizationSnapshot|Pick<AuthorizedReadContext,'canReadArea'>,source:OrderPaymentStateReadResult):OrderPaymentStateReadResult{
+ if(source.code!=='OK'||canReadOrderPaymentCredit(authorization)||!Object.hasOwn(source.data,'creditApplication'))return source;
+ const data={...source.data};
+ delete data.creditApplication;
+ return {...source,data};
+}
 
 /** The same canonical credit proposal for a payment view and a blocked output.
  * Both sources have already been tenant- and money-authorized by their reader. */

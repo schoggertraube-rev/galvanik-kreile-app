@@ -1,10 +1,133 @@
 "use server";
+// E-C: Today model is composed at the existing Today/Orders Action seam.
+import 'server-only';
+import type {QuoteReadback} from '@/modules/quotes/public';
+import {hasAnyAuthorizationArea} from '@/lib/server/authorization';
+import type {TodayModelReadPorts,TodayDashboardSources} from '@/lib/server/todayDashboard';
+import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
+import {PAGE_READ_COPY} from '@/ui/situationCatalog';
+
+/** The App binds the existing module projectors. No writer, session identity,
+ * business lookup, second permission policy or replacement source is created. */
+async function todayModelPorts():Promise<TodayModelReadPorts>{
+ const {getComplaints}=await import('@/app/actions/complaints.actions');
+ const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+ const {readModelPageSettingsInTransaction}=await import('@/modules/fundament/server-public');
+ const {projectIntakeMessageSources}=await import('@/modules/eingang/server-public');
+ const {projectTaskCalendarSources,projectQuoteFollowupSources}=await import('@/modules/tasks/server-public');
+ const {maskComplaintReadResult}=await import('@/modules/complaints/server-public');
+ const {quoteOperationContext}=await import('@/lib/server/quoteAuthorization');
+ const {quoteV45Capabilities,readV45QuoteRule,v45QuoteFacts}=await import('@/lib/server/v45QuoteRead');
+ const {modelRecord}=await import('@/lib/server/todayDashboard');
+ return {
+ liveComplaints:getComplaints,
+ liveFollowups:getQuoteFollowupsForTodayAction,
+ readSettings:readModelPageSettingsInTransaction,
+ messages:(auth,value)=>{
+  const source=modelRecord(value);if(!source)throw Error('TODAY_MODEL_MESSAGES_INVALID');
+  if(source.code!=='OK'){
+   if(typeof source.message!=='string')throw Error('TODAY_MODEL_MESSAGE_FAILURE_INVALID');
+  }else if(!Array.isArray(source.messages)||!Array.isArray(source.captures)||!source.messages.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version)))throw Error('TODAY_MODEL_MESSAGE_ROWS_INVALID');
+  return projectIntakeMessageSources(auth,source as unknown as Parameters<typeof projectIntakeMessageSources>[1]);
+ },
+ tasks:(auth,value)=>{
+  const source=modelRecord(value);
+  if(!source||!['OK','SOURCE_INCOMPLETE'].includes(String(source.code))||!Array.isArray(source.rows)||!Array.isArray(source.missingTaskIds)
+   ||!source.rows.every(row=>modelRecord(row)&&modelRecord(row.task)&&typeof row.task.id==='string'&&modelRecord(row.reference)))throw Error('TODAY_MODEL_TASKS_INVALID');
+  return projectTaskCalendarSources(auth,source as unknown as Parameters<typeof projectTaskCalendarSources>[1]);
+ },
+ complaints:(auth,value)=>{
+  const source=modelRecord(value);if(!source)throw Error('TODAY_MODEL_COMPLAINTS_INVALID');
+  if(source.code==='OK'&&(!Array.isArray(source.complaints)||!source.complaints.every(row=>modelRecord(row)&&typeof row.id==='string')))throw Error('TODAY_MODEL_COMPLAINT_ROWS_INVALID');
+  if(source.code!=='OK'&&typeof source.message!=='string')throw Error('TODAY_MODEL_COMPLAINT_FAILURE_INVALID');
+  return maskComplaintReadResult(auth,source as unknown as Parameters<typeof maskComplaintReadResult>[1]);
+ },
+ followups:(auth,value)=>{
+  if(!Array.isArray(value)||!value.every(row=>modelRecord(row)&&typeof row.id==='string'&&typeof row.title==='string'&&typeof row.quoteId==='string'&&typeof row.quoteNumber==='string'&&typeof row.customerName==='string'))throw Error('TODAY_MODEL_FOLLOWUPS_INVALID');
+  return {code:'OK',tasks:projectQuoteFollowupSources(auth,value as Parameters<typeof projectQuoteFollowupSources>[1])};
+ },
+ quotes:(auth,value,readAt)=>{
+  const source=modelRecord(value),list=modelRecord(source?.list);
+  if(!source||!list||list.code!=='OK'||!Array.isArray(list.quotes)||!Array.isArray(source.cards))throw Error('TODAY_MODEL_QUOTES_INVALID');
+  if(!quoteOperationContext(auth).capabilities.canReadQuote)throw Error('TODAY_MODEL_QUOTE_ACCESS_UNAVAILABLE');
+  const quoteList=source.list as TodayDashboardSources['quoteList'];
+  const cards=source.cards;
+  const quoteReads:TodayDashboardSources['quoteReads']=list.quotes.map(candidate=>{
+   const ref=modelRecord(candidate);if(!ref||typeof ref.quoteId!=='string'||!Number.isSafeInteger(ref.version))throw Error('TODAY_MODEL_QUOTE_REFERENCE_INVALID');
+   const saved=modelRecord(cards.find(row=>modelRecord(row)&&row.quoteId===ref.quoteId)),read=modelRecord(saved?.read),quote=modelRecord(read?.quote);
+   if(read?.code!=='OK'||quote?.quoteId!==ref.quoteId||quote?.version!==ref.version||!modelRecord(quote.lifecycle)||!Array.isArray(quote.positions))return {quoteId:ref.quoteId,read:null};
+   const raw=quote as unknown as QuoteReadback;
+   return {quoteId:raw.quoteId,version:raw.version,read:readV45QuoteRule(auth,raw,quoteV45Capabilities(auth)),facts:v45QuoteFacts(raw,readAt),validUntil:raw.validUntil,followupAt:raw.lifecycle?.followupAt??null};
+  });
+  return {quoteList,quoteReads};
+ },
+};}
+
+async function readModelTodayHome(auth:AuthorizationSnapshot,readAt=new Date(),deferLive=false){
+ const {readTodaySourcesFromModel,composeTodayDashboard}=await import('@/lib/server/todayDashboard');
+ const result=await readTodaySourcesFromModel(auth,await todayModelPorts(),readAt,deferLive);
+ if(result.code!=='OK')return result;
+ const dashboard=await withPageReadPhase('today.model.compose',async()=>composeTodayDashboard(auth,result.sources,result.sources.calendar),value=>({rows:value.items.length,missing:value.orderActions?.missingOrderIds.length??0}));
+ return {...result,dashboard};
+}
+
+export type TodayModelReader=typeof readModelTodayHome;
+/** Current-cookie read only. No caller-supplied actor, source callback or union
+ * snapshot is accepted or serialized by this public Action. */
+export async function readOfficeHomeModelAction(input?:{deferLive?:boolean}):Promise<OfficeHomeModel>{
+ if(input!==undefined&&(!input||typeof input!=='object'||Object.keys(input).some(key=>key!=='deferLive')||input.deferLive!==undefined&&typeof input.deferLive!=='boolean'))return {kind:'error',message:PAGE_READ_COPY.sourceIncomplete};
+ const current=await resolveAuthorization();
+ if(!current.ok)return {kind:'denied',message:PAGE_READ_COPY.sourceIncomplete};
+ if(!hasAnyAuthorizationArea(current.data))return {kind:'no_areas'};
+ const {loadOfficeHome}=await import('@/lib/server/officeHomeRead');
+ return loadOfficeHome(current.data,input?.deferLive===true,readModelTodayHome);
+}
+
+/** Cheap conditional read: the same settings/qualification SQL, no JSON payload,
+ * actor follow-up reads or dashboard composition when nothing has changed. */
+export async function readTodayHomeRevision(){
+ const current=await resolveAuthorization();if(!current.ok||!hasAnyAuthorizationArea(current.data))return null;
+ const auth=current.data;
+ const {readTodayModelInTransaction,todayModelRevision,todayModelRevisionMap}=await import('@/lib/server/todayDashboard');
+ const ports=await todayModelPorts();
+ const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
+ const {readTodayCalendar}=await import('@/lib/today/todayDashboardPolicy');
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const settings=await ports.readSettings(tx,auth);
+  if(settings.today.todayReadSource==='live')return null;
+  const day=readTodayCalendar(new Date()).today,model=await readTodayModelInTransaction(tx,auth,day,true);
+  if(model.code!=='OK')return null;
+  const pending=model.needsRebuild||model.rows.some(row=>!row.fresh);
+  return {revision:todayModelRevision(auth,model.rows,day),pending,revisions:todayModelRevisionMap(auth,model.rows,day)};
+ });
+}
+
+export async function readTodayHomePart(part:import('@/components/home/OfficeHomeClient').TodayHomePart):Promise<import('@/components/home/OfficeHomeClient').TodayHomePartResult>{
+ if(!['week','stock','notices','counts'].includes(part))throw Error('TODAY_REGION_INVALID');
+ try{
+ const current=await resolveAuthorization();if(!current.ok||!hasAnyAuthorizationArea(current.data))return {code:'SOURCE_INCOMPLETE',part};
+ const auth=current.data;
+ if(part==='week'){
+  const {readProductionWeek}=await import('@/lib/server/productionSnapshotPort');
+  const result=await readProductionWeek(auth);
+  return result.code==='OK'?{code:'OK',part,data:result.data}:{code:'SOURCE_INCOMPLETE',part};
+ }
+ // No Lager reader is installed on this main. R1: no mock inventory, inferred
+ // zero or parallel stock table; bind the approved package's facade when merged.
+ if(part==='stock')return {code:'SOURCE_INCOMPLETE',part};
+ const {loadOfficeHome,todayHomePartFromModel}=await import('@/lib/server/officeHomeRead');
+ const model=await loadOfficeHome(auth,false,readModelTodayHome);
+ return todayHomePartFromModel(model,part);
+ }catch{console.error('[TODAY_REGION_SOURCE_FAILED]',{part,code:'SOURCE_INCOMPLETE'});return {code:'SOURCE_INCOMPLETE',part};}
+}
+
+
 import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget,withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
 import {canTransportInvoiceDocument} from '@/lib/server/authorization';
-import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
+import {canReadOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
 /** Existing settings read; invoice transport may also request its sender name. */
@@ -304,17 +427,9 @@ export async function getTodayOrderReadAction(input:{orderIds:string[]}):Promise
   if(!inherited){const settings=await readPageReadSettingsAction();if(settings.code==='OK')configurePageReadBudget(settings.settings.queryTimeoutMs);}
   const authorization=await withPageReadPhase('action.auth',()=>resolveOrderCardAuthorization());if(!authorization.ok)return authorization.result;
   const auth=authorization.data;
-  const [{readTodayOrderSources},{readV45OrderRule}]=await Promise.all([import('@/lib/server/todayOrderRead'),import('@/lib/server/v45OrderRead')]);
+  const {readTodayOrderSources,projectTodayOrderSources}=await import('@/lib/server/todayOrderRead');
   const sources=await readTodayOrderSources(auth,input.orderIds,await todayOrderSourcePorts());
-  const rows=sources.map(({orderId,result})=>{
-   if(result.code!=='OK')return {orderId,result};
-   const {card,records,shipping,informed,payment,shipment,appointment}=result.data;
-   try{
-    const nextActionRule=readV45OrderRule(auth,card,informed?{orderId:card.id,value:informed}:undefined,{orderId:card.id,records},{shipping,payment,shipment});
-    return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:appointment,nextActionRule}}};
-   }
-   catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
-  });
+  const rows=projectTodayOrderSources(auth,sources);
   logPageReadPhase('action.model',diagnosticStarted,{requested:input.orderIds.length,ok:rows.filter(row=>row.result.code==='OK').length,failed:rows.filter(row=>row.result.code!=='OK').length});
   return {code:'OK',data:{rows}};
  },DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
@@ -351,7 +466,7 @@ async function readLiveOrderCardForPage(
       import('@/modules/fundament/server-public'),import('@/modules/orders/server-public'),import('@/modules/tasks/server-public'),
       import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/v45OrderRead'),import('@/lib/server/paymentSummaryRead'),
     ]);
-    const readCredit=hasAuthorizationArea(authorization.data,'zahlungen')?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
+    const readCredit=canReadOrderPaymentCredit(authorization.data)?async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string)=>{
       const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
       return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
     }:undefined;

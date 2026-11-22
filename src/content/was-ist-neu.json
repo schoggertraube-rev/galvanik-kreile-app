@@ -10,6 +10,16 @@
   },
   {
     "datum": "2026-11-22",
+    "pr": 264,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Deine Heute-Liste erscheint vor den ergänzenden Bereichen.",
+      "Du lädst fehlende Bereiche einzeln neu; die übrige Seite bleibt bedienbar."
+    ]
+  },
+  {
+    "datum": "2026-11-22",
     "pr": 258,
     "seite": "kunden",
     "ziel": "/customers",
