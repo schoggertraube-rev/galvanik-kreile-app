@@ -13,7 +13,10 @@ import {readLiveOrderCard} from '@/lib/server/orderCardRead';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
-import {projectorAuthorization,refreshTodayModel,rebuildTodayModel,todaySourceKey,type ProjectorAuthorization,type TodayProjectionPorts,type TodayProjectionResult} from '@/lib/server/todayProjection';
+import {refreshTodayModel,rebuildTodayModel,type ProjectorAuthorization} from '@/lib/server/todayProjection';
+type TodayProjectionPorts=Parameters<typeof refreshTodayModel>[1];
+type TodayProjectionResult=Awaited<ReturnType<TodayProjectionPorts['readSources']>> extends ReadonlyMap<string,infer Result>?Result:never;
+const todaySourceKey=(key:Parameters<TodayProjectionPorts['readSources']>[1][number])=>key.kind+':'+key.sourceId;
 
 let orderId:string;
 async function auth(){const result=await withSession(full,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_REAL_AUTH_REQUIRED');return result.data;}
@@ -39,11 +42,11 @@ beforeAll(async()=>{orderId=(await readyInvoiceOrder('TEST Today worker source')
 it('uses read-only union capabilities and publishes actual card versions with count-only refresh diagnostics',async()=>{
  expectTypeOf<ProjectorAuthorization>().not.toExtend<AuthorizationSnapshot>();
  const before=await sql`SELECT id::text FROM public.app_users WHERE tenant_id=${tenant} ORDER BY id`;
- const capability=await projectorAuthorization(tenant);
- expect(capability.areas).toEqual(expect.arrayContaining(['auftraege','preise','zahlungen']));
+ const observed:ProjectorAuthorization[]=[];
  const output=vi.spyOn(console,'info');
  try{
-  const built=await rebuildTodayModel(tenant,ports);expect(built.code).toBe('OK');expect(built.built).toBeGreaterThanOrEqual(2);
+  const built=await rebuildTodayModel(tenant,{...ports,readSources:async(capability,keys)=>{observed.push(capability);return ports.readSources(capability,keys);}});expect(built.code).toBe('OK');expect(built.built).toBeGreaterThanOrEqual(2);
+  expect(observed[0].areas).toEqual(expect.arrayContaining(['auftraege','preise','zahlungen']));
   const [source]=await sql`SELECT payload,source_version,status,source_seq=built_seq AS fresh,build_ms FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`;
   const live=await readLiveOrderCard(await auth(),{orderId});expect(live.code).toBe('OK');if(live.code!=='OK')throw Error('TEST_REAL_CARD_REQUIRED');
   expect(source).toMatchObject({payload:JSON.parse(JSON.stringify({card:live.data})),source_version:live.data.version,status:'OK',fresh:true,build_ms:expect.any(Number)});

@@ -5,29 +5,29 @@ import {getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole
 import type {TodayReadSettings} from '@/modules/fundament/public';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 
-export const TODAY_PROJECTOR_VERSION=1;
-export const TODAY_LIST_KINDS=['orders','messages','money','complaints','quote_followups','quotes','tasks','company'] as const;
-export type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
+const TODAY_PROJECTOR_VERSION=1;
+const TODAY_LIST_KINDS=['orders','messages','money','complaints','quote_followups','quotes','tasks','company'] as const;
+type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
 export type ProjectorAuthorization=Readonly<{tenantId:string;areas:readonly AccessArea[];permissions:readonly PermissionKey[];[projectionBrand]:true}>;
-export type TodaySourceKey=Readonly<{kind:TodaySourceKind;sourceId:string}>;
-export type TodayProjectionResult=
+type TodaySourceKey=Readonly<{kind:TodaySourceKind;sourceId:string}>;
+type TodayProjectionResult=
  | {code:'OK';payload:unknown;sourceVersion?:number;listed?:boolean}
  | {code:'GONE'}
  | {code:'SOURCE_INCOMPLETE';errorCode:string};
-export type TodayProjectionPorts={
+type TodayProjectionPorts={
  readSettings:(context:{tenantId:string})=>Promise<TodayReadSettings>;
  readSources:(authorization:ProjectorAuthorization,keys:readonly TodaySourceKey[])=>Promise<ReadonlyMap<string,TodayProjectionResult>>;
  listOrderIds:(authorization:ProjectorAuthorization)=>Promise<readonly string[]>;
 };
-export const todaySourceKey=(key:TodaySourceKey)=>key.kind+':'+key.sourceId;
+const todaySourceKey=(key:TodaySourceKey)=>key.kind+':'+key.sourceId;
 type Snapshot=TodaySourceKey&{sourceSeq:string;tenantSeq:string;day:string};
 type Lease={token:string;tenantSeq:string;day:string};
 
 /** Canonical area/role policy over the existing active user/rights source.
  * No new app_user, session, role, write grant or synthetic actor is created. */
-export async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthorization>{
+async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthorization>{
  const rows=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{role:string;areas:unknown}>(sql`
   SELECT actor.role,(SELECT coalesce(array_agg(rights.bereich ORDER BY rights.bereich),ARRAY[]::text[])
    FROM public.app_user_rights rights WHERE rights.tenant_id=actor.tenant_id AND rights.user_id=actor.id) AS areas
