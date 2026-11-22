@@ -1,7 +1,5 @@
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
-import {todayHomePartFromModel} from '@/lib/server/officeHomeRead';
 import {Suspense,use} from 'react';
-import {readTodayHomePart} from '@/app/actions/orders.actions';
 import {TODAY_MODEL_COPY} from '@/ui/situationCatalog';
 import {SeitenKopf} from '@/ui/kr';
 export {loadOfficeHome} from '@/lib/server/officeHomeRead';
@@ -18,11 +16,7 @@ export function OfficeHome({ authorization }: { authorization: AuthorizationSnap
 }
 function TodayPrimary({source}:{source:ReturnType<typeof loadOfficeHome>}){
  const model=use(source);
- const streams='dashboard'in model&&model.modelRead?.source==='modell'?{
-  week:readTodayHomePart('week'),stock:readTodayHomePart('stock'),
-  counts:Promise.resolve(todayHomePartFromModel(model,'counts')),notices:Promise.resolve(todayHomePartFromModel(model,'notices')),
- }:undefined;
- return <OfficeHomeClient model={model} streams={streams} ports={{
+ return <OfficeHomeClient model={model} ports={{
     savePreferences: saveTodayPreferencesAction,
     saveReminder: saveTodayReminderAction,
     assignOrder: assignOrderTaskAction,

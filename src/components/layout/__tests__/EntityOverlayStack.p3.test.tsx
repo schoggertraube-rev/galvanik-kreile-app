@@ -137,6 +137,14 @@ afterEach(()=>vi.unstubAllGlobals());
 const pollingModel=(title:string,pending=true):OfficeHomeModel=>({kind:'data',role:'meister',cacheLoginScope:'TEST-poll-scope',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,
  modelRead:{source:'modell',pending,incomplete:false,pollMs:1,rebuild:false},dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],items:[{key:'source-order:TEST-poll',field:'action',kind:'order',orderId:'TEST-poll',orderVersion:1,title,meta:'',urgency:'warning',primaryActionLabel:TODAY_MODEL_COPY.reload}]}});
 
+it('keeps the live tile arrangement while the stock reader is unbound',()=>{
+ render(<RolfHomeClient model={pollingModel('TEST known primary',false)} ports={actionPorts}/>);
+ expect(screen.getAllByText('TEST known primary')[0]).toBeVisible();
+ expect(document.querySelector('[data-testid="today-supplements"]')).toBeNull();
+ expect(document.querySelector('[data-today-region]')).toBeNull();
+ expect(screen.queryByText(TODAY_MODEL_COPY.partReload)).toBeNull();
+});
+
 it('controlled model transport never adopts a response for another login scope',async()=>{
  const next={...pollingModel('TEST foreign response',false),cacheLoginScope:'TEST-other-scope'};
  const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(JSON.stringify({code:'OK',model:next}),{status:200}));vi.stubGlobal('fetch',fetch);
