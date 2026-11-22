@@ -7,7 +7,7 @@ import {beforeAll,expect,it,vi,expectTypeOf} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
+import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {readLiveOrderCard,readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
@@ -22,6 +22,8 @@ import {readInvoiceVat} from '@/modules/accounting/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {withPageReadBudget} from '@/db/readBudget';
+import {readTodayModelInTransaction} from '@/lib/server/todayDashboard';
+import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {sql as query} from 'drizzle-orm';
 type TodayProjectionPorts=NonNullable<Parameters<typeof refreshTodayModel>[1]>;
@@ -67,6 +69,27 @@ it('cancels a stalled native projector source before the platform runtime limit 
   // Restore only this isolated TEST tenant after a deliberately interrupted lease.
   await sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=NULL WHERE tenant_id=${tenant}`;
  }
+});
+
+it('continues a bounded rebuild on the same tenant generation without rebuilding completed rows',async()=>{
+ const customerId=await customerFixture('TEST resumable model');
+ for(let index=0;index<7;index++)await intakeOrderFixture('TEST resumable model '+String(index),customerId);
+ let groups=0;
+ await expect(withPageReadBudget(()=>rebuildTodayModel(tenant,{...ports,readSources:async(...args)=>{
+  groups++;
+  if(groups===2)await withPrivilegedTenantTransaction({tenantId:tenant},tx=>tx.execute(query`SELECT pg_sleep(3)`));
+  return ports.readSources(...args);
+ }}),1800)).rejects.toThrow();
+ const completed=await sql`SELECT kind,source_id,source_seq::text AS seq FROM private.today_source_v1
+  WHERE tenant_id=${tenant} AND built_seq=source_seq AND built_tenant_seq=(SELECT tenant_seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant})`;
+ expect(completed.length).toBeGreaterThan(0);
+ expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
+ const next=await rebuildTodayModel(tenant,ports);
+ expect(next.code).toBe('OK');
+ for(const row of completed)expect(await sql`SELECT source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind=${row.kind} AND source_id=${row.source_id}`).toEqual([{seq:row.seq}]);
+ const day=readTodayCalendar(new Date()).today;
+ const model=await withPrivilegedTenantTransaction({tenantId:tenant},tx=>readTodayModelInTransaction(tx,{tenantId:tenant},day));
+ expect(model.needsRebuild).toBe(false);
 });
 
 it('PL11:36 renews a real short lease across a longer native source read and retains single ownership',async()=>{

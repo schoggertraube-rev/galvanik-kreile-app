@@ -4,6 +4,7 @@ import {cache} from 'react';
 type PageReadStationTiming={db_ms:number;acquire_ms:number;tx:number};
 type PageReadQueryObservation={total:number;rights:number;pageSettings:number;shippingSettings:number;phases:Record<string,number>;db_ms:number;acquire_ms:number;tx:number;stations:Record<string,PageReadStationTiming>};
 const requestQueryObservation=cache(():PageReadQueryObservation=>({total:0,rights:0,pageSettings:0,shippingSettings:0,phases:{},db_ms:0,acquire_ms:0,tx:0,stations:{}}));
+const requestSourceWarnings=cache(()=>new Set<string>());
 const queryPhases=new AsyncLocalStorage<string>();
 /** Same RSC request only; contains counts, never SQL, parameters or identities. */
 export function pageReadQueryObservation(){return budgets.getStore()?.queries??requestQueryObservation();}
@@ -53,9 +54,19 @@ export const DEFAULT_PAGE_READ_SETTINGS={
 } as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
-type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;queries:PageReadQueryObservation;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
+type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;queries:PageReadQueryObservation;sourceWarnings?:Set<string>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
+/** The one request scope joins independent readers without suppressing unknown faults. */
+export function warnOncePerPageRead(key:string,report:()=>void):void{
+ const seen=budgets.getStore()?.sourceWarnings??requestSourceWarnings();
+ if(seen.has(key))return;
+ seen.add(key);report();
+}
+export function assertPageReadBudgetActive():void{
+ const budget=budgets.getStore();
+ if(budget&&Date.now()>=budget.deadline)throw new PageReadTimeout();
+}
 /** PL22.11.01:55 E0: sending is a command, never a page read. Only its
  * existing transport leaves this scope; the caller's deadline is restored. */
 export function outsidePageReadBudget<T>(work:()=>Promise<T>):Promise<T>{
@@ -93,7 +104,7 @@ export function withPageReadBudget<T>(work:()=>Promise<T>,timeoutMs:number):Prom
   const startedAt=Date.now();
   // Drizzle queries are lazy thenables. Assimilate them inside the scope, not
   // later in the caller's await, or their SQL would miss the request budget.
-  return budgets.run({startedAt,deadline:startedAt+timeoutMs,cancel:new Set(),queries:requestQueryObservation()},async()=>await work());
+  return budgets.run({startedAt,deadline:startedAt+timeoutMs,cancel:new Set(),queries:requestQueryObservation(),sourceWarnings:requestSourceWarnings()},async()=>await work());
 }
 
 /** The trusted company setting changes only this read, never another request. */
