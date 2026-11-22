@@ -1,5 +1,6 @@
 import {getAuthorizationActionGrants,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {authorizationReadContext,type AuthorizedReadContext,type AuthorizationSnapshot} from './authorization';
+import type {AuthorizationSnapshot} from './authorization';
+import {authorizationReadContext,type AuthorizedReadContext} from './authorizationReadContext';
 
 /** Same commercial read predicate for a real-session wrapper and a normalized
  * projector callback; write capabilities still require the original full actor. */

@@ -35,16 +35,7 @@ export type AuthorizationSnapshot = {
   active: true;
 };
 
-/** PL22.11.05:30: read capabilities are not a session or command identity.
- * The session wrapper supplies the unchanged canonical area predicate. */
-export type AuthorizedReadContext=Readonly<{
-  tenantId:string;
-  permissions:readonly PermissionKey[];
-  canReadArea:(area:AccessArea)=>boolean;
-}>;
-export function authorizationReadContext(authorization:AuthorizationSnapshot):AuthorizedReadContext{
-  return {tenantId:authorization.tenantId,permissions:authorization.permissions,canReadArea:area=>hasAuthorizationArea(authorization,area)};
-}
+export {authorizationReadContext,type AuthorizedReadContext} from './authorizationReadContext';
 
 export {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 

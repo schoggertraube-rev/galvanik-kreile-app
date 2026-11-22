@@ -1,7 +1,8 @@
 import {readCaseActorTraces} from '@/lib/server/caseActorRead';
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {resolveAuthorization,authorizationReadContext,type AuthorizationSnapshot,type AuthorizedReadContext} from '@/lib/server/authorization';
+import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {Complaint,ComplaintFilter,ComplaintReadResult} from '../contract';
 import {readComplaintGoodsReminderDates} from '@/lib/server/communicationPort';
