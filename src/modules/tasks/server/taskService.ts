@@ -292,9 +292,23 @@ export async function restrictCollectionTaskForAppointment(tx:PrivilegedTenantTr
 export async function readTask(request:TaskOpenRequest):Promise<TaskReadResult>;
 export async function readTask(request:{calendar:true}):Promise<TaskCalendarRead>;
 export async function readTask(request:TaskOpenRequest|{calendar:true}):Promise<TaskReadResult|TaskCalendarRead>{
+ const invalid=invalidTaskRead(request);if(invalid)return invalid;
+ const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
+ return readTaskForAuthorization(auth,request);
+}
+function invalidTaskRead(request:TaskOpenRequest|{calendar:true}):TaskFailure|null{
  if(request&&typeof request==='object'&&!Array.isArray(request)&&'calendar'in request){
   if(Object.keys(request).join(',')!=='calendar'||request.calendar!==true)return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
-  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
+  return null;
+ }
+ if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
+ if('taskId'in request?Object.keys(request).join(',')!=='taskId':Object.keys(request).some(key=>!['reference','kind','itemId'].includes(key))||request.kind!==undefined&&!TASK_KINDS.includes(request.kind)||request.itemId!==undefined&&!taskUuid(request.itemId))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf enthält ungültige Felder.'};
+ return null;
+}
+/** Same read kernel for the session wrapper and the authorized root composer. */
+export async function readTaskForAuthorization(auth:AuthorizationSnapshot,request:TaskOpenRequest|{calendar:true}):Promise<TaskReadResult|TaskCalendarRead>{
+ const invalid=invalidTaskRead(request);if(invalid)return invalid;
+ if('calendar'in request){
   if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:DISPATCH_CALL_COPY.forbidden};
   try{return await withPrivilegedTenantTransaction(auth,async tx=>{
    const refs=await tx.execute<{id:string;version:number}>(sql`SELECT id::text,version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND status='offen' AND art IN ('rueckruf','frist','aufgabe') AND item_id IS NOT NULL ORDER BY faellig_am,id`);
@@ -310,9 +324,6 @@ export async function readTask(request:TaskOpenRequest|{calendar:true}):Promise<
    return {code:missingTaskIds.length?'SOURCE_INCOMPLETE' as const:'OK' as const,rows,missingTaskIds};
   });}catch(error){return resultError(error);}
  }
- if(!request||typeof request!=='object'||Array.isArray(request)||('taskId'in request?!taskUuid(request.taskId):!validTaskReference(request.reference)))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf ist ungültig.'};
- if('taskId'in request?Object.keys(request).join(',')!=='taskId':Object.keys(request).some(key=>!['reference','kind','itemId'].includes(key))||request.kind!==undefined&&!TASK_KINDS.includes(request.kind)||request.itemId!==undefined&&!taskUuid(request.itemId))return {code:'VALIDATION_ERROR',message:'Aufgabenaufruf enthält ungültige Felder.'};
- const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
   return readTaskInTransaction(tx,auth,request);
  });}catch(error){return resultError(error);}
