@@ -56,5 +56,5 @@ it('explicitly classifies every production versioned constant and keeps unknown 
  const types=new Set<string>();
  for(const file of files)for(const match of readFileSync(file,'utf8').matchAll(/['"`]([A-Z][A-Z0-9_]*_V\d+)['"`]/g))types.add(match[1]);
  for(const type of types)expect(definition.source,`missing explicit event scope: ${type}`).toContain("'"+type+"'");
- expect(await sql`SELECT private.today_event_scope_v1('TEST_UNKNOWN_FUTURE_V999') AS unknown_scope,private.today_event_scope_v1('USER_LAST_SEEN_RECORDED_V1') AS seen_scope`).toEqual([{unknown_scope:'tenant',seen_scope:'none'}]);
+ expect(await sql`SELECT private.today_event_scope_v1('TEST_UNKNOWN_FUTURE_V999') AS unknown_scope,private.today_event_scope_v1('USER_LAST_SEEN_RECORDED_V1') AS seen_scope,private.today_event_scope_v1(NULL) AS null_scope`).toEqual([{unknown_scope:'tenant',seen_scope:'none',null_scope:'tenant'}]);
 });
