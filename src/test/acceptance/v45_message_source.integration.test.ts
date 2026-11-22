@@ -8,6 +8,7 @@ import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarn
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {saveIntakeNoteAction,getIntakeMessagesAction} from '@/app/actions/eingang.actions';
 
+
 it('reads the stored send state and actor for U2 without inferring an unclear dispatch from message text',async()=>{
  const customerId=await customerFixture('V45 Nachrichten'),itemId=randomUUID();
  expect(await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST normale Nachricht, kein Status aus Text',concerns:[],context:{customerId}}))).toMatchObject({code:'OK'});
@@ -151,4 +152,19 @@ it('PL23:08 keeps first-look facts and explicit gaps when a specialist command i
   expect(row.nextActionRule.erstblick.find(field=>field.key==='nachrichten.inhalt')?.werte).toMatchObject({text:row.text});
   expect(await withSession(full,()=>getIntakeMessagesAction('alle'))).toEqual({...read,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});
  }
+});
+
+it('E-B shares the same real-session and explicit read kernel without changing source or permission results',async()=>{
+ const {readIntakeMessages,readIntakeMessagesForAuthorization}=await import('@/modules/eingang/server-public');
+ const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const itemId=randomUUID();
+ expect(await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST gemeinsamer Nachrichten-Lesekern'}))).toMatchObject({code:'OK'});
+ const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_READER_REAL_AUTH_REQUIRED');
+ const wrapper=await withSession(full,()=>readIntakeMessages('alle'));
+ const kernel=await readIntakeMessagesForAuthorization(auth.data,'alle');
+ expect(kernel).toEqual(wrapper);expect(kernel).toMatchObject({code:'OK',messages:expect.arrayContaining([expect.objectContaining({id:itemId})])});
+ const restricted=await createFixture(['eingang'],'werkstatt'),denied=await withSession(restricted,()=>resolveAuthorization());if(!denied.ok)throw Error('TEST_READER_DENIED_AUTH_REQUIRED');
+ expect(await readIntakeMessagesForAuthorization(denied.data,'alle')).toEqual(await withSession(restricted,()=>readIntakeMessages('alle')));
+ expect(await readIntakeMessagesForAuthorization(denied.data,'alle')).toMatchObject({code:'FORBIDDEN'});
+ expect(await readIntakeMessages('TEST-invalid-filter')).toMatchObject({code:'VALIDATION_ERROR'});
 });

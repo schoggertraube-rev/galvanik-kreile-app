@@ -3,6 +3,9 @@
   "version": "1.1.1",
   "owner": "Path-1 Fundament (authentifizierter Produkteinstieg)",
   "publicExports": [
+    "@/modules/fundament/public#TodayReadSettings",
+    "@/modules/fundament/public#todayReadSettingsFromCompany",
+    "@/modules/fundament/server-public#readTodayReadSettings",
     "@/modules/fundament/server-public#readLoggingSettings",
     "@/modules/fundament/public#CompanyLetterSettings",
     "@/modules/fundament/server-public#readCompanyLetterSettings",
