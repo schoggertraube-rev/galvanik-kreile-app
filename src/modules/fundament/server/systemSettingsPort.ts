@@ -66,11 +66,12 @@ const todayReadProjection=sql`jsonb_build_object(
  'has_todayRefreshLeaseSeconds',to_jsonb(company_settings)?'today_refresh_lease_seconds','todayRefreshLeaseSeconds',to_jsonb(company_settings)->'today_refresh_lease_seconds',
  'has_todayStalePollMs',to_jsonb(company_settings)?'today_stale_poll_ms','todayStalePollMs',to_jsonb(company_settings)->'today_stale_poll_ms',
  'has_navPrefetchMaxAgeSeconds',to_jsonb(company_settings)?'nav_prefetch_max_age_seconds','navPrefetchMaxAgeSeconds',to_jsonb(company_settings)->'nav_prefetch_max_age_seconds') AS today_read_source`;
-const readPageSettingsSourcesRow=cache(async(tenantId:string)=>withPageReadSettingsSource(async()=>{
+const readFreshPageSettingsSourcesRow=async(tenantId:string)=>withPageReadSettingsSource(async()=>{
  return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{page_read_source:unknown;today_read_source:unknown}>(sql`
   SELECT ${pageReadProjection},${todayReadProjection}
   FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY id LIMIT 2`));
-}));
+});
+const readPageSettingsSourcesRow=cache(readFreshPageSettingsSourcesRow);
 const readPageReadSettingsRow=cache(async(tenantId:string)=>{
  const rows=await readPageSettingsSourcesRow(tenantId);
  // PL22.11.02:51: a known absent value uses the one declared startup default.
@@ -85,8 +86,8 @@ export async function readPageReadSettings(context:{tenantId:string}){
  return readPageReadSettingsRow(context.tenantId);
 }
 
-export async function readTodayReadSettings(context:{tenantId:string}){
- const rows=await readPageSettingsSourcesRow(context.tenantId);
+export async function readTodayReadSettings(context:{tenantId:string;fresh?:true}){
+ const rows=await (context.fresh?readFreshPageSettingsSourcesRow:readPageSettingsSourcesRow)(context.tenantId);
  if(!rows.length)return {todayReadSource:DEFAULT_PAGE_READ_SETTINGS.todayReadSource,todayRefreshBatchLimit:DEFAULT_PAGE_READ_SETTINGS.todayRefreshBatchLimit,todayRefreshLeaseSeconds:DEFAULT_PAGE_READ_SETTINGS.todayRefreshLeaseSeconds,todayStalePollMs:DEFAULT_PAGE_READ_SETTINGS.todayStalePollMs,navPrefetchMaxAgeSeconds:DEFAULT_PAGE_READ_SETTINGS.navPrefetchMaxAgeSeconds};
  if(rows.length!==1)throw Error('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
  const settings=todayReadSettingsFromCompany(rows[0].today_read_source,DEFAULT_PAGE_READ_SETTINGS);
@@ -96,17 +97,18 @@ export async function readTodayReadSettings(context:{tenantId:string}){
 
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
-const readCompanyLetterSettingsRow=cache(async(tenantId:string,includeDeliveryNoteIdentity:boolean)=>withPrivilegedTenantTransaction({tenantId},async tx=>{
+const readFreshCompanyLetterSettingsRow=async(tenantId:string,includeDeliveryNoteIdentity:boolean)=>withPrivilegedTenantTransaction({tenantId},async tx=>{
   const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${includeDeliveryNoteIdentity?sql`,phone,COALESCE(NULLIF(tax_id,''),NULLIF(tax_number,'')) AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
   if(!rows.length)return {code:'NOT_FOUND' as const};
   if(rows.length!==1)return {code:'UNAVAILABLE' as const};
   const missingFields=(['companyName','street','zip','city','country'] as const).filter(key=>typeof rows[0][key]!=='string'||!rows[0][key].trim());
   if(missingFields.length)return {code:'VALIDATION_ERROR' as const,missingFields};
   return {code:'OK' as const,company:rows[0]};
- }));
-export async function readCompanyLetterSettings(context:Pick<CompanyDocumentContext,'tenantId'|'canRead'|'includeDeliveryNoteIdentity'>&Partial<Pick<CompanyDocumentContext,'actorId'>>){
+ });
+const readCompanyLetterSettingsRow=cache(readFreshCompanyLetterSettingsRow);
+export async function readCompanyLetterSettings(context:Pick<CompanyDocumentContext,'tenantId'|'canRead'|'includeDeliveryNoteIdentity'>&Partial<Pick<CompanyDocumentContext,'actorId'>>&{fresh?:true}){
  if(!context.canRead)return {code:'FORBIDDEN' as const};
- try{return await readCompanyLetterSettingsRow(context.tenantId,context.includeDeliveryNoteIdentity===true)}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
+ try{return await (context.fresh?readFreshCompanyLetterSettingsRow:readCompanyLetterSettingsRow)(context.tenantId,context.includeDeliveryNoteIdentity===true)}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
 }
 
 export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{

@@ -71,7 +71,7 @@ function productivePorts():TodayProjectionPorts{
    readAllocation:(tx,tenantId,customerId,input)=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)})};
  const source=(payload:unknown,complete=true,errorCode='TODAY_PROJECTOR_SOURCE_INCOMPLETE'):TodayProjectionResult=>complete?{code:'OK',payload}:{code:'SOURCE_INCOMPLETE',errorCode,payload};
  const known=(result:{code:string})=>result.code==='OK'||result.code==='FORBIDDEN';
- return {readSettings:readTodayReadSettings,listOrderIds:async auth=>(await orders(auth)).map(row=>row.id),
+ return {readSettings:context=>readTodayReadSettings({...context,fresh:true}),listOrderIds:async auth=>(await orders(auth)).map(row=>row.id),
   readSources:async(auth,keys)=>{
    // PL08:59: absence of an actual active profile is not a zero-valued
    // financial/task result. Keep every section unavailable for the live escape.
@@ -95,7 +95,7 @@ function productivePorts():TodayProjectionPorts{
       case 'orders':result=source(access.orders?await orders(auth):{code:'FORBIDDEN'});break;
       case 'messages':{const read=await readIntakeMessagesForAuthorization(auth,'offen');result=source(read,known(read));break;}
       case 'complaints':{const read=await readComplaintsForAuthorization(auth);result=source(read,known(read));break;}
-      case 'company':{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise')});result=source(read,known(read));break;}
+      case 'company':{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise'),fresh:true});result=source(read,known(read));break;}
       case 'quote_followups':result=source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day)));break;
       case 'money':{const read=await readTodayMoneySupport(auth,day);result=source(read,!read.supportMissing.length&&[read.invoiceSource,read.prepaymentSource,read.collectionSource,read.invoiceMailSource].every(known));break;}
       case 'tasks':{const read=await readTaskForAuthorization(auth,{calendar:true});result=source(read,known(read));break;}
