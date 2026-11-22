@@ -90,3 +90,26 @@ it('invalidates actual app-user name and active changes while retaining the exis
  expect(await sql`SELECT tenant_seq::integer AS seq FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{seq:before.seq+3}]);
  expect(await sql`SELECT role,full_name,active FROM public.app_users WHERE tenant_id=${tenant} AND id=${actor.actorId}::uuid`).toEqual([{role:actor.role,full_name:'TEST actual changed name',active:true}]);
 });
+
+it('marks two actual order sources in a fixed order under concurrent reversed input and rolls both schema probes back',async()=>{
+ // Explicit no-op schema/concurrency boundary, not an unrecorded product command.
+ const first=await readyInvoiceOrder('TEST sorted trigger first'),second=await readyInvoiceOrder('TEST sorted trigger second');
+ const ids=[first.orderId,second.orderId];
+ const original=await sql`SELECT to_jsonb(orders) AS row FROM public.orders orders WHERE tenant_id=${tenant} AND id IN (${ids[0]},${ids[1]}) ORDER BY id`;
+ const source=await sql`SELECT to_jsonb(model) AS row FROM private.today_source_v1 model WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
+ const rollback=Symbol('TEST rollback concurrent invalidation probe');
+ const probe=async(orderIds:string[])=>{
+  try{await sql.begin(async tx=>{
+   const before=await tx`SELECT source_id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id IN (${orderIds[0]},${orderIds[1]}) ORDER BY source_id`;
+   await tx`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=ANY(ARRAY[${orderIds[0]},${orderIds[1]}]::text[])`;
+   await tx`SELECT pg_sleep(0.03)`;
+   const marked=await tx`SELECT source_id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id IN (${orderIds[0]},${orderIds[1]}) ORDER BY source_id`;
+   expect(marked).toHaveLength(2);
+   expect(marked.map(row=>({id:row.source_id,seq:BigInt(row.seq)}))).toEqual(before.map(row=>({id:row.source_id,seq:BigInt(row.seq)+BigInt(1)})));
+   throw rollback;
+  });}catch(error){if(error!==rollback)throw error;}
+ };
+ await Promise.all([probe(ids),probe([...ids].reverse())]);
+ expect(await sql`SELECT to_jsonb(orders) AS row FROM public.orders orders WHERE tenant_id=${tenant} AND id IN (${ids[0]},${ids[1]}) ORDER BY id`).toEqual(original);
+ expect(await sql`SELECT to_jsonb(model) AS row FROM private.today_source_v1 model WHERE tenant_id=${tenant} ORDER BY kind,source_id`).toEqual(source);
+});
