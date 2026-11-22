@@ -1,7 +1,7 @@
 "use server";
 
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
@@ -15,7 +15,7 @@ import {
   attachInboxMessage,
   readCommunicationInbox,
   readLinkedCommunicationMessages,
-  sendCommunicationMail,
+  sendCommunicationMail as sendCommunicationMailPort,
   readCommunicationTargetInTransaction,
   readCommunicationImportContext,
 } from "@/lib/server/communicationPort";
@@ -309,7 +309,7 @@ import {recordImportedDispatchReplies,readImportedDispatchReplyEvidence} from '@
 import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
 async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,deferReply=false){
  if(result.code!=='OK'||!result.itemId)return result;
- const qualified=await qualifyImportedDeliveryFailure(auth,result.itemId,customerId=>linkImportedMail(auth,{itemId:result.itemId!,targetType:'CUSTOMER',targetId:customerId},readCommunicationTargetInTransaction,readCustomerProfile));
+ const qualified=await qualifyImportedDeliveryFailure(auth,result.itemId,customerId=>linkImportedMail(auth,{itemId:result.itemId!,targetType:'CUSTOMER',targetId:customerId},readCommunicationTargetInTransaction,readCustomerProfile),()=>readPageReadSettings(auth));
  return qualified.code==='OK'?(deferReply?result:withDispatchReply(auth,result)):{...qualified,itemId:result.itemId};
 }
 async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,strict=false){
@@ -322,7 +322,7 @@ async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:Au
  customerCurrent:async(writeTx,snapshot)=>{const customer=await readCustomerProfile(writeTx,auth.tenantId,receipt.customerId,true);const {customerCountryLabel}=await import('@/modules/customers/public');const r=snapshot.recipient;return !!customer&&customer.name===r.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===r.street&&customer.zipCode===r.zip&&customer.city===r.city&&customerCountryLabel(customer.country)===r.country;},
  createTask:(writeTx,value)=>createOrderHandoverTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)})
  });await finishFinalTasksForReply(tx,auth,receipt,complete,restrict);}});
- await recordImportedDispatchReplies(auth,result.itemId,{readLinked:readLinkedIntakeMails,record});return result;}
+ await recordImportedDispatchReplies(auth,result.itemId,{readLinked:readLinkedIntakeMails,record,readGraphSettings:()=>readPageReadSettings(auth)});return result;}
  catch(error){
   const reason=error instanceof Error&&/^[A-Z_]+$/.test(error.message)?error.message:'DATABASE_OR_PROVIDER_FAILURE';
   console.error('[IMPORTED_DISPATCH_REPLY_FAILED]',{name:error instanceof Error?error.name:'UnknownError',reason});
@@ -378,3 +378,6 @@ export async function confirmInvoiceHandoverAction(input:{invoiceId:string;clien
   }
  },readLoggingSettings);
 }
+
+// Root-only composition: the transport keeps its existing module boundary.
+const sendCommunicationMail=(auth:Parameters<typeof sendCommunicationMailPort>[0],input:Parameters<typeof sendCommunicationMailPort>[1])=>sendCommunicationMailPort(auth,input,()=>readPageReadSettings(auth));

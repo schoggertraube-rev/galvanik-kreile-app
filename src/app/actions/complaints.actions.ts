@@ -1,12 +1,12 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {recordComplaintMailRetry,readComplaintMailClosure} from '@/lib/server/communicationComplaintPort';
 import {unstable_noStore as noStore} from "next/cache";
 import {readComplaints,executeComplaint,readComplaintOrderSource,readComplaintOrderChoices} from "@/modules/complaints/server-public";
 import {recordIntakeComplaintEffect} from "@/modules/eingang/server-public";
 import {resolveAuthorization,hasAuthorizationArea} from '@/lib/server/authorization';
-import {sendCommunicationMail,readComplaintGoodsReminderContext} from '@/lib/server/communicationPort';
+import {sendCommunicationMail as sendCommunicationMailPort,readComplaintGoodsReminderContext} from '@/lib/server/communicationPort';
 import {readComplaintResultMail,readComplaintGoodsMail} from '@/lib/server/commands/emailTemplateCommand';
 import {COMPLAINT_DEFECTS,type ComplaintWriteResult,type ComplaintRequest,type ComplaintDialogData} from '@/modules/complaints/public';
 import {readIntakeCapture} from '@/modules/eingang/server-public';
@@ -111,3 +111,6 @@ export async function sendeNacharbeitBegleitscheinAction(input:{complaintId:stri
 
  },readLoggingSettings);
 }
+
+// Root-only composition: the transport keeps its existing module boundary.
+const sendCommunicationMail=(auth:Parameters<typeof sendCommunicationMailPort>[0],input:Parameters<typeof sendCommunicationMailPort>[1])=>sendCommunicationMailPort(auth,input,()=>readPageReadSettings(auth));

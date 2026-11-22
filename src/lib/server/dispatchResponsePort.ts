@@ -7,7 +7,7 @@ import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
 
 export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE';proofs:Array<{itemId:string;threadId:string;graphMessageId:string;originalSha256:string;receivedAt:string;inReplyTo:string;orderIds:string[];freezes:Array<{orderId:string;freezeId:string}>}>};
 type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]};deliveryReport?:{status:string}}};
-export type DispatchResponsePorts={readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string|null;senderAddress?:string|null}>}>};
+export type DispatchResponsePorts={readGraphSettings?:import('./microsoftGraph').GraphReadSettingsSource;readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string|null;senderAddress?:string|null}>}>};
 
 /** Incoming MIME and the exact Sent-Items request header bind the reaction to the real notice. */
 export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string},ports:DispatchResponsePorts):Promise<DispatchResponseCheck>{
@@ -34,7 +34,7 @@ export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{cu
    if(!chain||chain.status==='missing')continue;
    if(!original.proof_ok)throw Error('DISPATCH_RESPONSE_ORIGINAL_MISSING');
    if(!original.proof_ok||!chain||chain.source!=='original_mime'||chain.status!=='present'||!Array.isArray(chain.inReplyTo)||chain.inReplyTo.length!==1||!chain.originalSha256||!/^[a-f0-9]{64}$/.test(chain.originalSha256)||!mail.senderAddress)throw Error('DISPATCH_RESPONSE_REFERENCE_UNCLEAR');
-   const sent=await readMicrosoftGraphSentMailReference(chain.inReplyTo[0],mail.senderAddress);
+   const sent=await readMicrosoftGraphSentMailReference(chain.inReplyTo[0],mail.senderAddress,undefined,undefined,ports.readGraphSettings);
    if(sent.code!=='OK')throw Error('DISPATCH_RESPONSE_SENT_REFERENCE_UNCLEAR');
    if(!sent.data.clientRequestId)continue;
    const thread=threads.find(row=>row.source==='MS_GRAPH_OUT:'+sent.data.clientRequestId);

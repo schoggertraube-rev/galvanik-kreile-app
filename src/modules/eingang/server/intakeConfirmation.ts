@@ -21,6 +21,7 @@ export async function scheduleIntakeConfirmation(
   auth:AuthorizationSnapshot,
   receipt:OrderIntakeReceipt,
   afterResponse:((task:()=>Promise<void>)=>void)|undefined,
+  readGraphSettings?:import('@/lib/server/microsoftGraph').GraphReadSettingsSource,
 ):Promise<string>{
   try{
     const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;status:string;fehler_code:string|null}>(sql`
@@ -32,7 +33,7 @@ export async function scheduleIntakeConfirmation(
     if(rows[0].status==='gesendet')return 'Auftragsbestätigung wird gesendet';
     try{
       if(!afterResponse)throw Error('AFTER_RESPONSE_UNAVAILABLE');
-      afterResponse(async()=>{await sendIntakeConfirmation(auth,receipt);});
+      afterResponse(async()=>{await sendIntakeConfirmation(auth,receipt,readGraphSettings);});
     }catch(cause){
       console.error('[INTAKE_CONFIRMATION_SCHEDULE_FAILED]',{orderId:receipt.orderId,cause});
       await withPrivilegedTenantTransaction(auth,async tx=>{
@@ -61,7 +62,7 @@ async function recordConfirmationOutcome(tx:PrivilegedTenantTransaction,auth:Aut
 }
 
 /** Runs after booking, in a separate transaction; a failed send never undoes the order. */
-export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:OrderIntakeReceipt):Promise<string>{
+export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:OrderIntakeReceipt,readGraphSettings?:import('@/lib/server/microsoftGraph').GraphReadSettingsSource):Promise<string>{
   try{
     const prepared=await withPrivilegedTenantTransaction(auth,async tx=>{
       const rows=await tx.execute<{id:string;an:string;status:string;fehler_code:string|null}>(sql`
@@ -103,7 +104,7 @@ export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:
     if(typeof prepared==='string')return prepared;
     let failure:string|null='COMPANY_NAME_MISSING';
     if(prepared.message&&prepared.original){
-      const sent=await sendCommunicationMail(auth,{targetType:'ORDER',targetId:receipt.orderId,clientRequestId:prepared.id,subject:prepared.message.subject,body:prepared.message.body,intakeConfirmation:{outboxId:prepared.id,sourceClientEventId:receipt.clientEventId,original:prepared.original}});
+      const sent=await sendCommunicationMail(auth,{targetType:'ORDER',targetId:receipt.orderId,clientRequestId:prepared.id,subject:prepared.message.subject,body:prepared.message.body,intakeConfirmation:{outboxId:prepared.id,sourceClientEventId:receipt.clientEventId,original:prepared.original}},readGraphSettings);
       failure=sent.code==='OK'?null:sent.code;
     }
     if(failure)console.error('[INTAKE_CONFIRMATION_SEND_FAILED]',{orderId:receipt.orderId,code:failure});

@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+// Controlled settings source for provider-port unit cases; the native settings
+// round trip is covered independently against the isolated Replay tenant.
+const settings=vi.hoisted(()=>({queryTimeoutMs:10000,invoiceMailBatchLimit:101}));
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphSentDocumentEvidence,
   readMicrosoftGraphAttachments,
   readMicrosoftGraphMime,
   readMicrosoftGraphConfigurationStatus,
+  readMicrosoftGraphSentMailByRequest,
   sendMicrosoftGraphMail,
 } from "../microsoftGraph";
 
@@ -15,7 +19,33 @@ const env = {
   MS_GRAPH_MAILBOX: "mailbox@example.invalid",
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {vi.restoreAllMocks();settings.queryTimeoutMs=10000;});
+
+it('uses the configured tenant deadline for Graph reads',async()=>{
+ settings.queryTimeoutMs=37;
+ const timeout=vi.spyOn(AbortSignal,'timeout');
+ const fetchPort=vi.fn(async(_input:Parameters<typeof fetch>[0],init?:RequestInit)=>{
+  expect(init?.signal).toBeDefined();
+  return Response.json({value:[]});
+ });
+ const token=Response.json({access_token:'TEST-token'.repeat(5)});
+ fetchPort.mockImplementationOnce(async()=>token);
+ const readSettings=vi.fn(async()=>({...settings}));
+ expect(await readMicrosoftGraphSentMailByRequest({clientRequestId:'11111111-1111-4111-8111-111111111111',recipient:'test@example.invalid',preparedAt:'2026-11-22T01:00:00Z'},env,fetchPort,readSettings)).toMatchObject({code:'OK'});
+ expect(readSettings).toHaveBeenCalledTimes(1);
+ expect(timeout).toHaveBeenCalledWith(37);
+ expect(timeout).not.toHaveBeenCalledWith(10000);
+});
+
+it.each(['reader','value'] as const)('PL02:51 uses the canonical default when the optional %s is missing',async missing=>{
+ const {DEFAULT_PAGE_READ_SETTINGS}=await import('@/db/readBudget');
+ const timeout=vi.spyOn(AbortSignal,'timeout');
+ const fetchPort=vi.fn().mockResolvedValueOnce(Response.json({access_token:'TEST-token'.repeat(5)})).mockResolvedValueOnce(Response.json({value:[]}));
+ const source=missing==='reader'?undefined:async()=>undefined;
+ expect(await readMicrosoftGraphSentMailByRequest({clientRequestId:'11111111-1111-4111-8111-111111111111',recipient:'test@example.invalid',preparedAt:'2026-11-22T01:00:00Z'},env,fetchPort,source)).toMatchObject({code:'OK'});
+ expect(timeout).toHaveBeenCalledWith(DEFAULT_PAGE_READ_SETTINGS.graphTimeoutMs);
+ expect(fetchPort).toHaveBeenCalledTimes(2);
+});
 
 it('preserves large inline work photos and small ordinary images while excluding a signature CID',async()=>{
   const rows=[

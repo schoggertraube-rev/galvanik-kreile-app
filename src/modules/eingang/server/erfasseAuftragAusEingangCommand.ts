@@ -159,6 +159,7 @@ export async function erfasseAuftragAusEingangCommand(
   customerWriter?:CustomerWriter,customerUpdater?:CustomerUpdater,
   afterResponse?:(task:()=>Promise<void>)=>void,
   afterOrderCreated?:OrderIntakeTransactionBinding['after'],
+  readGraphSettings?:(auth:AuthorizationSnapshot)=>ReturnType<import('@/lib/server/microsoftGraph').GraphReadSettingsSource>,
 ): Promise<ErfasseAuftragResult> {
   const normalized = normalizeInput(input);
   if (!normalized) {
@@ -212,6 +213,6 @@ export async function erfasseAuftragAusEingangCommand(
     orderId: order.receipt.orderId,
     intakeItemId: binding.itemId()!,
     replayed: order.replayed,
-    confirmationMessage: await scheduleIntakeConfirmation(createAuthorization.data,order.receipt,afterResponse),
+    confirmationMessage: await scheduleIntakeConfirmation(createAuthorization.data,order.receipt,afterResponse,readGraphSettings?()=>readGraphSettings(createAuthorization.data):undefined),
   };
 }
