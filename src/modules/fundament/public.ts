@@ -8,6 +8,12 @@ export { SALES_STAGE_FEATURES, isFeatureEnabled } from "./featureCatalog";
 export type { SalesStage, SalesStageFeature, SalesStageFeatureDefinition, SalesStageFeatureId } from "./featureCatalog";
 export { ACCESS_AREAS, ACCESS_AREA_LABELS, isAccessAreaAllowedForRole } from "@/lib/auth/authorizationContract";
 export type { AccessArea, AppRole } from "@/lib/auth/authorizationContract";
+export type { FahrzeugEingabe,FahrzeugAuswahl,FahrerAuswahl,FahrzeugPflege,FahrzeugSpeichern } from "./fahrzeugVertrag";
+
+export type Firmensteuersaetze = Readonly<{
+  regelsatzBasispunkte: number | null;
+  ermaessigtBasispunkte: number;
+}>;
 
 export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;

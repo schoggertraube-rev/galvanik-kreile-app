@@ -89,7 +89,20 @@
     "@/modules/fundament/server-public#readEnergiePauschaleInTransaction",
     "@/modules/fundament/server-public#LagerEinstellungen",
     "@/modules/fundament/server-public#KanalAnhangGrenzen",
-    "@/modules/fundament/server-public#readArbeitskalenderInTransaction"
+    "@/modules/fundament/server-public#readArbeitskalenderInTransaction",
+    "@/modules/fundament/server-public#readInaktivitaetInTransaction",
+    "@/modules/fundament/public#Firmensteuersaetze",
+    "@/modules/fundament/server-public#readUmsatzsteuerSaetzeInTransaction",
+    "@/modules/fundament/server-public#qualifiziereUmsatzsteuerPosition",
+    "@/modules/fundament/server-public#pruefeUmsatzsteuerOriginalposition",
+    "@/modules/fundament/public#FahrzeugEingabe",
+    "@/modules/fundament/public#FahrzeugAuswahl",
+    "@/modules/fundament/public#FahrerAuswahl",
+    "@/modules/fundament/public#FahrzeugPflege",
+    "@/modules/fundament/public#FahrzeugSpeichern",
+    "@/modules/fundament/server-public#liesAktiveFahrzeugauswahl",
+    "@/modules/fundament/server-public#liesFahrzeugPflege",
+    "@/modules/fundament/server-public#speichereFahrzeug"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
@@ -113,7 +126,8 @@
     "public.app_users",
     "public.company_settings",
     "public.tenant_features",
-    "public.ui_events"
+    "public.ui_events",
+    "public.vehicles"
   ],
   "storagePurposes": [],
   "events": {

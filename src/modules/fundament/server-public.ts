@@ -30,3 +30,7 @@ export {readLagerEinstellungen,readAusschussBerechnenInTransaction,readKanalAnha
   readEnergiePauschaleInTransaction} from "./server/s16dSpurDSettingsPort";
 export type {LagerEinstellungen,KanalAnhangGrenzen} from "./server/s16dSpurDSettingsPort";
 export {readArbeitskalenderInTransaction} from "./server/s16dArbeitskalender";
+export {readInaktivitaetInTransaction} from "./server/inaktivitaetSettingsPort";
+export {readUmsatzsteuerSaetzeInTransaction,qualifiziereUmsatzsteuerPosition,
+  pruefeUmsatzsteuerOriginalposition} from "./server/umsatzsteuerSettingsPort";
+export {liesAktiveFahrzeugauswahl,liesFahrzeugPflege,speichereFahrzeug} from "./server/fahrzeugPort";

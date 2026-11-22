@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { readLagerEinstellungen, readKanalAnhangGrenzen, readArbeitskalenderInTransaction } from "@/modules/fundament/server-public";
+import { readLagerEinstellungen, readKanalAnhangGrenzen, readArbeitskalenderInTransaction,
+  readInaktivitaetInTransaction,readUmsatzsteuerSaetzeInTransaction,
+  qualifiziereUmsatzsteuerPosition,pruefeUmsatzsteuerOriginalposition } from "@/modules/fundament/server-public";
 import { plusWorkingDays } from "@/lib/domain/workingDays";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -34,6 +36,40 @@ test("S16d reads the same defaults without a company row and the changed row in 
     throw new Error("S16D_TEST_ROLLBACK");
   })).rejects.toThrow("S16D_TEST_ROLLBACK");
   expect(await readLagerEinstellungen(tenantId)).toEqual(withoutRow);
+});
+
+test("U10 keeps the saved reduced rate and reason tied to the same original item", async () => {
+  const tenantId = `TEST-s16d-vat-${crypto.randomUUID()}`;
+  await expect(withPrivilegedTenantTransaction({ tenantId }, async tx => {
+    expect(await readUmsatzsteuerSaetzeInTransaction(tx, tenantId)).toBeNull();
+    await tx.execute(sql`INSERT INTO public.company_settings (id,tenant_id) VALUES ('default',${tenantId})`);
+    const rates = await readUmsatzsteuerSaetzeInTransaction(tx, tenantId);
+    expect(rates).toEqual({ regelsatzBasispunkte: 1900, ermaessigtBasispunkte: 700 });
+    expect(qualifiziereUmsatzsteuerPosition(rates, "ermaessigt", null).code).toBe("STEUER_GRUND_FEHLT");
+    expect(qualifiziereUmsatzsteuerPosition(rates, "ermaessigt", "TEST-Grund")).toEqual({
+      code: "OK", satzBasispunkte: 700, grund: "TEST-Grund",
+    });
+    const saved = { itemId: "TEST-position-1", vatRateBasisPoints: 700, vatReductionReason: "TEST-Grund" };
+    expect(pruefeUmsatzsteuerOriginalposition(saved, { ...saved })).toBe(true);
+    expect(pruefeUmsatzsteuerOriginalposition(saved, { ...saved, itemId: "TEST-position-2" })).toBe(false);
+    await tx.execute(sql`UPDATE public.company_settings SET invoice_reduced_vat_rate_basis_points=800
+      WHERE tenant_id=${tenantId}`);
+    expect(pruefeUmsatzsteuerOriginalposition(saved, { ...saved })).toBe(true);
+    throw new Error("S16D_VAT_TEST_ROLLBACK");
+  })).rejects.toThrow("S16D_VAT_TEST_ROLLBACK");
+});
+
+test("S16d inactivity selects the stored device value ahead of the role and default", async () => {
+  const tenantId = `TEST-s16d-inactivity-${crypto.randomUUID()}`;
+  await expect(withPrivilegedTenantTransaction({ tenantId }, async tx => {
+    expect(await readInaktivitaetInTransaction(tx, tenantId, { geraetId: "TEST-device", rolle: "werkstatt" })).toBe(60);
+    await tx.execute(sql`INSERT INTO public.company_settings
+      (id,tenant_id,inaktivitaet_abmelden_geraete,inaktivitaet_abmelden_rollen)
+      VALUES ('default',${tenantId},'{"TEST-device":0}'::jsonb,'{"werkstatt":12}'::jsonb)`);
+    expect(await readInaktivitaetInTransaction(tx, tenantId, { geraetId: "TEST-device", rolle: "werkstatt" })).toBe(0);
+    expect(await readInaktivitaetInTransaction(tx, tenantId, { geraetId: null, rolle: "werkstatt" })).toBe(12);
+    throw new Error("S16D_INACTIVITY_TEST_ROLLBACK");
+  })).rejects.toThrow("S16D_INACTIVITY_TEST_ROLLBACK");
 });
 
 test("S16d calendar reads the same company's closure and leaves missing coverage open", async () => {
