@@ -26,8 +26,10 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
  const replies=new Map<string,DispatchReplyReceipt>();
  const histories=new Map<string,Awaited<ReturnType<typeof readCollectionReminderHistory>>>();
  const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>;deliveryFailedAt:string|null;responseSince:string|null}>();
- for(const order of orders.filter(row=>row.station==='fertig')){
-  const notification=await readOrderInformed(auth,order.id);
+ const finished=orders.filter(row=>row.station==='fertig');
+ const notifications=await Promise.all(finished.map(order=>readOrderInformed(auth,order.id)));
+ for(const [index,order] of finished.entries()){
+  const notification=notifications[index];
   if(notification.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
   const workingDays=policy===null||!notification.frozenAt?null:workingDaysBetween(berlinCalendarDay(new Date(notification.frozenAt)),berlinCalendarDay(),policy.holidays);
   if(workingDays!==null&&workingDays<0){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['DISPATCH_CALENDAR_INVALID'],unavailable:true});continue;}
