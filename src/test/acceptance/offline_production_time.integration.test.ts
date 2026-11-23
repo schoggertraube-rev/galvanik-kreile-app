@@ -24,6 +24,11 @@ async function finish(orderId:string,itemId:string,version:number,at:string){
  expect(await withSession(full,()=>replayOfflineWorkshopAction(offlinePartition({tenantId:KREILE_TENANT_SLUG,userId:full.actorId}),JSON.parse(JSON.stringify(original))))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:result.receipt.eventId}});
  return {...result,original};
 }
+async function bookedWeek(eventId:string){
+ const [row]=await sql`SELECT date_trunc('week',created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin')::date::text AS week FROM public.events WHERE id=${eventId}`;
+ if(!row?.week)throw Error('TEST_BOOKING_WEEK_MISSING');
+ return row.week as string;
+}
 it('does not backdate today’s price, supplements only on an actual pricing event and reverses original values',async()=>{
  const {created,orderId,itemId,version}=await setup('Offline KW unbewertet'),at=new Date(Date.now()-8*86400000).toISOString();
  const saved=await finish(orderId,itemId,version,at);
@@ -34,12 +39,17 @@ it('does not backdate today’s price, supplements only on an actual pricing eve
  const priced=await withSession(full,()=>changeOrderContentAction({orderId,expectedVersion:saved.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST echte Bepreisung nach Abgleich',items:[{id:itemId,catalogServiceId:null,name:'TEST Offline Preis',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:25000,vatRateBasisPoints:1900}]}));
  expect(priced.code).toBe('OK');if(priced.code!=='OK')throw Error('TEST_PRICE');
  expect(await sql`SELECT event_id,net_cents::int FROM private.order_production_snapshots WHERE origin_event_id=${saved.receipt.eventId} AND component='pricing' ORDER BY (SELECT created_at FROM public.events WHERE id=event_id)`).toEqual([{event_id:created.receipt.eventId,net_cents:10000},{event_id:priced.receipt.eventId,net_cents:15000}]);
- expect(await withSession(full,()=>getProductionWeekAction({onDate:new Date().toISOString().slice(0,10)}))).toMatchObject({code:'OK',data:{netCents:25000,currentlyUnpricedItemCount:0}});
+ const booking=new Map<string,number>();
+ const book=async(eventId:string,amount:number)=>{const week=await bookedWeek(eventId);booking.set(week,(booking.get(week)??0)+amount);};
+ const checkWeeks=async()=>{for(const [week,amount] of booking)expect(await withSession(full,()=>getProductionWeekAction({onDate:week}))).toMatchObject({code:'OK',data:{netCents:amount,currentlyUnpricedItemCount:0}});};
+ await book(created.receipt.eventId,10000);await book(priced.receipt.eventId,15000);
+ await checkWeeks();
  const input={orderId,itemId,expectedVersion:priced.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false};
- const reopened=await withSession(full,()=>setOrderItemFinishedAction(input));expect(reopened.code).toBe('OK');
+ const reopened=await withSession(full,()=>setOrderItemFinishedAction(input));expect(reopened.code).toBe('OK');if(reopened.code!=='OK')throw Error('TEST_REOPEN');
  expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE order_id=${orderId} AND tenant_id=${KREILE_TENANT_SLUG} AND direction=-1 ORDER BY component,net_cents`).toEqual([{component:'base',net_cents:null},{component:'pricing',net_cents:10000},{component:'pricing',net_cents:15000}]);
- expect(await withSession(full,()=>getProductionWeekAction({onDate:new Date().toISOString().slice(0,10)}))).toMatchObject({code:'OK',data:{netCents:0}});
+ await book(reopened.receipt.eventId,-25000);
+ await checkWeeks();
 });
 it('uses the real pre-existing price receipt and keeps booking order independent of a device clock ahead',async()=>{
  const {created,orderId,itemId,version}=await setup('Offline KW belegter Preis'),at=new Date(Date.now()+60000).toISOString();
