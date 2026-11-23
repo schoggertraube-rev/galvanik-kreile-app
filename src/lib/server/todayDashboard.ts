@@ -746,7 +746,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   // its previous build had status OK. Read that source through its live port.
   const mustReadLive=(kind:string,id='*')=>{const row=model.rows.find(source=>source.kind===kind&&source.sourceId===id);return row?.current!==true||row.status==='SOURCE_INCOMPLETE';};
   const live=async<T>(kind:string,known:T,read:()=>Promise<T>):Promise<T>=>{
-   if(deferLive||!mustReadLive(kind))return known;
+   if(!mustReadLive(kind))return known;
    try{return await withPageReadPhase(({orders:'today.orders',messages:'today.graph',money:'today.support',complaints:'today.complaints',quote_followups:'today.followups',tasks:'today.tasks',quotes:'today.quotes',company:'today.company'} as Record<string,string>)[kind],read);}
    catch{console.error('[TODAY_MODEL_LIVE_FAILED]',{kind,code:'SOURCE_INCOMPLETE'});return known;}
   };
@@ -789,7 +789,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   });
   let batch:TodayDashboardSources['batch']=access.orders?{code:'OK',data:{rows:projectTodayOrderSources(auth,rawRows)}}:null;
   const liveOrderIds=orders.filter(order=>mustReadLive('order',order.id)).map(order=>order.id);
-  if(!deferLive&&access.orders&&liveOrderIds.length){
+  if(access.orders&&liveOrderIds.length){
    const read=await withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:liveOrderIds}));
    if(read.code==='OK'&&batch?.code==='OK'){
     const liveRows=new Map(read.data.rows.map(row=>[row.orderId,row]));
@@ -802,7 +802,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   ]);
   const support={...money,...person,...delegation,supportMissing:[...money.supportMissing,...person.supportMissing,...delegation.supportMissing]};
   let versions:Array<{id:string;version:number}>|null=model.rows.flatMap(row=>row.kind==='order'&&row.currentVersion!==null?[{id:row.sourceId,version:row.currentVersion}]:[]);
-  if(!deferLive&&liveOrderIds.length){
+  if(liveOrderIds.length){
    try{const current=await readTodayOrderVersionsInTransaction(tx,auth.tenantId,liveOrderIds);
     versions=[...versions.filter(row=>!liveOrderIds.includes(row.id)),...current];
    }catch{versions=null;}
