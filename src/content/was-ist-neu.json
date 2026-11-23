@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-23",
+    "pr": 268,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Du öffnest Heute, während der geplante Neuaufbau getrennt von deinem Seitenaufruf läuft."
+    ]
+  },
+  {
+    "datum": "2026-11-23",
     "pr": 267,
     "seite": "heute",
     "ziel": "/",
