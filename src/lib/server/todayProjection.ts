@@ -2,7 +2,7 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
-import type {TodayReadSettings} from '@/modules/fundament/public';
+import {boundedTodayRefreshBudgetMs,type TodayReadSettings} from '@/modules/fundament/public';
 import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
@@ -308,7 +308,7 @@ export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=produ
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});
-  configurePageReadBudget(settings.todayRefreshLeaseSeconds*1000);
+  configurePageReadBudget(boundedTodayRefreshBudgetMs(settings.todayRefreshLeaseSeconds));
   return run({...ports,readSettings:async()=>settings});
  },5000);
 };
@@ -317,7 +317,7 @@ export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=produ
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});
-  configurePageReadBudget(Math.min(settings.todayRefreshLeaseSeconds*1000,240_000));
+  configurePageReadBudget(boundedTodayRefreshBudgetMs(settings.todayRefreshLeaseSeconds));
   return run();
  },5000);
 };

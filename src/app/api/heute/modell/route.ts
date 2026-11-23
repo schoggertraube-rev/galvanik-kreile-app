@@ -36,10 +36,9 @@ export async function GET(request:Request){
   }
   const before=await loadOfficeHome(auth.data);
   if(!('dashboard'in before))return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});
-  if(before.modelRead?.source==='live'||!before.modelRead?.pending)return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead?.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
   // A pending model never starts work from this GET. The bounded scheduled
   // route refreshes it independently of this response.
-  return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
+  return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead?.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
  },5_000);}catch{
   console.error('[TODAY_MODEL_READ_FAILED]',{code:'SOURCE_INCOMPLETE'});
   return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});

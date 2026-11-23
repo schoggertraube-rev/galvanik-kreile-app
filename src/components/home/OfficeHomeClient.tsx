@@ -97,11 +97,11 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
         if(stopped)return;
         if(result.code!=='OK'||!result.model||!('dashboard'in result.model))throw Error('TODAY_MODEL_RESPONSE_INCOMPLETE');
         if(result.model.cacheLoginScope!==scope){again=false;return;}
-        const next=result.model;
+        const next=result.model,previousRevision=revision;
         revision=next.modelRead?.revision;
         setPolled({base:initialModel,value:next});
         pending=again=next.modelRead?.pending===true;
-        nextDelay=baseDelay;
+        nextDelay=revision&&revision!==previousRevision?baseDelay:Math.min(maxDelay,Math.max(baseDelay,nextDelay*2));
       }catch{
         if(stopped||controller.signal.aborted)return;
         setMessage(PAGE_READ_COPY.sourceIncomplete);

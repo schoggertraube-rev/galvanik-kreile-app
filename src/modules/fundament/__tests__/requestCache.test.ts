@@ -3,6 +3,7 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {readPageReadSettings,readTodayReadSettings,readCompanyLetterSettings} from '../server/systemSettingsPort';
+import {boundedTodayRefreshBudgetMs,MAX_TODAY_REFRESH_MS} from '../public';
 
 type Dispatcher={getCacheForType:<T>(factory:()=>T)=>T};
 const test=vi.hoisted(()=>({
@@ -57,6 +58,14 @@ it('uses model startup defaults only for the known missing schema and rejects pa
  await expect(readTodayReadSettings({tenantId:KREILE_TENANT_SLUG})).rejects.toThrow('TODAY_READ_SETTINGS_SOURCE_INVALID');
  test.settings.mockResolvedValue([{today_read_source:flags},{today_read_source:flags}]);
  await expect(readTodayReadSettings({tenantId:KREILE_TENANT_SLUG})).rejects.toThrow('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
+});
+
+it('caps both model refresh budgets and rejects an overlong lease setting',async()=>{
+ expect(boundedTodayRefreshBudgetMs(600)).toBe(MAX_TODAY_REFRESH_MS);
+ expect(boundedTodayRefreshBudgetMs(30)).toBe(30_000);
+ const model={todayReadSource:'modell',todayRefreshBatchLimit:20,todayRefreshLeaseSeconds:600,todayShadowIntervalMs:60000,todayStalePollMs:1500,navPrefetchMaxAgeSeconds:60};
+ test.settings.mockResolvedValue([{today_read_source:{...model,...Object.fromEntries(Object.keys(model).map(key=>['has_'+key,true]))}}]);
+ await expect(readTodayReadSettings({tenantId:KREILE_TENANT_SLUG})).rejects.toThrow(`Du kannst die Nachlauf-Frist auf höchstens ${MAX_TODAY_REFRESH_MS/1000} Sekunden setzen.`);
 });
 
 it('shares page settings only for the same tenant in the same render and rereads actions',async()=>{

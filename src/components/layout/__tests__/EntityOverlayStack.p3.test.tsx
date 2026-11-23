@@ -172,6 +172,27 @@ it('backs off unchanged pending model revisions instead of polling continuously'
  }finally{vi.useRealTimers();}
 });
 
+it('backs off repeated empty-model 200 responses until a new revision and then backs off 304 again',async()=>{
+ vi.useFakeTimers();
+ try{
+  const empty=pollingModel('TEST empty model');
+  if(!('modelRead'in empty))throw Error('TEST_EMPTY_MODEL_REQUIRED');
+  empty.modelRead={source:'modell',pending:true,incomplete:false,pollMs:10,maxPollMs:80,rebuild:false};
+  const revision='b'.repeat(64);
+  let calls=0;
+  const fetch=vi.fn<typeof globalThis.fetch>(async()=>++calls>=7
+   ?new Response(null,{status:304})
+   :new Response(JSON.stringify({code:'OK',model:{...empty,modelRead:{...empty.modelRead,...(calls===6?{revision}:{})}}}),{status:200}));
+  vi.stubGlobal('fetch',fetch);
+  render(<RolfHomeClient model={empty} ports={actionPorts}/>);
+  const delays=[10,20,40,80,80,80,10,20];
+  for(const [index,delay] of delays.entries()){
+   await act(async()=>{await vi.advanceTimersByTimeAsync(delay-1);});expect(fetch).toHaveBeenCalledTimes(index);
+   await act(async()=>{await vi.advanceTimersByTimeAsync(1);});expect(fetch).toHaveBeenCalledTimes(index+1);
+  }
+ }finally{vi.useRealTimers();}
+});
+
 it('controlled late model response cannot replace a newer RSC snapshot even in the same login scope',async()=>{
  let finish!:(value:Response)=>void;
  const fetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));vi.stubGlobal('fetch',fetch);
