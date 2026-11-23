@@ -1,4 +1,5 @@
 import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
+import {reportOrderSourceIssue} from './orderSourceIssueLog';
 import type {OrderActorSummary} from "@/modules/orders/public";
 import "server-only";
 import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
@@ -875,7 +876,7 @@ export async function readTodayOrderCards(authorization:TodayOrderReadAuthorizat
     for(const [orderId,{queue,origin,items,freeze,handover}] of prepared){
      try{
       const quote=quoteValues.get(orderId),awardedQuote=quote instanceof Error?undefined:quote,awardedQuoteUnavailable=quote instanceof Error;
-      if(awardedQuoteUnavailable)console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId,name:quote.name});
+      if(awardedQuoteUnavailable)reportOrderSourceIssue('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',orderId,quote.message);
       const activeComplaint=complaintValues.get(orderId);
       if(queue.station!=='fertig'&&activeComplaint===undefined)throw Error('ORDER_NOTIFICATION_PROOF_INVALID');
       if(activeComplaint instanceof Error)throw activeComplaint;
@@ -1096,7 +1097,7 @@ export async function readLiveOrderCardSource(
       let awardedQuote:OrderCommercialQuote|undefined,awardedQuoteUnavailable=false;
       if(origin.has_commercial_quote&&queue.status!=='storniert'){
         try{awardedQuote=await withTenantSavepoint(tx,nested=>readOrderCommercialQuote(nested,authorization.tenantId,input.orderId));}
-        catch(error){awardedQuoteUnavailable=true;console.error('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId:queue.id,name:error instanceof Error?error.name:'UnknownError'});}
+        catch(error){awardedQuoteUnavailable=true;reportOrderSourceIssue('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',queue.id,error instanceof Error?error.message:'UnknownError');}
       }
       const commercialQuote=canReadMoney?awardedQuote:undefined;
       const cardItems=qualifiedItemUnits(items,awardedQuote);

@@ -22,6 +22,7 @@ import {appendCancellationCredit,readCancellationCreditSource} from './customerC
 import {readInvoiceHandoverSource} from '@/lib/server/orderHandoverSourcePort';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {readOrderCommercialQuote,bindOrderQuoteCommercialTerms} from '@/lib/server/orderQuoteReadPort';
+import {reportOrderSourceIssue} from '@/lib/server/orderSourceIssueLog';
 
 import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -1292,7 +1293,7 @@ async function readInvoiceShippingConsequencesWithHeader(auth:AuthorizationSnaps
   return {code:'OK' as const,orderId:order.id,orderVersion:order.version,shippingCostMissing:allocation.missingFee,feeCents:settings.shippingFeeCents,lines,additionalInvoices,reissueWithoutShipping,...(datenluecken.length?{datenluecken}:{}),...(settings.shippingFeeCents===null?{hintKey:'versand.pauschale_fehlt' as const}: {})};
  };return shared?await withTenantSavepoint(shared.tx,work):await withPrivilegedTenantTransaction(auth,work);}catch(error){
   const reason=error instanceof Error?error.message:'UnknownError';
-  console.error('[INVOICE_SHIPPING_PROPOSAL_FAILED]',reason);
+  reportOrderSourceIssue('[INVOICE_SHIPPING_PROPOSAL_FAILED]',input.orderId,reason);
   return {code:'SOURCE_INCOMPLETE' as const,orderId:input.orderId,orderVersion:input.expectedVersion,datenluecken:['SHIPPING_INVOICE_SOURCE'],...(identity.orderNumber?{message:SHIPPING_FEE_COPY.proposalMissing(identity.invoiceNumber??identity.orderNumber,identity.invoiceNumber!==undefined,reason==='SHIPPING_PROPOSAL_INVOICE_SOURCE_MISSING'?'freigabe':reason==='SHIPPING_PROPOSAL_SETTINGS_SOURCE_MISSING'?'einstellungen':reason==='SHIPPING_PROPOSAL_ORIGINAL_AMBIGUOUS'?'original':'quelle')}:{})};
  }
 }

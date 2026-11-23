@@ -18,6 +18,16 @@ const statistics=()=>sql`SELECT schemaname||'.'||relname AS name,(seq_scan+coale
 // PostgreSQL publishes idle-backend statistics asynchronously; this is not a
 // business timeout, reset, retry of the rebuild or a replacement data source.
 const published=()=>new Promise<void>(resolve=>setTimeout(resolve,1200));
+async function settledStatistics(){
+ let previous=new Map((await statistics()).map(row=>[row.name,BigInt(row.reads)]));
+ for(let attempt=0;attempt<12;attempt++){
+  await published();
+  const current=new Map((await statistics()).map(row=>[row.name,BigInt(row.reads)]));
+  if(current.size===previous.size&&[...current].every(([name,count])=>previous.get(name)===count))return current;
+  previous=current;
+ }
+ throw Error('TEST_RELATION_STATISTICS_NOT_SETTLED');
+}
 const exceptions=new Map([
  ['private.today_source_v1','Derived model being rebuilt, never an independent business input'],
  ['private.today_tenant_v1','Derived lease and tenant epoch being rebuilt'],
@@ -48,8 +58,7 @@ it('E-G2 gives every relation actually read by a full productive rebuild all thr
  expect(await withSession(full,()=>saveIntakeTaskAction({clientKey:task.client_key,taskId:task.id,version:task.version,kind:task.art,title:task.titel,dueDate:clock.yesterday,time:task.uhrzeit,forLogin:task.fuer_login,forArea:task.fuer_bereich,reference:{type:task.bezug_typ,id:task.bezug_id},note:task.notiz}))).toMatchObject({code:'OK'});
  const photo=await storeOrderPhoto(order.orderId);
  expect(await withSession(full,()=>reklamationAusfuehrenAction({action:'aufnehmen',clientKey:randomUUID(),orderId:order.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:order.items[0].id,menge:1}],defect:'Abplatzung',description:'TEST actual complaint dependency',photoIds:[photo],goodsReturn:'ja'}))).toMatchObject({code:'OK'});
- await published();
- const before=new Map((await statistics()).map(row=>[row.name,BigInt(row.reads)]));
+ const before=await settledStatistics();
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const sources=await sql`SELECT kind,status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
  for(const source of sources)expect(source.status,source.kind).toBe('OK');
@@ -63,8 +72,8 @@ it('E-G2 gives every relation actually read by a full productive rebuild all thr
  expect(lists.get('quotes').list.quotes).toHaveLength(1);
  expect(lists.get('tasks').rows).toHaveLength(1);
  expect(lists.get('company')).toMatchObject({code:'OK'});
- await published();
- const reads=(await statistics()).filter(row=>BigInt(row.reads)>(before.get(row.name)??BigInt(0))).map(row=>row.name);
+ const after=await settledStatistics();
+ const reads=[...after].filter(([name,count])=>count>(before.get(name)??BigInt(0))).map(([name])=>name);
  const triggers=await sql`SELECT n.nspname||'.'||c.relname AS name,count(*)::integer AS operations FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE NOT t.tgisinternal AND t.tgname IN ('today_mark_insert_v1','today_mark_update_v1','today_mark_delete_v1') GROUP BY n.nspname,c.relname`;
  const covered=new Set(triggers.filter(row=>row.operations===3).map(row=>row.name));
  expect(reads).toEqual(expect.arrayContaining(['public.orders','public.items','public.events','public.app_users','public.app_user_rights']));

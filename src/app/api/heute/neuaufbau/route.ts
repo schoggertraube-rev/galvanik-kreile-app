@@ -25,8 +25,8 @@ export async function GET(request:Request){
   }catch{return new Response(null,{status:401});}
  }
  try{
-  const result=await outsidePageReadBudget(()=>rebuildTodayModel(tenantId));
-  return new Response(null,{status:result.code==='BUSY'?409:204,headers:{'Cache-Control':'private, no-store'}});
+  const result=await outsidePageReadBudget(()=>rebuildTodayModel(tenantId,undefined,{bounded:true}));
+  return new Response(null,{status:result.code==='BUSY'?409:result.code==='INCOMPLETE'||result.stale>0?503:204,headers:{'Cache-Control':'private, no-store'}});
  }catch{
   console.error('[TODAY_PROJECTOR_REBUILD_FAILED]',{code:'SOURCE_INCOMPLETE'});
   return new Response(null,{status:503,headers:{'Cache-Control':'private, no-store'}});

@@ -1,7 +1,7 @@
 import 'server-only';
 import {after} from 'next/server';
 import {headers} from 'next/headers';
-import {outsidePageReadBudget} from '@/db/readBudget';
+import {outsidePageReadBudget,withPageReadBudget} from '@/db/readBudget';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 
@@ -35,8 +35,13 @@ async function queueTodayWork(tenantIds:readonly string[],mode?:Mode,shadow?:Sha
    for(const tenantId of new Set([...pending.tenants.keys(),...pending.shadows.keys()])){
     const requested=pending.tenants.get(tenantId),shadow=pending.shadows.get(tenantId);
     try{
-     if(shadow)await refreshTodayModel(tenantId,undefined,{shadow:{today:shadow.today,live:shadow.live},requestedMode:requested});
-     else await (requested==='rebuild'?rebuildTodayModel(tenantId):refreshTodayModel(tenantId));
+     // The worker outlives the response but must still have a native SQL
+     // cancellation boundary. Otherwise a stalled source can occupy a Vercel
+     // function until its 300-second runtime limit.
+     await withPageReadBudget(async()=>{
+      if(shadow)await refreshTodayModel(tenantId,undefined,{shadow:{today:shadow.today,live:shadow.live},requestedMode:requested});
+      else await (requested==='rebuild'?rebuildTodayModel(tenantId):refreshTodayModel(tenantId));
+     },30_000);
     }
     catch{console.error('[TODAY_PROJECTOR_REFRESH_FAILED]',{code:'SOURCE_INCOMPLETE'});}
    }

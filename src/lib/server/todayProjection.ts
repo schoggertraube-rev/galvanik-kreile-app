@@ -1,6 +1,6 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {withPageReadPhase} from '@/db/readBudget';
+import {assertPageReadBudgetActive,configurePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import type {TodayReadSettings} from '@/modules/fundament/public';
 import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
@@ -177,7 +177,7 @@ async function pending(tenantId:string,lease:Lease,rebuild:boolean,limit?:number
   WHERE source.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
    AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND (${rebuild} OR source.status<>'SOURCE_INCOMPLETE')
    AND (source.source_seq<>source.built_seq OR source.built_tenant_seq<>tenant.tenant_seq OR source.built_day IS DISTINCT FROM ${lease.day}::date
-    OR source.projector_version<>${TODAY_PROJECTOR_VERSION} OR source.status IN ('PENDING','SOURCE_INCOMPLETE'))
+    OR source.projector_version<>${TODAY_PROJECTOR_VERSION} OR source.status='PENDING')
   ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
 }
 /** Same short write-phase lock order as the source invalidators. Source reads
@@ -256,10 +256,17 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
    const keys:TodaySourceKey[]=[...TODAY_LIST_KINDS.map(kind=>({kind,sourceId:'*'})),...ids.map(sourceId=>({kind:'order' as const,sourceId}))];
    await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
     await lockProjectionSources(tx,tenantId,[...keys,...known.map(row=>({kind:'order' as const,sourceId:row.id}))]);
+    const generation=await tx.execute<{initializing:boolean}>(sql`SELECT rebuilt_at IS DISTINCT FROM '-infinity'::timestamptz AS initializing
+     FROM private.today_tenant_v1 WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint
+      AND refresh_lease_until=${lease.token}::timestamptz FOR UPDATE`);
+    if(generation.length!==1)throw Error('TODAY_PROJECTOR_LEASE_LOST');
+    if(generation[0].initializing)await tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at='-infinity'::timestamptz
+     WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz`);
     if(keys.length)await tx.execute(sql`INSERT INTO private.today_source_v1(tenant_id,kind,source_id)
      SELECT ${tenantId},key.kind,key.id FROM (VALUES ${sql.join(keys.map(key=>sql`(${key.kind}::text,${key.sourceId}::text)`),sql`, `)}) AS key(kind,id)
      WHERE EXISTS(SELECT 1 FROM private.today_tenant_v1 tenant WHERE tenant.tenant_id=${tenantId} AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp())
-     ORDER BY key.kind,key.id ON CONFLICT(tenant_id,kind,source_id) DO UPDATE SET listed=true,source_seq=today_source_v1.source_seq+1`);
+     ORDER BY key.kind,key.id ON CONFLICT(tenant_id,kind,source_id) DO UPDATE SET listed=true,
+      source_seq=today_source_v1.source_seq+CASE WHEN ${generation[0].initializing} THEN 1 ELSE 0 END`);
     const removed=known.filter(row=>!ids.includes(row.id));
     if(removed.length)await tx.execute(sql`UPDATE private.today_source_v1 source SET listed=false,status='GONE',payload=NULL,source_version=NULL,built_seq=source_seq,
      built_tenant_seq=${lease.tenantSeq}::bigint,built_day=${lease.day}::date,projector_version=${TODAY_PROJECTOR_VERSION},built_at=statement_timestamp()
@@ -277,9 +284,18 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
    if(!heartbeat.isOwned()){stale+=rows.length-offset;break;}
    const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports);built+=result.built;stale+=result.stale;
   }
-  if(rebuild)await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp()`)));
+  if(rebuild){
+   const remaining=await withLeaseWrite(lease,()=>pending(tenantId,lease,true,1));
+   if(remaining.length)stale+=remaining.length;
+   if(!remaining.length&&!stale){
+    const completed=await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp() RETURNING tenant_id`)));
+    if(completed.length!==1)return {code:'INCOMPLETE' as const,built,stale};
+   }
+  }
+  assertPageReadBudgetActive();
   return {code:'OK' as const,built,stale};
- }finally{await heartbeat.stop();await release(tenantId,lease);}
+ }catch(error){if(error instanceof Error&&error.message==='TODAY_PROJECTOR_LEASE_LOST')return {code:'INCOMPLETE' as const,built:0,stale:0};throw error;}
+ finally{await heartbeat.stop();await outsidePageReadBudget(()=>withPageReadBudget(()=>release(tenantId,lease),2000));}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
 export const refreshTodayModel=async(tenantId:string,ports:TodayProjectionPorts=productivePorts(),observation?:{shadow:{today:string;live:Record<string,number|null>};requestedMode?:'refresh'|'rebuild'})=>{
@@ -293,4 +309,12 @@ export const refreshTodayModel=async(tenantId:string,ports:TodayProjectionPorts=
  }
  return withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
 };
-export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts())=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
+export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
+ const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
+ if(!options?.bounded)return run();
+ return withPageReadBudget(async()=>{
+  const settings=await readTodayReadSettings({tenantId,fresh:true});
+  configurePageReadBudget(Math.min(settings.todayRefreshLeaseSeconds*1000,240_000));
+  return run();
+ },5000);
+};
