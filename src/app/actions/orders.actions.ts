@@ -102,7 +102,7 @@ export async function readTodayHomeRevision(){
 }
 
 export async function readTodayHomePart(part:import('@/components/home/OfficeHomeClient').TodayHomePart):Promise<import('@/components/home/OfficeHomeClient').TodayHomePartResult>{
- if(!['week','stock','notices','counts'].includes(part))throw Error('TODAY_REGION_INVALID');
+ if(!['week','notices','counts'].includes(part))throw Error('TODAY_REGION_INVALID');
  try{
  const current=await resolveAuthorization();if(!current.ok||!hasAnyAuthorizationArea(current.data))return {code:'SOURCE_INCOMPLETE',part};
  const auth=current.data;
@@ -111,9 +111,6 @@ export async function readTodayHomePart(part:import('@/components/home/OfficeHom
   const result=await readProductionWeek(auth);
   return result.code==='OK'?{code:'OK',part,data:result.data}:{code:'SOURCE_INCOMPLETE',part};
  }
- // No Lager reader is installed on this main. R1: no mock inventory, inferred
- // zero or parallel stock table; bind the approved package's facade when merged.
- if(part==='stock')return {code:'SOURCE_INCOMPLETE',part};
  const {loadOfficeHome,todayHomePartFromModel}=await import('@/lib/server/officeHomeRead');
  const model=await loadOfficeHome(auth,false,readModelTodayHome);
  return todayHomePartFromModel(model,part);

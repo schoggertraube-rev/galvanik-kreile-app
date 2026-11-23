@@ -370,7 +370,7 @@ it('keeps real payment and release evidence while masking credit for a price-onl
  expect(JSON.stringify(payment)).toBe(original);
 });
 
-it('streamed week reads the actual aggregate without money rights and stock stays explicitly unbound',async()=>{
+it('week reads the actual aggregate without money rights and rejects the absent stock route',async()=>{
  const actor=await createFixture(['mails'],'buero');
  await withSession(actor,async()=>{
   const {getProductionWeekAction}=await import('@/app/actions/orders.actions');
@@ -380,7 +380,7 @@ it('streamed week reads the actual aggregate without money rights and stock stay
   expect(result.result).toEqual({code:'OK',part:'week',data:original.code==='OK'?original.data:undefined});
   expect(Object.keys(result.result.data).sort()).toEqual(['currentlyUnpricedItemCount','netCents','weekEndExclusive','weekStart']);
   const stock=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=stock'));
-  expect((await stock.json()).result).toEqual({code:'SOURCE_INCOMPLETE',part:'stock'});
+  expect(stock.status).toBe(400);
  });
 });
 

@@ -181,7 +181,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 - `SURFACE_ASSIGNMENT_COPY.title`: "…" → `work.sign_missing`
 
-## Nur im Bestand (816)
+## Nur im Bestand (808)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -977,14 +977,6 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `DIALOG_LOAD_COPY.mailUnavailable`: "Die Mailansicht hat sich nicht geladen – lade die Seite neu."
 - `DIALOG_LOAD_COPY.reload`: "Neu laden"
 - `TODAY_MODEL_COPY.homeTitle`: "Der Tag"
-- `TODAY_MODEL_COPY.regionTitles.week`: "Diese Woche fertig"
-- `TODAY_MODEL_COPY.regionTitles.stock`: "Lager"
-- `TODAY_MODEL_COPY.regionTitles.notices`: "Hinweise"
-- `TODAY_MODEL_COPY.regionTitles.counts`: "Tageslage"
-- `TODAY_MODEL_COPY.partLoading`: "Wird nachgeladen."
-- `TODAY_MODEL_COPY.partFailed`: "Die Quelldaten sind gerade nicht lesbar."
-- `TODAY_MODEL_COPY.partReload`: "Bereich neu laden"
-- `TODAY_MODEL_COPY.noNotices`: "Keine Hinweise."
 - `TODAY_MODEL_COPY.cardRefreshing`: "Diese Karte holt sich gerade den neuesten Stand."
 - `TODAY_MODEL_COPY.reload`: "Jetzt laden"
 - `TODAY_MODEL_COPY.mainRefreshing`: "Ich hole gerade den neuesten Stand – dein nächster Schritt erscheint gleich."

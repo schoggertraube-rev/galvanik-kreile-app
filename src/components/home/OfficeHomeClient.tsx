@@ -4,7 +4,7 @@ const CommunicationPanel=dynamic(()=>import('@/components/communication/Communic
 import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
-import { Suspense,use,useCallback,useEffect,useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { confirmInvoiceHandoverAction,listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -26,9 +26,8 @@ export type OfficeHomeModel =
   | { kind: "no_areas" }
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
-export type TodayHomePart='week'|'stock'|'notices'|'counts';
+export type TodayHomePart='week'|'notices'|'counts';
 export type TodayHomePartResult={code:'SOURCE_INCOMPLETE';part:TodayHomePart}|{code:'OK';part:'week';data:{weekStart:string;weekEndExclusive:string;netCents:number;currentlyUnpricedItemCount:number}}|{code:'OK';part:'notices';missing:string[]}|{code:'OK';part:'counts'};
-export type TodayHomeStreams=Record<TodayHomePart,Promise<TodayHomePartResult>>;
 type BasicResult = { code: string; message?: string };
 type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
 type MailPreview = { id: string; subject: string; senderName: string; senderAddress: string|null; receivedAt: string|null; preview: string; body: string };
@@ -243,51 +242,4 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     </div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel">{more.invoiceMail?<Button text={INVOICE_DELIVERY_COPY.manualHandover} icon="check" onClick={()=>{setMore(null);void confirmInvoiceHandover(more);}}/>:model.dashboard.delegationTargets.map((target) => <Button key={target.userId} data-spec-id="hbmehr.weitergeben" text={`an ${target.displayName} geben`} icon="handoff" disabled={busy} onClick={() => void delegate(target)} />)}<Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
-}
-
-function TodayRegionFrame({part,children}:{part:TodayHomePart;children:React.ReactNode}){
- return <div data-today-region={part} style={{minBlockSize:'8rem'}}><Kachel titel={TODAY_MODEL_COPY.regionTitles[part]}>{children}</Kachel></div>;
-}
-export function TodayStreamedRegion(props:{part:TodayHomePart;source:Promise<TodayHomePartResult>;revision?:string;scope?:string;knownCounts?:boolean;children?:React.ReactNode}){
- return <Suspense fallback={<TodayRegionFrame part={props.part}><p role="status">{TODAY_MODEL_COPY.partLoading}</p><Button text={TODAY_MODEL_COPY.partReload} disabled/></TodayRegionFrame>}><TodayRegionRead {...props}/></Suspense>;
-}
-function TodayRegionRead({part,source,revision,scope,knownCounts,children}:{part:TodayHomePart;source:Promise<TodayHomePartResult>;revision?:string;scope?:string;knownCounts?:boolean;children?:React.ReactNode}){
- const original=use(source);
- const [entry,setEntry]=useState<{source:typeof source;value:TodayHomePartResult}|null>(null),[pending,setPending]=useState(false);
- const value=entry?.source===source?entry.value:original;
- const running=useRef<AbortController|null>(null),previous=useRef({source,revision}),etag=useRef(revision),wanted=useRef(revision);
- useLayoutEffect(()=>{wanted.current=revision;},[revision]);
- const nextRead=useRef<()=>void>(()=>{});
- const reload=useCallback(async()=>{
-  if(running.current||!scope)return;
-  const controller=new AbortController(),requested=wanted.current;running.current=controller;setPending(true);
-  try{
-   const headers:Record<string,string>={'X-Kreile-Login-Scope':scope};if(etag.current)headers['If-None-Match']='"'+etag.current+'"';
-   const response=await fetch('/api/heute/modell?nur=veraltet&bereich='+part,{credentials:'same-origin',cache:'no-store',headers,signal:controller.signal});
-   if(controller.signal.aborted)return;
-   if(response.status===304)return;
-   if(!response.ok)throw Error('TODAY_REGION_SOURCE_INCOMPLETE');
-   const result=await response.json() as {code?:string;scope?:string;revision?:string;result?:TodayHomePartResult};
-   if(controller.signal.aborted||result.scope!==scope||requested!==wanted.current)return;
-   const candidate=result.result;
-   if(result.code!=='OK'||!candidate||candidate.part!==part||!['OK','SOURCE_INCOMPLETE'].includes(candidate.code)
-    ||candidate.code==='OK'&&candidate.part==='week'&&(!Number.isSafeInteger(candidate.data?.netCents)||!Number.isSafeInteger(candidate.data?.currentlyUnpricedItemCount))
-    ||candidate.code==='OK'&&candidate.part==='notices'&&(!Array.isArray(candidate.missing)||!candidate.missing.every(item=>typeof item==='string')))throw Error('TODAY_REGION_RESPONSE_INCOMPLETE');
-   etag.current=result.revision;setEntry({source,value:candidate});
-  }catch{
-   if(!controller.signal.aborted)setEntry({source,value:{code:'SOURCE_INCOMPLETE',part}});
-  }finally{if(running.current===controller){running.current=null;setPending(false);if(!controller.signal.aborted&&requested!==wanted.current)queueMicrotask(()=>nextRead.current());}}
- },[part,source,scope]);
- useLayoutEffect(()=>{nextRead.current=()=>{void reload();};},[reload]);
- useEffect(()=>()=>{running.current?.abort();running.current=null;},[source,scope]);
- useEffect(()=>{
-  if(previous.current.source!==source){previous.current={source,revision};etag.current=revision;return;}
-  if(revision&&previous.current.revision!==revision){previous.current.revision=revision;void reload();}
- },[source,revision,reload]);
- let content:React.ReactNode;
- if(value.code!=='OK')content=<>{part==='counts'&&knownCounts?children:null}<p role="status">{TODAY_MODEL_COPY.partFailed}</p><Button text={TODAY_MODEL_COPY.partReload} disabled={pending} onClick={()=>void reload()}/></>;
- else if(value.part==='week')content=<><p>{new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(value.data.netCents/100)}</p>{value.data.currentlyUnpricedItemCount>0?<p>{TODAY_MODEL_COPY.unpriced(value.data.currentlyUnpricedItemCount)}</p>:null}</>;
- else if(value.part==='notices')content=<p>{value.missing.length?PAGE_READ_COPY.partial:TODAY_MODEL_COPY.noNotices}</p>;
- else content=children;
- return <TodayRegionFrame part={part}>{content}</TodayRegionFrame>;
 }
