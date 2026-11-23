@@ -66,6 +66,8 @@
     "@/modules/fundament/server-public#readModelPageSettingsInTransaction",
     "@/modules/fundament/public#TodayReadSettings",
     "@/modules/fundament/public#todayReadSettingsFromCompany",
+    "@/modules/fundament/public#MAX_TODAY_REFRESH_MS",
+    "@/modules/fundament/public#boundedTodayRefreshBudgetMs",
     "@/modules/fundament/public#PageReadSettings",
     "@/modules/fundament/public#pageReadSettingsFromCompany",
     "@/modules/fundament/public#parsePageReadSettings"
