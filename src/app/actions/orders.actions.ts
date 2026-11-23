@@ -396,7 +396,7 @@ async function resolveOrderCardAuthorization(): Promise<
     authorization = await resolveAuthorization();
   } catch (error) {
     console.error("[ORDER_CARD_AUTHORIZATION_ERROR]", {
-      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+      code: "ORDER_CARD_AUTHORIZATION_ERROR", name: error instanceof Error ? error.name : "UnknownError",
     });
     return {
       ok: false,
@@ -492,7 +492,7 @@ async function readLiveOrderCardForPage(
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
-      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+      code: "ORDER_CARD_ACTION_ERROR", name: error instanceof Error ? error.name : "UnknownError",
     });
     return { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." };
   }
@@ -587,7 +587,7 @@ export async function getExtraWorkMasterDataAction(): Promise<OrderCardActionRes
     return readExtraWorkMasterData(authorization.data);
   } catch (error) {
     console.error("[ORDER_CARD_EXTRA_WORK_ACTION_ERROR]", {
-      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+      code: "ORDER_CARD_EXTRA_WORK_ACTION_ERROR", name: error instanceof Error ? error.name : "UnknownError",
     });
     return { code: "UNAVAILABLE", message: "Mehrarbeitsstammdaten sind derzeit nicht verfügbar." };
   }
