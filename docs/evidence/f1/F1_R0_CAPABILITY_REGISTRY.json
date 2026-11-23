@@ -7,12 +7,12 @@
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
     "page_routes": 15,
-    "api_routes": 7,
+    "api_routes": 8,
     "server_action_groups": 48,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 96
+    "total": 97
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -30,6 +30,16 @@
     "LEGACY_REMOVE": "Known broken, fake, or demo-mode element. Scheduled for removal. Gate will detect as violation."
   },
   "capabilities": [
+    {
+      "stable_id": "api.intake.drafts",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/intake-drafts/route.ts",
+      "route": "/api/intake-drafts",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "E-C2 authenticated read-only Home draft transport through existing action and rights, isolated from App Router Server Action queue; exact-head native browser acceptance pending."
+    },
     {
       "stable_id": "api.today.rebuild",
       "kind": "API_ROUTE",
