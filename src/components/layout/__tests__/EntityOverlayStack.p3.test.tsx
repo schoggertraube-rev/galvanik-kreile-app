@@ -156,6 +156,22 @@ it('controlled model transport never adopts a response for another login scope',
  expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet');
 });
 
+it('backs off unchanged pending model revisions instead of polling continuously',async()=>{
+ vi.useFakeTimers();
+ try{
+  const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(null,{status:304}));vi.stubGlobal('fetch',fetch);
+  const model=pollingModel('TEST pending revision');
+  if(!('modelRead'in model))throw Error('TEST_PENDING_MODEL_REQUIRED');
+  model.modelRead={source:'modell',pending:true,incomplete:false,pollMs:10,maxPollMs:80,rebuild:false,revision:'a'.repeat(64)};
+  render(<RolfHomeClient model={model} ports={actionPorts}/>);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(10);});expect(fetch).toHaveBeenCalledTimes(1);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(19);});expect(fetch).toHaveBeenCalledTimes(1);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(1);});expect(fetch).toHaveBeenCalledTimes(2);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(39);});expect(fetch).toHaveBeenCalledTimes(2);
+  await act(async()=>{await vi.advanceTimersByTimeAsync(1);});expect(fetch).toHaveBeenCalledTimes(3);
+ }finally{vi.useRealTimers();}
+});
+
 it('controlled late model response cannot replace a newer RSC snapshot even in the same login scope',async()=>{
  let finish!:(value:Response)=>void;
  const fetch=vi.fn(()=>new Promise<Response>(resolve=>{finish=resolve;}));vi.stubGlobal('fetch',fetch);

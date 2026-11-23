@@ -5,6 +5,7 @@ import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/auth
 import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {scheduleTodayCommandFollowup} from '@/lib/server/todayProjectionSchedule';
 import type {TechnicalEvent,TechnicalLogRow,ClickLogRow,LogFilter,LogSubject,LogReason,LoggingSettingsReader} from '../public';
 
 // PL16.11: instance-local loss is explicitly accepted at cold start. Not a second log source.
@@ -163,6 +164,8 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
   await logTechnical(auth,{type:code==='UNAVAILABLE'?'server_error':'rejected',command:code==='UNAVAILABLE'?options.errorIdentifier??name:name,subject:source,reason});
  }
  if(auth&&slowMs!==null&&durationMs>slowMs)await logTechnical(auth,{type:'slow',command:name,subject:source,durationMs});
+ const tenants=[...readAuthorization().tenantTransactions.keys()];
+ if(tenants.length)await scheduleTodayCommandFollowup(tenants);
  return result;
  },logTechnical);
 }

@@ -15,7 +15,7 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 const phases=(calls:unknown[][])=>calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1]))).filter(row=>row.phase==='today.refresh');
 
-it('keeps committed source pending until the bounded scheduled rebuild',async()=>{
+it('reads the committed change live and refreshes only after the command response',async()=>{
  const order=await readyInvoiceOrder('TEST after real promised date');
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-19',reason:'TEST native after refresh',clientEventId:randomUUID()};
@@ -29,11 +29,12 @@ it('keeps committed source pending until the bounded scheduled rebuild',async()=
    return saved;
   },true);
   if(result.code!=='OK')throw Error('TEST_ACTUAL_PROMISED_DATE_REQUIRED');
-  expect(await sql`SELECT source.source_seq>source.built_seq AS pending FROM private.today_source_v1 source WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${order.orderId}`).toEqual([{pending:true}]);
-  expect(phases(output.mock.calls)).toHaveLength(0);
+  expect(await sql`SELECT source.source_seq>source.built_seq AS pending FROM private.today_source_v1 source WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${order.orderId}`).toEqual([{pending:false}]);
+  expect(phases(output.mock.calls).length).toBeGreaterThan(0);
+  const refreshCount=phases(output.mock.calls).length;
   const retry=await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))),true);
   expect(retry).toEqual({...result,replayed:true});
-  expect(phases(output.mock.calls)).toHaveLength(0);
+  expect(phases(output.mock.calls)).toHaveLength(refreshCount);
   expect(await sql`SELECT count(*)::integer AS count FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId} AND event_type='ORDER_PROMISED_DUE_DATE_CHANGED_V1'`).toEqual([{count:1}]);
  }finally{output.mockRestore();}
 });
@@ -55,7 +56,7 @@ it('PL11:36 schedules nothing for a real read transaction or a rolled-back sourc
  }finally{output.mockRestore();}
 });
 
-it('starts no projector from nested Action observations',async()=>{
+it('coalesces a nested Action into one post-response projector',async()=>{
  const order=await readyInvoiceOrder('TEST after nested actual commands');
  const output=vi.spyOn(console,'info');
  try{
@@ -64,7 +65,7 @@ it('starts no projector from nested Action observations',async()=>{
    const first=await changeOrderPromisedDueDateAction(input);expect(first.code).toBe('OK');
    expect(await changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input)))).toEqual({...first,replayed:true});
   },readLoggingSettings),true);
-  expect(phases(output.mock.calls)).toHaveLength(0);
+  expect(phases(output.mock.calls).length).toBeGreaterThan(0);
   expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
  }finally{output.mockRestore();}
 });

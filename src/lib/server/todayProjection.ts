@@ -19,7 +19,7 @@ import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
 import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS,compareTodayModelShadow} from './todayProjectionSchedule';
+import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS} from './todayProjectionSchedule';
 type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
@@ -303,16 +303,14 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
  finally{await heartbeat.stop();await outsidePageReadBudget(()=>withPageReadBudget(()=>release(tenantId,lease),2000));}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
-export const refreshTodayModel=async(tenantId:string,ports:TodayProjectionPorts=productivePorts(),observation?:{shadow:{today:string;live:Record<string,number|null>};requestedMode?:'refresh'|'rebuild'})=>{
- if(observation){
-  // Keep the settings reader in this one approved composition root. Merely
-  // comparing a shadow is not a command refresh and never claims its lease.
-  const settings=await ports.readSettings({tenantId});
-  const rebuild=await compareTodayModelShadow({tenantId},observation.shadow.today,observation.shadow.live,settings.todayShadowIntervalMs);
-  if(!rebuild&&!observation.requestedMode)return {code:'OK' as const,built:0,stale:0};
-  return withPageReadPhase('today.refresh',()=>runProjection(tenantId,{...ports,readSettings:async()=>settings},rebuild||observation.requestedMode==='rebuild'),projectionCounts);
- }
- return withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
+export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
+ const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false),projectionCounts);
+ if(!options?.bounded)return run();
+ return withPageReadBudget(async()=>{
+  const settings=await readTodayReadSettings({tenantId,fresh:true});
+  configurePageReadBudget(settings.todayRefreshLeaseSeconds*1000);
+  return run({...ports,readSettings:async()=>settings});
+ },5000);
 };
 export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
  const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);

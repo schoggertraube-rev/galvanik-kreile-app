@@ -21,7 +21,7 @@ export async function GET(request:Request){
   const conditional=request.headers.get('If-None-Match');
   if(conditional&&/^"[a-f0-9]{64}"$/.test(conditional)&&request.headers.get('X-Kreile-Login-Scope')===await readCacheLoginScope()){
    const current=await readTodayHomeRevision();
-   if(current&&!current.pending&&conditional==='"'+(part?current.revisions[part as keyof typeof current.revisions]:current.revision)+'"')return new Response(null,{status:304,headers:{...responseHeaders,ETag:conditional}});
+   if(current&&conditional==='"'+(part?current.revisions[part as keyof typeof current.revisions]:current.revision)+'"')return new Response(null,{status:304,headers:{...responseHeaders,ETag:conditional}});
   }
   if(part){
    const before=await readTodayHomeRevision();

@@ -742,10 +742,9 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   if(settings.today.todayReadSource==='live')return {code:'LIVE' as const,settings};
   const model=await withTenantSavepoint(tx,nested=>readTodayModelInTransaction(nested,auth,calendar.today));
   if(model.code==='EMPTY')return {code:'EMPTY' as const,settings};
-  // PL 22.11 13:43: only these disqualified sources use their canonical
-  // live reader. Healthy model rows remain untouched; a failed live read
-  // retains the explicit gap instead of substituting an empty source.
-  const mustReadLive=(kind:string,id='*')=>model.rows.some(row=>row.kind===kind&&row.sourceId===id&&(row.status==='SOURCE_INCOMPLETE'||row.tenantChanged===true));
+  // A command-invalidated row is never an authoritative snapshot, even when
+  // its previous build had status OK. Read that source through its live port.
+  const mustReadLive=(kind:string,id='*')=>{const row=model.rows.find(source=>source.kind===kind&&source.sourceId===id);return row?.current!==true||row.status==='SOURCE_INCOMPLETE';};
   const live=async<T>(kind:string,known:T,read:()=>Promise<T>):Promise<T>=>{
    if(deferLive||!mustReadLive(kind))return known;
    try{return await withPageReadPhase(({orders:'today.orders',messages:'today.graph',money:'today.support',complaints:'today.complaints',quote_followups:'today.followups',tasks:'today.tasks',quotes:'today.quotes',company:'today.company'} as Record<string,string>)[kind],read);}
@@ -808,7 +807,12 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
     versions=[...versions.filter(row=>!liveOrderIds.includes(row.id)),...current];
    }catch{versions=null;}
   }
-  const modelStaleOrderIds=orders.flatMap(order=>{const row=model.rows.find(source=>source.kind==='order'&&source.sourceId===order.id);return !row||row.fresh!==true&&row.status!=='SOURCE_INCOMPLETE'?[order.id]:[];});
+  const modelStaleOrderIds=orders.flatMap(order=>{
+   const row=model.rows.find(source=>source.kind==='order'&&source.sourceId===order.id);
+   if(row?.fresh===true)return [];
+   const qualified=batch?.code==='OK'?batch.data.rows.find(value=>value.orderId===order.id):null;
+   return qualified?.result.code==='OK'?[]:[order.id];
+  });
   const sources:TodayDashboardSources={calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource,modelStaleOrderIds};
   const relevant=(kind:string)=>kind==='order'?access.orders:kind==='orders'?hasAnyAuthorizationArea(auth):kind==='money'?access.money||access.invoiceMail:kind==='company'?access.company:kind==='complaints'?access.complaints:access.messages;
   return {code:'OK' as const,sources,operationalSource,settings,sourceRevision:todayModelRevision(auth,model.rows,calendar.today),sourceRevisions:todayModelRevisionMap(auth,model.rows,calendar.today),needsRebuild:model.needsRebuild,

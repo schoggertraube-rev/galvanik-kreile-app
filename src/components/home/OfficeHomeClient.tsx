@@ -18,7 +18,7 @@ import { IntakeDraftList } from "@/modules/eingang/public";
 import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";
 import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>} };
+type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;maxPollMs?:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>} };
 export type OfficeHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & OfficeIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & OfficeIdentity)
@@ -81,36 +81,38 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     if(!('dashboard'in initialModel)||!initialModel.modelRead||!initialModel.cacheLoginScope)return;
     const scope=initialModel.cacheLoginScope,controller=new AbortController();
     let stopped=false,running=false,rerun=false,timer:ReturnType<typeof setTimeout>|undefined,revision=initialModel.modelRead.revision;
+    const baseDelay=initialModel.modelRead.pollMs,maxDelay=Math.max(baseDelay,initialModel.modelRead.maxPollMs??baseDelay);
+    let nextDelay=baseDelay,pending=initialModel.modelRead.pending;
     const poll=async(changed=false)=>{
       if(stopped)return;if(running){if(changed)rerun=true;return;}
       running=true;if(timer)clearTimeout(timer);
+      let again=pending;
       try{
-      let nextDelay=initialModel.modelRead!.pollMs,again=true;
       try{
         const response=await fetch('/api/heute/modell?nur=veraltet',{credentials:'same-origin',cache:'no-store',signal:controller.signal,headers:{'X-Kreile-Login-Scope':scope,...(revision?{'If-None-Match':'"'+revision+'"'}:{})}});
-        if(response.status===401||response.status===403)return;
-        if(response.status===304){again=false;return;}
+        if(response.status===401||response.status===403){again=false;return;}
+        if(response.status===304){nextDelay=Math.min(maxDelay,Math.max(baseDelay,nextDelay*2));return;}
         if(!response.ok)throw Error('TODAY_MODEL_READ_UNAVAILABLE');
         const result=await response.json() as {code?:string;model?:OfficeHomeModel};
         if(stopped)return;
         if(result.code!=='OK'||!result.model||!('dashboard'in result.model))throw Error('TODAY_MODEL_RESPONSE_INCOMPLETE');
-        if(result.model.cacheLoginScope!==scope)return;
+        if(result.model.cacheLoginScope!==scope){again=false;return;}
         const next=result.model;
         revision=next.modelRead?.revision;
         setPolled({base:initialModel,value:next});
-        again=next.modelRead?.pending===true;
-        if(next.modelRead)nextDelay=next.modelRead.pollMs;
+        pending=again=next.modelRead?.pending===true;
+        nextDelay=baseDelay;
       }catch{
         if(stopped||controller.signal.aborted)return;
         setMessage(PAGE_READ_COPY.sourceIncomplete);
+        nextDelay=Math.min(maxDelay,Math.max(baseDelay,nextDelay*2));
       }
-      if(!stopped&&again)timer=setTimeout(()=>{void poll();},nextDelay);
-      }finally{running=false;if(rerun&&!stopped){rerun=false;queueMicrotask(()=>{void poll();});}}
+      }finally{if(!stopped&&again)timer=setTimeout(()=>{void poll();},nextDelay);running=false;if(rerun&&!stopped){rerun=false;queueMicrotask(()=>{void poll();});}}
     };
     modelPoll.current=poll;
     const resume=()=>{if(document.visibilityState==='visible')void poll(true);};
     window.addEventListener('focus',resume);document.addEventListener('visibilitychange',resume);
-    if(initialModel.modelRead.pending)timer=setTimeout(()=>{void poll();},initialModel.modelRead.pollMs);
+    if(initialModel.modelRead.pending)timer=setTimeout(()=>{void poll();},baseDelay);
     return ()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);stopped=true;controller.abort();if(timer)clearTimeout(timer);if(modelPoll.current===poll)modelPoll.current=null;};
   },[initialModel]);
   const refreshToday=()=>{if(modelPoll.current)void modelPoll.current(true);else router.refresh();};
