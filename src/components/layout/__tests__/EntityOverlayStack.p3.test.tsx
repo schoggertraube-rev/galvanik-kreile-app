@@ -221,16 +221,17 @@ it('controlled return to a fresh model checks its scoped revision and keeps unch
  const current=pollingModel('TEST unchanged visible content',false);
  if(!('modelRead'in current)||!current.modelRead)throw Error('TEST_CONDITIONAL_MODEL_REQUIRED');
  current.modelRead={...current.modelRead,revision:'a'.repeat(64)};
- const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(null,{status:304}));vi.stubGlobal('fetch',fetch);
+ const fetch=vi.fn<typeof globalThis.fetch>(async(input)=>input==='/api/intake-drafts'?new Response(JSON.stringify({code:'OK',drafts:[]})):new Response(null,{status:304}));vi.stubGlobal('fetch',fetch);
+ const modelCalls=()=>fetch.mock.calls.filter(([url])=>url==='/api/heute/modell?nur=veraltet');
  render(<RolfHomeClient model={current} ports={actionPorts}/>);
- expect(fetch).not.toHaveBeenCalled();
+ expect(modelCalls()).toHaveLength(0);
  fireEvent.focus(window);
- await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+ await waitFor(()=>expect(modelCalls()).toHaveLength(1));
  await act(async()=>{await Promise.resolve();});
- const headers=new Headers(fetch.mock.calls[0][1]?.headers);
+ const headers=new Headers(modelCalls()[0][1]?.headers);
  expect(headers.get('If-None-Match')).toBe('"'+'a'.repeat(64)+'"');expect(headers.get('X-Kreile-Login-Scope')).toBe('TEST-poll-scope');
  expect(screen.getAllByText('TEST unchanged visible content')[0]).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
- fireEvent.focus(window);await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
+ fireEvent.focus(window);await waitFor(()=>expect(modelCalls()).toHaveLength(2));
 });
 
 it('keeps the existing Today list visible while the one model refresh is pending',async()=>{
@@ -246,12 +247,13 @@ it('keeps the existing Today list visible while the one model refresh is pending
  expect(document.querySelector('[data-today-region]')).toBeNull();
 });
 it('keeps the known Today list when the complete model read fails',async()=>{
- const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(null,{status:503}));vi.stubGlobal('fetch',fetch);
+ const fetch=vi.fn<typeof globalThis.fetch>(async(input)=>input==='/api/intake-drafts'?new Response(JSON.stringify({code:'OK',drafts:[]})):new Response(null,{status:503}));vi.stubGlobal('fetch',fetch);
+ const modelCalls=()=>fetch.mock.calls.filter(([url])=>url==='/api/heute/modell?nur=veraltet');
  render(<RolfHomeClient model={pollingModel('TEST known after error',false)} ports={actionPorts}/>);
  expect(screen.getAllByText('TEST known after error')[0]).toBeVisible();
  fireEvent.focus(window);
- await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
- expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet');
+ await waitFor(()=>expect(modelCalls()).toHaveLength(1));
+ expect(modelCalls()[0][0]).toBe('/api/heute/modell?nur=veraltet');
  expect(screen.getAllByText('TEST known after error')[0]).toBeVisible();
  expect(document.querySelector('[data-today-region]')).toBeNull();
  expect(ports.refresh).not.toHaveBeenCalled();
