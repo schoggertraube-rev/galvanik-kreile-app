@@ -127,7 +127,7 @@ it('uses fresh background firm settings after the real RSC cache already read th
  });
 });
 
-it('PL11:36 removes an existing TEST-only order outside the canonical Today membership and keeps shadow counts equal',async()=>{
+it('keeps a TEST-only order outside canonical Today membership without a page-triggered rebuild',async()=>{
  const order=await readyInvoiceOrder('TEST canonical excluded source');
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  // Existing U288 fixture metadata: the canonical view excludes source=test.
@@ -145,8 +145,8 @@ it('PL11:36 removes an existing TEST-only order outside the canonical Today memb
  try{
   await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction),true);
   const records=output.mock.calls.filter(call=>call[0]==='[TODAY_MODEL_SHADOW]').map(call=>JSON.parse(String(call[1])));
-  expect(records.at(-1)).toMatchObject({different:0});
-  expect(records.at(-1).model.orderCards).toBe(listed.length);
+  expect(records).toEqual([]);
+  expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);
  }finally{output.mockRestore();}
 });
 
