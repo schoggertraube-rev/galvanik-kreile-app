@@ -1,54 +1,10 @@
 import 'server-only';
-import {after} from 'next/server';
-import {headers} from 'next/headers';
-import {outsidePageReadBudget,withPageReadBudget} from '@/db/readBudget';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 
 /** Shared background-model contract: worker, freshness checks and scheduler. */
 export const TODAY_PROJECTOR_VERSION=1;
 export const TODAY_MODEL_LIST_KINDS=['orders','messages','money','complaints','quote_followups','quotes','tasks','company'] as const;
-
-type Mode='refresh'|'rebuild';
-type Shadow={auth:{tenantId:string};today:string;live:Counts};
-type Jobs={scheduled:boolean;tenants:Map<string,Mode>;shadows:Map<string,Shadow>};
-// Keyed only by Next's actual request-local headers object. No header value is
-// read, no authorization is cached, and the weak entry dies with that request.
-const requests=new WeakMap<object,Jobs>();
-
-/** One native after job per request; a later stale-day shadow read upgrades an
- * already registered bounded refresh to rebuild instead of competing for its lease. */
-export async function scheduleTodayProjection(tenantIds:readonly string[],mode:Mode){
- return queueTodayWork(tenantIds,mode);
-}
-async function queueTodayWork(tenantIds:readonly string[],mode?:Mode,shadow?:Shadow){
- try{
-  const request=await headers();
-  let jobs=requests.get(request);
-  if(!jobs){jobs={scheduled:false,tenants:new Map(),shadows:new Map()};requests.set(request,jobs);}
-  if(mode)for(const tenantId of tenantIds)if(mode==='rebuild'||!jobs.tenants.has(tenantId))jobs.tenants.set(tenantId,mode);
-  if(shadow)jobs.shadows.set(shadow.auth.tenantId,shadow);
-  if(jobs.scheduled)return;
-  const pending=jobs;
-  after(()=>outsidePageReadBudget(async()=>{
-   const {refreshTodayModel,rebuildTodayModel}=await import('./todayProjection');
-   for(const tenantId of new Set([...pending.tenants.keys(),...pending.shadows.keys()])){
-    const requested=pending.tenants.get(tenantId),shadow=pending.shadows.get(tenantId);
-    try{
-     // The worker outlives the response but must still have a native SQL
-     // cancellation boundary. Otherwise a stalled source can occupy a Vercel
-     // function until its 300-second runtime limit.
-     await withPageReadBudget(async()=>{
-      if(shadow)await refreshTodayModel(tenantId,undefined,{shadow:{today:shadow.today,live:shadow.live},requestedMode:requested});
-      else await (requested==='rebuild'?rebuildTodayModel(tenantId):refreshTodayModel(tenantId));
-     },30_000);
-    }
-    catch{console.error('[TODAY_PROJECTOR_REFRESH_FAILED]',{code:'SOURCE_INCOMPLETE'});}
-   }
-  }));
-  jobs.scheduled=true;
- }catch{console.error('[TODAY_PROJECTOR_SCHEDULE_FAILED]',{code:'SOURCE_INCOMPLETE'});}
-}
 
 type Counts=Record<string,number|null>;
 type ShadowRow={kind:string;fresh:boolean;rebuild:boolean;counts:Counts};
@@ -57,14 +13,7 @@ const count=(path:string[])=>{
  return sql`CASE WHEN jsonb_typeof(${value})='array' THEN jsonb_array_length(${value}) ELSE NULL END`;
 };
 
-/** Dark diagnostic only. No model data replaces the live dashboard. Query and
- * log carry counts, never original payloads, money values, names or identities. */
-export async function observeTodayModelShadow(auth:{tenantId:string},today:string,live:Counts){
- // Capture count-only inputs now; all settings/claim/comparison SQL runs after
- // response close in the same coalesced native job as command refreshes.
- return queueTodayWork([],undefined,{auth:{tenantId:auth.tenantId},today,live:{...live}});
-}
-/** The sole projector composition root supplies the actual setting. */
+/** Count-only diagnostic on the explicit bounded projector path. */
 export async function compareTodayModelShadow(auth:{tenantId:string},today:string,live:Counts,intervalMs:number):Promise<boolean>{
  try{
   const slot=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`INSERT INTO private.today_tenant_v1(tenant_id,shadow_checked_at)

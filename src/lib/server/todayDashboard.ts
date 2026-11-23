@@ -17,7 +17,7 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {hasAnyAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import {observeTodayModelShadow,TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS} from './todayProjectionSchedule';
+import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS} from './todayProjectionSchedule';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -621,25 +621,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplai
   const diagnosticStarted=Date.now();
   const sources=await collectTodaySources(auth,readComplaints,readQuoteFollowups,readNow,operationalSource);
   const dashboard=composeTodayDashboard(auth,sources,sources.calendar);
-  const {access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,quoteList,taskRead}=sources;
-  const {orders:ordersAllowed,messages:graphAllowed,money:moneyAllowed}=access;
-  const orders=orderSource.code==='OK'?orderSource.data:[];
-  const calendar=sources.calendar,today=calendar.today;
   logPageReadPhase('today.model',diagnosticStarted,{rows:dashboard.items.length,actions:dashboard.orderActions?.rows.length??0,missing:dashboard.orderActions?.missingOrderIds.length??0});
-  await observeTodayModelShadow(auth,today,{
-   orders:ordersAllowed&&orderSource.code==='OK'?orders.length:null,
-   orderCards:ordersAllowed&&batch?.code==='OK'?batch.data.rows.filter(row=>row.result.code==='OK').length:null,
-   messages:graphAllowed&&graph.code==='OK'?graph.messages.length:null,
-   invoices:moneyAllowed&&support.invoiceSource.code==='OK'?support.invoiceSource.data.length:null,
-   prepayments:moneyAllowed&&support.prepaymentSource.code==='OK'?support.prepaymentSource.data.length:null,
-   collections:moneyAllowed&&support.collectionSource.code==='OK'?support.collectionSource.data.length:null,
-   invoiceMailGroups:access.invoiceMail&&support.invoiceMailSource.code==='OK'?support.invoiceMailSource.data.groups.length:null,
-   complaints:access.complaints&&complaints.code==='OK'?complaints.complaints.length:null,
-   quoteFollowups:graphAllowed&&quoteFollowups.code==='OK'&&'tasks'in quoteFollowups?quoteFollowups.tasks.length:null,
-   quotes:graphAllowed&&quoteList.code==='OK'?quoteList.quotes.length:null,
-   tasks:graphAllowed&&taskRead&&'rows'in taskRead&&taskRead.code==='OK'?taskRead.rows.length:null,
-   company:access.company&&companyLetter.code==='OK'&&'companyName'in companyLetter?1:null,
-  });
   return dashboard;
 }
 
