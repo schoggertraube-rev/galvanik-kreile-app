@@ -10,7 +10,7 @@ export async function getActiveCatalogAction() {
     const authorization = await resolveAuthorization();
     if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: "Leistungskatalog ist derzeit nicht verfügbar." };
     if (!hasAuthorizationArea(authorization.data,"preise")) return { code: "FORBIDDEN" as const, message: "Preise sind für dieses Profil nicht freigegeben." };
-    return await listCatalogServices({ tenantId: authorization.data.tenantId, actorId: authorization.data.userId, canRead: authorization.data.permissions.includes("perm_data_orders"), canManage: false });
+    return await listCatalogServices({ tenantId: authorization.data.tenantId, actorId: authorization.data.userId, canRead: authorization.data.permissions.includes("perm_data_orders"), canManage: false }, false, "order-prices");
   } catch (error) {
     console.error("[ORDER_CARD_CATALOG_ACTION_ERROR]", {
       message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
@@ -28,7 +28,7 @@ export async function getIntakeCatalogAction() {
     if (!hasAuthorizationArea(authorization.data,"eingang")) return { code: "FORBIDDEN" as const, message: "Auftragseingang ist für dieses Profil nicht freigegeben." };
     const context = { tenantId: authorization.data.tenantId, actorId: authorization.data.userId, canRead: true, canManage: false };
     return hasAuthorizationArea(authorization.data,"preise")
-      ? await listCatalogServices(context)
+      ? await listCatalogServices(context, false, "order-prices")
       : await listCatalogServices(context, false, "metadata");
   } catch (error) {
     console.error("[INTAKE_CATALOG_ACTION_ERROR]", {message:error instanceof Error?error.message.slice(0,200):"UNKNOWN"});

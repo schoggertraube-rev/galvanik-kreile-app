@@ -2,7 +2,7 @@ import {cache} from 'react';
 import {DEFAULT_PAGE_READ_SETTINGS,withPageReadSettingsSource} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {MAX_TODAY_REFRESH_MS,parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany} from '../public';
+import {MAX_TODAY_REFRESH_MS,parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany,validTodayRefreshLeaseSeconds} from '../public';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
@@ -31,6 +31,7 @@ import {
 } from "@/lib/auth/authorizationContract";
 import type {
   CompanySettingsInput,
+  BetriebswaechterEinstellung,
   CompanySettingsSnapshot,
   ShippingSettings,
   CreateManagedUserInput,
@@ -40,6 +41,11 @@ import type {
   UpdateManagedUserInput,
 } from "../public";
 import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
+import {readUmsatzsteuerSaetzeInTransaction,parseFirmensteuersaetze} from "./umsatzsteuerSettingsPort";
+import { BETRIEBSWAECHTER_EINSTELLUNGEN_COPY, FIRMENEMPFAENGER_COPY, UMSATZSTEUER_EINSTELLUNG_COPY, AUSSCHUSS_EINSTELLUNG_COPY, BETRIEBSRUHE_COPY, MEHRARBEIT_EINSTELLUNGEN_COPY, FIRMENAKZENT_COPY } from "@/ui/situationCatalog";
+import { parseMehrarbeitEinstellwerte, readMehrarbeitEinstellwerteInTransaction } from "./s16dMehrarbeitSettingsPort";
+import { istBetriebsruhe, type Betriebsruhe } from "@/lib/domain/workingDays";
+import { readSpurDFirmendialogInTransaction, readBetriebswaechterEinstellungenInTransaction } from "./s16dSpurDSettingsPort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export type SystemSettingsContext = {
@@ -104,13 +110,14 @@ function todaySettingsFromRows(rows:readonly {today_read_source:unknown}[]){
  if(!rows.length)return {todayReadSource:DEFAULT_PAGE_READ_SETTINGS.todayReadSource,todayRefreshBatchLimit:DEFAULT_PAGE_READ_SETTINGS.todayRefreshBatchLimit,todayRefreshLeaseSeconds:DEFAULT_PAGE_READ_SETTINGS.todayRefreshLeaseSeconds,todayShadowIntervalMs:DEFAULT_PAGE_READ_SETTINGS.todayShadowIntervalMs,todayStalePollMs:DEFAULT_PAGE_READ_SETTINGS.todayStalePollMs,navPrefetchMaxAgeSeconds:DEFAULT_PAGE_READ_SETTINGS.navPrefetchMaxAgeSeconds};
  if(rows.length!==1)throw Error('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
  const source=rows[0].today_read_source;
- if(source&&typeof source==='object'&&!Array.isArray(source)&&Number((source as Record<string,unknown>).todayRefreshLeaseSeconds)*1000>MAX_TODAY_REFRESH_MS)throw Error(PAGE_READ_COPY.refreshLeaseTooLong(MAX_TODAY_REFRESH_MS/1000));
+ if(source&&typeof source==='object'&&!Array.isArray(source)&&Object.hasOwn(source,'todayRefreshLeaseSeconds')
+   &&!validTodayRefreshLeaseSeconds((source as Record<string,unknown>).todayRefreshLeaseSeconds))throw Error(PAGE_READ_COPY.refreshLeaseTooLong(MAX_TODAY_REFRESH_MS/1000));
  const settings=todayReadSettingsFromCompany(rows[0].today_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!settings)throw Error('TODAY_READ_SETTINGS_SOURCE_INVALID');
  return settings;
 }
 
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown };
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown;today_refresh_lease_seconds?:number|null };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 const readFreshCompanyLetterSettingsRow=async(tenantId:string,includeDeliveryNoteIdentity:boolean)=>withPrivilegedTenantTransaction({tenantId},async tx=>{
   const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${includeDeliveryNoteIdentity?sql`,phone,COALESCE(NULLIF(tax_id,''),NULLIF(tax_number,'')) AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
@@ -213,11 +220,37 @@ function logSystemSettingsPortFailure(code: string, error: unknown): void {
   });
 }
 
+function parseEmpfaenger(value:unknown, neu:boolean) {
+  if (!value || typeof value!=="object" || Object.keys(value).sort().join(",")!=="bank,steuerberater") return null;
+  const {steuerberater,bank}=value as Record<string,unknown>;
+  const gueltig=(adresse:unknown):adresse is string|null=>adresse===null || (typeof adresse==="string"
+    && adresse.length>0 && adresse.length<=254
+    && (!neu || /^[^\s@,;<>"\\]+@[^\s@,;<>"\\.]+(?:\.[^\s@,;<>"\\.]+)+$/u.test(adresse)));
+  return gueltig(steuerberater)&&gueltig(bank)?{steuerberater,bank}:null;
+}
+
+function parseBetriebswaechter(value:unknown,neuerStand:boolean):BetriebswaechterEinstellung|null {
+  if(!value||typeof value!=="object"||Object.keys(value).sort().join(",")!==
+      "dienst_ausfall_toleranz_stunden,sicherung_hoechstalter_stunden,sicherung_min_prozent_vortag,sicherungsort,wiederherstellungstest_hoechstalter_tage"){
+    return null;
+  }
+  const stand=value as Record<string,unknown>;
+  const alter=stand.sicherung_hoechstalter_stunden,wiederherstellung=stand.wiederherstellungstest_hoechstalter_tage;
+  const mindestgroesse=stand.sicherung_min_prozent_vortag,dienst=stand.dienst_ausfall_toleranz_stunden;
+  const ort=stand.sicherungsort;
+  const ganzzahl=(zahl:unknown,maximum=2_147_483_647):zahl is number=>
+    typeof zahl==="number"&&Number.isSafeInteger(zahl)&&zahl>=1&&zahl<=maximum;
+  if(!ganzzahl(alter)||!ganzzahl(wiederherstellung)||!ganzzahl(mindestgroesse,100)||!ganzzahl(dienst)
+    ||!(ort===null||typeof ort==="string"&&ort.trim().length>0&&(!neuerStand||ort.trim()===ort)))return null;
+  return {sicherung_hoechstalter_stunden:alter,wiederherstellungstest_hoechstalter_tage:wiederherstellung,
+    sicherung_min_prozent_vortag:mindestgroesse,dienst_ausfall_toleranz_stunden:dienst,sicherungsort:ort};
+}
+
 export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,${pageReadProjection} FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,today_refresh_lease_seconds,${pageReadProjection} FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -238,16 +271,37 @@ export async function readSystemSettings(context: SystemSettingsContext) {
       `);
       const featureRows = await tx.execute<TenantFeatureRow>(sql`SELECT feature_id, enabled FROM public.tenant_features WHERE tenant = ${context.tenantId} ORDER BY feature_id`);
       const company = companies[0];
+      const firmendialog=(context.canManageCompany??context.canManage)
+        ? await readSpurDFirmendialogInTransaction(tx,context.tenantId) : null;
+      const akzentfarbe=firmendialog?{akzentfarbe:firmendialog.akzentfarbe}:{};
+      const zeitabschnitte=firmendialog?.betriebsruhe;
+      const betriebsruhe=Array.isArray(zeitabschnitte)&&zeitabschnitte.every(istBetriebsruhe)
+        ? zeitabschnitte : undefined;
+      const ausschussEinstellung=firmendialog&&context.canManageFinancial
+        ? {ausschussBerechnen:firmendialog.ausschussBerechnen} : {};
+      const umsatzsteuer=company&&firmendialog&&context.canManageFinancial
+        ? await readUmsatzsteuerSaetzeInTransaction(tx,context.tenantId) : null;
+      const mehrarbeit = company && context.canManageFinancial
+        ? await readMehrarbeitEinstellwerteInTransaction(tx, context.tenantId)
+        : null;
       return {
         company: company ? {
+          ...akzentfarbe,
+          ...ausschussEinstellung,
+          ...(umsatzsteuer?{umsatzsteuer}:{}),
+          ...(firmendialog?{betriebswaechter:firmendialog.betriebswaechter}:{}),
+          ...(firmendialog&&context.canManageFinancial?{empfaenger:firmendialog.empfaenger}:{}),
+          ...(betriebsruhe ? { betriebsruhe } : {}),
           companyName: company.company_name, street: company.street, zip: company.zip,
           city: company.city, country: company.country, taxId: company.tax_id, taxNumber: company.tax_number ?? null,
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
           pageReads:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.settings??null,
+          todayRefreshLeaseSeconds:company.today_refresh_lease_seconds??null,
           pageReadsSchemaReady:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.schemaReady===true,
+          ...(mehrarbeit ? { mehrarbeit } : {}),
           protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
-        } : EMPTY_COMPANY,
+        } : { ...EMPTY_COMPANY, ...akzentfarbe, ...ausschussEinstellung, ...(betriebsruhe ? { betriebsruhe } : {}) },
         users: users.map((user): ManagedUser => {
           const rawAreas = user.areas ?? (process.env.NODE_ENV === "test" && isAppRole(user.role) ? [...ROLE_ACCESS_AREA_TEMPLATES[user.role]] : []);
           if (!isAppRole(user.role) || rawAreas.some((area) => !isAccessArea(area))) {
@@ -320,6 +374,19 @@ export async function readCompanyDocumentSettings(context: CompanyDocumentContex
   }
 }
 
+function parseBetriebsruheWechsel(wert: unknown): CompanySettingsInput["betriebsruhe"] {
+  if (!wert || typeof wert !== "object" || Object.keys(wert).sort().join(",") !== "neu,vorher") {
+    return undefined;
+  }
+  const { vorher, neu } = wert as Record<string, unknown>;
+  const liste = (folgen: unknown): folgen is Betriebsruhe[] =>
+    Array.isArray(folgen) && folgen.every(zeitraum =>
+      istBetriebsruhe(zeitraum) && Object.keys(zeitraum).sort().join(",") === "bis,von");
+  if (!liste(vorher) || !liste(neu)) return undefined;
+  if (new Set(neu.map(({ von, bis }) => von + "/" + bis)).size !== neu.length) return undefined;
+  return { vorher, neu };
+}
+
 export async function updateCompanySettings(context: SystemSettingsContext, input: unknown) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind ungültig." };
@@ -328,8 +395,107 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   const pageReadsRequested=Object.hasOwn(value,'pageReads');
   const pageReads=pageReadsRequested?parsePageReadSettings(value.pageReads):null;
   if(pageReadsRequested&&!pageReads)return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.invalid};
+  const leaseRequested=Object.hasOwn(value,'todayRefreshLeaseSeconds');
+  if(leaseRequested&&!validTodayRefreshLeaseSeconds(value.todayRefreshLeaseSeconds))return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.refreshLeaseInvalid};
+  const mehrarbeitRequested=Object.hasOwn(value,'mehrarbeit');
+  const akzentAngefordert = Object.hasOwn(value, "akzentfarbe");
+  const betriebsruheAngefordert = Object.hasOwn(value, "betriebsruhe");
+  if (betriebsruheAngefordert && !(context.canManageCompany ?? context.canManage)) {
+    return { code: "FORBIDDEN" as const, message: BETRIEBSRUHE_COPY.keinRecht };
+  }
+  const betriebsruhe = betriebsruheAngefordert ? parseBetriebsruheWechsel(value.betriebsruhe) : undefined;
+  if (betriebsruheAngefordert && !betriebsruhe) {
+    return { code: "VALIDATION_ERROR" as const, message: BETRIEBSRUHE_COPY.ungueltig };
+  }
+
+  const akzentGueltig = (farbe: unknown): farbe is string =>
+    typeof farbe === "string" && /^#[0-9a-f]{6}$/i.test(farbe);
+  if (akzentAngefordert && !(context.canManageCompany ?? context.canManage)) {
+    return { code: "FORBIDDEN" as const, message: FIRMENAKZENT_COPY.keinRecht };
+  }
+  let akzentwechsel: { vorher: string; neu: string } | null = null;
+  if (akzentAngefordert) {
+    const input = value.akzentfarbe;
+    if (!input || typeof input !== "object" || Object.keys(input).sort().join(",") !== "neu,vorher") {
+      return { code: "VALIDATION_ERROR" as const, message: FIRMENAKZENT_COPY.ungueltig };
+    }
+    const { vorher, neu } = input as Record<string, unknown>;
+    if (!akzentGueltig(vorher) || !akzentGueltig(neu)) {
+      return { code: "VALIDATION_ERROR" as const, message: FIRMENAKZENT_COPY.ungueltig };
+    }
+    akzentwechsel = { vorher, neu: neu.toLowerCase() };
+  }
+  if(mehrarbeitRequested && !context.canManageFinancial)
+    return {code:"FORBIDDEN" as const,message:MEHRARBEIT_EINSTELLUNGEN_COPY.keinRecht};
+  const mehrarbeitErgebnis=mehrarbeitRequested?parseMehrarbeitEinstellwerte(value.mehrarbeit):null;
+  if(mehrarbeitErgebnis && "fehler" in mehrarbeitErgebnis)
+    return {code:"VALIDATION_ERROR" as const,message:MEHRARBEIT_EINSTELLUNGEN_COPY[mehrarbeitErgebnis.fehler]};
+  const mehrarbeit=mehrarbeitErgebnis?.wert;
+  const ausschussAngefordert = Object.hasOwn(value, "ausschussBerechnen");
+  let ausschuss: CompanySettingsInput["ausschussBerechnen"];
+  if (ausschussAngefordert) {
+    if (!(context.canManageCompany ?? context.canManage) || !context.canManageFinancial) {
+      return { code: "FORBIDDEN" as const, message: AUSSCHUSS_EINSTELLUNG_COPY.keinRecht };
+    }
+    const wechsel = value.ausschussBerechnen;
+    if (!wechsel || typeof wechsel !== "object" || Object.keys(wechsel).sort().join(",") !== "neu,vorher") {
+      return { code: "VALIDATION_ERROR" as const, message: AUSSCHUSS_EINSTELLUNG_COPY.ungueltig };
+    }
+    const { vorher, neu } = wechsel as Record<string, unknown>;
+    if (typeof vorher !== "boolean" || typeof neu !== "boolean") {
+      return { code: "VALIDATION_ERROR" as const, message: AUSSCHUSS_EINSTELLUNG_COPY.ungueltig };
+    }
+    ausschuss = { vorher, neu };
+  }
+  const steuerAngefordert=Object.hasOwn(value,"umsatzsteuer");
+  let steuer:CompanySettingsInput["umsatzsteuer"];
+  if(steuerAngefordert){
+    if(!(context.canManageCompany??context.canManage)||!context.canManageFinancial){
+      return {code:"FORBIDDEN" as const,message:UMSATZSTEUER_EINSTELLUNG_COPY.keinRecht};
+    }
+    const wechsel=value.umsatzsteuer;
+    if(!wechsel||typeof wechsel!=="object"||Object.keys(wechsel).sort().join(",")!=="neu,vorher"){
+      return {code:"VALIDATION_ERROR" as const,message:UMSATZSTEUER_EINSTELLUNG_COPY.ungueltig};
+    }
+    const {vorher:alterWert,neu:neuerWert}=wechsel as Record<string,unknown>;
+    const vorher=parseFirmensteuersaetze(alterWert),neu=parseFirmensteuersaetze(neuerWert);
+    if(!vorher||!neu||neu.regelsatzBasispunkte===null||neu.ermaessigtBasispunkte>=neu.regelsatzBasispunkte){
+      return {code:"VALIDATION_ERROR" as const,message:UMSATZSTEUER_EINSTELLUNG_COPY.ungueltig};
+    }
+    steuer={vorher,neu};
+  }
+  const empfaengerAngefordert=Object.hasOwn(value,"empfaenger");
+  let empfaenger:CompanySettingsInput["empfaenger"];
+  if(empfaengerAngefordert){
+    if(!(context.canManageCompany??context.canManage)||!context.canManageFinancial){
+      return {code:"FORBIDDEN" as const,message:FIRMENEMPFAENGER_COPY.keinRecht};
+    }
+    const wechsel=value.empfaenger;
+    if(!wechsel||typeof wechsel!=="object"||Object.keys(wechsel).sort().join(",")!=="neu,vorher"){
+      return {code:"VALIDATION_ERROR" as const,message:FIRMENEMPFAENGER_COPY.ungueltig};
+    }
+    const {vorher:alt,neu:aktuell}=wechsel as Record<string,unknown>;
+    const vorher=parseEmpfaenger(alt,false),neu=parseEmpfaenger(aktuell,true);
+    if(!vorher||!neu)return {code:"VALIDATION_ERROR" as const,message:FIRMENEMPFAENGER_COPY.ungueltig};
+    empfaenger={vorher,neu};
+  }
+  const waechterAngefordert=Object.hasOwn(value,"betriebswaechter");
+  let waechter:CompanySettingsInput["betriebswaechter"];
+  if(waechterAngefordert){
+    if(!(context.canManageCompany??context.canManage)){
+      return {code:"FORBIDDEN" as const,message:BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.keinRecht};
+    }
+    const wechsel=value.betriebswaechter;
+    if(!wechsel||typeof wechsel!=="object"||Object.keys(wechsel).sort().join(",")!=="neu,vorher"){
+      return {code:"VALIDATION_ERROR" as const,message:BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.ungueltig};
+    }
+    const {vorher:alt,neu:aktuell}=wechsel as Record<string,unknown>;
+    const vorher=parseBetriebswaechter(alt,false),neu=parseBetriebswaechter(aktuell,true);
+    if(!vorher||!neu)return {code:"VALIDATION_ERROR" as const,message:BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.ungueltig};
+    waechter={vorher,neu};
+  }
   const taxNumberRequested=Object.hasOwn(value,'taxNumber');
-  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(pageReadsRequested?['pageReads']:[])].sort().join(',');
+  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(mehrarbeitRequested?['mehrarbeit']:[]),...(akzentAngefordert?['akzentfarbe']:[]),...(betriebsruheAngefordert?['betriebsruhe']:[]),...(ausschussAngefordert?['ausschussBerechnen']:[]),...(steuerAngefordert?['umsatzsteuer']:[]),...(empfaengerAngefordert?["empfaenger"]:[]),...(waechterAngefordert?["betriebswaechter"]:[]),...(pageReadsRequested?['pageReads']:[]),...(leaseRequested?['todayRefreshLeaseSeconds']:[])].sort().join(',');
   if (Object.keys(value).sort().join(",") !== expectedKeys) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
   const protocol=protocolRequested?parseProtocolSettings(value.protocol):null;
   if(text(value.taxId,0,40)===null||(taxNumberRequested&&text(value.taxNumber,0,40)===null))return {code:'VALIDATION_ERROR' as const,message:'Firmendaten sind ungültig.'};
@@ -344,7 +510,7 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   if(normalized.taxId&&!isInvoiceVatId(normalized.taxId))return {code:'VALIDATION_ERROR' as const,message:E_INVOICE_COPY.missingSource('vatId'),field:'taxId' as const};
   if (Object.entries(normalized).some(([key,field]) => key !== "taxId" && key !== "taxNumber" && field === "") || !Number.isSafeInteger(normalized.paymentTermDays) || normalized.paymentTermDays < 1 || normalized.paymentTermDays > 365) return { code: "VALIDATION_ERROR" as const, message: "Alle Firmendaten einschließlich Zahlungsziel sind erforderlich." };
   try {
-    await withPrivilegedTenantTransaction(context, async (tx) => {
+    const bestaetigteMehrarbeit = await withPrivilegedTenantTransaction(context, async (tx) => {
       const rows = await tx.execute<{ id: string }>(sql`
         WITH updated AS (
           UPDATE public.company_settings
@@ -373,6 +539,107 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
         SELECT id FROM inserted
       `);
       if (rows.length !== 1) throw new Error("COMPANY_SETTINGS_WRITE_AMBIGUOUS");
+      if (akzentwechsel) {
+        const farbe = await tx.execute<{ akzentfarbe: string }>(sql`
+          UPDATE public.company_settings SET akzentfarbe = ${akzentwechsel.neu}
+          WHERE id = ${rows[0].id} AND tenant_id = ${context.tenantId}
+            AND akzentfarbe = ${akzentwechsel.vorher}
+          RETURNING akzentfarbe
+        `);
+        if (farbe.length !== 1 || farbe[0].akzentfarbe !== akzentwechsel.neu) throw Error("FIRMENAKZENT_KONFLIKT");
+      }
+      if (betriebsruhe) {
+        const gelesen = await tx.execute<{ betriebsruhe: Betriebsruhe[] }>(sql`
+          UPDATE public.company_settings SET betriebsruhe = ${JSON.stringify(betriebsruhe.neu)}::jsonb
+          WHERE id = ${rows[0].id} AND tenant_id = ${context.tenantId}
+            AND current_setting('app.tenant_id', true) = ${context.tenantId}
+            AND betriebsruhe = ${JSON.stringify(betriebsruhe.vorher)}::jsonb
+          RETURNING betriebsruhe
+        `);
+        if (gelesen.length !== 1 || !isDeepStrictEqual(gelesen[0].betriebsruhe, betriebsruhe.neu)) {
+          throw Error("BETRIEBSRUHE_KONFLIKT");
+        }
+      }
+      if (ausschuss) {
+        const stand = await tx.execute<{ ausschuss_berechnen: boolean }>(sql`
+          UPDATE public.company_settings SET ausschuss_berechnen = ${ausschuss.neu}
+          WHERE id = ${rows[0].id} AND tenant_id = ${context.tenantId}
+            AND current_setting('app.tenant_id', true) = ${context.tenantId}
+            AND ausschuss_berechnen = ${ausschuss.vorher}
+          RETURNING ausschuss_berechnen
+        `);
+        if (stand.length !== 1 || stand[0].ausschuss_berechnen !== ausschuss.neu) {
+          throw Error("AUSSCHUSS_EINSTELLUNG_KONFLIKT");
+        }
+      }
+      if(steuer){
+        const [gespeichert]=await tx.execute<{id:string}>(sql`
+          UPDATE public.company_settings
+          SET invoice_vat_rate_basis_points=${steuer.neu.regelsatzBasispunkte},
+              invoice_reduced_vat_rate_basis_points=${steuer.neu.ermaessigtBasispunkte}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id}
+            AND current_setting('app.tenant_id',true)=${context.tenantId}
+            AND invoice_vat_rate_basis_points IS NOT DISTINCT FROM ${steuer.vorher.regelsatzBasispunkte}::integer
+            AND invoice_reduced_vat_rate_basis_points=${steuer.vorher.ermaessigtBasispunkte}
+          RETURNING id
+        `);
+        if(!gespeichert||!isDeepStrictEqual(await readUmsatzsteuerSaetzeInTransaction(tx,context.tenantId),steuer.neu)){
+          throw Error("UMSATZSTEUER_EINSTELLUNG_KONFLIKT");
+        }
+      }
+      if(empfaenger){
+        const [gespeichert]=await tx.execute<{steuerberater:string|null;bank:string|null}>(sql`
+          UPDATE public.company_settings
+          SET steuerberater_email=${empfaenger.neu.steuerberater},bank_email=${empfaenger.neu.bank}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id}
+            AND current_setting('app.tenant_id',true)=${context.tenantId}
+            AND steuerberater_email IS NOT DISTINCT FROM ${empfaenger.vorher.steuerberater}::text
+            AND bank_email IS NOT DISTINCT FROM ${empfaenger.vorher.bank}::text
+          RETURNING steuerberater_email AS steuerberater,bank_email AS bank
+        `);
+        if(!isDeepStrictEqual(gespeichert,empfaenger.neu))throw Error("FIRMENEMPFAENGER_KONFLIKT");
+      }
+      if(waechter){
+        const {vorher,neu}=waechter;
+        const [gespeichert]=await tx.execute<{id:string}>(sql`
+          UPDATE public.company_settings
+          SET sicherung_hoechstalter_stunden=${neu.sicherung_hoechstalter_stunden},
+              wiederherstellungstest_hoechstalter_tage=${neu.wiederherstellungstest_hoechstalter_tage},
+              sicherung_min_prozent_vortag=${neu.sicherung_min_prozent_vortag},
+              dienst_ausfall_toleranz_stunden=${neu.dienst_ausfall_toleranz_stunden},
+              sicherungsort=${neu.sicherungsort}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id}
+            AND current_setting('app.tenant_id',true)=${context.tenantId}
+            AND sicherung_hoechstalter_stunden=${vorher.sicherung_hoechstalter_stunden}
+            AND wiederherstellungstest_hoechstalter_tage=${vorher.wiederherstellungstest_hoechstalter_tage}
+            AND sicherung_min_prozent_vortag=${vorher.sicherung_min_prozent_vortag}
+            AND dienst_ausfall_toleranz_stunden=${vorher.dienst_ausfall_toleranz_stunden}
+            AND sicherungsort IS NOT DISTINCT FROM ${vorher.sicherungsort}::text
+          RETURNING id
+        `);
+        if(!gespeichert||!isDeepStrictEqual(await readBetriebswaechterEinstellungenInTransaction(tx,context.tenantId),neu)){
+          throw Error("BETRIEBSWAECHTER_KONFLIKT");
+        }
+      }
+      let mehrarbeitNeu: Awaited<ReturnType<typeof readMehrarbeitEinstellwerteInTransaction>> = null;
+      if (mehrarbeit) {
+        const vorher = await readMehrarbeitEinstellwerteInTransaction(tx, context.tenantId);
+        if (vorher?.revision !== mehrarbeit.revision) throw Error("MEHRARBEIT_SETTINGS_CONFLICT");
+        const gespeichert = await tx.execute(sql`
+          UPDATE public.company_settings
+          SET mehrarbeit_spielraum_basispunkte=${mehrarbeit.spielraumBasispunkte},
+            mehrarbeit_stopp_basispunkte=${mehrarbeit.stoppBasispunkte},
+            mehrarbeit_schritt_minuten=${mehrarbeit.schrittMinuten},
+            mehrarbeit_max_minuten_je_taetigkeit=${mehrarbeit.maximalMinutenJeTaetigkeit}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id}
+          RETURNING id
+        `);
+        mehrarbeitNeu = await readMehrarbeitEinstellwerteInTransaction(tx, context.tenantId);
+        if (gespeichert.length !== 1 || !mehrarbeitNeu
+          || !isDeepStrictEqual({ ...mehrarbeitNeu, revision: mehrarbeit.revision }, mehrarbeit)) {
+          throw Error("MEHRARBEIT_SETTINGS_READBACK_MISSING");
+        }
+      }
       if(taxNumberRequested){
         const saved=await tx.execute<{tax_id:string|null;tax_number:string|null}>(sql`SELECT tax_id,tax_number FROM public.company_settings WHERE tenant_id=${context.tenantId} AND id=${rows[0]!.id}`);
         if(saved.length!==1||saved[0].tax_id!==(normalized.taxId||null)||saved[0].tax_number!==(normalized.taxNumber||null))throw Error('COMPANY_TAX_SETTINGS_READBACK_MISSING');
@@ -387,6 +654,12 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING seiten_abfrage_ms AS "queryTimeoutMs",rechnung_mail_grenze AS "invoiceMailBatchLimit"`);
         if(saved.length!==1||!isDeepStrictEqual(parsePageReadSettings(saved[0]),pageReads))throw Error('PAGE_READ_SETTINGS_READBACK_MISSING');
       }
+      if(leaseRequested){
+        const saved=await tx.execute<{today_refresh_lease_seconds:number}>(sql`UPDATE public.company_settings SET today_refresh_lease_seconds=${value.todayRefreshLeaseSeconds as number}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id}
+          RETURNING today_refresh_lease_seconds`);
+        if(saved.length!==1||saved[0].today_refresh_lease_seconds!==value.todayRefreshLeaseSeconds)throw Error('TODAY_REFRESH_LEASE_READBACK_MISSING');
+      }
       const audit=await tx.execute(sql`
         INSERT INTO public.ui_events (tenant_id, event_type, payload)
         VALUES (
@@ -394,14 +667,45 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           'company_settings_updated',
           jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text)
           ${protocol?sql`||jsonb_build_object('protocol',${JSON.stringify(protocol)}::jsonb)`:sql``}
+          ${leaseRequested?sql`||jsonb_build_object('todayRefreshLeaseSeconds',${value.todayRefreshLeaseSeconds as number})`:sql``}
           ${pageReads?sql`||jsonb_build_object('pageReads',${JSON.stringify(pageReads)}::jsonb)`:sql``}
+          ${mehrarbeit?sql`||jsonb_build_object('mehrarbeit',${JSON.stringify(mehrarbeit)}::jsonb)`:sql``}
+          ${akzentwechsel ? sql`||jsonb_build_object('akzentfarbe',${akzentwechsel.neu}::text)` : sql``}
+          ${betriebsruhe ? sql`||jsonb_build_object('betriebsruhe',${JSON.stringify(betriebsruhe)}::jsonb)` : sql``}
+          ${ausschuss ? sql`||jsonb_build_object('ausschussBerechnen',${JSON.stringify(ausschuss)}::jsonb)` : sql``}
+          ${waechter?sql`||jsonb_build_object('betriebswaechter',${JSON.stringify(waechter)}::jsonb)`:sql``}
+          ${empfaenger?sql`||jsonb_build_object('empfaenger',${JSON.stringify(empfaenger)}::jsonb)`:sql``}
+          ${steuer?sql`||jsonb_build_object('umsatzsteuer',${JSON.stringify(steuer)}::jsonb)`:sql``}
         )
         RETURNING id
       `);
-      if((protocol||taxNumberRequested||pageReadsRequested)&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
+      if((pageReadsRequested||leaseRequested)&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
+      if((protocol||taxNumberRequested||mehrarbeit||akzentwechsel||betriebsruhe||ausschuss||steuer||empfaenger||waechter||leaseRequested)&&audit.length!==1)throw Error('COMPANY_SETTINGS_AUDIT_MISSING');
+      return mehrarbeitNeu;
     });
-    return { code: "OK" as const };
+    return { code: "OK" as const, ...(bestaetigteMehrarbeit ? { mehrarbeit: bestaetigteMehrarbeit } : {}), ...(akzentwechsel ? { akzentfarbe: akzentwechsel.neu } : {}), ...(betriebsruhe ? { betriebsruhe: betriebsruhe.neu } : {}), ...(ausschuss ? { ausschussBerechnen: ausschuss.neu } : {}), ...(steuer?{umsatzsteuer:steuer.neu}:{}), ...(empfaenger?{empfaenger:empfaenger.neu}:{}), ...(waechter?{betriebswaechter:waechter.neu}:{}) };
   } catch (error) {
+    if(error instanceof Error&&error.message==="BETRIEBSWAECHTER_KONFLIKT"){
+      return {code:"CONFLICT" as const,message:BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.konflikt};
+    }
+    if(error instanceof Error&&error.message==="FIRMENEMPFAENGER_KONFLIKT"){
+      return {code:"CONFLICT" as const,message:FIRMENEMPFAENGER_COPY.konflikt};
+    }
+    if(error instanceof Error&&error.message==="UMSATZSTEUER_EINSTELLUNG_KONFLIKT"){
+      return {code:"CONFLICT" as const,message:UMSATZSTEUER_EINSTELLUNG_COPY.konflikt};
+    }
+    if (error instanceof Error && error.message === "AUSSCHUSS_EINSTELLUNG_KONFLIKT") {
+      return { code: "CONFLICT" as const, message: AUSSCHUSS_EINSTELLUNG_COPY.konflikt };
+    }
+    if (error instanceof Error && error.message === "BETRIEBSRUHE_KONFLIKT") {
+      return { code: "CONFLICT" as const, message: BETRIEBSRUHE_COPY.konflikt };
+    }
+    if (error instanceof Error && error.message === "FIRMENAKZENT_KONFLIKT") {
+      return { code: "CONFLICT" as const, message: FIRMENAKZENT_COPY.konflikt };
+    }
+    if (error instanceof Error && error.message === "MEHRARBEIT_SETTINGS_CONFLICT") {
+      return {code:"CONFLICT" as const,message:MEHRARBEIT_EINSTELLUNGEN_COPY.konflikt};
+    }
     logSystemSettingsPortFailure("COMPANY_SETTINGS_WRITE_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Firmendaten konnten nicht sicher gespeichert werden. Fehlercode: COMPANY_SETTINGS_WRITE_FAILED." };
   }

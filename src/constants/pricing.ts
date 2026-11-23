@@ -1,1 +1,0 @@
-export const DEFAULT_HOURLY_RATE_EUR = 75;

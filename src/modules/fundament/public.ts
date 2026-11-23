@@ -9,15 +9,46 @@ export type { SalesStage, SalesStageFeature, SalesStageFeatureDefinition, SalesS
 export { ACCESS_AREAS, ACCESS_AREA_LABELS, isAccessAreaAllowedForRole } from "@/lib/auth/authorizationContract";
 export type { AccessArea, AppRole } from "@/lib/auth/authorizationContract";
 
+import type { Betriebsruhe } from "@/lib/domain/workingDays";
+
+export type MehrarbeitEinstellungenInput = Readonly<{
+  revision: string;
+  spielraumBasispunkte: number;
+  stoppBasispunkte: number;
+  schrittMinuten: number;
+  maximalMinutenJeTaetigkeit: number;
+}>;
+export type Firmensteuersaetze = Readonly<{
+  regelsatzBasispunkte:number|null;
+  ermaessigtBasispunkte:number;
+}>;
+export type Firmenempfaenger = Readonly<{steuerberater:string|null;bank:string|null}>;
+export type BetriebswaechterEinstellung = Readonly<{
+  sicherung_hoechstalter_stunden:number;
+  wiederherstellungstest_hoechstalter_tage:number;
+  sicherung_min_prozent_vortag:number;
+  sicherungsort:string|null;
+  dienst_ausfall_toleranz_stunden:number;
+}>;
 export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
   taxId: string; taxNumber?: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
   pageReads?:PageReadSettings;
+  todayRefreshLeaseSeconds?:number;
+  mehrarbeit?: MehrarbeitEinstellungenInput;
+  akzentfarbe?: Readonly<{ vorher: string; neu: string }>;
+  betriebsruhe?: Readonly<{ vorher: readonly Betriebsruhe[]; neu: readonly Betriebsruhe[] }>;
+  ausschussBerechnen?: Readonly<{ vorher: boolean; neu: boolean }>;
+  betriebswaechter?: Readonly<{vorher:BetriebswaechterEinstellung;neu:BetriebswaechterEinstellung}>;
+  empfaenger?: Readonly<{vorher:Firmenempfaenger;neu:Firmenempfaenger}>;
+  umsatzsteuer?: Readonly<{vorher:Firmensteuersaetze;neu:Firmensteuersaetze}>;
 };
 export type ProtocolSettings={retentionDays:number|null;slowMs:number;hangMs:number};
 export type CompanySettingsSnapshot = {
-  [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
-}&{protocol?:ProtocolSettings|null;pageReadsSchemaReady?:boolean};
+  [Key in keyof Pick<CompanySettingsInput, "companyName" | "street" | "zip" | "city" | "country" |
+    "taxId" | "iban" | "bic" | "bankName" | "paymentTermDays" | "logoUrl">]: CompanySettingsInput[Key] | null;
+}&{taxNumber?: string | null; pageReads?: PageReadSettings | null; todayRefreshLeaseSeconds?:number|null; mehrarbeit?: MehrarbeitEinstellungenInput;
+  protocol?:ProtocolSettings|null; akzentfarbe?: string; betriebsruhe?: readonly Betriebsruhe[]; ausschussBerechnen?: boolean; umsatzsteuer?: Firmensteuersaetze;empfaenger?: Firmenempfaenger;betriebswaechter?:BetriebswaechterEinstellung;pageReadsSchemaReady?:boolean};
 export type CompanyLetterSettings=Pick<CompanySettingsInput,'companyName'|'street'|'zip'|'city'|'country'>&{phone?:string|null;taxId?:string|null;logoUrl?:string|null};
 export type ShippingSettings = {
   shippingFeeCents?:number|null;
@@ -73,6 +104,7 @@ export type PageReadSettings={queryTimeoutMs:number;invoiceMailBatchLimit:number
 export type TodayReadSettings={todayReadSource:'modell'|'live';todayRefreshBatchLimit:number;todayRefreshLeaseSeconds:number;todayShadowIntervalMs:number;todayStalePollMs:number;navPrefetchMaxAgeSeconds:number};
 /** Vercel-Funktionslaufzeit 300 s minus Puffer. */
 export const MAX_TODAY_REFRESH_MS=240_000;
+export const validTodayRefreshLeaseSeconds=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=1&&value*1000<=MAX_TODAY_REFRESH_MS;
 export const boundedTodayRefreshBudgetMs=(seconds:number)=>Math.min(seconds*1000,MAX_TODAY_REFRESH_MS);
 export function todayReadSettingsFromCompany(value:unknown,defaults:Readonly<TodayReadSettings>):TodayReadSettings|null{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
@@ -82,7 +114,7 @@ export function todayReadSettingsFromCompany(value:unknown,defaults:Readonly<Tod
  if(present.every(value=>value===false))return {todayReadSource:defaults.todayReadSource,todayRefreshBatchLimit:defaults.todayRefreshBatchLimit,todayRefreshLeaseSeconds:defaults.todayRefreshLeaseSeconds,todayShadowIntervalMs:defaults.todayShadowIntervalMs,todayStalePollMs:defaults.todayStalePollMs,navPrefetchMaxAgeSeconds:defaults.navPrefetchMaxAgeSeconds};
  if(!present.every(value=>value===true)||!['modell','live'].includes(String(source.todayReadSource)))return null;
  for(const key of fields.slice(1))if(!Number.isSafeInteger(source[key])||Number(source[key])<1||Number(source[key])>2147483647)return null;
- if(Number(source.todayRefreshLeaseSeconds)*1000>MAX_TODAY_REFRESH_MS)return null;
+ if(!validTodayRefreshLeaseSeconds(source.todayRefreshLeaseSeconds))return null;
  return {todayReadSource:source.todayReadSource as 'modell'|'live',todayRefreshBatchLimit:Number(source.todayRefreshBatchLimit),todayRefreshLeaseSeconds:Number(source.todayRefreshLeaseSeconds),todayShadowIntervalMs:Number(source.todayShadowIntervalMs),todayStalePollMs:Number(source.todayStalePollMs),navPrefetchMaxAgeSeconds:Number(source.navPrefetchMaxAgeSeconds)};
 }
 export function parsePageReadSettings(value:unknown):PageReadSettings|null{
@@ -108,3 +140,5 @@ export function pageReadSettingsFromCompany(value:unknown,defaults:Readonly<Page
  const settings=parsePageReadSettings({queryTimeoutMs:row.queryTimeoutMs,invoiceMailBatchLimit:row.invoiceMailBatchLimit});
  return settings?{settings,schemaReady:true}:null;
 }
+
+export type { FahrzeugEingabe, FahrzeugPflege } from "./fahrzeugVertrag";

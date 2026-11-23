@@ -3,8 +3,11 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (70)
+## Gleicher Wortlaut (73)
 
+- `WERKSTATT_PULS_COPY.station.angenommen`: "Eingangslager" → `order.stage.wareneingang`, `work.storage`
+- `WERKSTATT_PULS_COPY.station.galvanik`: "Galvanik" → `order.stage.galvanik`, `work.processing`
+- `WERKSTATT_PULS_COPY.station.fertig`: "Ausgangslager" → `order.stage.fertig`, `out.title`, `work.finished`
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
 - `DELIVERY_NOTE_COPY.order`: "Auftrag" → `customer.order_singular`
@@ -76,8 +79,9 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COMPONENT_PREVIEW_COPY.names.kundenbild`: "Kundenbild" → `customer.tab.insights`, `settings.group.bewertung`
 - `PENDING_UNDO_COPY.undo`: "Rückgängig" → `bundle.undo`, `undo.action`
 
-## Ähnlicher Wortlaut (102)
+## Ähnlicher Wortlaut (103)
 
+- `WERKSTATT_PULS_COPY.ueberfaellig`: "überfällig" → `register.customers_debt`
 - `INVOICE_VAT_COPY.groupNet`: "Netto (" → `collection.net`, `quote.net_short`, `ws.net`
 - `INVOICE_VAT_COPY.groupNet`: ")" → `work.sign_missing`
 - `INVOICE_VAT_COPY.groupVat`: ")" → `work.sign_missing`
@@ -181,10 +185,82 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 - `SURFACE_ASSIGNMENT_COPY.title`: "…" → `work.sign_missing`
 
-## Nur im Bestand (816)
+## Nur im Bestand (911)
 
+- `AUTOMATIK_NACHRICHTEN_TEXTE.auftragsbestaetigung`: "Wir haben deinen Auftrag {auftrag} erfasst."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.status`: "Dein Auftrag {auftrag} steht jetzt auf {stand}."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.kv_erinnerung`: "Gib uns bitte Rückmeldung zu Kostenvoranschlag {kv}."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.abholung`: "Dein Auftrag {auftrag} liegt zur Abholung bereit."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.zahlungserinnerung`: "Bitte zahle Rechnung {nummer} bis {datum}."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.bewertung`: "Bewerte uns gern hier: {link}."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.sdb_anforderung`: "Sende uns bitte das aktuelle Sicherheitsdatenblatt für {artikel}."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.antwort_erinnerung`: "Gib uns bitte Rückmeldung zu deiner Nachricht vom {datum}."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.versandhinweis`: "Dein Auftrag {auftrag} ist unterwegs."
+- `AUTOMATIK_NACHRICHTEN_TEXTE.lagergeld_brief`: "Hol deinen Auftrag {auftrag} bitte bis {datum} ab."
+- `MEHRARBEIT_MAILVORLAGE_COPY.platzhalter`: "Platzhalter:"
+- `MEHRARBEIT_MAILVORLAGE_COPY.ungueltig`: "Füg die fehlenden Platzhalter in die Vorlage ein, mindestens {Begründung}."
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.sicherungsort`: "Sicherungsort"
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.sicherung_hoechstalter_stunden`: "Maximales Alter der Sicherung (Stunden)"
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.wiederherstellungstest_hoechstalter_tage`: "Wiederherstellungstest spätestens nach (Tagen)"
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.sicherung_min_prozent_vortag`: "Mindestgröße zur Vortagssicherung (%)"
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.dienst_ausfall_toleranz_stunden`: "Dienststörung melden nach (Stunden)"
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.ungueltig`: "Trag ganze positive Grenzwerte und höchstens 100 Prozent ein."
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.keinRecht`: "Für diese Grenzwerte brauchst du das Recht für Firmendaten."
+- `BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.konflikt`: "Lade die Firmendaten neu, weil sich die Grenzwerte geändert haben."
+- `FIRMENEMPFAENGER_COPY.steuerberater`: "E-Mail des Steuerberaters"
+- `FIRMENEMPFAENGER_COPY.bank`: "E-Mail der Bank"
+- `FIRMENEMPFAENGER_COPY.ungueltig`: "Trag je Feld eine gültige E-Mail-Adresse ein oder lass es leer."
+- `FIRMENEMPFAENGER_COPY.keinRecht`: "Für diese Adressen brauchst du die Rechte für Firmendaten und Preise."
+- `FIRMENEMPFAENGER_COPY.konflikt`: "Lade die Firmendaten neu, weil sich die Empfänger geändert haben."
+- `UMSATZSTEUER_EINSTELLUNG_COPY.regelsatz`: "Regelsatz (%)"
+- `UMSATZSTEUER_EINSTELLUNG_COPY.ermaessigt`: "Ermäßigter Satz (%)"
+- `UMSATZSTEUER_EINSTELLUNG_COPY.ungueltig`: "Trag gültige Steuersätze mit niedrigerem ermäßigtem Satz ein."
+- `UMSATZSTEUER_EINSTELLUNG_COPY.keinRecht`: "Für Steuersätze brauchst du das Recht für Firmendaten und Preise."
+- `UMSATZSTEUER_EINSTELLUNG_COPY.konflikt`: "Lade die Firmendaten neu, weil sich die Steuersätze geändert haben."
+- `UMSATZSTEUER_EINSTELLUNG_COPY.katalogRegelsatzFehlt`: "Wähl einen Steuersatz für die Leistung."
+- `UMSATZSTEUER_EINSTELLUNG_COPY.katalogSatzUngueltig`: "Wähl einen hinterlegten Firmensteuersatz oder 0 Prozent."
+- `UMSATZSTEUER_EINSTELLUNG_COPY.katalogSatzNochNichtUnterstuetzt`: "Für diesen Steuersatz fehlt noch die durchgehende Verarbeitung."
+- `UMSATZSTEUER_EINSTELLUNG_COPY.exportSatzFehlt`: "Der Firmenregelsatz fehlt."
+- `SETTINGS_PENDING_CONSUMER_COPY.unavailable`: "Diese Einstellung ist noch nicht verfügbar."
+- `AUSSCHUSS_EINSTELLUNG_COPY.label`: "Ausschuss berechnen"
+- `AUSSCHUSS_EINSTELLUNG_COPY.keinRecht`: "Die Ausschussberechnung darfst du nicht ändern."
+- `AUSSCHUSS_EINSTELLUNG_COPY.ungueltig`: "Wähle aus, ob Ausschuss berechnet wird."
+- `AUSSCHUSS_EINSTELLUNG_COPY.konflikt`: "Lade die inzwischen geänderte Ausschussberechnung neu."
+- `BETRIEBSRUHE_COPY.titel`: "Betriebsruhe"
+- `BETRIEBSRUHE_COPY.von`: "Von"
+- `BETRIEBSRUHE_COPY.bis`: "Bis"
+- `BETRIEBSRUHE_COPY.hinzufuegen`: "Zeitraum hinzufügen"
+- `BETRIEBSRUHE_COPY.entfernen`: "Zeitraum entfernen"
+- `BETRIEBSRUHE_COPY.keinRecht`: "Die Betriebsruhe darfst du nicht ändern."
+- `BETRIEBSRUHE_COPY.ungueltig`: "Ein Zeitraum endet vor seinem Beginn oder steht doppelt, korrigier ihn."
+- `BETRIEBSRUHE_COPY.konflikt`: "Lade die inzwischen geänderte Betriebsruhe neu."
+- `FIRMENAKZENT_COPY.label`: "Akzentfarbe"
+- `FIRMENAKZENT_COPY.keinRecht`: "Du darfst die Akzentfarbe nicht ändern."
+- `FIRMENAKZENT_COPY.ungueltig`: "Wähle eine gültige Akzentfarbe."
+- `FIRMENAKZENT_COPY.konflikt`: "Die Akzentfarbe wurde geändert, lade die Firmendaten neu."
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.spielraumBasispunkte`: "Spielraum ohne Rückfrage (% vom KV)"
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.stoppBasispunkte`: "Stopp für den Auftrag (% vom KV)"
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.schrittMinuten`: "Minuten je Antippen"
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.maximalMinutenJeTaetigkeit`: "Höchste Dauer je Tätigkeit (Min.)"
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.keinRecht`: "Die Mehrarbeitsregeln darfst du nicht ändern."
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.spielraumUngueltig`: "Trag den Spielraum als Prozentwert ab 0 ein."
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.stoppUngueltig`: "Der Stopp muss über dem Spielraum liegen."
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.minutenUngueltig`: "Trag Minuten je Antippen und Höchstdauer größer als 0 ein."
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.revisionUngueltig`: "Lade die Mehrarbeitsregeln neu."
+- `MEHRARBEIT_EINSTELLUNGEN_COPY.konflikt`: "Lade die inzwischen geänderten Mehrarbeitsregeln neu."
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
+- `LEISTUNG_DURCHLAUF_COPY.label`: "Standard-Durchlaufzeit"
+- `LEISTUNG_DURCHLAUF_COPY.fehlt`: "fehlt"
+- `METALL_KURSKLAUSEL_COPY.label`: "Kursklausel"
+- `METALL_KURSKLAUSEL_COPY.fehlt`: "Die freigegebene Kursklausel fehlt."
+- `METALL_KURSKLAUSEL_COPY.vorschlag`: "{Metall}: ca. {Gramm} g zum Tageskurs. Abgerechnet wird zum vereinbarten Kursstichtag {Kursstichtag}."
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
+- `WERKSTATT_PULS_COPY.fehlt`: "fehlt"
+- `WERKSTATT_PULS_COPY.stationszahlen`: "Aufträge je Station"
+- `WERKSTATT_PULS_COPY.auftraege`: "Überfällige Aufträge und Aufträge ohne Zusagetermin"
+- `WERKSTATT_PULS_COPY.ohneZusage`: "ohne Zusagetermin"
+- `WERKSTATT_PULS_COPY.auftraegeFehlen`: "Lade die Werkstatt-Analyse neu, damit die Auftragsliste erscheint."
+- `WERKSTATT_PULS_COPY.keineBetroffenen`: "Im gelesenen Stand sind keine betroffenen Aufträge enthalten."
 - `EVIDENCE_VISIBILITY_COPY.invalid`: "Wähle das Foto erneut."
 - `EVIDENCE_VISIBILITY_COPY.missing`: "Das Foto ist nicht mehr da. Lade den Auftrag neu."
 - `EVIDENCE_VISIBILITY_COPY.forbidden`: "Die Sichtbarkeit von Fotos darfst du nicht ändern."
@@ -714,6 +790,8 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PICKUP_APPOINTMENT_COPY.changed`: "Der Fertig-Stand oder der Abholtermin hat sich geändert. Öffne den Auftrag erneut; Deine Eingaben bleiben erhalten."
 - `PICKUP_APPOINTMENT_COPY.forbidden`: "Für den Abholtermin brauchst Du die Freigabe für Aufträge."
 - `PICKUP_APPOINTMENT_COPY.unavailable`: "Der Abholtermin konnte nicht sicher gespeichert werden. Deine Eingaben bleiben erhalten; versuche es erneut."
+- `DOKUMENTAUFBEWAHRUNG_COPY.fehlt`: "Frist fehlt"
+- `DOKUMENTAUFBEWAHRUNG_COPY.ablaufhemmung`: "Ablaufhemmung"
 - `STORAGE_CHARGE_COPY.name`: "Lagergeld"
 - `STORAGE_CHARGE_COPY.unit`: "Woche"
 - `STORAGE_CHARGE_COPY.forbidden`: "Für den Lagergeldbetrag brauchst Du das Recht Zahlungen & Mahnungen. Die übrigen Angaben bleiben erhalten."
@@ -916,6 +994,25 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPMENT_GROUP_COPY.changed`: "Die Sendung hat sich geändert. Lade sie neu und bestätige sie noch einmal."
 - `SHIPMENT_GROUP_COPY.confirmGroup`: "Diese Aufträge gehen zusammen raus. Öffne die Versanddaten und bestätige die Sendung."
 - `SHIPMENT_GROUP_COPY.unavailable`: "Warenausgang konnte nicht sicher gebucht werden."
+- `FAHRZEUG_COPY.titel`: "Fahrzeuge"
+- `FAHRZEUG_COPY.anlegen`: "Fahrzeug anlegen"
+- `FAHRZEUG_COPY.speichern`: "Fahrzeug speichern"
+- `FAHRZEUG_COPY.neuLaden`: "Fahrzeuge neu laden"
+- `FAHRZEUG_COPY.kennzeichen`: "Kennzeichen"
+- `FAHRZEUG_COPY.art`: "Fahrzeugart"
+- `FAHRZEUG_COPY.kraftstoff`: "Kraftstoff"
+- `FAHRZEUG_COPY.tankkarte`: "Tankkartenbezeichnung"
+- `FAHRZEUG_COPY.fahrer`: "Fahrer"
+- `FAHRZEUG_COPY.ohneFahrer`: "Ohne Zuordnung"
+- `FAHRZEUG_COPY.fahrerInaktiv`: "Inaktiver Login"
+- `FAHRZEUG_COPY.startKm`: "Startkilometer"
+- `FAHRZEUG_COPY.aktiv`: "Aktiv"
+- `FAHRZEUG_COPY.inaktiv`: "Deaktiviert"
+- `FAHRZEUG_COPY.gespeichert`: "Das Fahrzeug ist gespeichert."
+- `FAHRZEUG_COPY.INVALID`: "Trag Kennzeichen, Fahrzeugart, Kraftstoff und Startkilometer vollständig ein."
+- `FAHRZEUG_COPY.FORBIDDEN`: "Du darfst die Fahrzeuge nicht pflegen."
+- `FAHRZEUG_COPY.CONFLICT`: "Das Kennzeichen ist belegt oder der Stand hat sich geändert."
+- `FAHRZEUG_COPY.UNAVAILABLE`: "Die Fahrzeugpflege ist gerade nicht verfügbar."
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.companyName`: "Firmenname"
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.street`: "Straße"
 - `E_INVOICE_SETTINGS_COPY.fieldLabels.zip`: "PLZ"
@@ -999,3 +1096,5 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PAGE_READ_COPY.timeout`: "Abfragezeit in Millisekunden"
 - `PAGE_READ_COPY.mailBatch`: "Rechnungen je Versandtakt"
 - `PAGE_READ_COPY.invalid`: "Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."
+- `PAGE_READ_COPY.refreshLeaseLabel`: "Nachlauf-Frist in Sekunden"
+- `PAGE_READ_COPY.refreshLeaseInvalid`: "Du kannst die Nachlauf-Frist nur zwischen 1 und 240 Sekunden speichern."

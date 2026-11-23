@@ -245,7 +245,7 @@ export async function getRechnungAction(id: string): Promise<Ausgangsrechnung> {
 
 export async function listKostenpostenAction(filter?: KostenpostenFilter): Promise<Kostenposten[]> {
   const supabase = await createClient();
-  let query = supabase.from('kostenposten').select('*').order('betrag', { ascending: false });
+  let query = supabase.from('kostenposten').select('*').is('tenant_id', null).order('betrag', { ascending: false });
 
   if (filter?.art) {
     query = query.eq('art', filter.art);
@@ -289,8 +289,8 @@ export async function getKostenpostenAction(id: string): Promise<Kostenposten> {
 // === COCKPIT & AUSWERTUNGEN ===
 import { db } from '@/db';
 import { beleg, kostenposten, kategorie } from '@/db/schema_buchhaltung';
-import { and, gte, lte, ne } from 'drizzle-orm';
-import { UstvaWerte, Ersparnis, KategorieSumme } from '@/lib/buchhaltung/types';
+import { and, gte, isNull, lte, ne } from 'drizzle-orm';
+import { UstvaWerte, KategorieSumme } from '@/lib/buchhaltung/types';
 
 export async function getCockpitMetricsAction(von: string, bis: string) {
   // Einnahmen & USt aus Rechnungen grouped by ustSatz
@@ -305,7 +305,7 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
   }, new Map<number, { ustSatz: number; nettoSum: number; ustSum: number }>()).values()];
 
   // Ausgaben & Vorsteuer aus Belegen
-  const belege = await db.select({ netto: beleg.netto, ustBetrag: beleg.ustBetrag, kategorieId: beleg.kategorieId, ocrConfidence: beleg.ocrConfidence })
+  const belege = await db.select({ netto: beleg.netto, ustBetrag: beleg.ustBetrag, kategorieId: beleg.kategorieId })
     .from(beleg)
     .where(and(
       ne(beleg.status, 'storniert'),
@@ -315,7 +315,7 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
 
   // Fixkosten
   const kosten = await db.select({ betrag: kostenposten.betrag, kategorie: kostenposten.kategorie, art: kostenposten.art, intervall: kostenposten.intervall, giltAb: kostenposten.giltAb, giltBis: kostenposten.giltBis })
-    .from(kostenposten);
+    .from(kostenposten).where(isNull(kostenposten.tenantId));
 
   let umsatz19 = 0, umsatz7 = 0, umsatz0 = 0;
   let ust19 = 0, ust7 = 0;
@@ -360,7 +360,7 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
   // Kategorien gruppieren
   const kategorienMap = new Map<string, { summe: number, anzahl: number }>();
 
-  const alleKategorien = await db.select().from(kategorie);
+  const alleKategorien = await db.select().from(kategorie).where(isNull(kategorie.tenantId));
   const katIdToName = new Map(alleKategorien.map(k => [k.id, k.name]));
   
   for (const b of belege) {
@@ -399,21 +399,6 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
     status: 'berechnet'
   };
 
-  const SCHWELLE = 85;
-  const stundensatz = 120;
-  const autoBelegeCount = belege.filter(b => Number(b.ocrConfidence || 0) >= SCHWELLE).length;
-  const gespart = autoBelegeCount * 4 * (stundensatz / 60);
-  const prozent = belege.length > 0 ? (autoBelegeCount / belege.length) * 100 : 0;
-
-  const ersparnis: Ersparnis = {
-    jahr: new Date(von).getFullYear(),
-    minutenProBeleg: 4,
-    beraterStundensatz: stundensatz,
-    betrag: gespart,
-    anzahlAutoBelege: autoBelegeCount,
-    prozentAutomatisch: Math.round(prozent)
-  };
-
   return {
     ustva,
     bwa: {
@@ -422,7 +407,7 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
       ausgaben: ausgabenBelegeNetto + ausgabenFix,
     },
     kategorien: kategorienArr,
-    ersparnis
+    ersparnis: null
   };
 }
 export async function generateDatevExportAction(von: string, bis: string): Promise<string> {

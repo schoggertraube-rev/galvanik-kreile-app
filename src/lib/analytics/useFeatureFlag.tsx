@@ -36,12 +36,6 @@ export const FLAG_DEFS: FlagDef[] = [
     category: "analytics",
   },
   {
-    name: "insightRules",
-    description: "Zeigt regelbasierte Insights (Sektion E) im Drill-Drawer. Ohne Flag: Platzhalter.",
-    default: false,
-    category: "analytics",
-  },
-  {
     name: "insightLlm",
     description: "Aktiviert KI-generierte Insights via Claude (Bedrock). Nur aggregierte Daten, keine Klarnamen.",
     default: false,

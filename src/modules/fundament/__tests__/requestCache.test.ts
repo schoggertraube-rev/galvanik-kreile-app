@@ -3,7 +3,15 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {readPageReadSettings,readTodayReadSettings,readCompanyLetterSettings} from '../server/systemSettingsPort';
-import {boundedTodayRefreshBudgetMs,MAX_TODAY_REFRESH_MS} from '../public';
+import {boundedTodayRefreshBudgetMs,MAX_TODAY_REFRESH_MS,validTodayRefreshLeaseSeconds} from '../public';
+
+it('uses one refresh lease ceiling for read and write',()=>{
+ expect(validTodayRefreshLeaseSeconds(1)).toBe(true);
+ expect(validTodayRefreshLeaseSeconds(MAX_TODAY_REFRESH_MS/1000)).toBe(true);
+ expect(validTodayRefreshLeaseSeconds(MAX_TODAY_REFRESH_MS/1000+1)).toBe(false);
+ expect(validTodayRefreshLeaseSeconds(0)).toBe(false);
+ expect(validTodayRefreshLeaseSeconds(1.5)).toBe(false);
+});
 
 type Dispatcher={getCacheForType:<T>(factory:()=>T)=>T};
 const test=vi.hoisted(()=>({

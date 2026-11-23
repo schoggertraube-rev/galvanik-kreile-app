@@ -3,6 +3,7 @@ import {reportProtocolClientError} from '@/modules/logging/public';
 
 import {logout} from '@/app/actions/auth';
 import {clearLoggedOutReadState} from './logoutReadState';
+import {INAKTIVITAET_TEXTE} from "@/ui/inaktivitaetTexte";
 import {OFFLINE_LOGOUT_COPY} from '@/ui/situationCatalog';
 import {removeCacheScopeMarker} from './cacheScopeMarker';
 import {syncOriginals} from './syncOriginals';
@@ -13,7 +14,7 @@ const listeners=new Set<()=>void>();
 export const subscribeLogoutNotice=(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};};
 export const readLogoutNotice=()=>notice;
 /** The existing action ends the session first; local storage is never authority. */
-export async function logoutWithReadCleanup(){
+export async function logoutWithReadCleanup(inaktivitaet?: Readonly<{minuten:number;entwurfGesichert:boolean}>){
  const scope=document.documentElement.dataset.offlineScope??null;
  // PL11:25/13:29: finish delayed commands with the original session before
  // ending it. Unavailable network/storage must not consume originals or stop logout.
@@ -35,7 +36,9 @@ export async function logoutWithReadCleanup(){
   new Promise<{cacheCleared:false;pendingCount:null}>(resolve=>{timer=setTimeout(()=>{reportProtocolClientError('OFFLINE_LOGOUT_CLEANUP_TIMEOUT');resolve({cacheCleared:false,pendingCount:null});},1500);}),
  ]);
  if(timer)clearTimeout(timer);
- notice=result?[!cleanup.cacheCleared?OFFLINE_LOGOUT_COPY.cachePending:null,cleanup.pendingCount?OFFLINE_LOGOUT_COPY.pending(cleanup.pendingCount):null].filter(Boolean).join(' '):'';
+ const abmeldung=inaktivitaet && Number.isSafeInteger(inaktivitaet.minuten) && inaktivitaet.minuten>0
+  ? INAKTIVITAET_TEXTE.abgemeldet(inaktivitaet.minuten,inaktivitaet.entwurfGesichert===true) : null;
+ notice=result?[abmeldung,!cleanup.cacheCleared?OFFLINE_LOGOUT_COPY.cachePending:null,cleanup.pendingCount?OFFLINE_LOGOUT_COPY.pending(cleanup.pendingCount):null].filter(Boolean).join(' '):'';
  for(const listener of listeners)listener();
  if(!result)throw failure;
  return result;

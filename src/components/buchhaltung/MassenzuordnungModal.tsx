@@ -6,9 +6,11 @@ interface MassenzuordnungModalProps {
   onClose: () => void;
   onAssign: (kontoId: string, kostenstelleId: string) => Promise<void>;
   count: number;
+  konten: readonly { id: string; name: string }[];
+  kostenstellen: readonly { id: string; name: string }[];
 }
 
-export function MassenzuordnungModal({ isOpen, onClose, onAssign, count }: MassenzuordnungModalProps) {
+export function MassenzuordnungModal({ isOpen, onClose, onAssign, count, konten, kostenstellen }: MassenzuordnungModalProps) {
   const [konto, setKonto] = useState("");
   const [kostenstelle, setKostenstelle] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,11 +51,7 @@ export function MassenzuordnungModal({ isOpen, onClose, onAssign, count }: Masse
               className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">-- Nicht ändern --</option>
-              <option value="4930">4930 - Bürobedarf</option>
-              <option value="3400">3400 - Wareneingang</option>
-              <option value="4210">4210 - Miete</option>
-              <option value="4260">4260 - Instandhaltung</option>
-              <option value="4670">4670 - Reisekosten</option>
+              {konten.map(konto => <option key={konto.id} value={konto.id}>{konto.name}</option>)}
             </select>
           </div>
           <div>
@@ -64,10 +62,7 @@ export function MassenzuordnungModal({ isOpen, onClose, onAssign, count }: Masse
               className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">-- Nicht ändern --</option>
-              <option value="ks-gal">GAL - Galvanik</option>
-              <option value="ks-pol">POL - Politur</option>
-              <option value="ks-sch">SCH - Schleifen</option>
-              <option value="ks-buero">Büro / Verwaltung</option>
+              {kostenstellen.map(stelle => <option key={stelle.id} value={stelle.id}>{stelle.name}</option>)}
             </select>
           </div>
         </div>

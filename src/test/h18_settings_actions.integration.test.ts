@@ -923,3 +923,52 @@ it('4c persists editable email_templates through the real settings action, event
  const denied=await createFixture('TEST-mail-denied');
  expect(await withSession(denied,()=>saveEmailTemplateAction(input))).toMatchObject({code:'FORBIDDEN'});
 });
+
+it('R43 keeps vehicle care closed until a consuming area exists', async () => {
+  const fixture = await createFixture('TEST-vehicle');
+  const id = randomUUID();
+  await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by)
+    VALUES(${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'einstellungen',${fixture.actorId}::uuid)`;
+  const { liesFahrzeugPflegeAction, speichereFahrzeugAction } = await import('@/app/actions/settings.actions');
+  const input = { id, version:0, kennzeichen:`TEST-${id.slice(0,8)}`, art:'Transporter',
+    kraftstoff:'Diesel', tankkarte:null, fahrerId:null, startKm:125, aktiv:true };
+  expect(await withSession(fixture, () => speichereFahrzeugAction(input))).toMatchObject({ code:'FORBIDDEN' });
+  const row = await sql`SELECT id::text, tenant_id, kennzeichen, angelegt_von::text
+    FROM public.vehicles WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}::uuid`;
+  expect(row).toEqual([]);
+  expect(await withSession(fixture, () => liesFahrzeugPflegeAction())).toMatchObject({code:'FORBIDDEN'});
+  const denied = await createFixture('TEST-vehicle-denied');
+  expect(await withSession(denied, () => liesFahrzeugPflegeAction())).toMatchObject({code:'FORBIDDEN'});
+  expect(await withSession(denied, () => speichereFahrzeugAction({...input,id:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+}, 30_000);
+
+it('R43 rejects direct changes to settings without a live consumer', async () => {
+  const fixture = await createFixture('TEST-pending-consumers');
+  await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by)
+    VALUES(${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'einstellungen',${fixture.actorId}::uuid)`;
+  const { saveCompanySettingsAction } = await import('@/app/actions/settings.actions');
+  const { SETTINGS_PENDING_CONSUMER_COPY } = await import('@/ui/situationCatalog');
+  for (const key of ['mehrarbeit','akzentfarbe','betriebsruhe','ausschussBerechnen','empfaenger','betriebswaechter']) {
+    const input = { [key]: null } as unknown as Parameters<typeof saveCompanySettingsAction>[0];
+    expect(await withSession(fixture, () => saveCompanySettingsAction(input))).toMatchObject({
+      code:'VALIDATION_ERROR', message:SETTINGS_PENDING_CONSUMER_COPY.unavailable,
+    });
+  }
+}, 30_000);
+
+it('KP8 reads station counts and weekly target only through an authorized real session', async () => {
+  const fixture = await createFixture('TEST-stations');
+  const { getWerkstattStationszahlen, getWerkstattWochenziel } = await import('@/features/analyse/analyse.actions');
+  const stations = await withSession(fixture, () => getWerkstattStationszahlen());
+  expect(stations).toEqual(expect.arrayContaining([
+    expect.objectContaining({station:'angenommen'}),
+    expect.objectContaining({station:'galvanik'}),
+    expect.objectContaining({station:'fertig'}),
+  ]));
+  const weekly = await withSession(fixture, () => getWerkstattWochenziel());
+  expect(weekly === null || Number.isSafeInteger(weekly)).toBe(true);
+  const denied = await createFixture('TEST-stations-denied');
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${denied.actorId}::uuid AND bereich='buchhaltung'`;
+  expect(await withSession(denied, () => getWerkstattStationszahlen())).toBeNull();
+  expect(await withSession(denied, () => getWerkstattWochenziel())).toBeNull();
+}, 30_000);

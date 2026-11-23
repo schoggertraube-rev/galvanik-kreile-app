@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { LEISTUNG_DURCHLAUF_COPY } from "@/ui/situationCatalog";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -23,7 +24,7 @@ type CatalogRow = {
   surface: string;
   unit: string;
   net_price_cents: number | string;
-  standard_lead_time_working_days: number | string;
+  standard_lead_time_working_days: number | string | null;
 };
 
 type HistoryRow = {
@@ -195,6 +196,10 @@ export function calculateTermSuggestion(input:{today:string;wishDate:string|null
  let lead=0,leadSurface=eligible[0].surfaceRequested;
  for(const position of eligible){
   const catalog=position.catalogServiceId?input.catalogById.get(position.catalogServiceId):undefined;
+  if(catalog?.standard_lead_time_working_days===null)return {
+   achievableDate:null,wishDate:input.wishDate,rating:null,bufferWorkingDays:null,reasons:[],
+   unavailableReason:LEISTUNG_DURCHLAUF_COPY.vorschlag(catalog.name),
+  };
   const days=catalog?.standard_lead_time_working_days!=null?integer(catalog.standard_lead_time_working_days,"INTAKE_CATALOG_LEAD_INVALID"):SURFACE_LEAD_DAYS[normalized(position.surfaceRequested)]??3;
   if(days>=lead){lead=days;leadSurface=position.surfaceRequested;}
  }

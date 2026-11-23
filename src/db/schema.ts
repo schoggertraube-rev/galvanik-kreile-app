@@ -505,7 +505,7 @@ export const catalogServices = pgTable("catalog_services", {
   unit: text("unit").notNull(),
   netPriceCents: integer("net_price_cents").notNull(),
   vatRateBasisPoints: integer("vat_rate_basis_points").notNull().default(1900),
-  standardLeadTimeWorkingDays: integer("standard_lead_time_working_days").notNull(),
+  standardLeadTimeWorkingDays: integer("standard_lead_time_working_days"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

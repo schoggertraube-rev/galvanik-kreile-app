@@ -15,9 +15,11 @@ import { setExtraWorkHourlyRateAction } from "@/app/actions/orders.actions";
 import {
   ACCESS_AREAS,
   ACCESS_AREA_LABELS,
+  MAX_TODAY_REFRESH_MS,
   isAccessAreaAllowedForRole,
   type AccessArea,
   type CompanySettingsInput,
+  type BetriebswaechterEinstellung,
   type ManagedUser,
   type SystemSettingsSnapshot,
 } from "@/modules/fundament/public";
@@ -27,8 +29,9 @@ import { runServerAction } from "@/lib/client/runServerAction";
 import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog";
 import { Toast } from "@/ui/kr/Toast";
 import styles from "./settings.module.css";
+import { BETRIEBSWAECHTER_EINSTELLUNGEN_COPY, UMSATZSTEUER_EINSTELLUNG_COPY } from "@/ui/situationCatalog";
 import { ShippingSettingsEditor } from "./ShippingSettingsEditor";
-import {E_INVOICE_SETTINGS_COPY} from '@/ui/situationCatalog';
+import {E_INVOICE_SETTINGS_COPY, LEISTUNG_DURCHLAUF_COPY} from '@/ui/situationCatalog';
 import { EmailTemplatesEditor } from './EmailTemplatesEditor';
 
 type Tab = "company" | "catalog" | "users";
@@ -49,14 +52,16 @@ function applyRightChanges(users: ManagedUser[], changes: RightChange[]): Manage
   }), users);
 }
 
-const emptyService = (): CatalogService => ({
+type Leistungsentwurf = Omit<CatalogService, "vatRateBasisPoints"> & { vatRateBasisPoints: number | null };
+
+const emptyService = (): Leistungsentwurf => ({
   id: "",
   name: "",
   surface: "",
   unit: "Stück",
   netPriceCents: 0,
-  vatRateBasisPoints: 1900,
-  standardLeadTimeWorkingDays: 5,
+  vatRateBasisPoints: null,
+  standardLeadTimeWorkingDays: null,
   active: true,
 });
 
@@ -64,6 +69,32 @@ function suggestedShortCode(fullName: string): string {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
   const initials = parts.map((part) => part[0]).join("").replace(/[^A-Za-zÄÖÜäöü0-9]/g, "").toUpperCase();
   return (initials || fullName.replace(/[^A-Za-zÄÖÜäöü0-9]/g, "").slice(0, 2).toUpperCase()).slice(0, 3);
+}
+
+function steuerProzent(wert:number|null|undefined):string{
+  return wert==null?"":String(wert/100).replace(".",",");
+}
+
+function steuerBasispunkte(wert:string):number|null{
+  const teile=/^(\d{1,3})(?:[.,](\d{1,2}))?$/.exec(wert.trim());
+  if(!teile)return null;
+  const satz=Number(teile[1])*100+Number((teile[2]??"").padEnd(2,"0"));
+  return satz>0&&satz<=10000?satz:null;
+}
+
+const waechterGrenzen=[
+  "sicherung_hoechstalter_stunden","wiederherstellungstest_hoechstalter_tage",
+  "sicherung_min_prozent_vortag","dienst_ausfall_toleranz_stunden",
+] as const;
+
+function waechterFelder(stand:BetriebswaechterEinstellung|undefined){
+  return {
+    sicherungsort:stand?.sicherungsort??"",
+    sicherung_hoechstalter_stunden:String(stand?.sicherung_hoechstalter_stunden??""),
+    wiederherstellungstest_hoechstalter_tage:String(stand?.wiederherstellungstest_hoechstalter_tage??""),
+    sicherung_min_prozent_vortag:String(stand?.sicherung_min_prozent_vortag??""),
+    dienst_ausfall_toleranz_stunden:String(stand?.dienst_ausfall_toleranz_stunden??""),
+  };
 }
 
 export function SettingsAdminClient({
@@ -87,6 +118,20 @@ export function SettingsAdminClient({
   const [tab, setTab] = useState<Tab>(
     canManageCompany ? "company" : canManageLogins || initialSnapshot.users.some((user) => user.isCurrent) ? "users" : "company",
   );
+  const [akzentBasis, setAkzentBasis] = useState(initialSnapshot.company.akzentfarbe);
+  const [akzentfarbe, setAkzentfarbe] = useState(akzentBasis);
+  const [ruheBasis, setRuheBasis] = useState(initialSnapshot.company.betriebsruhe);
+  const [betriebsruhe, setBetriebsruhe] = useState(ruheBasis);
+  const [waechterBasis,setWaechterBasis]=useState(initialSnapshot.company.betriebswaechter);
+  const [waechter,setWaechter]=useState(()=>waechterFelder(waechterBasis));
+  const [empfaengerBasis,setEmpfaengerBasis]=useState(initialSnapshot.company.empfaenger);
+  const [steuerberater,setSteuerberater]=useState(empfaengerBasis?.steuerberater??"");
+  const [bankEmpfaenger,setBankEmpfaenger]=useState(empfaengerBasis?.bank??"");
+  const [steuerBasis,setSteuerBasis]=useState(initialSnapshot.company.umsatzsteuer);
+  const [regelSatz,setRegelSatz]=useState(()=>steuerProzent(steuerBasis?.regelsatzBasispunkte));
+  const [ermaessigterSatz,setErmaessigterSatz]=useState(()=>steuerProzent(steuerBasis?.ermaessigtBasispunkte));
+  const [ausschussBasis, setAusschussBasis] = useState(initialSnapshot.company.ausschussBerechnen);
+  const [ausschussBerechnen, setAusschussBerechnen] = useState(ausschussBasis);
   const [company, setCompany] = useState<CompanySettingsInput>({
     companyName: initialSnapshot.company.companyName ?? "",
     street: initialSnapshot.company.street ?? "",
@@ -101,9 +146,13 @@ export function SettingsAdminClient({
     paymentTermDays: initialSnapshot.company.paymentTermDays ?? 0,
     logoUrl: initialSnapshot.company.logoUrl ?? "",
     ...(initialSnapshot.company.pageReadsSchemaReady===true&&initialSnapshot.company.pageReads?{pageReads:initialSnapshot.company.pageReads}:{}),
+    ...(typeof initialSnapshot.company.todayRefreshLeaseSeconds==='number'?{todayRefreshLeaseSeconds:initialSnapshot.company.todayRefreshLeaseSeconds}:{}),
   });
   const [services, setServices] = useState(initialServices);
   const [draft, setDraft] = useState(emptyService());
+  const katalogSteuersatz = draft.vatRateBasisPoints ?? steuerBasis?.regelsatzBasispunkte ?? null;
+  const katalogSteuersaetze = [...new Set([steuerBasis?.regelsatzBasispunkte, steuerBasis?.ermaessigtBasispunkte, 0])]
+    .filter((satz): satz is number => satz != null && [0, 700, 1900].includes(satz));
   const [users, setUsers] = useState(initialSnapshot.users);
   const [hourlyRate, setHourlyRate] = useState(initialSnapshot.extraWorkHourlyRate);
   const [hourlyRateEuro, setHourlyRateEuro] = useState(
@@ -201,13 +250,79 @@ export function SettingsAdminClient({
   }
 
   function saveCompany() {
-    report(() => saveCompanySettingsAction(company), "Firmendaten gespeichert.");
+    const alter=waechterFelder(waechterBasis);
+    const waechterGeaendert=waechterBasis&&(waechter.sicherungsort.trim()!==alter.sicherungsort
+      ||waechterGrenzen.some(feld=>waechter[feld]!==alter[feld]));
+    if(waechterGeaendert&&waechterGrenzen.some(feld=>!/^\d+$/.test(waechter[feld])||Number(waechter[feld])<1
+      ||Number(waechter[feld])>(feld==="sicherung_min_prozent_vortag"?100:2_147_483_647))){
+      setMessage(BETRIEBSWAECHTER_EINSTELLUNGEN_COPY.ungueltig);
+      return;
+    }
+    const waechterNeu={
+      sicherungsort:waechter.sicherungsort.trim()||null,
+      sicherung_hoechstalter_stunden:Number(waechter.sicherung_hoechstalter_stunden),
+      wiederherstellungstest_hoechstalter_tage:Number(waechter.wiederherstellungstest_hoechstalter_tage),
+      sicherung_min_prozent_vortag:Number(waechter.sicherung_min_prozent_vortag),
+      dienst_ausfall_toleranz_stunden:Number(waechter.dienst_ausfall_toleranz_stunden),
+    };
+    const waechterwechsel=waechterBasis&&waechterGeaendert
+      ? {betriebswaechter:{vorher:waechterBasis,neu:waechterNeu}} : {};
+    const empfaengerNeu={steuerberater:steuerberater.trim()||null,bank:bankEmpfaenger.trim()||null};
+    const empfaengerwechsel=empfaengerBasis&&(empfaengerNeu.steuerberater!==empfaengerBasis.steuerberater
+      ||empfaengerNeu.bank!==empfaengerBasis.bank) ? {empfaenger:{vorher:empfaengerBasis,neu:empfaengerNeu}} : {};
+    const steuerGeaendert=steuerBasis&&(regelSatz!==steuerProzent(steuerBasis.regelsatzBasispunkte)
+      ||ermaessigterSatz!==steuerProzent(steuerBasis.ermaessigtBasispunkte));
+    const regel=steuerBasispunkte(regelSatz),ermaessigt=steuerBasispunkte(ermaessigterSatz);
+    if(steuerGeaendert&&(regel===null||ermaessigt===null||ermaessigt>=regel)){
+      setMessage(UMSATZSTEUER_EINSTELLUNG_COPY.ungueltig);
+      return;
+    }
+    const steuerwechsel=steuerBasis&&steuerGeaendert&&regel!==null&&ermaessigt!==null
+      ? {umsatzsteuer:{vorher:steuerBasis,neu:{regelsatzBasispunkte:regel,ermaessigtBasispunkte:ermaessigt}}} : {};
+    report(async () => {
+      const geaendert = akzentfarbe && akzentBasis && akzentfarbe !== akzentBasis
+        ? { akzentfarbe: { vorher: akzentBasis, neu: akzentfarbe } } : {};
+      const ruhewechsel = betriebsruhe && ruheBasis && betriebsruhe !== ruheBasis
+        ? { betriebsruhe: { vorher: ruheBasis, neu: betriebsruhe } } : {};
+      const ausschusswechsel = typeof ausschussBerechnen === "boolean" && typeof ausschussBasis === "boolean"
+        && ausschussBerechnen !== ausschussBasis
+        ? { ausschussBerechnen: { vorher: ausschussBasis, neu: ausschussBerechnen } } : {};
+      const result = await saveCompanySettingsAction({ ...company, ...geaendert, ...ruhewechsel, ...ausschusswechsel, ...steuerwechsel, ...empfaengerwechsel, ...waechterwechsel });
+      if(result.code==="OK"&&result.betriebswaechter){
+        setWaechterBasis(result.betriebswaechter);
+        setWaechter(waechterFelder(result.betriebswaechter));
+      }
+      if(result.code==="OK"&&result.empfaenger){
+        setEmpfaengerBasis(result.empfaenger);
+        setSteuerberater(result.empfaenger.steuerberater??"");
+        setBankEmpfaenger(result.empfaenger.bank??"");
+      }
+      if(result.code==="OK"&&result.umsatzsteuer){
+        setSteuerBasis(result.umsatzsteuer);
+        setRegelSatz(steuerProzent(result.umsatzsteuer.regelsatzBasispunkte));
+        setErmaessigterSatz(steuerProzent(result.umsatzsteuer.ermaessigtBasispunkte));
+      }
+      if (result.code === "OK" && typeof result.ausschussBerechnen === "boolean") {
+        setAusschussBasis(result.ausschussBerechnen);
+        setAusschussBerechnen(result.ausschussBerechnen);
+      }
+      if (result.code === "OK" && result.betriebsruhe) {
+        setRuheBasis(result.betriebsruhe);
+        setBetriebsruhe(result.betriebsruhe);
+      }
+      if (result.code === "OK" && result.akzentfarbe) {
+        setAkzentBasis(result.akzentfarbe);
+        setAkzentfarbe(result.akzentfarbe);
+      }
+      return result;
+    }, "Firmendaten gespeichert.");
   }
 
   function saveService() {
+    if (katalogSteuersatz === null || !katalogSteuersaetze.includes(katalogSteuersatz)) return;
     startTransition(async () => {
       const execution = await runServerAction(
-        () => saveCatalogServiceAction({ ...draft, id: draft.id || null }),
+        () => saveCatalogServiceAction({ ...draft, id: draft.id || null, vatRateBasisPoints: katalogSteuersatz }),
         "Leistung speichern",
       );
       if (!execution.ok) {
@@ -384,8 +499,15 @@ export function SettingsAdminClient({
       <div id="company-data" className={styles.grid}>{field("companyName", E_INVOICE_SETTINGS_COPY.fieldLabels.companyName)}{field("street", E_INVOICE_SETTINGS_COPY.fieldLabels.street)}{field("zip", E_INVOICE_SETTINGS_COPY.fieldLabels.zip)}{field("city", E_INVOICE_SETTINGS_COPY.fieldLabels.city)}{field("country", E_INVOICE_SETTINGS_COPY.fieldLabels.country)}{field("taxId", E_INVOICE_SETTINGS_COPY.fieldLabels.taxId)}{field("taxNumber", E_INVOICE_SETTINGS_COPY.fieldLabels.taxNumber)}{field("iban", E_INVOICE_SETTINGS_COPY.fieldLabels.iban)}{field("bic", E_INVOICE_SETTINGS_COPY.fieldLabels.bic)}{field("bankName", E_INVOICE_SETTINGS_COPY.fieldLabels.bankName)}{field("paymentTermDays", E_INVOICE_SETTINGS_COPY.fieldLabels.paymentTermDays, "number")}{field("logoUrl", E_INVOICE_SETTINGS_COPY.fieldLabels.logoUrl)}</div>
       <div className={styles.grid}>
         <label>{PAGE_READ_COPY.timeout}<input type="number" min="1" disabled={initialSnapshot.company.pageReadsSchemaReady!==true} value={company.pageReads?.queryTimeoutMs??''} onChange={event=>setCompany(current=>current.pageReads?{...current,pageReads:{...current.pageReads,queryTimeoutMs:Number(event.target.value)}}:current)}/></label>
+        <label>{PAGE_READ_COPY.refreshLeaseLabel}<input type="number" min="1" max={MAX_TODAY_REFRESH_MS/1000} disabled={pending} value={company.todayRefreshLeaseSeconds??''} onChange={event=>setCompany(current=>({...current,todayRefreshLeaseSeconds:Number(event.target.value)}))}/></label>
       </div>
       {initialSnapshot.company.pageReadsSchemaReady!==true?<p role="status">{PAGE_READ_COPY.settingsPending}</p>:null}
+      {canManageFinancial&&steuerBasis?<div className={styles.grid}>
+        <label>{UMSATZSTEUER_EINSTELLUNG_COPY.regelsatz}<input inputMode="decimal" maxLength={6} disabled={pending}
+          value={regelSatz} onChange={event=>setRegelSatz(event.currentTarget.value)}/></label>
+        <label>{UMSATZSTEUER_EINSTELLUNG_COPY.ermaessigt}<input inputMode="decimal" maxLength={6} disabled={pending}
+          value={ermaessigterSatz} onChange={event=>setErmaessigterSatz(event.currentTarget.value)}/></label>
+      </div>:null}
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
       <ShippingSettingsEditor />
       {canManageFinancial ? <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div> : null}
@@ -398,10 +520,18 @@ export function SettingsAdminClient({
       <label>Oberfläche<input value={draft.surface} onChange={(event) => setDraft({ ...draft, surface: event.target.value })} /></label>
       <label>Einheit<input value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value })} /></label>
       <label>Nettopreis (€)<input type="number" min="0" step="0.01" value={draft.netPriceCents / 100} onChange={(event) => setDraft({ ...draft, netPriceCents: Math.round(Number(event.target.value) * 100) })} /></label>
-      <label>Steuersatz<select value={draft.vatRateBasisPoints} onChange={(event) => setDraft({ ...draft, vatRateBasisPoints: Number(event.target.value) as 0 | 700 | 1900 })}><option value="1900">19 %</option><option value="700">7 %</option><option value="0">0 %</option></select></label>
-      <label>Standard-Durchlaufzeit<input type="number" min="0" max="365" value={draft.standardLeadTimeWorkingDays} onChange={(event) => setDraft({ ...draft, standardLeadTimeWorkingDays: Number(event.target.value) })} /></label>
+      <label>Steuersatz<select value={katalogSteuersatz ?? ""} onChange={event => setDraft({ ...draft,
+        vatRateBasisPoints: event.target.value === "" ? null : Number(event.target.value) })}>
+        {katalogSteuersatz === null ? <option value="" disabled>{UMSATZSTEUER_EINSTELLUNG_COPY.katalogRegelsatzFehlt}</option> : null}
+        {katalogSteuersatz !== null && !katalogSteuersaetze.includes(katalogSteuersatz)
+          ? <option value={katalogSteuersatz} disabled>{steuerProzent(katalogSteuersatz)} % – {UMSATZSTEUER_EINSTELLUNG_COPY.katalogSatzNochNichtUnterstuetzt}</option> : null}
+        {katalogSteuersaetze.map(satz => <option key={satz} value={satz}>{steuerProzent(satz)} %</option>)}
+      </select></label>
+      <label>{LEISTUNG_DURCHLAUF_COPY.label}<input type="number" min="0" max="365" placeholder={LEISTUNG_DURCHLAUF_COPY.fehlt}
+        value={draft.standardLeadTimeWorkingDays ?? ""} onChange={(event) => setDraft({ ...draft,
+          standardLeadTimeWorkingDays: event.target.value === "" ? null : Number(event.target.value) })} /></label>
       <label className={styles.check}><input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />Aktiv</label>
-    </div><button disabled={pending} onClick={saveService}>Leistung speichern</button><div className={styles.list}>{services.map((service) => <button key={service.id} onClick={() => setDraft({...service,surface:orderPositionSurfaceLabel(service.surface),unit:orderPositionUnitLabel(service.unit)})}><strong>{service.name}</strong><span>{orderPositionSurfaceLabel(service.surface)} · {(service.netPriceCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / {orderPositionUnitLabel(service.unit)}</span></button>)}</div></section> : null}
+    </div><button disabled={pending || katalogSteuersatz === null || !katalogSteuersaetze.includes(katalogSteuersatz)} onClick={saveService}>Leistung speichern</button><div className={styles.list}>{services.map((service) => <button key={service.id} onClick={() => setDraft({...service,surface:orderPositionSurfaceLabel(service.surface),unit:orderPositionUnitLabel(service.unit)})}><strong>{service.name}</strong><span>{orderPositionSurfaceLabel(service.surface)} · {(service.netPriceCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / {orderPositionUnitLabel(service.unit)}</span></button>)}</div></section> : null}
 
     {(canManageLogins || currentUser) && tab === "users" ? <section data-spec-id="rechte.dialog">
       <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>{canManageLogins ? "Rechte auswählen und anschließend speichern." : "Ihr Zugang und Ihr persönlicher Code."}</p></div><Link data-spec-id="rechte.schliessen" href={returnTo ?? "/"}>Schließen</Link></div>

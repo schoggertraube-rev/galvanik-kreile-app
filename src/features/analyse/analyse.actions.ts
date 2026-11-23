@@ -2,6 +2,10 @@
 
 import { readAuthorizedArea } from "@/lib/server/authHelper";
 import { createClient } from "@/lib/supabase/server";
+import { belegteTermintreue } from "@/lib/analyse/termintreue";
+import { readWerkstattStationszahlen, readWerkstattWochenzielInTransaction, type WerkstattStationszahl } from "@/lib/server/werkstattStationszahlen";
+import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { WERKSTATT_PULS_COPY } from "@/ui/situationCatalog";
 import {
   AnalyseTileKey,
   AnalyseTileSummary,
@@ -26,12 +30,6 @@ type DurchlaufzeitRow = {
 
 type WochenzielRow = {
   fertig_diese_woche: number;
-};
-
-type StationDurchlaufRow = {
-  station: string;
-  avg_tage: number | null;
-  teile_aktuell: number;
 };
 
 type CustomerNameRow = {
@@ -117,7 +115,40 @@ function toAffectedOrder(
   };
 }
 
-async function getWerkstattPulsSummary(supabase: AnalyseSupabaseClient, period: string): Promise<AnalyseTileSummary> {
+async function autorisierteStationszahlen(
+  authorization: { tenantId: string; permissions: readonly string[] },
+): Promise<readonly WerkstattStationszahl[] | null> {
+  if (!authorization.permissions.includes("perm_view_leitstand")) return null;
+  try {
+    return await withPrivilegedTenantTransaction(authorization,
+      tx => readWerkstattStationszahlen(tx, authorization.tenantId));
+  } catch {
+    return null;
+  }
+}
+
+export async function getWerkstattStationszahlen(): Promise<readonly WerkstattStationszahl[] | null> {
+  const authorization = await readAuthorizedArea("buchhaltung");
+  return authorization.ok ? autorisierteStationszahlen(authorization.data) : null;
+}
+
+async function readWerkstattWochenziel(tenantId: string): Promise<number | null> {
+  try {
+    return await withPrivilegedTenantTransaction({ tenantId }, tx => readWerkstattWochenzielInTransaction(tx, tenantId));
+  } catch {
+    return null;
+  }
+}
+
+export async function getWerkstattWochenziel(): Promise<number | null> {
+  const authorization = await readAuthorizedArea("buchhaltung");
+  return authorization.ok ? readWerkstattWochenziel(authorization.data.tenantId) : null;
+}
+
+async function getWerkstattPulsSummary(
+  supabase: AnalyseSupabaseClient, period: string, wochenzielSoll: number | null,
+  stationszahlen: readonly WerkstattStationszahl[] | null,
+): Promise<AnalyseTileSummary> {
   const { data: t }: AnalyseQueryResult<TermintreueRow> = await supabase
     .from('v_analyse_termintreue')
     .select('*')
@@ -130,50 +161,17 @@ async function getWerkstattPulsSummary(supabase: AnalyseSupabaseClient, period: 
     .from('v_analyse_wochenziel')
     .select('*')
     .single();
-  const { data: s }: AnalyseQueryResult<StationDurchlaufRow[]> = await supabase
-    .from('v_analyse_station_durchlauf')
-    .select('*');
+  const termintreue = belegteTermintreue(t);
+  const status: AnalyseTileStatus = termintreue === null ? "data_missing"
+    : t && t.ohne_zusagetermin > 0 ? "watch" : "stable";
 
-  // Ampellogik & Werte
-  const termintreue = t?.termintreue_pct ?? 0;
-  const ohneZusage = t?.ohne_zusagetermin ?? 0;
-  const avgTage = d?.avg_tage ?? 0;
-  
-  // Wochenziel
-  const wochenzielIst = w?.fertig_diese_woche ?? 0;
-
-  // Status-Logik
-  let status: AnalyseTileStatus = "data_missing";
-  if (t && d && w) {
-    if (termintreue < 80 || avgTage > 10 || ohneZusage > 10) {
-      status = "critical";
-    } else if (termintreue < 90 || avgTage > 7 || ohneZusage > 0) {
-      status = "watch";
-    } else {
-      status = "stable";
-    }
-  }
-
-  // Score Ring (Beispiel: Ohne Wochenziel nur Termintreue)
-  let scoreRing: number | undefined = undefined;
-  if (t) {
-    scoreRing = termintreue;
-  }
-
-  // Stationen-Minibalken (Top 4 Stationen mit dem höchsten Durchlauf)
-  const progressBars = (s || [])
-    .sort((a, b) => (b.avg_tage ?? 0) - (a.avg_tage ?? 0))
-    .slice(0, 4)
-    .map(station => {
-      const avgTage = station.avg_tage ?? 0;
-
-      return {
-        label: station.station,
-        value: avgTage,
-        fillRatio: Math.min(100, (avgTage / 10) * 100), // Angenommen 10 Tage ist max
-        colorClass: avgTage > 5 ? "bg-red-500" : "bg-blue-500",
-      };
-    });
+  const groessteStation = Math.max(1, ...(stationszahlen ?? []).map(station => station.auftraege));
+  const progressBars = stationszahlen?.map(station => ({
+    label: WERKSTATT_PULS_COPY.station[station.station] ?? station.station,
+    value: station.auftraege,
+    fillRatio: station.auftraege / groessteStation * 100,
+    colorClass: "bg-blue-500",
+  }));
 
   return {
     key: "werkstatt_puls",
@@ -181,19 +179,19 @@ async function getWerkstattPulsSummary(supabase: AnalyseSupabaseClient, period: 
     subtitle: "Termintreue & Durchlaufzeit",
     status,
     primaryLabel: "Termintreue",
-    primaryValue: t?.termintreue_pct ? `${t.termintreue_pct}%` : null,
+    primaryValue: termintreue === null ? WERKSTATT_PULS_COPY.fehlt : `${termintreue}%`,
     secondaryLabel: "Ø Durchlaufzeit",
     secondaryValue: d?.avg_tage ? `${d.avg_tage} Tage` : null,
     tertiaryLabel: "Wochenziel",
-    tertiaryValue: w ? `${wochenzielIst} (kein Ziel gesetzt)` : null,
+    tertiaryValue: w ? wochenzielSoll === null ? String(w.fertig_diese_woche)
+      : `${w.fertig_diese_woche} / ${wochenzielSoll}` : null,
     periodLabel: period,
-    scoreRing,
     progressBars,
     dataSources: [
       { tableOrView: "v_analyse_termintreue" },
       { tableOrView: "v_analyse_durchlaufzeit" },
       { tableOrView: "v_analyse_wochenziel" },
-      { tableOrView: "v_analyse_station_durchlauf" }
+      { tableOrView: "v_operational_station_queue_v1" }
     ],
     linkedEntities: [], 
     emptyState: status === "data_missing" ? {
@@ -216,7 +214,10 @@ export async function getAnalyseOverview(
     const supabase = await createClient();
 
     // Werkstatt Puls
-    const werkstattPuls = await getWerkstattPulsSummary(supabase, period);
+    const [wochenziel, stationszahlen] = await Promise.all([
+      readWerkstattWochenziel(authorization.data.tenantId), autorisierteStationszahlen(authorization.data),
+    ]);
+    const werkstattPuls = await getWerkstattPulsSummary(supabase, period, wochenziel, stationszahlen);
 
     const emptyTiles: AnalyseTileSummary[] = [
       {
@@ -343,29 +344,31 @@ export async function getAnalyseTileDetail(
         .from('v_analyse_wochenziel')
         .select('*')
         .single();
-      const { data: s }: AnalyseQueryResult<StationDurchlaufRow[]> = await supabase
-        .from('v_analyse_station_durchlauf')
-        .select('*');
-      const { data: eco } = await supabase.from('v_analyse_werkstatt_puls_economics').select('*').single();
-
       // Hole echte verspätete Aufträge
-      const { data: delayedOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
+      const { data: delayedOrders, error: verzugFehler }: AnalyseQueryResult<AffectedOrderRow[]> & {error?:unknown} = await supabase.from('orders')
         .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
         .eq('tenant_id', authorization.data.tenantId)
         .not('promised_due_date', 'is', null)
+        .neq('status', 'storniert')
         .is('completed_date', null)
         .lt('promised_due_date', new Date().toISOString())
         .limit(10);
 
-      const { data: missingDueOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
+      const { data: missingDueOrders, error: zusageFehler }: AnalyseQueryResult<AffectedOrderRow[]> & {error?:unknown} = await supabase.from('orders')
         .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
         .eq('tenant_id', authorization.data.tenantId)
+        .eq('tenant_id', authorization.data.tenantId)
         .is('promised_due_date', null)
+        .is('completed_date', null)
         .neq('status', 'storniert')
         .limit(10);
 
+      if (verzugFehler || zusageFehler) {
+        return { data: null, error: WERKSTATT_PULS_COPY.auftraegeFehlen };
+      }
+
       // Mappings
-      const termintreuePct = t?.termintreue_pct ?? null;
+      const termintreuePct = belegteTermintreue(t);
       const termintreueMessbarN = t?.nenner ?? 0;
       const ohneZusageterminN = t?.ohne_zusagetermin ?? 0;
       const { count: openOrdersCount } = await supabase
@@ -376,40 +379,13 @@ export async function getAnalyseTileDetail(
 
       const avgTage = d?.avg_tage ?? null;
       const avgDurchlaufzeitMessbarN = d?.n ?? 0;
-      const wochenzielIst = w?.fertig_diese_woche ?? 0;
-      const wochenzielSoll = null; 
+      const wochenzielIst = w?.fertig_diese_woche ?? null;
+      const wochenzielSoll = await readWerkstattWochenziel(authorization.data.tenantId);
       const offeneAuftraegeN = openOrdersCount ?? 0; 
       const kritischeAuftraegeN = delayedOrders ? delayedOrders.length : 0;
       const dokumentationsquotePct = null; // not in view yet
       const dokumentationsquoteMessbarN = 0;
       
-      let status: "ok" | "watch" | "critical" | "insufficient_data" = "insufficient_data";
-      if (t && d) {
-        if ((termintreuePct !== null && termintreuePct < 80) || (avgTage !== null && avgTage > 10) || ohneZusageterminN > 10) status = "critical";
-        else if ((termintreuePct !== null && termintreuePct < 90) || (avgTage !== null && avgTage > 7) || ohneZusageterminN > 0) status = "watch";
-        else status = "ok";
-      }
-
-      const scoreRing = termintreuePct !== null ? termintreuePct : null;
-
-      // Stations
-      const stations = (s || []).map(st => {
-        const avgTage = st.avg_tage ?? 0;
-        const teileAktuell = st.teile_aktuell ?? 0;
-
-        return {
-          stationId: st.station,
-          stationName: st.station,
-          status: (avgTage > 5 ? "critical" : (avgTage > 2 ? "watch" : "ok")) as "critical" | "watch" | "ok" | "free",
-          auslastungPct: Math.min(100, Math.round((avgTage / 10) * 100)),
-          wartendN: teileAktuell,
-          avgWartezeitTage: st.avg_tage ?? null,
-          engpassScore: Math.round(avgTage * teileAktuell),
-          hauptursache: null,
-          openUrl: `/orders?station=${encodeURIComponent(st.station)}&returnTo=/performance?tile=werkstatt_puls`
-        };
-      });
-
       // Affected Orders
       const affectedOrdersMapped: WerkstattPulsData["affectedOrders"] = [];
       (delayedOrders || []).forEach(order => {
@@ -419,21 +395,18 @@ export async function getAnalyseTileDetail(
         affectedOrdersMapped.push(toAffectedOrder(order, "missing_due_date"));
       });
 
+      const auftraegeJeStation = await autorisierteStationszahlen(authorization.data);
+
       // Data Sources list
       const ds: WerkstattPulsData["dataSources"] = [
         { label: "Termintreue & DQ", sourceName: "v_analyse_termintreue", recordCount: 1, status: t ? "live" : "missing" },
         { label: "Durchlaufzeit", sourceName: "v_analyse_durchlaufzeit", recordCount: 1, status: d ? "live" : "missing" },
         { label: "Wochenziel", sourceName: "v_analyse_wochenziel", recordCount: 1, status: w ? "live" : "missing" },
-        { label: "Stationen Durchlauf", sourceName: "v_analyse_station_durchlauf", recordCount: s ? s.length : 0, status: s ? "live" : "missing" },
-        { label: "Wirtschaftlichkeit", sourceName: "v_analyse_werkstatt_puls_economics", recordCount: 1, status: eco ? "live" : "missing" },
+        { label: WERKSTATT_PULS_COPY.stationszahlen, sourceName: "v_operational_station_queue_v1",
+          recordCount: auftraegeJeStation?.length ?? null, status: auftraegeJeStation === null ? "missing" : "live" },
         { label: "Verlauf", sourceName: "kpi_snapshots", recordCount: null, status: "missing" }
       ];
 
-      // F0-W2b (ANA-03): isLive wird aus der tatsächlichen Quellenabdeckung abgeleitet
-      // (nicht mehr unbedingt true). "Verlauf"/kpi_snapshots ist strukturell noch keine
-      // echte Quelle (keine Abfrage dahinter) und wird bereits separat ehrlich über
-      // trend.comparison.available=false ausgewiesen; für die Kern-Kachel (hero/stations/
-      // economics) zählen die fünf tatsächlich abgefragten Quellen als "nötig".
       const requiredDataSources = ds.filter(source => source.sourceName !== "kpi_snapshots");
       const isLive = requiredDataSources.every(source => source.status === "live");
       const missingSourceWarnings = requiredDataSources
@@ -451,34 +424,17 @@ export async function getAnalyseTileDetail(
         hero: {
           termintreuePct, termintreueMessbarN, ohneZusageterminN,
           avgDurchlaufzeitTage: avgTage, avgDurchlaufzeitMessbarN,
-          wochenzielIst, wochenzielSoll, wochenzielQuelle: "missing",
+          wochenzielIst, wochenzielSoll, wochenzielQuelle: wochenzielSoll === null ? "missing" : "company_settings",
           offeneAuftraegeN, kritischeAuftraegeN,
-          dokumentationsquotePct, dokumentationsquoteMessbarN,
-          werkstattScore: scoreRing, scoreStatus: status
+          dokumentationsquotePct, dokumentationsquoteMessbarN
         },
         trend: {
           termintreue: [],
           avgDurchlaufzeit: [],
           comparison: { mode: "previous_period", available: false, reasonIfMissing: "Für einen Wochenverlauf werden mindestens zwei auswertbare Wochen benötigt." }
         },
-        stations,
+        auftraegeJeStation,
         affectedOrders: affectedOrdersMapped,
-        economics: {
-          engpassRevenueEur: eco?.engpass_revenue_eur ?? 0,
-          engpassDbEur: eco?.engpass_db_eur ?? 0,
-          actualDelayCostEur: eco?.actual_delay_cost_eur ?? 0,
-          modelDelayRiskEur: eco?.model_delay_risk_eur ?? 0,
-          confidence: eco ? (eco.n_delayed_orders > 0 ? "high" : "medium") : "none",
-          missingReasons: [],
-          affectedOrderCount: eco?.n_delayed_orders ?? 0,
-        },
-        insight: {
-          available: stations.length > 0,
-          source: "rules",
-          observation: stations.length > 0 ? `${stations[0].stationName} ist aktuell stärkster Engpass. ${stations[0].wartendN} Teile warten dort, Ø Wartezeit ${stations[0].avgWartezeitTage} Tage.` : 'Noch keine belastbare Engpass-Einschätzung.',
-          recommendation: stations.length > 0 ? "Betroffene Aufträge prüfen und Reihenfolge für heute festlegen." : null,
-          actionLinks: stations.length > 0 ? [{ label: "Aufträge öffnen", href: stations[0].openUrl }] : []
-        },
         connectedLinks: [
           { label: "Bäder & Material", value: "Galvanik Status prüfen", href: "/baeder", enabled: true },
           { label: "Qualitätskontrolle", value: "Ausschuss prüfen", href: "/kontrolle", enabled: true },

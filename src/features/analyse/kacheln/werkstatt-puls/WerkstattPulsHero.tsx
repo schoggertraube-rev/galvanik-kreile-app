@@ -1,4 +1,5 @@
 import React from 'react';
+import { WERKSTATT_PULS_COPY } from '@/ui/situationCatalog';
 import { WerkstattPulsData } from '@/lib/analyse/dataContracts';
 
 interface Props {
@@ -21,7 +22,7 @@ export function WerkstattPulsHero({ data }: Props) {
           {hero.termintreuePct !== null ? (
             <>
               <div>
-                <span className={`kpi-value ${hero.termintreuePct < 80 ? 'bad' : hero.termintreuePct < 90 ? 'warn' : ''}`}>
+                <span className="kpi-value">
                   {hero.termintreuePct}
                 </span>
                 <span className="kpi-unit">%</span>
@@ -37,7 +38,7 @@ export function WerkstattPulsHero({ data }: Props) {
               )}
             </>
           ) : (
-            <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>Nicht messbar (Keine fertigen Aufträge)</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>{WERKSTATT_PULS_COPY.fehlt}</div>
           )}
         </div>
 
@@ -106,31 +107,6 @@ export function WerkstattPulsHero({ data }: Props) {
         </div>
       </div>
 
-      {/* Score-Ring */}
-      <div className="score-ring">
-        <svg viewBox="0 0 120 120">
-          <defs>
-            <linearGradient id="ringG" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#7A3FB0"/>
-              <stop offset="60%" stopColor="#C2185B"/>
-              <stop offset="100%" stopColor="#F2643C"/>
-            </linearGradient>
-          </defs>
-          <circle cx="60" cy="60" r="50" fill="none" stroke="#F0E6D3" strokeWidth="9"/>
-          {hero.werkstattScore !== null && (
-            <circle cx="60" cy="60" r="50" fill="none" stroke="url(#ringG)" strokeWidth="9"
-              strokeDasharray="314" strokeDashoffset={314 - (314 * hero.werkstattScore) / 100} strokeLinecap="round"/>
-          )}
-        </svg>
-        <div className="score-num">
-          {hero.werkstattScore !== null ? (
-            <>{hero.werkstattScore}<span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-3)' }}>/100</span></>
-          ) : (
-            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>N/A</span>
-          )}
-        </div>
-        <div className="score-label">Werkstatt-Score</div>
-      </div>
     </div>
   );
 }

@@ -128,9 +128,6 @@ export type WerkstattPulsData = {
 
     dokumentationsquotePct: number | null;
     dokumentationsquoteMessbarN: number;
-
-    werkstattScore: number | null;
-    scoreStatus: "ok" | "watch" | "critical" | "insufficient_data";
   };
 
   trend: {
@@ -153,18 +150,7 @@ export type WerkstattPulsData = {
     };
   };
 
-  stations: Array<{
-    stationId: string;
-    stationName: string;
-    status: "free" | "ok" | "watch" | "critical";
-    auslastungPct: number | null;
-    wartendN: number;
-    avgWartezeitTage: number | null;
-    engpassScore: number | null;
-    hauptursache: string | null;
-    openUrl: string;
-  }>;
-
+  auftraegeJeStation?: readonly { station: string; auftraege: number }[] | null;
   affectedOrders: Array<{
     orderId: string;
     orderNumber: string;
@@ -179,27 +165,6 @@ export type WerkstattPulsData = {
     priority: string | null;
     openUrl: string;
   }>;
-
-  economics: {
-    engpassRevenueEur: number | null;
-    engpassDbEur: number | null;
-    actualDelayCostEur: number | null;
-    modelDelayRiskEur: number | null;
-    confidence: "none" | "low" | "medium" | "high";
-    missingReasons: string[];
-    affectedOrderCount: number;
-  };
-
-  insight: {
-    available: boolean;
-    source: "rules" | "edge_function" | "none";
-    observation: string | null;
-    recommendation: string | null;
-    actionLinks: Array<{
-      label: string;
-      href: string;
-    }>;
-  };
 
   connectedLinks: Array<{
     label: string;

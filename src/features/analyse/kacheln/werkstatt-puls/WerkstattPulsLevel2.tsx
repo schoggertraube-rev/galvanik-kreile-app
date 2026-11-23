@@ -3,11 +3,9 @@ import { ArrowLeft } from 'lucide-react';
 import './WerkstattPulsLevel2.css';
 import { WerkstattPulsData } from '@/lib/analyse/dataContracts';
 import { WerkstattPulsHero } from './WerkstattPulsHero';
-import { WerkstattPulsInsightBox } from './WerkstattPulsInsightBox';
 import { WerkstattPulsTrend } from './WerkstattPulsTrend';
 import { WerkstattPulsStationArena } from './WerkstattPulsStationArena';
 import { WerkstattPulsOrdersTable } from './WerkstattPulsOrdersTable';
-import { WerkstattPulsEconomics } from './WerkstattPulsEconomics';
 import { WerkstattPulsFooter } from './WerkstattPulsFooter';
 
 interface Props {
@@ -53,25 +51,16 @@ export function WerkstattPulsLevel2({ data, onClose }: Props) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 7h10M7 17h10M5 3v18M19 3v18"/></svg>
             Vergleich: Vorwoche
           </button>
-          {data.hero.scoreStatus === 'critical' && <span className="pill pill-bad">HANDLUNGSBEDARF</span>}
-          {data.hero.scoreStatus === 'watch' && <span className="pill pill-warn">BEOBACHTEN</span>}
-          {data.hero.scoreStatus === 'ok' && <span className="pill pill-ok">OK</span>}
-          {data.hero.scoreStatus === 'insufficient_data' && <span className="pill pill-mute">DATEN FEHLEN</span>}
         </div>
       </div>
 
       <WerkstattPulsHero data={data} />
-      <WerkstattPulsInsightBox data={data} />
       
       <div className="grid-2">
         <WerkstattPulsTrend data={data} />
-        {/* Engpass-Ranking is integrated in StationArena logically, but visually placed next to Trend in HTML. Let's extract it. */}
-        <WerkstattPulsStationArena.Ranking data={data} />
+        <WerkstattPulsStationArena data={data} />
       </div>
-
-      <WerkstattPulsStationArena.Cards data={data} />
       <WerkstattPulsOrdersTable data={data} />
-      <WerkstattPulsEconomics data={data} />
       <WerkstattPulsFooter data={data} />
     </div>
   );

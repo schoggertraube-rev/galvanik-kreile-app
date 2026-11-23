@@ -8,6 +8,7 @@ import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
 import { kvpRepository, KvpItem } from "@/lib/repositories/kvpRepository";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { EVIDENCE_READ_COPY } from "@/ui/situationCatalog";
 
 const BENEFITS = ["Zeit sparen", "Fehler vermeiden", "Kunde zufriedener", "Kosten senken", "Arbeit erleichtern"];
 const CATEGORIES = ["Sicherheit", "Qualität", "Ablauf", "Werkzeug/Maschine", "Kunde", "Kommunikation", "Ordnung/Sauberkeit", "Sonstiges"];
@@ -25,7 +26,6 @@ export function BetriebKvpClient() {
   const [newCategory] = useState(CATEGORIES[0]);
   const [newBenefit] = useState(BENEFITS[0]);
   const [newProblem] = useState("");
-  const [hasPhotoMock] = useState(false);
 
   useEffect(() => {
     kvpRepository.getAll().then(data => setItems(data)).catch(console.error);
@@ -134,11 +134,11 @@ export function BetriebKvpClient() {
                 </div>
                 <button 
                   disabled
-                  className={`shrink-0 h-[34px] px-3 rounded-lg flex items-center justify-center gap-2 border transition-colors ${hasPhotoMock ? 'bg-accent-orange/10 border-accent-orange text-accent-orange' : 'bg-gray-100 border-neutral-gray-200 text-text-muted hover:bg-gray-200'}`}
-                  title="Foto anhängen (Mock)"
+                  className="shrink-0 h-[34px] px-3 rounded-lg flex items-center justify-center gap-2 border border-neutral-gray-200 bg-gray-100 text-text-muted"
+                  title={EVIDENCE_READ_COPY.unavailable}
                 >
                   <Camera className="w-4 h-4" /> 
-                  <span className="text-xs font-bold">{hasPhotoMock ? 'Foto' : 'Foto'}</span>
+                  <span className="text-xs font-bold">Foto</span>
                 </button>
               </div>
 
@@ -283,9 +283,7 @@ export function BetriebKvpClient() {
             {activeItem.hasPhoto && (
               <div>
                 <h3 className="font-bold text-sm uppercase text-text-muted mb-2 flex items-center gap-2"><Camera className="w-4 h-4"/> Angehängtes Foto</h3>
-                <div className="w-full h-40 bg-neutral-gray-100 border border-dashed border-neutral-gray-300 rounded-xl flex items-center justify-center text-neutral-gray-400 font-bold text-sm">
-                  [Foto Platzhalter - Demo]
-                </div>
+                <p className="text-sm text-text-muted">{EVIDENCE_READ_COPY.unavailable}</p>
               </div>
             )}
 

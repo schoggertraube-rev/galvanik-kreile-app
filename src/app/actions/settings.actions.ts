@@ -1,8 +1,11 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readUmsatzsteuerSaetzeInTransaction} from '@/modules/fundament/server-public';
 
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
+import { SETTINGS_PENDING_CONSUMER_COPY } from '@/ui/situationCatalog';
+import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { liesFahrzeugPflege, speichereFahrzeug } from "@/modules/fundament/server-public";
 import {applyPinChangeRateLimit} from "@/lib/server/pinRateLimit";
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
@@ -195,11 +198,53 @@ export async function saveCompanySettingsAction(input: CompanySettingsInput&{pro
  return observeAction('saveCompanySettingsAction',subjectForAction('saveCompanySettingsAction',input),async()=>{
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
+  if (["mehrarbeit", "akzentfarbe", "betriebsruhe", "ausschussBerechnen", "empfaenger", "betriebswaechter"]
+    .some(key => Object.hasOwn(input, key))) {
+    return { code: "VALIDATION_ERROR" as const, message: SETTINGS_PENDING_CONSUMER_COPY.unavailable };
+  }
   const result = await updateCompanySettings(resolved.context, input);
-  if (result.code === "OK") revalidatePath("/settings");
+  if (result.code === "OK") {
+    revalidatePath("/settings");
+    if (result.akzentfarbe) revalidatePath("/", "layout");
+  }
   return result;
 
  },readLoggingSettings);
+}
+
+export async function liesFahrzeugPflegeAction() {
+  noStore();
+  const resolved = await settingsContext();
+  if (!resolved?.context.canManageCompany) return { code:"FORBIDDEN" as const };
+  if (!fahrzeugPflegeMitVerbraucher()) return { code:"FORBIDDEN" as const };
+  try {
+    const pflege = await withPrivilegedTenantTransaction(resolved.authorization,
+      tx=>liesFahrzeugPflege(tx,resolved.context));
+    return pflege ? { code:"OK" as const,pflege } : { code:"FORBIDDEN" as const };
+  } catch (error) {
+    console.error("[FAHRZEUG_PFLEGE_READ_FAILED]",error instanceof Error ? error.name : "UnknownError");
+    return { code:"UNAVAILABLE" as const };
+  }
+}
+
+export async function speichereFahrzeugAction(input: unknown) {
+  const resolved = await settingsContext();
+  if (!resolved?.context.canManageCompany) return { code:"FORBIDDEN" as const };
+  if (!fahrzeugPflegeMitVerbraucher()) return { code:"FORBIDDEN" as const };
+  try {
+    const result = await withPrivilegedTenantTransaction(resolved.authorization,
+      tx=>speichereFahrzeug(tx,resolved.context,input));
+    if (result.code === "OK") revalidatePath("/settings");
+    return result;
+  } catch (error) {
+    console.error("[FAHRZEUG_PFLEGE_WRITE_FAILED]",error instanceof Error ? error.name : "UnknownError");
+    return { code:"UNAVAILABLE" as const };
+  }
+}
+
+function fahrzeugPflegeMitVerbraucher(): boolean {
+  // R43: Der Verbraucher wird erst im zugehörigen Bereich freigeschaltet.
+  return false;
 }
 
 export async function saveManagedUserAction(input: UpdateManagedUserInput) {
@@ -272,7 +317,8 @@ export async function saveCatalogServiceAction(input: SaveCatalogServiceInput) {
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Leistungen dürfen nicht geändert werden." };
   if (!resolved.context.canManageFinancial) return { code: "FORBIDDEN" as const, message: FINANCIAL_ACCESS_COPY.pricesMissing };
-  const result = await saveCatalogService({ tenantId: resolved.context.tenantId, actorId: resolved.context.actorId, canRead: true, canManage: true }, input);
+  const result = await saveCatalogService({ tenantId: resolved.context.tenantId, actorId: resolved.context.actorId, canRead: true, canManage: true,
+    readVat: readUmsatzsteuerSaetzeInTransaction }, input);
   if (result.code === "OK") revalidatePath("/settings");
   return result;
 

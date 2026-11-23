@@ -2,7 +2,8 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {readEmailTemplatesAction,saveEmailTemplateAction} from '@/app/actions/settings.actions';
 import {Rueckfrage} from '@/ui/kr';
-import type {StoredEmailTemplate} from '@/lib/email/templateContract';
+import {MEHRARBEIT_FREIGABE_VORLAGE,MEHRARBEIT_VORLAGE_FELDER,type StoredEmailTemplate} from '@/lib/email/templateContract';
+import {MEHRARBEIT_MAILVORLAGE_COPY} from '@/ui/situationCatalog';
 
 export function EmailTemplatesEditor(){
  const [rows,setRows]=useState<StoredEmailTemplate[]|null>(null),[current,setCurrent]=useState<StoredEmailTemplate|null>(null),[message,setMessage]=useState<string|null>(null),[busy,setBusy]=useState(false),[unclear,setUnclear]=useState(false),[confirm,setConfirm]=useState(false);
@@ -30,6 +31,8 @@ export function EmailTemplatesEditor(){
  };
  return <><section aria-label="Mailvorlagen"><h3>Mailvorlagen</h3>{message?<p role="status">{message}</p>:null}{rows===null?<button disabled={busy} onClick={()=>void load()}>{busy?'Wird geladen …':'Erneut laden'}</button>:!rows.length?<p>Keine Mailvorlagen vorhanden.</p>:<>
   <label>Vorlage<select disabled={busy||unclear} value={current?.id??''} onChange={event=>{const id=event.target.value;navigate(()=>{setCurrent(rows.find(row=>row.id===id)??null);pending.current=null;setMessage(null);});}}>{rows.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
-  {current?<><label>Betreff<input value={current.subject} maxLength={500} disabled={busy||unclear} onChange={event=>setCurrent({...current,subject:event.target.value})}/></label><label>Nachricht<textarea value={current.body??''} maxLength={20000} disabled={busy||unclear} onChange={event=>setCurrent({...current,body:event.target.value})}/></label>{current.key.endsWith(':reklamation_ergebnis')?<p>Platzhalter: {'{Kunde} · {RK-Nummer} · {Ergebnis} · {Begründung}'}</p>:null}<button disabled={busy} onClick={()=>void save()}>{busy?'Wird gespeichert …':unclear?'Erneut speichern':'Mailvorlage speichern'}</button><button disabled={busy||unclear} onClick={()=>navigate(()=>void load())}>Neu laden</button></>:null}
+  {current?<><label>Betreff<input value={current.subject} maxLength={500} disabled={busy||unclear} onChange={event=>setCurrent({...current,subject:event.target.value})}/></label><label>Nachricht<textarea value={current.body??''} maxLength={20000} disabled={busy||unclear} onChange={event=>setCurrent({...current,body:event.target.value})}/></label>{current.key.endsWith(':'+MEHRARBEIT_FREIGABE_VORLAGE)
+    ?<p>{MEHRARBEIT_MAILVORLAGE_COPY.platzhalter} {MEHRARBEIT_VORLAGE_FELDER.map(feld=>'{'+feld+'}').join(' · ')}</p>:null}
+  {current.key.endsWith(':reklamation_ergebnis')?<p>Platzhalter: {'{Kunde} · {RK-Nummer} · {Ergebnis} · {Begründung}'}</p>:null}<button disabled={busy} onClick={()=>void save()}>{busy?'Wird gespeichert …':unclear?'Erneut speichern':'Mailvorlage speichern'}</button><button disabled={busy||unclear} onClick={()=>navigate(()=>void load())}>Neu laden</button></>:null}
  </>}</section>{confirm?<Rueckfrage felder={['Mailvorlage']} beschaeftigt={busy} onWeiter={()=>{next.current=null;setConfirm(false);}} onVerwerfen={()=>{const action=next.current;next.current=null;setConfirm(false);action?.();}}/>:null}</>;
 }

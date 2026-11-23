@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 interface KachelShellProps {
   title: string;
   subtitle: string;
-  status: 'STABIL' | 'BEOBACHTEN' | 'HANDLUNGSBEDARF';
+  status?: 'STABIL' | 'BEOBACHTEN' | 'HANDLUNGSBEDARF';
   onClick?: () => void;
   children: React.ReactNode;
 }
@@ -32,9 +32,9 @@ export const KachelShell: React.FC<KachelShellProps> = ({ title, subtitle, statu
           </h3>
           <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
         </div>
-        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor()}`}>
+        {status ? <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusColor()}`}>
           {status}
-        </span>
+        </span> : null}
       </div>
       <div className="flex-1">
         {children}

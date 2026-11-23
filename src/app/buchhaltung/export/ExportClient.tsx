@@ -2,12 +2,14 @@
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Download, FileText, CheckCircle2, ArrowLeft, FolderArchive, FileSpreadsheet, TrendingUp, CalendarClock, Banknote, Info } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
+import { readBuchhaltungSteuersaetzeAction } from "@/app/buchhaltung/analysis.actions";
+import { UMSATZSTEUER_EINSTELLUNG_COPY } from "@/ui/situationCatalog";
 
 // ── Mock Preview Data ────────────────────────────────────────────────────
 
@@ -45,6 +47,16 @@ function ExportContent({ previewData }: { previewData: { header: string, rows: s
   const searchParams = useSearchParams();
   const initialFormat = searchParams?.get("format") ?? "datev";
   const [activeFormat, setActiveFormat] = useState(initialFormat);
+  const [steuersaetze, setSteuersaetze] = useState<Awaited<ReturnType<typeof readBuchhaltungSteuersaetzeAction>>>(null);
+  useEffect(() => {
+    if (activeFormat !== "steuerprofil") return;
+    let aktiv = true;
+    void readBuchhaltungSteuersaetzeAction().then(
+      saetze => { if (aktiv) setSteuersaetze(saetze); },
+      () => { if (aktiv) setSteuersaetze(null); },
+    );
+    return () => { aktiv = false; };
+  }, [activeFormat]);
   const DATEV_PREVIEW = {
     header: previewData.header,
     rows: previewData.rows.map(r => {
@@ -309,8 +321,11 @@ function ExportContent({ previewData }: { previewData: { header: string, rows: s
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <ProfileRow label="Unternehmen" value="Galvanik Kreile" />
             <ProfileRow label="Sachkontenrahmen" value="SKR03" />
-            <ProfileRow label="Standard-USt" value="19 %" />
-            <ProfileRow label="Ermäßigt" value="7 %" />
+            <ProfileRow label="Standard-USt" value={steuersaetze?.regelsatzBasispunkte == null
+              ? UMSATZSTEUER_EINSTELLUNG_COPY.exportSatzFehlt
+              : `${(steuersaetze.regelsatzBasispunkte / 100).toLocaleString("de-DE")} %`} />
+            <ProfileRow label="Ermäßigt" value={steuersaetze == null ? "–"
+              : `${(steuersaetze.ermaessigtBasispunkte / 100).toLocaleString("de-DE")} %`} />
             <ProfileRow label="Kleinunternehmer" value="Nein" />
             <ProfileRow label="Voranmeldung" value="Monatlich" />
           </div>

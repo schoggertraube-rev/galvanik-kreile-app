@@ -4,7 +4,8 @@ import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {COMPLAINT_RESULT_TEMPLATE,COMPLAINT_GOODS_TEMPLATE,renderComplaintGoodsTemplate,renderComplaintResultTemplate,type StoredEmailTemplate} from '@/lib/email/templateContract';
+import {COMPLAINT_RESULT_TEMPLATE,COMPLAINT_GOODS_TEMPLATE,renderComplaintGoodsTemplate,renderComplaintResultTemplate,MEHRARBEIT_FREIGABE_VORLAGE,pruefeMehrarbeitVorlage,type StoredEmailTemplate} from '@/lib/email/templateContract';
+import {MEHRARBEIT_MAILVORLAGE_COPY} from '@/ui/situationCatalog';
 
 type Failure={code:'FORBIDDEN'|'VALIDATION_ERROR'|'CONFLICT'|'NOT_FOUND'|'UNAVAILABLE';message:string};
 const html=(value:string)=>'<p>'+value.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,'<br>')+'</p>';
@@ -35,6 +36,10 @@ export async function saveStoredEmailTemplate(auth:AuthorizationSnapshot,input:u
   if(old[0].key.endsWith(':'+COMPLAINT_GOODS_TEMPLATE)){
    try{renderComplaintGoodsTemplate(v.subject+'\n'+v.body,{Kunde:'',Auftragsnummer:'','RK-Nummer':''});}
    catch(error){console.warn('[EMAIL_TEMPLATE_VARIABLE_UNKNOWN]',error instanceof Error?error.name:'UnknownError');return {code:'VALIDATION_ERROR' as const,message:'Erlaubte Platzhalter: Kunde, Auftragsnummer, RK-Nummer.'};}
+  }
+  if(old[0].key.endsWith(':'+MEHRARBEIT_FREIGABE_VORLAGE)){
+   try{pruefeMehrarbeitVorlage(v.subject,v.body);}
+   catch{return {code:'VALIDATION_ERROR' as const,message:MEHRARBEIT_MAILVORLAGE_COPY.ungueltig};}
   }
   const rows=await tx.execute<StoredEmailTemplate>(sql`UPDATE public.email_templates SET subject_template=${v.subject},body_text_template=${v.body},body_html_template=${html(v.body)},updated_at=clock_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${v.id}::uuid AND updated_at=${v.updatedAt}::timestamp RETURNING id::text,template_key AS key,name,subject_template AS subject,body_text_template AS body,updated_at::text AS "updatedAt"`);
   if(!rows[0])return {code:'CONFLICT' as const,message:'Mailvorlage wurde inzwischen geändert · bitte neu laden.'};

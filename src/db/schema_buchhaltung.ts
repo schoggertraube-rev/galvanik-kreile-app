@@ -5,6 +5,8 @@ import { pgTable, text, timestamp, date, numeric, boolean, integer, jsonb, uuid 
 // ============================================================================
 
 export const kategorie = pgTable("kategorie", {
+  tenantId: text("tenant_id"),
+  ausEingangsrechnungId: uuid("aus_eingangsrechnung_id"),
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   typ: text("typ").notNull().default("ausgabe"),
@@ -135,6 +137,12 @@ export const zahlung = pgTable("zahlung", {
 });
 
 export const kostenposten = pgTable("kostenposten", {
+  tenantId: text("tenant_id"),
+  laufendeArt: text("laufende_art"),
+  naechsteFaelligkeit: date("naechste_faelligkeit"),
+  kategorieId: uuid("kategorie_id"),
+  fahrzeugId: uuid("fahrzeug_id"),
+  lieferantId: text("lieferant_id"),
   id: uuid("id").primaryKey().defaultRandom(),
   bezeichnung: text("bezeichnung").notNull(),
   art: text("art").notNull(),

@@ -1,14 +1,120 @@
 // S15: generated V45 text access for new components; existing constants stay unchanged.
 export {V45_TEXT,V45_TEXT_TEMPLATES} from './generated/v45Texte.generated';
 export type {V45TextKey} from './generated/v45Texte.generated';
+export const AUTOMATIK_NACHRICHTEN_TEXTE = {
+  auftragsbestaetigung: "Wir haben deinen Auftrag {auftrag} erfasst.",
+  status: "Dein Auftrag {auftrag} steht jetzt auf {stand}.",
+  kv_erinnerung: "Gib uns bitte Rückmeldung zu Kostenvoranschlag {kv}.",
+  abholung: "Dein Auftrag {auftrag} liegt zur Abholung bereit.",
+  zahlungserinnerung: "Bitte zahle Rechnung {nummer} bis {datum}.",
+  bewertung: "Bewerte uns gern hier: {link}.",
+  sdb_anforderung: "Sende uns bitte das aktuelle Sicherheitsdatenblatt für {artikel}.",
+  antwort_erinnerung: "Gib uns bitte Rückmeldung zu deiner Nachricht vom {datum}.",
+  versandhinweis: "Dein Auftrag {auftrag} ist unterwegs.",
+  lagergeld_brief: "Hol deinen Auftrag {auftrag} bitte bis {datum} ab.",
+} as const;
+export const MEHRARBEIT_MAILVORLAGE_COPY = {
+  platzhalter: "Platzhalter:",
+  ungueltig: "Füg die fehlenden Platzhalter in die Vorlage ein, mindestens {Begründung}.",
+} as const;
+export const BETRIEBSWAECHTER_EINSTELLUNGEN_COPY={
+  sicherungsort:"Sicherungsort",
+  sicherung_hoechstalter_stunden:"Maximales Alter der Sicherung (Stunden)",
+  wiederherstellungstest_hoechstalter_tage:"Wiederherstellungstest spätestens nach (Tagen)",
+  sicherung_min_prozent_vortag:"Mindestgröße zur Vortagssicherung (%)",
+  dienst_ausfall_toleranz_stunden:"Dienststörung melden nach (Stunden)",
+  ungueltig:"Trag ganze positive Grenzwerte und höchstens 100 Prozent ein.",
+  keinRecht:"Für diese Grenzwerte brauchst du das Recht für Firmendaten.",
+  konflikt:"Lade die Firmendaten neu, weil sich die Grenzwerte geändert haben.",
+} as const;
+export const FIRMENEMPFAENGER_COPY={
+  steuerberater:"E-Mail des Steuerberaters",
+  bank:"E-Mail der Bank",
+  ungueltig:"Trag je Feld eine gültige E-Mail-Adresse ein oder lass es leer.",
+  keinRecht:"Für diese Adressen brauchst du die Rechte für Firmendaten und Preise.",
+  konflikt:"Lade die Firmendaten neu, weil sich die Empfänger geändert haben.",
+} as const;
+export const UMSATZSTEUER_EINSTELLUNG_COPY={
+  regelsatz:"Regelsatz (%)",
+  ermaessigt:"Ermäßigter Satz (%)",
+  ungueltig:"Trag gültige Steuersätze mit niedrigerem ermäßigtem Satz ein.",
+  keinRecht:"Für Steuersätze brauchst du das Recht für Firmendaten und Preise.",
+  konflikt:"Lade die Firmendaten neu, weil sich die Steuersätze geändert haben.",
+  katalogRegelsatzFehlt: "Wähl einen Steuersatz für die Leistung.",
+  katalogSatzUngueltig: "Wähl einen hinterlegten Firmensteuersatz oder 0 Prozent.",
+  katalogSatzNochNichtUnterstuetzt: "Für diesen Steuersatz fehlt noch die durchgehende Verarbeitung.",
+  exportSatzFehlt: "Der Firmenregelsatz fehlt.",
+} as const;
+// TODO_PL R43: final wording when the consuming area activates these settings.
+export const SETTINGS_PENDING_CONSUMER_COPY = {
+  unavailable: "Diese Einstellung ist noch nicht verfügbar.",
+} as const;
+export const AUSSCHUSS_EINSTELLUNG_COPY = {
+  label: "Ausschuss berechnen",
+  keinRecht: "Die Ausschussberechnung darfst du nicht ändern.",
+  ungueltig: "Wähle aus, ob Ausschuss berechnet wird.",
+  konflikt: "Lade die inzwischen geänderte Ausschussberechnung neu.",
+} as const;
+export const BETRIEBSRUHE_COPY = {
+  titel: "Betriebsruhe",
+  zeitraum: (nummer: number) => `Zeitraum ${nummer}`,
+  von: "Von",
+  bis: "Bis",
+  hinzufuegen: "Zeitraum hinzufügen",
+  entfernen: "Zeitraum entfernen",
+  keinRecht: "Die Betriebsruhe darfst du nicht ändern.",
+  ungueltig: "Ein Zeitraum endet vor seinem Beginn oder steht doppelt, korrigier ihn.",
+  konflikt: "Lade die inzwischen geänderte Betriebsruhe neu.",
+} as const;
+export const FIRMENAKZENT_COPY = {
+  label: "Akzentfarbe",
+  keinRecht: "Du darfst die Akzentfarbe nicht ändern.",
+  ungueltig: "Wähle eine gültige Akzentfarbe.",
+  konflikt: "Die Akzentfarbe wurde geändert, lade die Firmendaten neu.",
+} as const;
+export const MEHRARBEIT_EINSTELLUNGEN_COPY = {
+  spielraumBasispunkte: "Spielraum ohne Rückfrage (% vom KV)",
+  stoppBasispunkte: "Stopp für den Auftrag (% vom KV)",
+  schrittMinuten: "Minuten je Antippen",
+  maximalMinutenJeTaetigkeit: "Höchste Dauer je Tätigkeit (Min.)",
+  keinRecht: "Die Mehrarbeitsregeln darfst du nicht ändern.",
+  spielraumUngueltig: "Trag den Spielraum als Prozentwert ab 0 ein.",
+  stoppUngueltig: "Der Stopp muss über dem Spielraum liegen.",
+  minutenUngueltig: "Trag Minuten je Antippen und Höchstdauer größer als 0 ein.",
+  revisionUngueltig: "Lade die Mehrarbeitsregeln neu.",
+  konflikt: "Lade die inzwischen geänderten Mehrarbeitsregeln neu.",
+} as const;
 /** One editable invoice-mail draft for the existing customer/order composer. */
 export const INVOICE_MAIL_COMPOSER_COPY={
  subject:(number:string,companyName:string)=>`Rechnung ${number} · ${companyName}`,
  body:'Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen',
 } as const;
+
+export const LEISTUNG_DURCHLAUF_COPY = {
+  label: "Standard-Durchlaufzeit",
+  fehlt: "fehlt",
+  vorschlag: (leistung: string) => `Für „${leistung}“ fehlt die Standard-Durchlaufzeit.`,
+} as const;
+
 /** PL13.11.00:14 immutable invoice VAT display. */
+export const METALL_KURSKLAUSEL_COPY = {
+  label: "Kursklausel",
+  fehlt: "Die freigegebene Kursklausel fehlt.",
+  vorschlag: "{Metall}: ca. {Gramm} g zum Tageskurs. Abgerechnet wird zum vereinbarten Kursstichtag {Kursstichtag}.",
+} as const;
 /** Existing evidence-read wording, shared by the original and visibility read. */
 export const EVIDENCE_READ_COPY={unavailable:'Nachweise konnten nicht sicher geladen werden.'} as const;
+export const WERKSTATT_PULS_COPY = {
+  fehlt: "fehlt",
+  stationszahlen: "Aufträge je Station",
+  station: { angenommen: "Eingangslager", galvanik: "Galvanik", fertig: "Ausgangslager" } as Readonly<Record<string, string>>,
+  auftraege: "Überfällige Aufträge und Aufträge ohne Zusagetermin",
+  ueberfaellig: "überfällig",
+  ohneZusage: "ohne Zusagetermin",
+  tageUeberfaellig: (tage: number) => `${tage} Tage überfällig`,
+  auftraegeFehlen: "Lade die Werkstatt-Analyse neu, damit die Auftragsliste erscheint.",
+  keineBetroffenen: "Im gelesenen Stand sind keine betroffenen Aufträge enthalten.",
+} as const;
 export const EVIDENCE_VISIBILITY_COPY={
  invalid:'Wähle das Foto erneut.',missing:'Das Foto ist nicht mehr da. Lade den Auftrag neu.',
  forbidden:'Die Sichtbarkeit von Fotos darfst du nicht ändern.',conflict:'Das Foto wurde gerade geändert. Lade es neu und wähle die Sichtbarkeit noch einmal.',
@@ -240,6 +346,10 @@ export const PICKUP_APPOINTMENT_COPY={
  unavailable:'Der Abholtermin konnte nicht sicher gespeichert werden. Deine Eingaben bleiben erhalten; versuche es erneut.',
  recorded:(date:string)=>'Abholtermin vereinbart '+date,
 };
+export const DOKUMENTAUFBEWAHRUNG_COPY = {
+  fehlt: "Frist fehlt",
+  ablaufhemmung: "Ablaufhemmung",
+} as const;
 export const STORAGE_CHARGE_COPY={name:'Lagergeld',unit:'Woche',forbidden:'Für den Lagergeldbetrag brauchst Du das Recht Zahlungen & Mahnungen. Die übrigen Angaben bleiben erhalten.'};
 export const DISPATCH_CALL_COPY={
  title:'Ruf den Kunden wegen seiner fertigen Ware an',note:'Sprich mit dem Kunden über diese fertigen Aufträge: ',
@@ -479,6 +589,16 @@ export {FINANCIAL_ACCESS_COPY} from './financialAccessCopy';
 
 export {PACKAGE_SWITCH_COPY} from './packageSwitchCopy';
 
+export const FAHRZEUG_COPY = {
+  titel:"Fahrzeuge", anlegen:"Fahrzeug anlegen", speichern:"Fahrzeug speichern", neuLaden:"Fahrzeuge neu laden",
+  kennzeichen:"Kennzeichen", art:"Fahrzeugart", kraftstoff:"Kraftstoff", tankkarte:"Tankkartenbezeichnung",
+  fahrer:"Fahrer", ohneFahrer:"Ohne Zuordnung", fahrerInaktiv:"Inaktiver Login",
+  startKm:"Startkilometer", aktiv:"Aktiv", inaktiv:"Deaktiviert", gespeichert:"Das Fahrzeug ist gespeichert.",
+  INVALID:"Trag Kennzeichen, Fahrzeugart, Kraftstoff und Startkilometer vollständig ein.",
+  FORBIDDEN:"Du darfst die Fahrzeuge nicht pflegen.",
+  CONFLICT:"Das Kennzeichen ist belegt oder der Stand hat sich geändert.",
+  UNAVAILABLE:"Die Fahrzeugpflege ist gerade nicht verfügbar.",
+} as const;
 export const E_INVOICE_SETTINGS_COPY={
  fieldLabels:{companyName:'Firmenname',street:'Straße',zip:'PLZ',city:'Ort',country:'Land',taxId:E_INVOICE_COPY.vatIdLabel,taxNumber:E_INVOICE_COPY.taxNumberLabel,iban:'IBAN',bic:'BIC',bankName:'Bank',paymentTermDays:'Zahlungsziel in Tagen',logoUrl:'Logo-Pfad'},
  action:(field:string)=>`${eInvoiceFieldLabel(field)} in den Einstellungen eintragen`,
@@ -537,4 +657,4 @@ export const SURFACE_ASSIGNMENT_COPY={
 export const DIALOG_LOAD_COPY={unavailable:'Der Dialog hat sich nicht geladen – lade die Seite neu.',mailUnavailable:'Die Mailansicht hat sich nicht geladen – lade die Seite neu.',reload:'Neu laden'} as const;
 /** PLAN_LADEZEIT E3: only stale model facts use these refresh messages. */
 export const TODAY_MODEL_COPY={homeTitle:'Der Tag',regionTitles:{week:'Diese Woche fertig',stock:'Lager',notices:'Hinweise',counts:'Tageslage'},partLoading:'Wird nachgeladen.',partFailed:'Die Quelldaten sind gerade nicht lesbar.',partReload:'Bereich neu laden',noNotices:'Keine Hinweise.',unpriced:(count:number)=>`${count} Positionen sind noch unbewertet.`,cardRefreshing:'Diese Karte holt sich gerade den neuesten Stand.',reload:'Jetzt laden',mainRefreshing:'Ich hole gerade den neuesten Stand – dein nächster Schritt erscheint gleich.',rebuildButton:'Startseite neu aufbauen',rebuildRunning:'Ich baue die Startseite gerade neu auf – das dauert ein paar Sekunden.',rebuildDone:'Die Startseite ist neu aufgebaut.'} as const;
-export const PAGE_READ_COPY={orderIncomplete:(number:string)=>`Auftrag ${number} ist gerade nicht lesbar · öffne den Auftrag.`,loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null.",refreshLeaseTooLong:(seconds:number)=>`Du kannst die Nachlauf-Frist auf höchstens ${seconds} Sekunden setzen.`} as const;
+export const PAGE_READ_COPY={orderIncomplete:(number:string)=>`Auftrag ${number} ist gerade nicht lesbar · öffne den Auftrag.`,loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null.",refreshLeaseLabel:"Nachlauf-Frist in Sekunden",refreshLeaseInvalid:"Du kannst die Nachlauf-Frist nur zwischen 1 und 240 Sekunden speichern.",refreshLeaseTooLong:(seconds:number)=>`Du kannst die Nachlauf-Frist auf höchstens ${seconds} Sekunden setzen.`} as const;

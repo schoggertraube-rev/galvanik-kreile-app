@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { SALES_STAGE_FEATURES } from "../featureCatalog";
+import "../server/systemSettingsPort";
 
 const { execute, withTransaction, hash } = vi.hoisted(() => ({ execute: vi.fn(), withTransaction: vi.fn(), hash: vi.fn() }));
 
@@ -30,7 +31,8 @@ describe("system settings port", () => {
         full_name: "Phillip", kuerzel: "P", bezeichnung: "Werkstatt", role: "werkstatt", active: true,
         areas: ["auftraege", "eingang", "kunden"],
       }])
-      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
+      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })))
+      .mockResolvedValueOnce([{stand:{akzentfarbe:'#123456',betriebsruhe:[],ausschuss_berechnen:false}}]);
     const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
@@ -49,7 +51,8 @@ describe("system settings port", () => {
         { id: "11111111-1111-4111-8111-111111111111", email: "gregor@example.invalid", full_name: "Gregor", kuerzel: "G", bezeichnung: "Entwickler", role: "developer", active: true, areas: ["auftraege", 'preise','zahlungen','buchhaltung', "einstellungen", "logins", "wartung"] },
         { id: "22222222-2222-4222-8222-222222222222", email: null, full_name: "Christian Dieter", kuerzel: "CD", bezeichnung: null, role: "meister", active: false, areas: ["auftraege", 'preise','zahlungen','buchhaltung', "logins"] },
       ])
-      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
+      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })))
+      .mockResolvedValueOnce([{stand:{akzentfarbe:'#123456',betriebsruhe:[],ausschuss_berechnen:false}}]);
     const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
@@ -66,7 +69,8 @@ describe("system settings port", () => {
     execute
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
+      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })))
+      .mockResolvedValueOnce([{stand:{akzentfarbe:'#123456',betriebsruhe:[],ausschuss_berechnen:false}}]);
     const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
@@ -109,6 +113,11 @@ describe("system settings port", () => {
     const { readSystemSettings, updateCompanySettings, updateManagedUser } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings({ ...context, canManage: false })).resolves.toMatchObject({ code: "FORBIDDEN" });
     await expect(updateCompanySettings(context, {})).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(updateCompanySettings(context, {
+      companyName: "TEST Kreile", street: "TEST Weg 1", zip: "12345", city: "Berlin", country: "Deutschland",
+      taxId: "DE123456789", iban: "DE0012345678", bic: "TESTDEFF", bankName: "Testbank", paymentTermDays: 14,
+      logoUrl: "/TEST-logo.png", todayRefreshLeaseSeconds: 241,
+    })).resolves.toMatchObject({ code: "VALIDATION_ERROR", message: expect.stringContaining("240 Sekunden") });
     await expect(updateManagedUser(context, { userId: "invalid" },async()=>{})).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(withTransaction).not.toHaveBeenCalled();
   });

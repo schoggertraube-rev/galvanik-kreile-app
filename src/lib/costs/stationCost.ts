@@ -1,4 +1,3 @@
-import { DEFAULT_HOURLY_RATE_EUR } from "../../constants/pricing";
 import { InventoryItem } from "../repositories/inventoryRepository";
 
 export interface WorkTimeLog {
@@ -24,7 +23,7 @@ export function computeStationCost(
   workTimeLogs: WorkTimeLog[],
   consumableUses: ConsumableUse[],
   inventoryItems: InventoryItem[],
-  hourlyRate = DEFAULT_HOURLY_RATE_EUR,
+  hourlyRate: number,
   multiplier = 1
 ): { laborCost: number; materialCost: number; total: number } {
   const laborMinutes = workTimeLogs.reduce(

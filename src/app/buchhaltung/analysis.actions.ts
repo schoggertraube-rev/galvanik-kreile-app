@@ -9,6 +9,8 @@ import { and, gte, lte, ne } from 'drizzle-orm';
 import { generateInsight } from '@/lib/analyse/insights';
 import type {InvoiceTruthRow} from '@/lib/server/invoiceTruthRead';
 import {getInvoiceTruthAction} from '@/app/actions/invoices.actions';
+import {readBuchhaltungSteuersaetzeAction} from '@/app/actions/einstellungenReads.actions';
+export {readBuchhaltungSteuersaetzeAction};
 
 async function invoiceRows(from?: string, to?: string): Promise<InvoiceTruthRow[]> {
   const result = await getInvoiceTruthAction({from,to});
@@ -19,24 +21,31 @@ async function invoiceRows(from?: string, to?: string): Promise<InvoiceTruthRow[
 export async function getUstvaAnalysisAction(von: string, bis: string) {
   await rejectDeferredLegacy("buchhaltung");
 
-  // Aktueller Monat
-  const rechnungen = (await invoiceRows(von, bis)).filter((invoice) => invoice.status === 'issued');
+  const [saetze, originalbelege] = await Promise.all([readBuchhaltungSteuersaetzeAction(), invoiceRows(von, bis)]);
+  const rechnungen = originalbelege.filter(invoice => invoice.status === "issued");
 
   const belege = await db.select({ netto: beleg.netto, ustBetrag: beleg.ustBetrag, belegart: beleg.belegart, status: beleg.status })
     .from(beleg)
     .where(and(ne(beleg.status, 'storniert'), gte(beleg.belegdatum, von), lte(beleg.belegdatum, bis)));
 
-  let umsatz19 = 0, umsatz7 = 0;
-  for (const r of rechnungen) {
-    for(const group of r.vatGroups){
-      if(group.rateBp===1900)umsatz19+=group.netCents/100;
-      else if(group.rateBp===700)umsatz7+=group.netCents/100;
+  // Gespeicherte Firmenwerte ordnen die Gruppen ein. Der Originalsatz bestimmt weiterhin die Beträge.
+  const gruppen = new Map<number, { nettoCent: number; steuerCent: number }>();
+  for (const rechnung of rechnungen) {
+    for (const gruppe of rechnung.vatGroups) {
+      const summe = gruppen.get(gruppe.rateBp) ?? { nettoCent: 0, steuerCent: 0 };
+      summe.nettoCent += gruppe.netCents;
+      summe.steuerCent += gruppe.vatCents;
+      gruppen.set(gruppe.rateBp, summe);
     }
   }
-  const ust19 = rechnungen.flatMap(row=>row.vatGroups).filter(group=>group.rateBp===1900).reduce((sum,group)=>sum+group.vatCents,0)/100;
-  const ust7 = rechnungen.flatMap(row=>row.vatGroups).filter(group=>group.rateBp===700).reduce((sum,group)=>sum+group.vatCents,0)/100;
-  const ustTotal = ust19 + ust7;
-  
+  const steuergruppen = [...gruppen.entries()].map(([satz, summe]) => ({
+    satz,
+    art: satz === saetze?.regelsatzBasispunkte ? "regel"
+      : satz === saetze?.ermaessigtBasispunkte ? "ermaessigt" : "original",
+    ...summe,
+  }));
+  const ustTotal = steuergruppen.reduce((summe, gruppe) => summe + gruppe.steuerCent, 0) / 100;
+
   const vorsteuerTotal = belege.reduce((sum, b) => sum + (Number(b.ustBetrag) || 0), 0);
   const zahllast = ustTotal - vorsteuerTotal;
   
@@ -74,7 +83,8 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
     zahllast,
     ustTotal,
     vorsteuerTotal,
-    umsatzTotal: umsatz19 + umsatz7,
+    umsatzTotal: steuergruppen.reduce((summe, gruppe) => summe + gruppe.nettoCent, 0) / 100,
+    steuergruppen,
     offeneBelege,
     trendProzent,
     chartData,
@@ -255,12 +265,12 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
   await rejectDeferredLegacy("buchhaltung");
 
   const { kostenposten } = await import('@/db/schema_buchhaltung');
-  const { and, gte, lte, ne } = await import('drizzle-orm');
+  const { and, gte, isNull, lte, ne } = await import('drizzle-orm');
 
   const belegeRaw = await db.select({ netto: beleg.netto, kategorieId: beleg.kategorieId, belegart: beleg.belegart, status: beleg.status, belegdatum: beleg.belegdatum })
     .from(beleg).where(and(ne(beleg.status, 'storniert'), gte(beleg.belegdatum, von), lte(beleg.belegdatum, bis)));
 
-  const fixkostenRaw = await db.select().from(kostenposten);
+  const fixkostenRaw = await db.select().from(kostenposten).where(isNull(kostenposten.tenantId));
 
   // Variable Kosten = aus Belegen (außer es ist ein als Fixkosten markierter Vertrag, aber wir vereinfachen: Belege = Variabel, Verträge = Fix)
   // Belege, die keine Rechnungen sind, oft Variabel. Wir summieren einfach alle erfassten Belege als Variabel, und Verträge als Fix.
@@ -318,74 +328,22 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
   };
 }
 
-export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
-  await rejectDeferredLegacy("buchhaltung");
+type SparzaehlerAnalyse = {
+  ersparnisBetrag: number;
+  anzahlAutoBelege: number;
+  anzahlGesamt: number;
+  prozentAutomatisch: number;
+  stundensatz: number;
+  schwelle: number;
+  chartData: { name: string; ist: number; istKumuliert: number; vorjahr: null }[];
+  topBelege: Pick<typeof beleg.$inferSelect, "id" | "brutto" | "belegdatum" | "ocrConfidence" | "kategorieId">[];
+  insights: ReturnType<typeof generateInsight>;
+};
 
+export async function getSparzaehlerAnalysisAction(von: string, bis: string): Promise<SparzaehlerAnalyse> {
   void von;
   void bis;
-  const { ne } = await import('drizzle-orm');
-  // removed einkauf import
-  
-  const rawBelege = await db.select({
-    id: beleg.id,
-    brutto: beleg.brutto,
-    belegdatum: beleg.belegdatum,
-    ocrConfidence: beleg.ocrConfidence,
-    kategorieId: beleg.kategorieId
-  }).from(beleg).where(ne(beleg.status, 'storniert')); // Ersparnis is YTD by definition in our app!
-  
-  const year = new Date().getFullYear();
-  const belegeThisYear = rawBelege.filter(b => b.belegdatum && b.belegdatum.startsWith(year.toString()));
-  
-  // Settings from DB
-  const { steuerprofil } = await import('@/db/schema_buchhaltung');
-  await db.select().from(steuerprofil).limit(1);
-  const schwelle = 85;
-  const stundensatz = 120;
-  
-  const autoBelege = belegeThisYear.filter(b => b.ocrConfidence && Number(b.ocrConfidence) >= schwelle);
-  const anzahlAutoBelege = autoBelege.length;
-  const anzahlGesamt = belegeThisYear.length;
-  const prozentAutomatisch = anzahlGesamt > 0 ? Math.round((anzahlAutoBelege / anzahlGesamt) * 100) : 0;
-  
-  // 4 Min pro Beleg
-  const ersparnisBetrag = Math.round(anzahlAutoBelege * 4 * (stundensatz / 60));
-
-  // ChartData (kumulativ über Monate im Jahr)
-  const chartData = Array.from({length: 12}).map((_, i) => {
-    const month = String(i + 1).padStart(2, '0');
-    const autoInMonth = autoBelege.filter(b => b.belegdatum && b.belegdatum.startsWith(`${year}-${month}`)).length;
-    return {
-      name: `Monat \${i+1}`,
-      ist: Math.round(autoInMonth * 4 * (stundensatz / 60)),
-      // F0-W2b (ANA-01): keine Vorjahresquelle vorhanden — kein erfundener Faktor.
-      vorjahr: null
-    };
-  });
-
-  // Calculate cumulative for chartist
-  let kumuliert = 0;
-  const chartDataKumuliert = chartData.map(d => {
-    kumuliert += d.ist;
-    return { ...d, istKumuliert: kumuliert };
-  });
-
-  const insights = generateInsight('sparzaehler', {
-    prozentAutomatisch,
-    ersparnisBetrag
-  });
-
-  return {
-    ersparnisBetrag,
-    anzahlAutoBelege,
-    anzahlGesamt,
-    prozentAutomatisch,
-    stundensatz,
-    schwelle,
-    chartData: chartDataKumuliert,
-    topBelege: autoBelege.sort((a, b) => (Number(b.ocrConfidence) || 0) - (Number(a.ocrConfidence) || 0)).slice(0, 5),
-    insights
-  };
+  return rejectDeferredLegacy("buchhaltung");
 }
 
 export async function getAusgabenKategorien() {
@@ -393,6 +351,7 @@ export async function getAusgabenKategorien() {
 
   const { sql, eq } = await import('drizzle-orm');
   const { beleg, kategorie } = await import('@/db/schema_buchhaltung');
+  const { and, isNull } = await import('drizzle-orm');
 
   const sums = await db.select({
     catName: kategorie.name,
@@ -400,7 +359,7 @@ export async function getAusgabenKategorien() {
     anzahl: sql<number>`count(${beleg.id})`
   })
   .from(beleg)
-  .leftJoin(kategorie, eq(beleg.kategorieId, kategorie.id))
+  .leftJoin(kategorie, and(eq(beleg.kategorieId, kategorie.id), isNull(kategorie.tenantId)))
   .groupBy(kategorie.name);
 
   const getSum = (catMatch: string) => {

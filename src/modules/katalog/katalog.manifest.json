@@ -4,11 +4,13 @@
   "owner": "Verkaufsstufe 1 Leistungskatalog",
   "publicExports": [
     "@/modules/katalog/public#CatalogService",
+    "@/modules/katalog/public#AUFTRAGS_KATALOG_STEUERSAETZE",
     "@/modules/katalog/public#CatalogServiceChoice",
     "@/modules/katalog/public#SaveCatalogServiceInput",
     "@/modules/katalog/server-public#CatalogCommandContext",
     "@/modules/katalog/server-public#listCatalogServices",
-    "@/modules/katalog/server-public#saveCatalogService"
+    "@/modules/katalog/server-public#saveCatalogService",
+    "@/modules/katalog/public#AuftragsKatalogSteuersatz"
   ],
   "capabilities": ["catalog:read", "catalog:manage"],
   "migrations": ["20261025182920_s1_p1_datenfundament.sql", "20261030001500_catalog_service_audit_event.sql"],
