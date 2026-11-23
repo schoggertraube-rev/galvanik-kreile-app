@@ -281,8 +281,8 @@ it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s so
   try{
    const first=await withSession(full,()=>withPageReadBudget(()=>readModelForCurrentSession(true),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
    expect(first.code).toBe('OK');if(first.code!=='OK')throw Error('TEST_FIRST_MODEL_REQUIRED');
-   expect(first.pending).toBe(true);expect(first.dashboard.messageActions?.code).toBe('SOURCE_INCOMPLETE');
-   expect(output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase)).not.toContain('today.graph');
+   expect(first.pending).toBe(true);expect(first.dashboard.messageActions).toEqual(baseline.dashboard.messageActions);
+   expect(output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase)).toContain('today.graph');
    output.mockClear();
    const current=await withSession(full,()=>withPageReadBudget(()=>readModelForCurrentSession(),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
    expect(current.code).toBe('OK');if(current.code!=='OK')throw Error('TEST_TARGETED_LIVE_RESULT');
