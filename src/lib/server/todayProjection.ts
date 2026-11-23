@@ -1,8 +1,8 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {assertPageReadBudgetActive,configurePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
+import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
-import type {TodayReadSettings} from '@/modules/fundament/public';
+import {boundedTodayRefreshBudgetMs,type TodayReadSettings} from '@/modules/fundament/public';
 import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
@@ -19,7 +19,7 @@ import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
 import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS,compareTodayModelShadow} from './todayProjectionSchedule';
+import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS} from './todayProjectionSchedule';
 type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
@@ -56,10 +56,10 @@ function keepLeaseAlive(tenantId:string,lease:Lease,seconds:number){
     RETURNING refresh_lease_until::text AS token`);
    if(rows.length!==1)throw Error('TODAY_PROJECTOR_LEASE_LOST');
    lease.token=rows[0].token;
-  })).catch(()=>{owned=false;console.error('[TODAY_PROJECTOR_LEASE_LOST]',{code:'SOURCE_INCOMPLETE'});}).finally(()=>{if(!stopped&&owned)schedule();});
+  })).catch(()=>{owned=false;expirePageReadBudget();console.error('[TODAY_PROJECTOR_LEASE_LOST]',{code:'SOURCE_INCOMPLETE'});}).finally(()=>{if(!stopped&&owned)schedule();});
  },Math.max(1,Math.floor(seconds*1000/3)));};
  schedule();
- return {isOwned:()=>owned,stop:async()=>{stopped=true;if(timer)clearTimeout(timer);await running;}};
+ return {assertOwned:()=>{if(!owned)throw Error('TODAY_PROJECTOR_LEASE_LOST');},stop:async()=>{stopped=true;if(timer)clearTimeout(timer);await running;}};
 }
 
 /** Canonical area/role policy over the existing active user/rights source.
@@ -189,7 +189,8 @@ async function lockProjectionSources(tx:PrivilegedTenantTransaction,tenantId:str
    (VALUES ${sql.join(keys.map(key=>sql`(${key.kind}::text,${key.sourceId}::text)`),sql`, `)})
   ORDER BY source.kind,source.source_id FOR UPDATE`);
 }
-async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[],results:ReadonlyMap<string,TodayProjectionResult>,buildMs:number,canMarkFailure=true):Promise<{built:number;stale:number}>{
+async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[],results:ReadonlyMap<string,TodayProjectionResult>,buildMs:number,assertOwned:()=>void,canMarkFailure=true):Promise<{built:number;stale:number}>{
+ assertOwned();
  const values=rows.map(row=>{
   let result=results.get(todaySourceKey(row))??{code:'SOURCE_INCOMPLETE' as const,errorCode:'TODAY_PROJECTOR_SOURCE_MISSING'};
   let payload:string|null=null;
@@ -225,22 +226,25 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
   }));
   return {built:saved.length,stale:rows.length-saved.length};
  }catch{
+  assertOwned();
   // A failed group rolls back natively before it is split. Normal operation is
   // one set-based UPDATE per <=15 sources, never one transaction per row.
-  if(rows.length>1){const middle=Math.ceil(rows.length/2),a=await publishGroup(tenantId,lease,rows.slice(0,middle),results,buildMs),b=await publishGroup(tenantId,lease,rows.slice(middle),results,buildMs);return {built:a.built+b.built,stale:a.stale+b.stale};}
-  if(canMarkFailure)return publishGroup(tenantId,lease,rows,new Map([[todaySourceKey(rows[0]),{code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_ROW_FAILED'}]]),buildMs,false);
+  if(rows.length>1){const middle=Math.ceil(rows.length/2),a=await publishGroup(tenantId,lease,rows.slice(0,middle),results,buildMs,assertOwned),b=await publishGroup(tenantId,lease,rows.slice(middle),results,buildMs,assertOwned);return {built:a.built+b.built,stale:a.stale+b.stale};}
+  if(canMarkFailure)return publishGroup(tenantId,lease,rows,new Map([[todaySourceKey(rows[0]),{code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_ROW_FAILED'}]]),buildMs,assertOwned,false);
   console.error('[TODAY_PROJECTOR_ROW_FAILED]',{code:'SOURCE_INCOMPLETE'});return {built:0,stale:1};
  }
 }
-async function projectGroup(auth:ProjectorAuthorization,lease:Lease,rows:readonly Snapshot[],ports:TodayProjectionPorts):Promise<{built:number;stale:number}>{
+async function projectGroup(auth:ProjectorAuthorization,lease:Lease,rows:readonly Snapshot[],ports:TodayProjectionPorts,assertOwned:()=>void):Promise<{built:number;stale:number}>{
+ assertOwned();
  const started=performance.now();
  let results:ReadonlyMap<string,TodayProjectionResult>;
  try{results=await ports.readSources(auth,rows);}
  catch{
-  if(rows.length>1){const middle=Math.ceil(rows.length/2),a=await projectGroup(auth,lease,rows.slice(0,middle),ports),b=await projectGroup(auth,lease,rows.slice(middle),ports);return {built:a.built+b.built,stale:a.stale+b.stale};}
+  assertOwned();
+  if(rows.length>1){const middle=Math.ceil(rows.length/2),a=await projectGroup(auth,lease,rows.slice(0,middle),ports,assertOwned),b=await projectGroup(auth,lease,rows.slice(middle),ports,assertOwned);return {built:a.built+b.built,stale:a.stale+b.stale};}
   results=new Map([[todaySourceKey(rows[0]),{code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_SOURCE_FAILED'}]]);
  }
- return publishGroup(auth.tenantId,lease,rows,results,Math.round(performance.now()-started));
+ return publishGroup(auth.tenantId,lease,rows,results,Math.round(performance.now()-started),assertOwned);
 }
 
 async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean){
@@ -281,9 +285,10 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit));
   let built=0,stale=0;
   for(let offset=0;offset<rows.length;offset+=15){
-   if(!heartbeat.isOwned()){stale+=rows.length-offset;break;}
-   const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports);built+=result.built;stale+=result.stale;
+   heartbeat.assertOwned();
+   const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports,heartbeat.assertOwned);heartbeat.assertOwned();built+=result.built;stale+=result.stale;
   }
+  heartbeat.assertOwned();
   if(rebuild){
    const remaining=await withLeaseWrite(lease,()=>pending(tenantId,lease,true,1));
    if(remaining.length)stale+=remaining.length;
@@ -298,23 +303,21 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
  finally{await heartbeat.stop();await outsidePageReadBudget(()=>withPageReadBudget(()=>release(tenantId,lease),2000));}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
-export const refreshTodayModel=async(tenantId:string,ports:TodayProjectionPorts=productivePorts(),observation?:{shadow:{today:string;live:Record<string,number|null>};requestedMode?:'refresh'|'rebuild'})=>{
- if(observation){
-  // Keep the settings reader in this one approved composition root. Merely
-  // comparing a shadow is not a command refresh and never claims its lease.
-  const settings=await ports.readSettings({tenantId});
-  const rebuild=await compareTodayModelShadow({tenantId},observation.shadow.today,observation.shadow.live,settings.todayShadowIntervalMs);
-  if(!rebuild&&!observation.requestedMode)return {code:'OK' as const,built:0,stale:0};
-  return withPageReadPhase('today.refresh',()=>runProjection(tenantId,{...ports,readSettings:async()=>settings},rebuild||observation.requestedMode==='rebuild'),projectionCounts);
- }
- return withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,false),projectionCounts);
+export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
+ const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false),projectionCounts);
+ if(!options?.bounded)return run();
+ return withPageReadBudget(async()=>{
+  const settings=await readTodayReadSettings({tenantId,fresh:true});
+  configurePageReadBudget(boundedTodayRefreshBudgetMs(settings.todayRefreshLeaseSeconds));
+  return run({...ports,readSettings:async()=>settings});
+ },5000);
 };
 export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
  const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});
-  configurePageReadBudget(Math.min(settings.todayRefreshLeaseSeconds*1000,240_000));
+  configurePageReadBudget(boundedTodayRefreshBudgetMs(settings.todayRefreshLeaseSeconds));
   return run();
  },5000);
 };

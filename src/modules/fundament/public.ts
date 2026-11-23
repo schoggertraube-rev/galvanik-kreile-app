@@ -71,6 +71,9 @@ export type {PackageSwitchId,PackageSwitchValues} from "./featureCatalog";
 export type PageReadSettings={queryTimeoutMs:number;invoiceMailBatchLimit:number};
 /** E-B: same company source, kept separate from the existing two-field editor. */
 export type TodayReadSettings={todayReadSource:'modell'|'live';todayRefreshBatchLimit:number;todayRefreshLeaseSeconds:number;todayShadowIntervalMs:number;todayStalePollMs:number;navPrefetchMaxAgeSeconds:number};
+/** Vercel-Funktionslaufzeit 300 s minus Puffer. */
+export const MAX_TODAY_REFRESH_MS=240_000;
+export const boundedTodayRefreshBudgetMs=(seconds:number)=>Math.min(seconds*1000,MAX_TODAY_REFRESH_MS);
 export function todayReadSettingsFromCompany(value:unknown,defaults:Readonly<TodayReadSettings>):TodayReadSettings|null{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
  const source=value as Record<string,unknown>;
@@ -79,6 +82,7 @@ export function todayReadSettingsFromCompany(value:unknown,defaults:Readonly<Tod
  if(present.every(value=>value===false))return {todayReadSource:defaults.todayReadSource,todayRefreshBatchLimit:defaults.todayRefreshBatchLimit,todayRefreshLeaseSeconds:defaults.todayRefreshLeaseSeconds,todayShadowIntervalMs:defaults.todayShadowIntervalMs,todayStalePollMs:defaults.todayStalePollMs,navPrefetchMaxAgeSeconds:defaults.navPrefetchMaxAgeSeconds};
  if(!present.every(value=>value===true)||!['modell','live'].includes(String(source.todayReadSource)))return null;
  for(const key of fields.slice(1))if(!Number.isSafeInteger(source[key])||Number(source[key])<1||Number(source[key])>2147483647)return null;
+ if(Number(source.todayRefreshLeaseSeconds)*1000>MAX_TODAY_REFRESH_MS)return null;
  return {todayReadSource:source.todayReadSource as 'modell'|'live',todayRefreshBatchLimit:Number(source.todayRefreshBatchLimit),todayRefreshLeaseSeconds:Number(source.todayRefreshLeaseSeconds),todayShadowIntervalMs:Number(source.todayShadowIntervalMs),todayStalePollMs:Number(source.todayStalePollMs),navPrefetchMaxAgeSeconds:Number(source.navPrefetchMaxAgeSeconds)};
 }
 export function parsePageReadSettings(value:unknown):PageReadSettings|null{

@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-23",
+    "pr": 268,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Heute öffnet sich schnell und zeigt Änderungen an Aufträgen sofort."
+    ]
+  },
+  {
+    "datum": "2026-11-23",
     "pr": 267,
     "seite": "heute",
     "ziel": "/",

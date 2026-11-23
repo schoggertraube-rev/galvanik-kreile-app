@@ -97,8 +97,7 @@ export async function readTodayHomeRevision(){
   if(settings.today.todayReadSource==='live')return null;
   const day=readTodayCalendar(new Date()).today,model=await readTodayModelInTransaction(tx,auth,day,true);
   if(model.code!=='OK')return null;
-  const pending=model.needsRebuild||model.rows.some(row=>!row.fresh);
-  return {revision:todayModelRevision(auth,model.rows,day),pending,revisions:todayModelRevisionMap(auth,model.rows,day)};
+  return {revision:todayModelRevision(auth,model.rows,day),revisions:todayModelRevisionMap(auth,model.rows,day)};
  });
 }
 
@@ -718,16 +717,16 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
     const [{ readLiveOrderCard }, orders] = await Promise.all([
       import("@/lib/server/orderCardRead"),
-      getOperationalOrders(authorization.data),
+      withPageReadPhase('orders.list.source',()=>getOperationalOrders(authorization.data)),
     ]);
-    const cardReads = await Promise.all(orders.map((order) => readLiveOrderCard(authorization.data, { orderId: order.id })));
-    const finished=orders.some(order=>order.station==='fertig')?await (async()=>{
+    const cardReads = await withPageReadPhase('orders.list.cards',()=>Promise.all(orders.map((order) => readLiveOrderCard(authorization.data, { orderId: order.id }))));
+    const finished=orders.some(order=>order.station==='fertig')?await withPageReadPhase('orders.list.dispatch',async()=>{
      const [{readFinishedDispatchQueue},{readShippingSettings}]=await Promise.all([import('@/modules/orders/server-public'),import('@/modules/fundament/server-public')]);
      const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
      if(settings.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const};
      const [{readCustomerProfile},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/lib/server/privilegedDb')]);
      return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{readHasMail:id=>withPrivilegedTenantTransaction(authorization.data,async tx=>{const customer=await readCustomerProfile(tx,authorization.data.tenantId,id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();})});
-    })():{code:'OK' as const,rows:[]};
+    }):{code:'OK' as const,rows:[]};
     const projections=new Map(finished.code==='OK'?finished.rows.map((row,rank)=>[row.orderId,{state:row.unavailable?'unavailable' as const:'available' as const,rank,...row}]):[]);
     const data: OrderResponse[] = orders.map((order, index) => {
       const cardRead = cardReads[index];
@@ -743,7 +742,7 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
     });
     return { ok: true, data,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope() };
   } catch (error: unknown) {
-    console.error("[ORDER_READ_ERROR]", error);
+    console.error("[ORDER_READ_ERROR]", {name:error instanceof Error?error.name:'UnknownError',code:'ORDER_READ_FAILED'});
     return {
       ok: false,
       error: "DB_ERROR",

@@ -228,6 +228,8 @@ it('actual GET returns a command-stale model promptly while the scheduled projec
  expect(response.status).toBe(200);expect(response.headers.get('Cache-Control')).toBe('private, no-store');
  const result=await response.json();expect(result.code).toBe('OK');
  expect(result.model.modelRead).toMatchObject({source:'modell',pending:true});
+ expect(result.model.kind).not.toBe('partial');
+ expect(result.model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)).toMatchObject({version:order.version+1});
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
  const settled=await withSession(full,()=>getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet')),true);
  expect((await settled.json()).model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)?.version).toBe(order.version+1);
@@ -279,8 +281,8 @@ it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s so
   try{
    const first=await withSession(full,()=>withPageReadBudget(()=>readModelForCurrentSession(true),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
    expect(first.code).toBe('OK');if(first.code!=='OK')throw Error('TEST_FIRST_MODEL_REQUIRED');
-   expect(first.pending).toBe(true);expect(first.dashboard.messageActions?.code).toBe('SOURCE_INCOMPLETE');
-   expect(output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase)).not.toContain('today.graph');
+   expect(first.pending).toBe(true);expect(first.dashboard.messageActions).toEqual(baseline.dashboard.messageActions);
+   expect(output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase)).toContain('today.graph');
    output.mockClear();
    const current=await withSession(full,()=>withPageReadBudget(()=>readModelForCurrentSession(),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
    expect(current.code).toBe('OK');if(current.code!=='OK')throw Error('TEST_TARGETED_LIVE_RESULT');
@@ -311,6 +313,8 @@ it('conditional real GET skips unchanged composition and reloads after an actual
   expect((await changeOrderPromisedDueDateAction(command)).code).toBe('OK');
   const changed=await getModelRoute(request());expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(etag);
   const current=await changed.json();expect(current.model.modelRead.pending).toBe(true);
+  const unchangedPending=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet',{headers:{'If-None-Match':changed.headers.get('etag')!,'X-Kreile-Login-Scope':value.model.cacheLoginScope}}));
+  expect(unchangedPending.status).toBe(304);expect(await unchangedPending.text()).toBe('');
   expect((await refreshTodayModel(tenant)).code).toBe('OK');
   const settled=await getModelRoute(request());expect(settled.status).toBe(200);
   expect((await settled.json()).model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)).toMatchObject({version:order.version+1});

@@ -3,7 +3,7 @@
 import {afterAll,expect,it,vi} from 'vitest';
 import postgres from 'postgres';
 import {createServer} from 'node:http';
-import {PageReadTimeout,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort,observeNativePageReadQuery,pageReadQueryObservation,withPageReadPhase,logPageReadQueryObservation} from '@/db/readBudget';
+import {PageReadTimeout,expirePageReadBudget,withPageReadBudget,withPageReadQueryLimits,withPageReadSourcesReady,withPageReadSettingsSource,configurePageReadBudget,withAuthorizationReadBudget,pageReadFetchPort,observeNativePageReadQuery,pageReadQueryObservation,withPageReadPhase,logPageReadQueryObservation} from '@/db/readBudget';
 
 const url=process.env.DATABASE_URL;
 const testPort=process.env.GITHUB_ACTIONS==='true'?'54322':'54342';
@@ -18,6 +18,17 @@ const native=postgres(url,{prepare:false,max:1,debug:(_connection,text,parameter
 }});
 const client=withPageReadQueryLimits(native);
 afterAll(()=>native.end({timeout:5}));
+
+it('cancels a running native read when its bounded projector loses the lease',async()=>{
+ const started=Date.now();
+ await expect(withPageReadBudget(async()=>{
+  const timer=setTimeout(expirePageReadBudget,40);
+  try{await client.begin(async tx=>{await tx`SELECT pg_sleep(1)`;});}
+  finally{clearTimeout(timer);}
+ },2000)).rejects.toBeInstanceOf(PageReadTimeout);
+ expect(Date.now()-started).toBeLessThan(1000);
+ expect(await client`SELECT 1 AS ok`).toEqual([{ok:1}]);
+});
 
 it('counts executed native SQL including SET and queued BEGIN without mixing two request scopes',async()=>{
  await native`SELECT 1`;const wire:string[]=[];inspectWire=text=>wire.push(text);

@@ -2,7 +2,7 @@ import {cache} from 'react';
 import {DEFAULT_PAGE_READ_SETTINGS,withPageReadSettingsSource} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany} from '../public';
+import {MAX_TODAY_REFRESH_MS,parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany} from '../public';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
@@ -103,6 +103,8 @@ export async function readModelPageSettingsInTransaction(tx:PrivilegedTenantTran
 function todaySettingsFromRows(rows:readonly {today_read_source:unknown}[]){
  if(!rows.length)return {todayReadSource:DEFAULT_PAGE_READ_SETTINGS.todayReadSource,todayRefreshBatchLimit:DEFAULT_PAGE_READ_SETTINGS.todayRefreshBatchLimit,todayRefreshLeaseSeconds:DEFAULT_PAGE_READ_SETTINGS.todayRefreshLeaseSeconds,todayShadowIntervalMs:DEFAULT_PAGE_READ_SETTINGS.todayShadowIntervalMs,todayStalePollMs:DEFAULT_PAGE_READ_SETTINGS.todayStalePollMs,navPrefetchMaxAgeSeconds:DEFAULT_PAGE_READ_SETTINGS.navPrefetchMaxAgeSeconds};
  if(rows.length!==1)throw Error('TODAY_READ_SETTINGS_SOURCE_INCOMPLETE');
+ const source=rows[0].today_read_source;
+ if(source&&typeof source==='object'&&!Array.isArray(source)&&Number((source as Record<string,unknown>).todayRefreshLeaseSeconds)*1000>MAX_TODAY_REFRESH_MS)throw Error(PAGE_READ_COPY.refreshLeaseTooLong(MAX_TODAY_REFRESH_MS/1000));
  const settings=todayReadSettingsFromCompany(rows[0].today_read_source,DEFAULT_PAGE_READ_SETTINGS);
  if(!settings)throw Error('TODAY_READ_SETTINGS_SOURCE_INVALID');
  return settings;

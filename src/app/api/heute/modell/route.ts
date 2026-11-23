@@ -8,8 +8,8 @@ export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const responseHeaders={'Cache-Control':'private, no-store','Vary':'Cookie'};
 
-/** Ordinary authorized home read after the first image. No Action queue, actor
- * claim or new write route; only the existing derived single-flight worker. */
+/** Ordinary authorized home read after the first image. Model rebuilding is
+ * owned by the bounded scheduled route, never by this read request. */
 export async function GET(request:Request){
  const query=new URL(request.url).searchParams;
  const part=query.get('bereich');
@@ -21,7 +21,7 @@ export async function GET(request:Request){
   const conditional=request.headers.get('If-None-Match');
   if(conditional&&/^"[a-f0-9]{64}"$/.test(conditional)&&request.headers.get('X-Kreile-Login-Scope')===await readCacheLoginScope()){
    const current=await readTodayHomeRevision();
-   if(current&&!current.pending&&conditional==='"'+(part?current.revisions[part as keyof typeof current.revisions]:current.revision)+'"')return new Response(null,{status:304,headers:{...responseHeaders,ETag:conditional}});
+   if(current&&conditional==='"'+(part?current.revisions[part as keyof typeof current.revisions]:current.revision)+'"')return new Response(null,{status:304,headers:{...responseHeaders,ETag:conditional}});
   }
   if(part){
    const before=await readTodayHomeRevision();
@@ -36,11 +36,9 @@ export async function GET(request:Request){
   }
   const before=await loadOfficeHome(auth.data);
   if(!('dashboard'in before))return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});
-  if(before.modelRead?.source==='live'||!before.modelRead?.pending)return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead?.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
-  // loadOfficeHome has already scheduled the coalesced projector. A model
-  // refresh can take longer than an HTTP request and must never hold this GET
-  // (or its database slot) open until the platform's runtime limit.
-  return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
+  // A pending model never starts work from this GET. The bounded scheduled
+  // route refreshes it independently of this response.
+  return Response.json({code:'OK',model:before},{headers:{...responseHeaders,...(before.modelRead?.revision?{ETag:'"'+before.modelRead.revision+'"'}:{})}});
  },5_000);}catch{
   console.error('[TODAY_MODEL_READ_FAILED]',{code:'SOURCE_INCOMPLETE'});
   return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});
