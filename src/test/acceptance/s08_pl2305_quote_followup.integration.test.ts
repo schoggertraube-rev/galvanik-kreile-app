@@ -11,6 +11,10 @@ import {readSettingsAction,saveCompanySettingsAction} from '@/app/actions/settin
 import {db} from '@/db';
 import {DEFAULT_PAGE_READ_SETTINGS,logPageReadPhase,PageReadTimeout,pageReadFetchPort,withPageReadBudget,withPageReadQueryLimits,withAuthorizationReadBudget} from '@/db/readBudget';
 import {resolveAuthorization} from '@/lib/server/authorization';
+import {readTodayOrderCards,readLiveOrderCardSource} from '@/lib/server/orderCardRead';
+import {readInvoiceShippingConsequences} from '@/lib/server/commands/immutableInvoiceCommand';
+import {readInvoiceVat} from '@/modules/accounting/public';
+import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 
 import {readMicrosoftGraphSentDocumentEvidence,readMicrosoftGraphSentMailByRequest,readMicrosoftGraphSentMailReference} from '@/lib/server/microsoftGraph';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
@@ -52,6 +56,35 @@ it('A09 request-phase diagnostics retain PG identifiers but never error bodies, 
 
 it('CB23:05 stored damaged goods keep one physical receipt and the catalog exit on fresh retry',async()=>{
  await runQuoteQuantityCase({name:'CB23:05 blocked goods',quantity:10,received:10,total:4000,expected:4000,hours:'0.5000',operational:true,fixed:0,blocked:true});
+});
+
+it('R36 reports one known incomplete quote source for two real card readers in one request',async()=>{
+ await runQuoteQuantityCase({name:'TEST R36 known quote source',quantity:10,received:10,total:4000,expected:4000,hours:'0.5000',operational:true,fixed:0,inspect:async({orderId,quoteId})=>{
+  const original=await sql`SELECT mengen FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND auftrag_id=${orderId} AND kv_id=${quoteId}::uuid`;
+  expect(original).toHaveLength(1);
+  try{
+   // Isolated TEST source corruption: the original qualified receipt is restored below.
+   await sql`UPDATE public.goods_receipt SET mengen='[]'::jsonb WHERE tenant_id=${KREILE_TENANT_SLUG} AND auftrag_id=${orderId} AND kv_id=${quoteId}::uuid`;
+   const warning=vi.spyOn(console,'warn').mockImplementation(()=>{}),error=vi.spyOn(console,'error').mockImplementation(()=>{});
+   try{
+    await withSession(full,()=>withPageReadBudget(async()=>{
+     const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_R36_AUTH_REQUIRED');
+     expect((await readTodayOrderCards(auth.data,[orderId])).get(orderId)).toMatchObject({code:'OK'});
+     expect(await readLiveOrderCardSource(auth.data,{orderId})).toMatchObject({code:'OK'});
+     expect(await readInvoiceShippingConsequences(auth.data,{orderId,expectedVersion:-1},readInvoiceVat,readShippingSettingsInTransaction)).toMatchObject({code:'SOURCE_INCOMPLETE'});
+    },10000));
+    expect(warning.mock.calls.filter(call=>call[0]==='[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]')).toEqual([['[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',{orderId,code:'ORDER_CARD_QUOTE_PRICE_INVALID'}]]);
+    expect(error.mock.calls.filter(call=>call[0]==='[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]')).toEqual([]);
+    warning.mockClear();error.mockClear();
+    await withSession(full,()=>withPageReadBudget(async()=>{
+     const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_R36_AUTH_REQUIRED');
+     expect(await readInvoiceShippingConsequences(auth.data,{orderId,expectedVersion:-1},readInvoiceVat,readShippingSettingsInTransaction)).toMatchObject({code:'SOURCE_INCOMPLETE'});
+    },10000));
+    expect(warning).toHaveBeenCalledWith('[INVOICE_SHIPPING_PROPOSAL_FAILED]',{orderId,code:'SHIPPING_PROPOSAL_ORDER_SOURCE_INVALID'});
+    expect(error.mock.calls.filter(call=>call[0]==='[INVOICE_SHIPPING_PROPOSAL_FAILED]')).toEqual([]);
+   }finally{warning.mockRestore();error.mockRestore();}
+  }finally{await sql`UPDATE public.goods_receipt SET mengen=${sql.json(original[0].mengen)}::jsonb WHERE tenant_id=${KREILE_TENANT_SLUG} AND auftrag_id=${orderId} AND kv_id=${quoteId}::uuid`;}
+ }});
 });
 
 it('CB23:05 actual commercial-quote SQL failure preserves the operational card without money',async()=>{

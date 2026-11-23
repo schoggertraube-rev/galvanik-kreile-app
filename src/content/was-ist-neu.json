@@ -1,5 +1,14 @@
 [
   {
+    "datum": "2026-11-23",
+    "pr": 267,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Du kannst Heute weiter öffnen, während der Tagesbestand neu aufgebaut wird."
+    ]
+  },
+  {
     "datum": "2026-11-22",
     "pr": 265,
     "seite": "einstellungen",
