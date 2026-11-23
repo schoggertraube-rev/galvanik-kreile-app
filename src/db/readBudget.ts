@@ -54,7 +54,7 @@ export const DEFAULT_PAGE_READ_SETTINGS={
 } as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
-type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;queries:PageReadQueryObservation;sourceWarnings?:Set<string>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
+type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;aborted:{value:boolean};queries:PageReadQueryObservation;sourceWarnings?:Set<string>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
 /** The one request scope joins independent readers without suppressing unknown faults. */
@@ -65,7 +65,16 @@ export function warnOncePerPageRead(key:string,report:()=>void):void{
 }
 export function assertPageReadBudgetActive():void{
  const budget=budgets.getStore();
- if(budget&&Date.now()>=budget.deadline)throw new PageReadTimeout();
+ if(budget&&(budget.aborted.value||Date.now()>=budget.deadline))throw new PageReadTimeout();
+}
+/** A lost projector lease cancels outstanding native reads in its own bounded
+ * scope immediately. No request or unrelated transaction is affected. */
+export function expirePageReadBudget():void{
+ const budget=budgets.getStore();
+ if(!budget)return;
+ budget.aborted.value=true;
+ budget.deadline=Math.min(budget.deadline,Date.now());
+ for(const cancel of [...budget.cancel])cancel();
 }
 /** PL22.11.01:55 E0: sending is a command, never a page read. Only its
  * existing transport leaves this scope; the caller's deadline is restored. */
@@ -91,7 +100,7 @@ export function withPageReadSettingsSource<T>(work:()=>Promise<T>):Promise<T>{
 /** Separate short read scope; returning to a page restores its own deadline. */
 export function withAuthorizationReadBudget<T>(work:()=>Promise<T>):Promise<T>{
  const startedAt=Date.now(),parent=budgets.getStore();
- return budgets.run({startedAt,deadline:Math.min(startedAt+AUTHORIZATION_READ_TIMEOUT_MS,parent?.deadline??Infinity),cancel:new Set(),queries:parent?.queries??requestQueryObservation(),kind:'authorization'},async()=>await work());
+ return budgets.run({startedAt,deadline:Math.min(startedAt+AUTHORIZATION_READ_TIMEOUT_MS,parent?.deadline??Infinity),cancel:new Set(),aborted:{value:false},queries:parent?.queries??requestQueryObservation(),kind:'authorization'},async()=>await work());
 }
 
 export class PageReadTimeout extends Error {
@@ -104,7 +113,7 @@ export function withPageReadBudget<T>(work:()=>Promise<T>,timeoutMs:number):Prom
   const startedAt=Date.now();
   // Drizzle queries are lazy thenables. Assimilate them inside the scope, not
   // later in the caller's await, or their SQL would miss the request budget.
-  return budgets.run({startedAt,deadline:startedAt+timeoutMs,cancel:new Set(),queries:requestQueryObservation(),sourceWarnings:requestSourceWarnings()},async()=>await work());
+  return budgets.run({startedAt,deadline:startedAt+timeoutMs,cancel:new Set(),aborted:{value:false},queries:requestQueryObservation(),sourceWarnings:requestSourceWarnings()},async()=>await work());
 }
 
 /** The trusted company setting changes only this read, never another request. */
@@ -118,7 +127,7 @@ function withinBudget<T>(work:()=>PromiseLike<T>,cancel?:()=>unknown):Promise<T>
   const budget=budgets.getStore();
   if(!budget)return Promise.resolve(work());
   const remaining=budget.deadline-Date.now();
-  if(remaining<=0){
+  if(budget.aborted.value||remaining<=0){
     // A lazy postgres-js query has not entered the pool yet. Do not cancel
     // and then start it: the driver would reserve a connection for a query
     // it refuses to execute. Reject before touching that pending query.
@@ -213,7 +222,7 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
         const budget=budgets.getStore();
         const acquiringPhase=queryPhases.getStore();
         if(!budget)return Reflect.apply(value,target,args);
-        if(Date.now()>=budget.deadline)return Promise.reject(new PageReadTimeout());
+        if(budget.aborted.value||Date.now()>=budget.deadline)return Promise.reject(new PageReadTimeout());
         return new Promise((resolve,reject)=>{
           // Bound pool acquisition, but once acquired let the native driver
           // finish cancellation/rollback before releasing this transaction.
@@ -236,7 +245,7 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
               logPageReadPhase('db.acquire',acquiringAt,{...(port===undefined?{driver_port_unknown:1}:{driver_port:port}),...(pooler===undefined?{driver_host_unknown:1}:{driver_pooler:pooler?1:0})});
             }
             const remaining=budget.deadline-Date.now();
-            if(remaining<=0)throw new PageReadTimeout();
+            if(budget.aborted.value||remaining<=0)throw new PageReadTimeout();
             // PostgreSQL is the second cancellation boundary: even if the
             // separate native cancel connection fails, this read cannot run
             // indefinitely. Transaction-local state never leaks into the pool.
@@ -251,7 +260,7 @@ export function withPageReadQueryLimits<T extends object>(client:T):T{
               finally{addReadTiming(budget,'db_ms',Math.max(0,Date.now()-at),acquiringPhase);}
             }
             const prepareStatement=async()=>{
-              const left=budget.deadline-Date.now();if(left<=0)throw new PageReadTimeout();
+              const left=budget.deadline-Date.now();if(budget.aborted.value||left<=0)throw new PageReadTimeout();
               const at=Date.now(),phase=queryPhases.getStore();
               try{return await withinBudget(()=>native.unsafe("SELECT set_config('statement_timeout',$1,true)",[String(left)]));}
               finally{addReadTiming(budget,'db_ms',Math.max(0,Date.now()-at),phase);}
@@ -285,7 +294,7 @@ export function pageReadFetchPort(fetchPort:typeof fetch):typeof fetch{
   if(!budget)return fetchPort(input,init);
   const read=()=>{
   const remaining=budget.deadline-Date.now();
-  if(remaining<=0)return Promise.reject(new PageReadTimeout());
+  if(budget.aborted.value||remaining<=0)return Promise.reject(new PageReadTimeout());
   const original=init?.signal??(input instanceof Request?input.signal:undefined);
   const deadline=AbortSignal.timeout(remaining);
   const signal=original?AbortSignal.any([original,deadline]):deadline;

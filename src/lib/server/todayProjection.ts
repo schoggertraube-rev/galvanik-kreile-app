@@ -1,6 +1,6 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
-import {assertPageReadBudgetActive,configurePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
+import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import type {TodayReadSettings} from '@/modules/fundament/public';
 import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
@@ -56,7 +56,7 @@ function keepLeaseAlive(tenantId:string,lease:Lease,seconds:number){
     RETURNING refresh_lease_until::text AS token`);
    if(rows.length!==1)throw Error('TODAY_PROJECTOR_LEASE_LOST');
    lease.token=rows[0].token;
-  })).catch(()=>{owned=false;console.error('[TODAY_PROJECTOR_LEASE_LOST]',{code:'SOURCE_INCOMPLETE'});}).finally(()=>{if(!stopped&&owned)schedule();});
+  })).catch(()=>{owned=false;expirePageReadBudget();console.error('[TODAY_PROJECTOR_LEASE_LOST]',{code:'SOURCE_INCOMPLETE'});}).finally(()=>{if(!stopped&&owned)schedule();});
  },Math.max(1,Math.floor(seconds*1000/3)));};
  schedule();
  return {assertOwned:()=>{if(!owned)throw Error('TODAY_PROJECTOR_LEASE_LOST');},stop:async()=>{stopped=true;if(timer)clearTimeout(timer);await running;}};
