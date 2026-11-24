@@ -182,7 +182,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 - `SURFACE_ASSIGNMENT_COPY.title`: "…" → `work.sign_missing`
 
-## Nur im Bestand (816)
+## Nur im Bestand (817)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -1000,3 +1000,4 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `PAGE_READ_COPY.timeout`: "Abfragezeit in Millisekunden"
 - `PAGE_READ_COPY.mailBatch`: "Rechnungen je Versandtakt"
 - `PAGE_READ_COPY.invalid`: "Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null."
+- `PAGE_READ_COPY.refreshLeaseInvalid`: "Du kannst die Nachlauf-Frist nur zwischen 1 und 240 Sekunden speichern."

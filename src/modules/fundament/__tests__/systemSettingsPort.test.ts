@@ -88,6 +88,22 @@ describe("system settings port", () => {
     expect(execute.mock.calls[1]?.[0].text).toContain("company_settings_updated");
   });
 
+  it("validates the live Today lease limit and persists its audited readback", async () => {
+    const { updateCompanySettings } = await import("../server/systemSettingsPort");
+    const company = {
+      companyName: "Galvanik Kreile", street: "Testweg 1", zip: "12345", city: "Berlin", country: "Deutschland",
+      taxId: "DE123456789", iban: "DE0012345678", bic: "TESTDEFF", bankName: "Testbank", paymentTermDays: 14, logoUrl: "/logo.png",
+    };
+    await expect(updateCompanySettings(context, { ...company, todayRefreshLeaseSeconds: 241 })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(withTransaction).not.toHaveBeenCalled();
+    execute.mockResolvedValueOnce([{ id: `company:${KREILE_TENANT_SLUG}` }])
+      .mockResolvedValueOnce([{ today_refresh_lease_seconds: 45 }])
+      .mockResolvedValueOnce([{ id: "audit" }]);
+    await expect(updateCompanySettings(context, { ...company, todayRefreshLeaseSeconds: 45 })).resolves.toEqual({ code: "OK" });
+    expect(execute.mock.calls[1]?.[0].text).toContain("today_refresh_lease_seconds");
+    expect(JSON.stringify(execute.mock.calls[2]?.[0])).toContain("todayRefreshLeaseSeconds");
+  });
+
   it("reads complete company data for a tenant-bound document and fails closed when it is missing", async () => {
     execute.mockResolvedValueOnce([{
       company_name: "Galvanik Kreile", street: "Testweg 1", zip: "12345", city: "Teststadt",

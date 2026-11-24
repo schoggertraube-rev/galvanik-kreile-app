@@ -13,6 +13,7 @@ export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
   taxId: string; taxNumber?: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
   pageReads?:PageReadSettings;
+  todayRefreshLeaseSeconds?:number;
 };
 export type ProtocolSettings={retentionDays:number|null;slowMs:number;hangMs:number};
 export type CompanySettingsSnapshot = {
@@ -73,6 +74,7 @@ export type PageReadSettings={queryTimeoutMs:number;invoiceMailBatchLimit:number
 export type TodayReadSettings={todayReadSource:'modell'|'live';todayRefreshBatchLimit:number;todayRefreshLeaseSeconds:number;todayShadowIntervalMs:number;todayStalePollMs:number;navPrefetchMaxAgeSeconds:number};
 /** Vercel-Funktionslaufzeit 300 s minus Puffer. */
 export const MAX_TODAY_REFRESH_MS=240_000;
+export const validTodayRefreshLeaseSeconds=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=1&&value*1000<=MAX_TODAY_REFRESH_MS;
 export const boundedTodayRefreshBudgetMs=(seconds:number)=>Math.min(seconds*1000,MAX_TODAY_REFRESH_MS);
 export function todayReadSettingsFromCompany(value:unknown,defaults:Readonly<TodayReadSettings>):TodayReadSettings|null{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;

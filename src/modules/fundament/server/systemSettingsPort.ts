@@ -2,7 +2,7 @@ import {cache} from 'react';
 import {DEFAULT_PAGE_READ_SETTINGS,withPageReadSettingsSource} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {MAX_TODAY_REFRESH_MS,parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany} from '../public';
+import {MAX_TODAY_REFRESH_MS,parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany,validTodayRefreshLeaseSeconds} from '../public';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
@@ -110,7 +110,7 @@ function todaySettingsFromRows(rows:readonly {today_read_source:unknown}[]){
  return settings;
 }
 
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown };
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;today_refresh_lease_seconds?:number|null;page_read_source?:unknown };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 const readFreshCompanyLetterSettingsRow=async(tenantId:string,includeDeliveryNoteIdentity:boolean)=>withPrivilegedTenantTransaction({tenantId},async tx=>{
   const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${includeDeliveryNoteIdentity?sql`,phone,COALESCE(NULLIF(tax_id,''),NULLIF(tax_number,'')) AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
@@ -217,7 +217,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,${pageReadProjection} FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,today_refresh_lease_seconds,${pageReadProjection} FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -245,6 +245,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
           pageReads:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.settings??null,
+          todayRefreshLeaseSeconds:company.today_refresh_lease_seconds??null,
           pageReadsSchemaReady:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.schemaReady===true,
           protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
         } : EMPTY_COMPANY,
@@ -328,8 +329,10 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   const pageReadsRequested=Object.hasOwn(value,'pageReads');
   const pageReads=pageReadsRequested?parsePageReadSettings(value.pageReads):null;
   if(pageReadsRequested&&!pageReads)return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.invalid};
+  const leaseRequested=Object.hasOwn(value,'todayRefreshLeaseSeconds');
+  if(leaseRequested&&!validTodayRefreshLeaseSeconds(value.todayRefreshLeaseSeconds))return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.refreshLeaseInvalid};
   const taxNumberRequested=Object.hasOwn(value,'taxNumber');
-  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(pageReadsRequested?['pageReads']:[])].sort().join(',');
+  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(pageReadsRequested?['pageReads']:[]),...(leaseRequested?['todayRefreshLeaseSeconds']:[])].sort().join(',');
   if (Object.keys(value).sort().join(",") !== expectedKeys) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
   const protocol=protocolRequested?parseProtocolSettings(value.protocol):null;
   if(text(value.taxId,0,40)===null||(taxNumberRequested&&text(value.taxNumber,0,40)===null))return {code:'VALIDATION_ERROR' as const,message:'Firmendaten sind ungültig.'};
@@ -387,6 +390,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING seiten_abfrage_ms AS "queryTimeoutMs",rechnung_mail_grenze AS "invoiceMailBatchLimit"`);
         if(saved.length!==1||!isDeepStrictEqual(parsePageReadSettings(saved[0]),pageReads))throw Error('PAGE_READ_SETTINGS_READBACK_MISSING');
       }
+      if(leaseRequested){
+        const saved=await tx.execute<{today_refresh_lease_seconds:number}>(sql`UPDATE public.company_settings SET today_refresh_lease_seconds=${value.todayRefreshLeaseSeconds as number}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING today_refresh_lease_seconds`);
+        if(saved.length!==1||saved[0].today_refresh_lease_seconds!==value.todayRefreshLeaseSeconds)throw Error('TODAY_REFRESH_LEASE_READBACK_MISSING');
+      }
       const audit=await tx.execute(sql`
         INSERT INTO public.ui_events (tenant_id, event_type, payload)
         VALUES (
@@ -395,10 +403,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text)
           ${protocol?sql`||jsonb_build_object('protocol',${JSON.stringify(protocol)}::jsonb)`:sql``}
           ${pageReads?sql`||jsonb_build_object('pageReads',${JSON.stringify(pageReads)}::jsonb)`:sql``}
+          ${leaseRequested?sql`||jsonb_build_object('todayRefreshLeaseSeconds',${value.todayRefreshLeaseSeconds as number}::integer)`:sql``}
         )
         RETURNING id
       `);
-      if((protocol||taxNumberRequested||pageReadsRequested)&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
+      if((protocol||taxNumberRequested||pageReadsRequested||leaseRequested)&&audit.length!==1)throw Error('COMPANY_SETTINGS_AUDIT_MISSING');
     });
     return { code: "OK" as const };
   } catch (error) {
