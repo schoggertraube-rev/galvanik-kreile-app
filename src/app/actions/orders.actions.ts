@@ -712,21 +712,25 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
-    const [{ readLiveOrderCard }, orders] = await Promise.all([
+    const [{ readTodayOrderCards }, orders] = await Promise.all([
       import("@/lib/server/orderCardRead"),
       withPageReadPhase('orders.list.source',()=>getOperationalOrders(authorization.data)),
     ]);
-    const cardReads = await withPageReadPhase('orders.list.cards',()=>Promise.all(orders.map((order) => readLiveOrderCard(authorization.data, { orderId: order.id }))));
+    const cardReads = await withPageReadPhase('orders.list.cards',()=>readTodayOrderCards(authorization.data,orders.map(order=>order.id)));
     const finished=orders.some(order=>order.station==='fertig')?await withPageReadPhase('orders.list.dispatch',async()=>{
      const [{readFinishedDispatchQueue},{readShippingSettings}]=await Promise.all([import('@/modules/orders/server-public'),import('@/modules/fundament/server-public')]);
      const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
      if(settings.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const};
-     const [{readCustomerProfile},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/lib/server/privilegedDb')]);
-     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{readHasMail:id=>withPrivilegedTenantTransaction(authorization.data,async tx=>{const customer=await readCustomerProfile(tx,authorization.data.tenantId,id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();})});
+     const [{readCustomerProfiles},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/lib/server/privilegedDb')]);
+     const customerIds=[...new Set(orders.filter(order=>order.station==='fertig').map(order=>order.customerId))];
+     let profiles:Awaited<ReturnType<typeof readCustomerProfiles>>|null=null;
+     try{profiles=await withPrivilegedTenantTransaction(authorization.data,tx=>readCustomerProfiles(tx,authorization.data.tenantId,customerIds));}
+     catch(error){console.error('[DISPATCH_CUSTOMER_MAIL_READ_FAILED]',error instanceof Error?error.name:'UnknownError');}
+     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{readHasMail:async id=>{const customer=profiles?.get(id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();}});
     }):{code:'OK' as const,rows:[]};
     const projections=new Map(finished.code==='OK'?finished.rows.map((row,rank)=>[row.orderId,{state:row.unavailable?'unavailable' as const:'available' as const,rank,...row}]):[]);
-    const data: OrderResponse[] = orders.map((order, index) => {
-      const cardRead = cardReads[index];
+    const data: OrderResponse[] = orders.map((order) => {
+      const cardRead = cardReads.get(order.id);
       return {
         ...order,
         ...(order.station==='fertig'?{finishedDispatch:projections.get(order.id)??{state:'unavailable' as const}}:{}),
@@ -747,6 +751,23 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
     };
   }
 
+ },readLoggingSettings);
+}
+
+/** The first list paint uses the same tenant-bound source as the full card read. */
+export async function getOrdersBaseDb(): Promise<ActionResult<OrderResponse[]> & {serverReadAt?:string}> {
+ return observeAction('getOrdersBaseDb',subjectForAction('getOrdersDb',undefined),async()=>{
+  noStore();
+  const authorization=await resolveOperationalReadAuthorization();
+  if(!authorization.ok)return authorization;
+  try{
+   const {getOperationalOrders}=await import('@/lib/server/operationalOrders');
+   const data=await withPageReadPhase('orders.list.base',()=>getOperationalOrders(authorization.data,{purpose:'today'}));
+   return {ok:true,data,serverReadAt:new Date().toISOString()};
+  }catch(error:unknown){
+   console.error('[ORDER_BASE_READ_ERROR]',{name:error instanceof Error?error.name:'UnknownError',code:'ORDER_BASE_READ_FAILED'});
+   return {ok:false,error:'DB_ERROR',message:'Auftragsdaten konnten nicht sicher geladen werden.'};
+  }
  },readLoggingSettings);
 }
 

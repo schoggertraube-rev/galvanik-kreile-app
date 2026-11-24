@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrdersAppAdapter } from "@/app/orders/OrdersAppAdapter";
 
 const ports = vi.hoisted(() => ({
+  getOrdersBaseDb: vi.fn(),
   getOrdersDb: vi.fn(),
   openOrder: vi.fn(),
   openCustomer:vi.fn(),
@@ -13,7 +14,7 @@ const ports = vi.hoisted(() => ({
   retainDevice:vi.fn(),
 }));
 
-vi.mock("@/app/actions/orders.actions", () => ({ getOrdersDb: ports.getOrdersDb }));
+vi.mock("@/app/actions/orders.actions", () => ({ getOrdersBaseDb: ports.getOrdersBaseDb,getOrdersDb: ports.getOrdersDb }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.create }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({ loading: false, hasPermission: () => true,offline24h:ports.offline24h,offlineScope:ports.offlineScope }),
@@ -50,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
   ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order] });
+  ports.getOrdersBaseDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST base unavailable'});
   ports.offline24h=false;ports.offlineScope=null;
   ports.readDevice.mockResolvedValue({code:'EMPTY'});ports.retainDevice.mockResolvedValue({code:'STORED'});
 });
@@ -59,6 +61,29 @@ afterEach(()=>{cleanup();vi.restoreAllMocks();});
 describe("OrdersAppAdapter V1.1", () => {
   // Explicit synthetic component states. Native Actions/Auth/DB/IDB proof is
   // offline_workshop_sync.browser.integration.test.ts, not this mocked boundary.
+  it('shows guarded base fields before qualification and keeps the same order row',async()=>{
+    let finish!: (value:{ok:true;data:typeof order[]})=>void;
+    ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[order],serverReadAt:'2026-11-24T08:00:00.000Z'});
+    ports.getOrdersDb.mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+    render(<OrdersAppAdapter/>);
+    const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
+    expect(row).toHaveTextContent('Sabrina Schmidt');
+    expect(row).toHaveTextContent('angenommen');
+    expect(row).not.toHaveTextContent('27.10.2026');
+    expect(row).not.toHaveTextContent('stosstange');
+    finish({ok:true,data:[order]});
+    await waitFor(()=>expect(row).toHaveTextContent('27.10.2026'));
+    expect(screen.getByRole('group',{name:'Auftrag A-2026-0001'})).toBe(row);
+  });
+  it('keeps the base row with an unknown status when qualification fails',async()=>{
+    ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[order],serverReadAt:'2026-11-24T08:00:00.000Z'});
+    ports.getOrdersDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST raw database error'});
+    render(<OrdersAppAdapter/>);
+    const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
+    await waitFor(()=>expect(row).toHaveTextContent('Status unbekannt · wird erneut geladen.'));
+    expect(row).not.toHaveTextContent('TEST raw database error');
+    expect(screen.queryByText('Noch keine Aufträge.')).not.toBeInTheDocument();
+  });
   it('renders the same retained list offline without a server request',async()=>{
     ports.offline24h=true;ports.offlineScope='a'.repeat(64);
     vi.spyOn(navigator,'onLine','get').mockReturnValue(false);

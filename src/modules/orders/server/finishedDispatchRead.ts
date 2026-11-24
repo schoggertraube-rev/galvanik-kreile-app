@@ -1,7 +1,7 @@
 import 'server-only';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {readOrderInformed} from '@/lib/server/orderReleaseRead';
+import {readOrdersInformed} from '@/lib/server/orderReleaseRead';
 import type {OperationalOrder} from '@/lib/types/operationalOrder';
 import {berlinCalendarDay,workingDaysBetween,plusWorkingDays} from '@/lib/domain/workingDays';
 import {readOrderPickupAppointment,pickupStorageDue} from '@/lib/server/pickupAppointmentPort';
@@ -30,10 +30,10 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
  const histories=new Map<string,Awaited<ReturnType<typeof readCollectionReminderHistory>>>();
  const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>;deliveryFailedAt:string|null;responseSince:string|null}>();
  const finished=orders.filter(row=>row.station==='fertig');
- const notifications=await Promise.all(finished.map(order=>readOrderInformed(auth,order.id)));
- for(const [index,order] of finished.entries()){
-  const notification=notifications[index];
-  if(notification.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
+ const notifications=await readOrdersInformed(auth,finished.map(order=>order.id));
+ for(const order of finished){
+  const notification=notifications.get(order.id);
+  if(notification?.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
   const workingDays=policy===null||!notification.frozenAt?null:workingDaysBetween(berlinCalendarDay(new Date(notification.frozenAt)),berlinCalendarDay(),policy.holidays);
   if(workingDays!==null&&workingDays<0){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['DISPATCH_CALENDAR_INVALID'],unavailable:true});continue;}
   result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,

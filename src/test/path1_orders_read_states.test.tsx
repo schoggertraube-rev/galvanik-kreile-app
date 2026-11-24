@@ -4,11 +4,12 @@ import OrdersPage from "@/app/orders/page";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 const ports = vi.hoisted(() => ({
+  getOrdersBaseDb: vi.fn(),
   getOrdersDb: vi.fn(),
   openOrder: vi.fn(),
 }));
 
-vi.mock("@/app/actions/orders.actions", () => ({ getOrdersDb: ports.getOrdersDb }));
+vi.mock("@/app/actions/orders.actions", () => ({ getOrdersBaseDb: ports.getOrdersBaseDb,getOrdersDb: ports.getOrdersDb }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: vi.fn() }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({ hasPermission: () => false, loading: false }),
@@ -43,6 +44,7 @@ const order = (id = "order-1", orderNumber = "A-100"): OperationalOrder => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  ports.getOrdersBaseDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST base unavailable'});
   window.sessionStorage.clear();
 });
 
