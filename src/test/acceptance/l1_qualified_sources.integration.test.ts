@@ -5,7 +5,7 @@ import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e
 import {createFixture,full,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {getComplaints} from '@/app/actions/complaints.actions';
-import {changeOrderContentAction,getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
+import {changeOrderContentAction,getLiveOrderCardAction,getOrdersBaseDb,getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {db} from '@/db';
@@ -36,6 +36,11 @@ it('batches actual Today facts once and keeps the same qualified full-card value
  const ready=await readyInvoiceOrder('TEST L1 batch ready','pickup',false,customer);
  const ids=[first.receipt.orderId,ready.orderId];
  const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_L1_BATCH_AUTH');
+ const base=await withSession(full,()=>getOrdersBaseDb());
+ expect(base.ok).toBe(true);
+ if(!base.ok)throw Error('TEST_L1_BASE_READ_FAILED');
+ const source=await getOperationalOrders(authorization.data,{purpose:'today'});
+ for(const id of ids)expect(base.data.find(row=>row.id===id)).toEqual(source.find(row=>row.id===id));
  expect(await readTodayOrderCards(authorization.data,[])).toEqual(new Map());
  expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toEqual({code:'OK',data:{rows:[]}});
  const options=db.$client.options,previous=options.debug;let batchQueries=0,transactions=0;
