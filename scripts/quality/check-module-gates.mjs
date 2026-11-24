@@ -488,9 +488,9 @@ export function validTodayProjectorComposition(source) {
     if(!ts.isImportDeclaration(statement)||!ts.isStringLiteral(statement.moduleSpecifier))continue;
     const facade=(resolveSpec(TODAY_PROJECTOR_FILE,statement.moduleSpecifier.text)??'').match(/^src\/modules\/([^/]+)\/server-public$/);
     if(!facade)continue;
-    const allowed=TODAY_PROJECTOR_READ_FACADES.get(facade[1]),bindings=statement.importClause?.namedBindings;
-    if(!allowed||!bindings||!ts.isNamedImports(bindings)||statement.importClause.name)return false;
-    if(bindings.elements.some(binding=>!allowed.has((binding.propertyName??binding.name).text)))return false;
+    const allowed=TODAY_PROJECTOR_READ_FACADES.get(facade[1])??new Set(),bindings=statement.importClause?.namedBindings;
+    if(!bindings||!ts.isNamedImports(bindings)||statement.importClause.name)return false;
+    if(bindings.elements.some(binding=>{const name=(binding.propertyName??binding.name).text;return name!=='tagQuellen'&&!allowed.has(name);}))return false;
   }
   return true;
 }

@@ -7,7 +7,8 @@ import { useHydrated } from '@/hooks/useHydrated';
 import type { Geraet } from './typen';
 import { cx } from './typen';
 import styles from './AppShell.module.css';
-export type Bereich = 'tag' | 'nachrichten' | 'werkstatt' | 'auftraege' | 'kunden' | 'geld' | 'einstellungen';
+import {NAVIGATION,type Bereich} from '../navigation/register';
+export type {Bereich} from '../navigation/register';
 export interface NavEintrag { id: Bereich; text: string; icon: IconName; badge?: { n: number; rot?: boolean }; }
 export interface AppShellProps {
   geraet: Geraet;
@@ -22,14 +23,10 @@ export interface AppShellProps {
   /** nur variante=werkstatt */ onAuftragOeffnen?: () => void; onMehrarbeit?: () => void; onFertigMelden?: () => void;
   ebene?: ReactNode; zustand?:ReactNode;children: ReactNode;
 }
-const NAV: NavEintrag[] = [
-  { id: 'tag', text: 'Der Tag', icon: 'sun' }, { id: 'nachrichten', text: 'Nachrichten', icon: 'mail' }, { id: 'werkstatt', text: 'Werkstatt', icon: 'flask' },
-  { id: 'auftraege', text: 'Aufträge', icon: 'list' }, { id: 'kunden', text: 'Kunden & Kontakt', icon: 'users' },
-  { id: 'geld', text: 'Geld & Rechnungen', icon: 'euro' }
-];
+const NAV: NavEintrag[] = NAVIGATION.filter(entry=>entry.platz==='liste').map(entry=>({id:entry.id,text:entry.text,icon:entry.icon}));
 const DOCK: Array<{ id: Bereich | 'mehr'; text: string; icon: IconName }> = [
-  { id: 'tag', text: 'Der Tag', icon: 'sun' }, { id: 'auftraege', text: 'Aufträge', icon: 'list' }, { id: 'kunden', text: 'Kunden', icon: 'users' },
-  { id: 'geld', text: 'Geld', icon: 'euro' }, { id: 'mehr', text: 'Mehr', icon: 'grid' }
+  ...NAVIGATION.filter(entry=>entry.dockText!==null).map(entry=>({id:entry.id,text:entry.dockText!,icon:entry.icon})),
+  { id: 'mehr', text: 'Mehr', icon: 'grid' }
 ];
 /** Navigation nach Gerät, nicht nach Rolle. Aktionsleiste NUR variante=werkstatt – nie auf Büro-Desktop (G3/G4). Kalender-Menüpunkt erst nach M365-Abnahme. */
 export function AppShell(p: AppShellProps) {
@@ -65,7 +62,7 @@ export function AppShell(p: AppShellProps) {
         <div className="kr-nav-trenner" />
         {NAV.filter(n => !aus.includes(n.id)).map(nav)}
         <div className="kr-nav-trenner kr-nav-unten" />
-        {!aus.includes('einstellungen') && nav({ id: 'einstellungen', text: 'Einstellungen', icon: 'settings' })}
+        {NAVIGATION.filter(entry=>entry.platz==='unten'&&!aus.includes(entry.id)).map(entry=>nav({id:entry.id,text:entry.text,icon:entry.icon}))}
       </nav>
       <main className="kr-inhalt">{p.children}</main></div>{p.ebene}</>);
   }
