@@ -496,6 +496,34 @@ export function validTodayProjectorComposition(source) {
 }
 export function allowedServerFacadeConsumer(file, source) {
   if(file===TODAY_PROJECTOR_FILE)return validTodayProjectorComposition(source);
+  const taktJobsFile = 'src/modules/takt/jobs.ts';
+  const taktRoutes = new Set([
+    'src/app/api/takt/route.ts',
+    'src/app/api/heute/neuaufbau/route.ts',
+    'src/app/api/heute/modell/route.ts',
+  ]);
+  if (file === taktJobsFile || taktRoutes.has(file)) {
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const fundamentReaders = new Set([
+      'readBetriebswaechterEinstellungenInTransaction', 'readLoggingSettings',
+      'isFeatureEnabled', 'readTenantFeatures', 'readPackageSwitches',
+      'readErkennungsEinstellungenInTransaction',
+    ]);
+    for (const statement of tree.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const facade = (resolveSpec(file, statement.moduleSpecifier.text) ?? '').match(/^src\/modules\/([^/]+)\/server-public$/);
+      if (!facade) continue;
+      const clause = statement.importClause;
+      if (!clause || clause.name || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) return false;
+      if (taktRoutes.has(file) && facade[1] !== 'takt') return false;
+      for (const binding of clause.namedBindings.elements) {
+        const importedName = (binding.propertyName ?? binding.name).text;
+        if (file === taktJobsFile && importedName !== 'taktJobs' &&
+            !(facade[1] === 'fundament' && fundamentReaders.has(importedName))) return false;
+      }
+    }
+    return true;
+  }
   if (REAL_DB_TEST_FILE.test(file)) return true;
   return SERVER_ACTION_FILE.test(file) && hasDirectiveInPrologue(source, "use server");
 }
