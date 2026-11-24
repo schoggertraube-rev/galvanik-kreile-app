@@ -317,6 +317,15 @@ jobs:
             echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
           } >> "$GITHUB_ENV"
 
+      # supabase start above applies every candidate migration on this isolated CI stack.
+      # BF-008 runs before the historical resets below without resetting the running Storage stack.
+      - name: BF-008 tenant coverage check (full candidate vs F0_TENANT_COVERAGE.json)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          node scripts/quality/check-tenant-coverage.mjs --selftest
+          node scripts/quality/check-tenant-coverage.mjs
+
       - name: Replay exact Production cutoff from zero without seed
         run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260810100000
 
@@ -455,11 +464,6 @@ jobs:
       - name: F0 negative + inventory tests (grant-denial, rls-contract, storage, view)
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/quality/f0_negative_tests.sql
-
-      - name: BF-008 tenant coverage check (F0_TENANT_COVERAGE.json vs live)
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: node scripts/quality/check-tenant-coverage.mjs
 
       - name: BF-007 storage HTTP negative matrix (S1-S12, real Storage API)
         run: node scripts/quality/f0-storage-http-tests.mjs

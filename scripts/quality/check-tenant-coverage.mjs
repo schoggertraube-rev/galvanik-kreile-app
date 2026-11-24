@@ -72,12 +72,8 @@ function arraysEqualAsSets(a, b) {
   return sa.length === sb.length && sa.every((v, i) => v === sb[i]);
 }
 
+function compareCoverage(liveRows, coverageTables, migrationFixtureTables) {
 const errors = [];
-
-const coverage = JSON.parse(readFileSync(COVERAGE_PATH, "utf8"));
-const coverageTables = coverage.tables ?? {};
-
-const liveRows = queryLiveTenantTables();
 const liveTableNames = new Set(liveRows.map((row) => row.table_name));
 const coverageTableNames = new Set(Object.keys(coverageTables));
 
@@ -96,7 +92,6 @@ if (staleInCoverage.length > 0) {
 }
 
 // (2) fixture_tested-Menge muss exakt der Migrationsquelle entsprechen.
-const migrationFixtureTables = extractFixtureTestedTablesFromMigration();
 const jsonFixtureTables = new Set(
   Object.entries(coverageTables)
     .filter(([, entry]) => entry.category === "fixture_tested")
@@ -127,12 +122,43 @@ for (const [tableName, entry] of Object.entries(coverageTables)) {
     );
   }
 }
+return { errors, liveTableNames, migrationFixtureTables };
+}
+
+const coverage = JSON.parse(readFileSync(COVERAGE_PATH, "utf8"));
+const coverageTables = coverage.tables ?? {};
+const migrationFixtureTables = extractFixtureTestedTablesFromMigration();
+if (process.argv.includes("--selftest")) {
+  const fixtureTable = [...migrationFixtureTables][0];
+  const fixtureCoverage = { [fixtureTable]: { category: "fixture_tested", policy_names: [] } };
+  const fixtureMigration = new Set([fixtureTable]);
+  const fixtureLive = [{ table_name: fixtureTable, rls_enabled: true, policy_names: [] }];
+  if (compareCoverage(fixtureLive, fixtureCoverage, fixtureMigration).errors.length !== 0) {
+    throw new Error("BF-008 selftest: matching coverage rejected");
+  }
+  const unregistered = [
+    ...fixtureLive,
+    { table_name: "new_tenant_table_without_register_entry", rls_enabled: true, policy_names: [] },
+  ];
+  const negative = compareCoverage(unregistered, fixtureCoverage, fixtureMigration).errors;
+  if (!negative.some((error) => error.includes("new_tenant_table_without_register_entry"))) {
+    throw new Error("BF-008 selftest: unregistered tenant table was accepted");
+  }
+  console.log("F0_TENANT_COVERAGE_SELFTEST=PASS (unregistered tenant table rejected)");
+  process.exit(0);
+}
+
+const liveRows = queryLiveTenantTables();
+const { errors, liveTableNames } = compareCoverage(liveRows, coverageTables, migrationFixtureTables);
 
 if (errors.length > 0) {
   console.error("F0_TENANT_COVERAGE_CHECK=FAIL");
   for (const error of errors) {
     console.error(`- ${error}`);
   }
+  // Diagnosedaten stammen ausschliesslich aus dem gerade geprueften Kandidaten-Replay.
+  const missing = liveRows.filter((row) => !(row.table_name in coverageTables));
+  if (missing.length > 0) console.error(`- Live-Registerdaten: ${JSON.stringify(missing)}`);
   process.exit(1);
 }
 
