@@ -13,7 +13,7 @@ const responseHeaders={'Cache-Control':'private, no-store','Vary':'Cookie'};
 export async function GET(request:Request){
  const query=new URL(request.url).searchParams;
  const part=query.get('bereich');
- if(query.get('nur')!=='veraltet'||[...query.keys()].some(key=>key!=='nur'&&key!=='bereich')||query.getAll('nur').length!==1||query.getAll('bereich').length>1||part!==null&&!['week','stock','notices','counts'].includes(part))return new Response(null,{status:400,headers:responseHeaders});
+ if(query.get('nur')!=='veraltet'||[...query.keys()].some(key=>key!=='nur'&&key!=='bereich')||query.getAll('nur').length!==1||query.getAll('bereich').length>1||part!==null&&!['week','notices','counts'].includes(part))return new Response(null,{status:400,headers:responseHeaders});
  try{return await withPageReadBudget(async()=>{
   const auth=await resolveAuthorization();
   if(!auth.ok)return new Response(null,{status:401,headers:responseHeaders});

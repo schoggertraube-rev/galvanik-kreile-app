@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrdersAppAdapter } from "@/app/orders/OrdersAppAdapter";
 
 const ports = vi.hoisted(() => ({
+  getOrdersBaseDb: vi.fn(),
   getOrdersDb: vi.fn(),
   openOrder: vi.fn(),
   openCustomer:vi.fn(),
@@ -13,7 +14,7 @@ const ports = vi.hoisted(() => ({
   retainDevice:vi.fn(),
 }));
 
-vi.mock("@/app/actions/orders.actions", () => ({ getOrdersDb: ports.getOrdersDb }));
+vi.mock("@/app/actions/orders.actions", () => ({ getOrdersBaseDb: ports.getOrdersBaseDb,getOrdersDb: ports.getOrdersDb }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.create }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({ loading: false, hasPermission: () => true,offline24h:ports.offline24h,offlineScope:ports.offlineScope }),
@@ -50,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
   ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order] });
+  ports.getOrdersBaseDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST base unavailable'});
   ports.offline24h=false;ports.offlineScope=null;
   ports.readDevice.mockResolvedValue({code:'EMPTY'});ports.retainDevice.mockResolvedValue({code:'STORED'});
 });
@@ -59,12 +61,72 @@ afterEach(()=>{cleanup();vi.restoreAllMocks();});
 describe("OrdersAppAdapter V1.1", () => {
   // Explicit synthetic component states. Native Actions/Auth/DB/IDB proof is
   // offline_workshop_sync.browser.integration.test.ts, not this mocked boundary.
+  it('shows guarded base fields before qualification and keeps the same order row',async()=>{
+    let finish!: (value:{ok:true;data:typeof order[]})=>void;
+    ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[order],serverReadAt:'2026-11-24T08:00:00.000Z'});
+    ports.getOrdersDb.mockReturnValue(new Promise(resolve=>{finish=resolve;}));
+    render(<OrdersAppAdapter/>);
+    const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
+    expect(row).toHaveTextContent('Sabrina Schmidt');
+    expect(row).toHaveTextContent('Angenommen');
+    expect(row).toHaveTextContent('27.10.2026');
+    expect(row).not.toHaveTextContent('angenommen · angenommen');
+    expect(row).not.toHaveTextContent('stosstange');
+    finish({ok:true,data:[order]});
+    await waitFor(()=>expect(row).toHaveTextContent('27.10.2026'));
+    expect(screen.getByRole('group',{name:'Auftrag A-2026-0001'})).toBe(row);
+  });
+  it('keeps the base row with an unknown status when qualification fails',async()=>{
+    ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[order],serverReadAt:'2026-11-24T08:00:00.000Z'});
+    ports.getOrdersDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST raw database error'});
+    render(<OrdersAppAdapter/>);
+    const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
+    await waitFor(()=>expect(row).toHaveTextContent('Den Status kann ich gerade nicht laden.'));
+    expect(row).not.toHaveTextContent('TEST raw database error');
+    expect(screen.queryByText('Noch keine Aufträge.')).not.toBeInTheDocument();
+  });
+  it('uses the same station wording as Heute for the base row',async()=>{
+    ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[{...order,station:'galvanik',status:'galvanik'}],serverReadAt:'2026-11-24T08:00:00.000Z'});
+    ports.getOrdersDb.mockReturnValue(new Promise(()=>{}));
+    render(<OrdersAppAdapter/>);
+    const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
+    expect(row).toHaveTextContent('In Galvanik');
+    expect(row).not.toHaveTextContent('In der Galvanik');
+  });
+  it('stops retrying after 5, 10, 20 and 40 seconds without hiding the unknown status',async()=>{
+    vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
+    try{
+      ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[order],serverReadAt:'2026-11-24T08:00:00.000Z'});
+      ports.getOrdersDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST unavailable'});
+      render(<OrdersAppAdapter/>);
+      await act(async()=>{await vi.advanceTimersByTimeAsync(0);});
+      expect(ports.getOrdersDb).toHaveBeenCalledTimes(1);
+      for(const [index,delay] of [5000,10000,20000,40000].entries()){
+        await act(async()=>{await vi.advanceTimersByTimeAsync(delay);});
+        expect(ports.getOrdersDb).toHaveBeenCalledTimes(index+2);
+        expect(screen.getByRole('group',{name:'Auftrag A-2026-0001'})).toHaveTextContent('Den Status kann ich gerade nicht laden.');
+      }
+      await act(async()=>{await vi.advanceTimersByTimeAsync(80000);});
+      expect(ports.getOrdersDb).toHaveBeenCalledTimes(5);
+    }finally{vi.useRealTimers();}
+  });
   it('renders the same retained list offline without a server request',async()=>{
     ports.offline24h=true;ports.offlineScope='a'.repeat(64);
     vi.spyOn(navigator,'onLine','get').mockReturnValue(false);
     ports.readDevice.mockResolvedValue({code:'OK',value:{port:'orders.list',serverReadAt:'2026-11-13T10:00:00.000Z',response:{result:{ok:true,data:[order]},datenluecken:[]}}});
     render(<OrdersAppAdapter/>);
     await screen.findByText(order.orderNumber);
+    expect(ports.getOrdersDb).not.toHaveBeenCalled();
+    expect(ports.readDevice).toHaveBeenCalledWith(ports.offlineScope,true,{port:'orders.list',objectId:'orders'});
+  });
+  it('uses the retained list when a base request loses server reachability',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);
+    const online=vi.spyOn(navigator,'onLine','get').mockReturnValue(true);
+    ports.getOrdersBaseDb.mockImplementation(async()=>{online.mockReturnValue(false);throw Error('TEST server unreachable');});
+    ports.readDevice.mockResolvedValue({code:'OK',value:{port:'orders.list',serverReadAt:'2026-11-13T10:00:00.000Z',response:{result:{ok:true,data:[order]},datenluecken:[]}}});
+    render(<OrdersAppAdapter/>);
+    await screen.findByText(order.orderNumber);
+    expect(ports.getOrdersBaseDb).toHaveBeenCalledTimes(1);
     expect(ports.getOrdersDb).not.toHaveBeenCalled();
     expect(ports.readDevice).toHaveBeenCalledWith(ports.offlineScope,true,{port:'orders.list',objectId:'orders'});
   });
@@ -90,6 +152,15 @@ describe("OrdersAppAdapter V1.1", () => {
     expect(screen.queryByText(order.orderNumber)).not.toBeInTheDocument();
     expect(screen.queryByText('Noch keine Aufträge.')).not.toBeInTheDocument();
     expect(ports.getOrdersDb).not.toHaveBeenCalled();
+  });
+  it('retains a live base-reader denial before any full read',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);
+    ports.getOrdersBaseDb.mockResolvedValue({ok:false,error:'FORBIDDEN',message:'TEST right revoked',serverReadAt:'2026-11-24T08:00:00.000Z',cacheLoginScope:'b'.repeat(64)});
+    render(<OrdersAppAdapter/>);
+    await screen.findByText('TEST right revoked');
+    expect(ports.getOrdersDb).not.toHaveBeenCalled();
+    expect(ports.retainDevice).toHaveBeenCalledWith(ports.offlineScope,true,expect.objectContaining({response:{result:{ok:false,error:'FORBIDDEN',message:'TEST right revoked'},datenluecken:[]}}),null);
+    expect(screen.queryByText(order.orderNumber)).not.toBeInTheDocument();
   });
   it('does not turn a missing device source into a successful empty list',async()=>{
     ports.offline24h=true;ports.offlineScope='a'.repeat(64);

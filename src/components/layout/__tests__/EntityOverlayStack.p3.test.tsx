@@ -81,7 +81,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 }));
 
 
-import {TodayStreamedRegion,OfficeHomeClient as RolfHomeClient} from '@/components/home/OfficeHomeClient';
+import {OfficeHomeClient as RolfHomeClient} from '@/components/home/OfficeHomeClient';
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
 import type {OrdersHomeProjection} from '@/modules/orders/public';
 import {TODAY_MODEL_COPY} from '@/ui/situationCatalog';
@@ -142,7 +142,7 @@ it('keeps the live tile arrangement while the stock reader is unbound',()=>{
  expect(screen.getAllByText('TEST known primary')[0]).toBeVisible();
  expect(document.querySelector('[data-testid="today-supplements"]')).toBeNull();
  expect(document.querySelector('[data-today-region]')).toBeNull();
- expect(screen.queryByText(TODAY_MODEL_COPY.partReload)).toBeNull();
+ expect(screen.queryByRole('button',{name:'Bereich neu laden'})).toBeNull();
 });
 
 it('controlled model transport never adopts a response for another login scope',async()=>{
@@ -221,42 +221,42 @@ it('controlled return to a fresh model checks its scoped revision and keeps unch
  const current=pollingModel('TEST unchanged visible content',false);
  if(!('modelRead'in current)||!current.modelRead)throw Error('TEST_CONDITIONAL_MODEL_REQUIRED');
  current.modelRead={...current.modelRead,revision:'a'.repeat(64)};
- const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(null,{status:304}));vi.stubGlobal('fetch',fetch);
+ const fetch=vi.fn<typeof globalThis.fetch>(async(input)=>input==='/api/intake-drafts'?new Response(JSON.stringify({code:'OK',drafts:[]})):new Response(null,{status:304}));vi.stubGlobal('fetch',fetch);
+ const modelCalls=()=>fetch.mock.calls.filter(([url])=>url==='/api/heute/modell?nur=veraltet');
  render(<RolfHomeClient model={current} ports={actionPorts}/>);
- expect(fetch).not.toHaveBeenCalled();
+ expect(modelCalls()).toHaveLength(0);
  fireEvent.focus(window);
- await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+ await waitFor(()=>expect(modelCalls()).toHaveLength(1));
  await act(async()=>{await Promise.resolve();});
- const headers=new Headers(fetch.mock.calls[0][1]?.headers);
+ const headers=new Headers(modelCalls()[0][1]?.headers);
  expect(headers.get('If-None-Match')).toBe('"'+'a'.repeat(64)+'"');expect(headers.get('X-Kreile-Login-Scope')).toBe('TEST-poll-scope');
  expect(screen.getAllByText('TEST unchanged visible content')[0]).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
- fireEvent.focus(window);await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
+ fireEvent.focus(window);await waitFor(()=>expect(modelCalls()).toHaveLength(2));
 });
 
-// Isolated promise/React transport proof, not an Auth/DB or full Next claim.
-it('streams independent regions while the primary Today list remains interactive',async()=>{
- let finishWeek!:(value:import('@/components/home/OfficeHomeClient').TodayHomePartResult)=>void;
- let finishNotices!:(value:import('@/components/home/OfficeHomeClient').TodayHomePartResult)=>void;
- const week=new Promise<import('@/components/home/OfficeHomeClient').TodayHomePartResult>(resolve=>{finishWeek=resolve;});
- const notices=new Promise<import('@/components/home/OfficeHomeClient').TodayHomePartResult>(resolve=>{finishNotices=resolve;});
- const click=vi.fn();
- await act(async()=>{render(<><button onClick={click}>TEST primary remains usable</button><TodayStreamedRegion part="week" source={week} scope="TEST-stream-scope"/><TodayStreamedRegion part="notices" source={notices} scope="TEST-stream-scope"/></>);});
- fireEvent.click(screen.getByRole('button',{name:'TEST primary remains usable'}));expect(click).toHaveBeenCalledTimes(1);
- expect(screen.getAllByText(TODAY_MODEL_COPY.partLoading)).toHaveLength(2);
- const regions=[...document.querySelectorAll<HTMLElement>('[data-today-region]')];expect(regions.every(region=>region.style.minBlockSize==='8rem')).toBe(true);
- await act(async()=>{finishNotices({code:'OK',part:'notices',missing:[]});await Promise.resolve();});
- expect(screen.getByText(TODAY_MODEL_COPY.noNotices)).toBeVisible();expect(screen.getAllByText(TODAY_MODEL_COPY.partLoading)).toHaveLength(1);
- await act(async()=>{finishWeek({code:'OK',part:'week',data:{weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:12345,currentlyUnpricedItemCount:0}});await Promise.resolve();});
- expect(screen.getByText(/123,45/)).toBeVisible();expect(screen.queryByText(TODAY_MODEL_COPY.partLoading)).toBeNull();
- expect(regions.every(region=>region.style.minBlockSize==='8rem')).toBe(true);
+it('keeps the existing Today list visible while the one model refresh is pending',async()=>{
+ let resolve!:(value:Response)=>void;
+ const fetch=vi.fn<typeof globalThis.fetch>(()=>new Promise<Response>(done=>{resolve=done;}));vi.stubGlobal('fetch',fetch);
+ render(<RolfHomeClient model={pollingModel('TEST primary stays visible')} ports={actionPorts}/>);
+ await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(1));
+ expect(screen.getAllByText('TEST primary stays visible')[0]).toBeVisible();
+ expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet');
+ expect(document.querySelector('[data-today-region]')).toBeNull();
+ await act(async()=>{resolve(new Response(JSON.stringify({code:'OK',model:pollingModel('TEST refreshed primary',false)}),{status:200}));await Promise.resolve();});
+ await waitFor(()=>expect(screen.getAllByText('TEST refreshed primary')[0]).toBeVisible());
+ expect(document.querySelector('[data-today-region]')).toBeNull();
 });
-it('retries only the failed streamed region and does not replace the primary model',async()=>{
- const source=Promise.resolve({code:'SOURCE_INCOMPLETE' as const,part:'week' as const});
- const fetch=vi.fn<typeof globalThis.fetch>(async()=>new Response(JSON.stringify({code:'OK',scope:'TEST-stream-scope',result:{code:'OK',part:'week',data:{weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:56789,currentlyUnpricedItemCount:0}}}),{status:200}));vi.stubGlobal('fetch',fetch);
- await act(async()=>{render(<><p>TEST known primary</p><TodayStreamedRegion part="week" source={source} scope="TEST-stream-scope"/></>);});
- fireEvent.click(screen.getByRole('button',{name:TODAY_MODEL_COPY.partReload}));
- await screen.findByText(/567,89/);expect(fetch).toHaveBeenCalledTimes(1);expect(fetch.mock.calls[0][0]).toBe('/api/heute/modell?nur=veraltet&bereich=week');
- expect(screen.getByText('TEST known primary')).toBeVisible();expect(ports.refresh).not.toHaveBeenCalled();
+it('keeps the known Today list when the complete model read fails',async()=>{
+ const fetch=vi.fn<typeof globalThis.fetch>(async(input)=>input==='/api/intake-drafts'?new Response(JSON.stringify({code:'OK',drafts:[]})):new Response(null,{status:503}));vi.stubGlobal('fetch',fetch);
+ const modelCalls=()=>fetch.mock.calls.filter(([url])=>url==='/api/heute/modell?nur=veraltet');
+ render(<RolfHomeClient model={pollingModel('TEST known after error',false)} ports={actionPorts}/>);
+ expect(screen.getAllByText('TEST known after error')[0]).toBeVisible();
+ fireEvent.focus(window);
+ await waitFor(()=>expect(modelCalls()).toHaveLength(1));
+ expect(modelCalls()[0][0]).toBe('/api/heute/modell?nur=veraltet');
+ expect(screen.getAllByText('TEST known after error')[0]).toBeVisible();
+ expect(document.querySelector('[data-today-region]')).toBeNull();
+ expect(ports.refresh).not.toHaveBeenCalled();
 });
 
 });

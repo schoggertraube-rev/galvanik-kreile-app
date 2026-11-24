@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
-import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
-import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
+import {ORDER_STATION_COPY,PAGE_READ_COPY,SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
+import { getOrdersBaseDb, getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import {readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
@@ -28,7 +28,7 @@ type OrderFilter = "alle" | "galvanik" | "angenommen" | "fertig";
 type OrdersState =
   | { kind: "loading" }
   | { kind: "denied" | "error" | "conflict"; message: string }
-  | { kind: "data"; orders: OrderListRow[]; loadedAt: string;source: "online"|"device" };
+  | { kind: "data"; orders: OrderListRow[]; loadedAt: string;source: "online"|"device"; qualification: "pending"|"ready"|"unknown" };
 
 type OrderListRow =
   & Pick<OrdersListItem, "id" | "orderNumber" | "station" | "status" | "risk">
@@ -108,7 +108,7 @@ function orderSubject(order: OrderListRow): string {
 }
 
 function detailText(order: OrderListRow): string | undefined {
-  if (order.cardReadErrorCode) return `Lesefehler · ${order.cardReadErrorCode}`;
+  if (order.cardReadErrorCode) return PAGE_READ_COPY.qualificationUnknown;
   const subject = orderSubject(order);
   const surface = order.surfaceRequested?.trim();
   const quantity = order.parts.length > 0 ? `${order.parts.length} ${order.parts.length === 1 ? "Teil" : "Teile"}` : null;
@@ -166,14 +166,14 @@ function dueOrdersFor(orders: readonly OrderListRow[], date: Date): OrderListRow
   return orders.filter((order) => dateKey(calendarDate(order.dueDate) ?? new Date(0)) === key);
 }
 
-function OrderRow({ order, onOpen,onCustomer,onPhoto }: { order: OrderListRow; onOpen: (id: string) => void;onCustomer?:()=>void;onPhoto?:()=>void }) {
+function OrderRow({ order, qualification, onOpen,onCustomer,onPhoto }: { order: OrderListRow; qualification: "pending"|"ready"|"unknown"; onOpen: (id: string) => void;onCustomer?:()=>void;onPhoto?:()=>void }) {
   return <div className="kr-stapel" style={{gap:4}} role="group" aria-label={'Auftrag '+order.orderNumber}><Auftragszeile
     id={order.orderNumber}
     kundeKurz={order.customerName ?? "Kunde nicht hinterlegt"}
-    titel={orderSubject(order)}
-    meta={[detailText(order),order.offlineMatchReason].filter(Boolean).join(" · ")||undefined}
-    ton={rowTone(order)}
-    status={{ text: order.cardReadErrorCode ?? (order.dueValue || order.statusText), ton: rowTone(order) }}
+    titel={qualification==='ready'?orderSubject(order):(ORDER_STATION_COPY[order.station]??ORDER_STATION_COPY.unknown)}
+    meta={qualification==='ready'?[detailText(order),order.offlineMatchReason].filter(Boolean).join(" · ")||undefined:[order.dueDate?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(order.dueDate)):null].filter(Boolean).join(' · ')}
+    ton={qualification==='ready'?rowTone(order):undefined}
+    status={qualification==='ready'?{ text: order.cardReadErrorCode?PAGE_READ_COPY.qualificationUnknown:(order.dueValue || order.statusText), ton: rowTone(order) }:qualification==='unknown'?{text:PAGE_READ_COPY.qualificationUnknown}:undefined}
     karte
     onOeffnen={() => onOpen(order.id)}
   /><div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'flex-end'}}>{onCustomer?<Button icon="users" text="Kundenkarte" onClick={onCustomer}/>:null}{onPhoto?<Button icon="camera" text="Foto" onClick={onPhoto}/>:null}<Button icon="open" art="primaer" text="Öffnen" onClick={()=>onOpen(order.id)}/></div></div>;
@@ -203,9 +203,18 @@ export function OrdersAppAdapter() {
   useEffect(() => {
     let active = true;
     let loadRevision=0;
-    const load = async () => {
+    let retryTimer:ReturnType<typeof setTimeout>|null=null;
+    let retryAttempt=0;
+    const load = async (retry=false) => {
       const revision=++loadRevision;
-      setState({ kind: "loading" });
+      if(retryTimer){clearTimeout(retryTimer);retryTimer=null;}
+      if(!retry)retryAttempt=0;
+      setState(previous=>retry&&previous.kind==='data'?previous:{kind:'loading'});
+      let baseReady=false;
+      const scheduleRetry=()=>{
+        const delay=[5000,10000,20000,40000][retryAttempt++];
+        if(delay!==undefined)retryTimer=setTimeout(()=>{if(active)void load(true);},delay);
+      };
       try {
         let device=false;
         const readDevice=async():Promise<Awaited<ReturnType<typeof getOrdersDb>>>=>{
@@ -216,29 +225,52 @@ export function OrdersAppAdapter() {
           return {...stored.value.response.result,serverReadAt:stored.value.serverReadAt};
         };
         const readFence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
-        const result = await readWithDeviceFallback(getOrdersDb,readDevice,!!(offline24h&&offlineScope));
+        const readOnline=async():Promise<Awaited<ReturnType<typeof getOrdersDb>>>=>{
+          const base=await getOrdersBaseDb();
+          if(!active||revision!==loadRevision)throw Error('ORDER_READ_SUPERSEDED');
+          if(!base.ok&&(base.error==='FORBIDDEN'||base.error==='UNAUTHORIZED'))return base;
+          if(base.ok){
+            baseReady=true;
+            setState(previous=>({kind:'data',orders:base.data.map(toOrderListRow),loadedAt:base.serverReadAt??new Date().toISOString(),source:'online',qualification:retry&&previous.kind==='data'?'unknown':'pending'}));
+          }
+          return getOrdersDb();
+        };
+        const result = await readWithDeviceFallback(readOnline,readDevice,!!(offline24h&&offlineScope));
         if (!active||revision!==loadRevision) return;
         if(!device&&offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'orders.list',portVersion:1,objectId:'orders',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},readFence);
         if(!active||revision!==loadRevision)return;
         if (!result.ok) {
+          if(baseReady&&result.error!=='FORBIDDEN'&&result.error!=='UNAUTHORIZED'){
+            setState(previous=>previous.kind==='data'?{...previous,qualification:'unknown'}:previous);
+            scheduleRetry();
+            return;
+          }
           setState({
             kind: result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN" ? "denied" : result.error === "CONFLICT" ? "conflict" : "error",
             message: result.message,
           });
+          if(result.error!=="UNAUTHORIZED"&&result.error!=="FORBIDDEN")scheduleRetry();
           return;
         }
-        if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:device?'device':"online" });
+        if(active&&revision===loadRevision){retryAttempt=0;setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:device?'device':"online",qualification:'ready' });}
       } catch (error) {
         console.error('[ORDERS_READ_FAILED]',error instanceof Error?error.name:'UnknownError');
-        if (active&&revision===loadRevision) setState({ kind: "error", message: "Aufträge konnten nicht sicher geladen werden." });
+        if (active&&revision===loadRevision){
+          if(baseReady){
+            setState(previous=>previous.kind==='data'?{...previous,qualification:'unknown'}:previous);
+            scheduleRetry();
+          }else {setState({kind:'error',message:'Aufträge konnten nicht sicher geladen werden.'});scheduleRetry();}
+        }
       }
     };
     void load();
-    window.addEventListener("kreile-sync-orders", load);
-    const unsubscribe=subscribeServerReachability(()=>void load());
+    const reload=()=>{void load();};
+    window.addEventListener("kreile-sync-orders", reload);
+    const unsubscribe=subscribeServerReachability(reload);
     return () => {
       active = false;
-      window.removeEventListener("kreile-sync-orders", load);
+      if(retryTimer)clearTimeout(retryTimer);
+      window.removeEventListener("kreile-sync-orders", reload);
       unsubscribe();
     };
   }, [offline24h,offlineScope]);
@@ -328,7 +360,7 @@ export function OrdersAppAdapter() {
           onWert={setFilter}
         />
       </div>
-      {orders.length ? <div className="kr-stapel" style={{ gap: 16 }}>{[...orders.reduce((groups,order)=>{const group=groups.get(order.customerId)??[];group.push(order);groups.set(order.customerId,group);return groups;},new Map<string,OrderListRow[]>())].map(([customerId,group])=><section key={customerId} className="kr-stapel" aria-label={'Aufträge · '+(group[0].customerName??'Kundenname fehlt')}><h2>{group[0].customerName??'Kundenname fehlt'}</h2>{group.map(order=><OrderRow key={order.id} order={order} onOpen={openOrder} onCustomer={hasPermission('perm_view_customers')?()=>openCustomer(order.customerId):undefined} onPhoto={hasPermission('perm_op_photos')?()=>openOrder(order.id,'photos'):undefined}/>)}</section>)}</div> : <Zustand art="leer" text={query ? `Kein Auftrag für „${query}“.` : "Keine Aufträge in dieser Auswahl."} aktion={canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />}
+      {orders.length ? <div className="kr-stapel" style={{ gap: 16 }}>{[...orders.reduce((groups,order)=>{const group=groups.get(order.customerId)??[];group.push(order);groups.set(order.customerId,group);return groups;},new Map<string,OrderListRow[]>())].map(([customerId,group])=><section key={customerId} className="kr-stapel" aria-label={'Aufträge · '+(group[0].customerName??'Kundenname fehlt')}><h2>{group[0].customerName??'Kundenname fehlt'}</h2>{group.map(order=><OrderRow key={order.id} order={order} qualification={state.qualification} onOpen={openOrder} onCustomer={hasPermission('perm_view_customers')?()=>openCustomer(order.customerId):undefined} onPhoto={hasPermission('perm_op_photos')?()=>openOrder(order.id,'photos'):undefined}/>)}</section>)}</div> : <Zustand art="leer" text={query ? `Kein Auftrag für „${query}“.` : "Keine Aufträge in dieser Auswahl."} aktion={canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />}
     </div> : null}
     {view === "woche" ? <div className="kr-stapel"><Terminuebersicht ansicht="woche" tage={weekDays} /></div> : null}
     {view === "monat" ? <div className="kr-stapel">

@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (70)
+## Gleicher Wortlaut (71)
 
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
@@ -75,6 +75,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COMPONENT_PREVIEW_COPY.names.mehrarbeit`: "Mehrarbeit" → `bundle.book_extra`, `work.extra_short`
 - `COMPONENT_PREVIEW_COPY.names.kundenbild`: "Kundenbild" → `customer.tab.insights`, `settings.group.bewertung`
 - `PENDING_UNDO_COPY.undo`: "Rückgängig" → `bundle.undo`, `undo.action`
+- `ORDER_STATION_COPY.fertig`: "Fertig" → `filter.ready`
 
 ## Ähnlicher Wortlaut (102)
 
@@ -977,22 +978,22 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `DIALOG_LOAD_COPY.mailUnavailable`: "Die Mailansicht hat sich nicht geladen – lade die Seite neu."
 - `DIALOG_LOAD_COPY.reload`: "Neu laden"
 - `TODAY_MODEL_COPY.homeTitle`: "Der Tag"
-- `TODAY_MODEL_COPY.regionTitles.week`: "Diese Woche fertig"
-- `TODAY_MODEL_COPY.regionTitles.stock`: "Lager"
-- `TODAY_MODEL_COPY.regionTitles.notices`: "Hinweise"
-- `TODAY_MODEL_COPY.regionTitles.counts`: "Tageslage"
-- `TODAY_MODEL_COPY.partLoading`: "Wird nachgeladen."
-- `TODAY_MODEL_COPY.partFailed`: "Die Quelldaten sind gerade nicht lesbar."
-- `TODAY_MODEL_COPY.partReload`: "Bereich neu laden"
-- `TODAY_MODEL_COPY.noNotices`: "Keine Hinweise."
 - `TODAY_MODEL_COPY.cardRefreshing`: "Diese Karte holt sich gerade den neuesten Stand."
 - `TODAY_MODEL_COPY.reload`: "Jetzt laden"
 - `TODAY_MODEL_COPY.mainRefreshing`: "Ich hole gerade den neuesten Stand – dein nächster Schritt erscheint gleich."
 - `TODAY_MODEL_COPY.rebuildButton`: "Startseite neu aufbauen"
 - `TODAY_MODEL_COPY.rebuildRunning`: "Ich baue die Startseite gerade neu auf – das dauert ein paar Sekunden."
 - `TODAY_MODEL_COPY.rebuildDone`: "Die Startseite ist neu aufgebaut."
+- `ORDER_STATION_COPY.wareneingang`: "Angenommen"
+- `ORDER_STATION_COPY.angenommen`: "Angenommen"
+- `ORDER_STATION_COPY.galvanik`: "In Galvanik"
+- `ORDER_STATION_COPY.raus`: "Raus / abgeholt"
+- `ORDER_STATION_COPY.abgeholt`: "Raus / abgeholt"
+- `ORDER_STATION_COPY.versendet`: "Raus / abgeholt"
+- `ORDER_STATION_COPY.unknown`: "Station nicht erfasst"
 - `PAGE_READ_COPY.loading`: "Deine Arbeitsfläche wird geladen."
 - `PAGE_READ_COPY.sourceIncomplete`: "Diese Quelle ist gerade nicht erreichbar · Erneut laden."
+- `PAGE_READ_COPY.qualificationUnknown`: "Den Status kann ich gerade nicht laden."
 - `PAGE_READ_COPY.partial`: "Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar."
 - `PAGE_READ_COPY.reload`: "Erneut laden"
 - `PAGE_READ_COPY.settingsPending`: "Die neuen Abfragewerte sind noch nicht verfügbar."

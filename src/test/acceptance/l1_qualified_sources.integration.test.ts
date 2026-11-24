@@ -5,7 +5,7 @@ import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e
 import {createFixture,full,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {getComplaints} from '@/app/actions/complaints.actions';
-import {changeOrderContentAction,getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
+import {changeOrderContentAction,getLiveOrderCardAction,getOrdersBaseDb,getOrdersDb,getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {db} from '@/db';
@@ -30,12 +30,40 @@ beforeAll(async()=>{
  for(const feature of SALES_STAGE_FEATURES)await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES(${tenant},${feature.id},${feature.defaultEnabled})`;
  expect(await withSession(full,()=>saveCompanySettingsAction({...companyInput,pageReads:{queryTimeoutMs:DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs,invoiceMailBatchLimit:DEFAULT_PAGE_READ_SETTINGS.invoiceMailBatchLimit}}))).toMatchObject({code:'OK'});
 });
+it('reads one and twenty visible orders with the same number of SQL statements',async()=>{
+ const customer=await customerFixture('TEST L1 list count customer');
+ await intakeOrderFixture('TEST L1 list count first',customer);
+ const options=db.$client.options,previous=options.debug;
+ const read=async()=>{
+  let queries=0;
+  options.debug=(_connection,statement)=>{if(!/^(?:begin|commit|rollback)\b/i.test(statement.trim()))queries++;};
+  try{
+   const result=await withSession(full,()=>getOrdersDb());
+   expect(result.ok).toBe(true);
+   if(!result.ok)throw Error('TEST_L1_LIST_READ_FAILED');
+   return {rows:result.data.length,queries};
+  }finally{options.debug=previous;}
+ };
+ const one=await read();
+ for(let index=1;index<20;index++)await intakeOrderFixture(`TEST L1 list count ${index}`,customer);
+ const twenty=await read();
+ expect(one.rows).toBe(1);
+ expect(twenty.rows).toBe(20);
+ expect(one.queries).toBeGreaterThan(0);
+ expect(twenty.queries).toBe(one.queries);
+ console.log(`TEST_EC2_LIST_QUERIES one=${one.queries} twenty=${twenty.queries}`);
+});
 it('batches actual Today facts once and keeps the same qualified full-card values, version and evidence for zero, one and several orders',async()=>{
  const customer=await customerFixture('TEST L1 batch customer');
  const first=await intakeOrderFixture('TEST L1 batch intake',customer);
  const ready=await readyInvoiceOrder('TEST L1 batch ready','pickup',false,customer);
  const ids=[first.receipt.orderId,ready.orderId];
  const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_L1_BATCH_AUTH');
+ const base=await withSession(full,()=>getOrdersBaseDb());
+ expect(base.ok).toBe(true);
+ if(!base.ok)throw Error('TEST_L1_BASE_READ_FAILED');
+ const source=await getOperationalOrders(authorization.data,{purpose:'today'});
+ for(const id of ids)expect(base.data.find(row=>row.id===id)).toEqual(source.find(row=>row.id===id));
  expect(await readTodayOrderCards(authorization.data,[])).toEqual(new Map());
  expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toEqual({code:'OK',data:{rows:[]}});
  const options=db.$client.options,previous=options.debug;let batchQueries=0,transactions=0;

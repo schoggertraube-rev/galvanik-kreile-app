@@ -1,10 +1,10 @@
 "use client";
 import dynamic from 'next/dynamic';
 const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
-import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY,ORDER_STATION_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
-import { Suspense,use,useCallback,useEffect,useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { confirmInvoiceHandoverAction,listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -14,8 +14,8 @@ import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import { deriveTodayReminder, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
-import { IntakeDraftList } from "@/modules/eingang/public";
-import { getIntakeDraftsAction, discardIntakeDraftAction } from "@/app/actions/eingang.actions";
+import { IntakeDraftList, type IntakeDraftResult } from "@/modules/eingang/public";
+import { discardIntakeDraftAction } from "@/app/actions/eingang.actions";
 import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
 type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;maxPollMs?:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>} };
@@ -26,9 +26,8 @@ export type OfficeHomeModel =
   | { kind: "no_areas" }
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
-export type TodayHomePart='week'|'stock'|'notices'|'counts';
+export type TodayHomePart='week'|'notices'|'counts';
 export type TodayHomePartResult={code:'SOURCE_INCOMPLETE';part:TodayHomePart}|{code:'OK';part:'week';data:{weekStart:string;weekEndExclusive:string;netCents:number;currentlyUnpricedItemCount:number}}|{code:'OK';part:'notices';missing:string[]}|{code:'OK';part:'counts'};
-export type TodayHomeStreams=Record<TodayHomePart,Promise<TodayHomePartResult>>;
 type BasicResult = { code: string; message?: string };
 type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
 type MailPreview = { id: string; subject: string; senderName: string; senderAddress: string|null; receivedAt: string|null; preview: string; body: string };
@@ -39,10 +38,14 @@ export type OfficeHomePorts = {
   handBackOrder: (input: { orderId: string; expectedVersion: number; clientEventId: string }) => Promise<AssignmentResult>;
 };
 
-const STATUS_LABELS: Record<string, string> = { angenommen: "Angenommen", wareneingang: "Angenommen", galvanik: "In Galvanik", fertig: "Fertig", raus: "Raus / abgeholt", abgeholt: "Raus / abgeholt", versendet: "Raus / abgeholt" };
 const FIELD_LABELS: Record<TodayItem["field"], string> = { action: "Heute zu tun", today: "Heute fällig", assign: "Zuordnen", money: "Geld einfordern", bundle: "Bündel-Vorschlag" };
 
-export function statusLabel(order: OrdersHomeSource): string { const status = order.statusText?.trim() || order.status; return STATUS_LABELS[status.toLowerCase()] ?? STATUS_LABELS[order.station.toLowerCase()] ?? "Status nicht hinterlegt"; }
+async function readHomeIntakeDrafts(): Promise<IntakeDraftResult> {
+  const response = await fetch("/api/intake-drafts", { cache: "no-store", credentials: "same-origin" });
+  return response.json() as Promise<IntakeDraftResult>;
+}
+
+export function statusLabel(order: OrdersHomeSource): string { const status = order.statusText?.trim() || order.status; return ORDER_STATION_COPY[status.toLowerCase()] ?? ORDER_STATION_COPY[order.station.toLowerCase()] ?? "Status nicht hinterlegt"; }
 export function dayGreeting(hour: number): string { return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
 function berlinHour(now: Date): number { const hour = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "numeric", hourCycle: "h23" }).formatToParts(now).find((part) => part.type === "hour")?.value; return Number(hour ?? now.getHours()); }
 export type DayLine = { salutation: string; urgent: number; other: number };
@@ -224,7 +227,7 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
 
   return <section data-testid="rolf-v11-home" data-spec-id="tag">
     {model.kind==='partial'?<Hinweis ton="warn">{PAGE_READ_COPY.partial}<Button art="leise" icon="refresh" text={PAGE_READ_COPY.reload} onClick={()=>router.refresh()}/></Hinweis>:null}
-    <IntakeDraftList readDrafts={getIntakeDraftsAction} discardDraft={discardIntakeDraftAction} />
+    <IntakeDraftList readDrafts={readHomeIntakeDrafts} discardDraft={discardIntakeDraftAction} />
     <SeitenKopf titel="Der Tag" werkzeug={<div className="kr-schnellleiste"><Button data-spec-id="tag.anpassen" art="leise" icon="grid" text="Anpassen · geplant" disabled onClick={() => { setLayout(model.dashboard.layout); setCustomize(true); setMessage(""); }} /><Button art="leise" icon="layers" text="Bündeln · geplant" disabled /></div>} />
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
@@ -243,51 +246,4 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     </div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel">{more.invoiceMail?<Button text={INVOICE_DELIVERY_COPY.manualHandover} icon="check" onClick={()=>{setMore(null);void confirmInvoiceHandover(more);}}/>:model.dashboard.delegationTargets.map((target) => <Button key={target.userId} data-spec-id="hbmehr.weitergeben" text={`an ${target.displayName} geben`} icon="handoff" disabled={busy} onClick={() => void delegate(target)} />)}<Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
-}
-
-function TodayRegionFrame({part,children}:{part:TodayHomePart;children:React.ReactNode}){
- return <div data-today-region={part} style={{minBlockSize:'8rem'}}><Kachel titel={TODAY_MODEL_COPY.regionTitles[part]}>{children}</Kachel></div>;
-}
-export function TodayStreamedRegion(props:{part:TodayHomePart;source:Promise<TodayHomePartResult>;revision?:string;scope?:string;knownCounts?:boolean;children?:React.ReactNode}){
- return <Suspense fallback={<TodayRegionFrame part={props.part}><p role="status">{TODAY_MODEL_COPY.partLoading}</p><Button text={TODAY_MODEL_COPY.partReload} disabled/></TodayRegionFrame>}><TodayRegionRead {...props}/></Suspense>;
-}
-function TodayRegionRead({part,source,revision,scope,knownCounts,children}:{part:TodayHomePart;source:Promise<TodayHomePartResult>;revision?:string;scope?:string;knownCounts?:boolean;children?:React.ReactNode}){
- const original=use(source);
- const [entry,setEntry]=useState<{source:typeof source;value:TodayHomePartResult}|null>(null),[pending,setPending]=useState(false);
- const value=entry?.source===source?entry.value:original;
- const running=useRef<AbortController|null>(null),previous=useRef({source,revision}),etag=useRef(revision),wanted=useRef(revision);
- useLayoutEffect(()=>{wanted.current=revision;},[revision]);
- const nextRead=useRef<()=>void>(()=>{});
- const reload=useCallback(async()=>{
-  if(running.current||!scope)return;
-  const controller=new AbortController(),requested=wanted.current;running.current=controller;setPending(true);
-  try{
-   const headers:Record<string,string>={'X-Kreile-Login-Scope':scope};if(etag.current)headers['If-None-Match']='"'+etag.current+'"';
-   const response=await fetch('/api/heute/modell?nur=veraltet&bereich='+part,{credentials:'same-origin',cache:'no-store',headers,signal:controller.signal});
-   if(controller.signal.aborted)return;
-   if(response.status===304)return;
-   if(!response.ok)throw Error('TODAY_REGION_SOURCE_INCOMPLETE');
-   const result=await response.json() as {code?:string;scope?:string;revision?:string;result?:TodayHomePartResult};
-   if(controller.signal.aborted||result.scope!==scope||requested!==wanted.current)return;
-   const candidate=result.result;
-   if(result.code!=='OK'||!candidate||candidate.part!==part||!['OK','SOURCE_INCOMPLETE'].includes(candidate.code)
-    ||candidate.code==='OK'&&candidate.part==='week'&&(!Number.isSafeInteger(candidate.data?.netCents)||!Number.isSafeInteger(candidate.data?.currentlyUnpricedItemCount))
-    ||candidate.code==='OK'&&candidate.part==='notices'&&(!Array.isArray(candidate.missing)||!candidate.missing.every(item=>typeof item==='string')))throw Error('TODAY_REGION_RESPONSE_INCOMPLETE');
-   etag.current=result.revision;setEntry({source,value:candidate});
-  }catch{
-   if(!controller.signal.aborted)setEntry({source,value:{code:'SOURCE_INCOMPLETE',part}});
-  }finally{if(running.current===controller){running.current=null;setPending(false);if(!controller.signal.aborted&&requested!==wanted.current)queueMicrotask(()=>nextRead.current());}}
- },[part,source,scope]);
- useLayoutEffect(()=>{nextRead.current=()=>{void reload();};},[reload]);
- useEffect(()=>()=>{running.current?.abort();running.current=null;},[source,scope]);
- useEffect(()=>{
-  if(previous.current.source!==source){previous.current={source,revision};etag.current=revision;return;}
-  if(revision&&previous.current.revision!==revision){previous.current.revision=revision;void reload();}
- },[source,revision,reload]);
- let content:React.ReactNode;
- if(value.code!=='OK')content=<>{part==='counts'&&knownCounts?children:null}<p role="status">{TODAY_MODEL_COPY.partFailed}</p><Button text={TODAY_MODEL_COPY.partReload} disabled={pending} onClick={()=>void reload()}/></>;
- else if(value.part==='week')content=<><p>{new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(value.data.netCents/100)}</p>{value.data.currentlyUnpricedItemCount>0?<p>{TODAY_MODEL_COPY.unpriced(value.data.currentlyUnpricedItemCount)}</p>:null}</>;
- else if(value.part==='notices')content=<p>{value.missing.length?PAGE_READ_COPY.partial:TODAY_MODEL_COPY.noNotices}</p>;
- else content=children;
- return <TodayRegionFrame part={part}>{content}</TodayRegionFrame>;
 }

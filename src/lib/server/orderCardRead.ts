@@ -810,7 +810,8 @@ export async function readTodayOrderCards(authorization:TodayOrderReadAuthorizat
       if(selectedIds.length===1){
        const id=selectedIds[0];
        console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId:id,name:error instanceof Error?error.name:'UnknownError'});
-       results.set(id,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+       const errorCode=error instanceof Error&&/^ORDER_CARD_[A-Z0-9_]+$/.test(error.message)?error.message:'ORDER_CARD_READ_FAILED';
+       results.set(id,{code:'UNAVAILABLE',message:`Auftragskarte konnte nicht sicher geladen werden. Fehlercode: ${errorCode}.`,errorCode});
        return;
       }
       const middle=Math.ceil(selectedIds.length/2);
@@ -828,7 +829,8 @@ export async function readTodayOrderCards(authorization:TodayOrderReadAuthorizat
    const prepared=new Map<string,PreparedCard>();
    const failCard=(orderId:string,error:unknown)=>{
     console.error('[TODAY_ORDER_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});
-    results.set(orderId,{code:'UNAVAILABLE',message:'Auftragskarte konnte nicht sicher geladen werden.'});
+    const errorCode=error instanceof Error&&/^ORDER_CARD_[A-Z0-9_]+$/.test(error.message)?error.message:'ORDER_CARD_READ_FAILED';
+    results.set(orderId,{code:'UNAVAILABLE',message:`Auftragskarte konnte nicht sicher geladen werden. Fehlercode: ${errorCode}.`,errorCode});
    };
    for(const orderId of orderIds){
     if(results.has(orderId))continue;

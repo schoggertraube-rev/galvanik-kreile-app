@@ -1,7 +1,7 @@
 import 'server-only';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
-import {readOrderInformed} from '@/lib/server/orderReleaseRead';
+import {readOrdersInformed} from '@/lib/server/orderReleaseRead';
 import type {OperationalOrder} from '@/lib/types/operationalOrder';
 import {berlinCalendarDay,workingDaysBetween,plusWorkingDays} from '@/lib/domain/workingDays';
 import {readOrderPickupAppointment,pickupStorageDue} from '@/lib/server/pickupAppointmentPort';
@@ -17,6 +17,9 @@ import {readCollectionMoneyAccess} from '@/lib/server/storageLetterRead';
 import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
 
 export type FinishedDispatch={collectionSend?:{allowed:boolean;requiresMoney:boolean;message:string|null};orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true};
+function safeDispatchReadError(error:unknown){
+ return {name:error instanceof Error&&/^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(error.name)?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/.test(error.message)?error.message:'DISPATCH_READ_FAILED'};
+}
 
 /** Enrich existing operational rows; never a second saved queue or release rule. */
 export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>}){
@@ -26,9 +29,11 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
  const replies=new Map<string,DispatchReplyReceipt>();
  const histories=new Map<string,Awaited<ReturnType<typeof readCollectionReminderHistory>>>();
  const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>;deliveryFailedAt:string|null;responseSince:string|null}>();
- for(const order of orders.filter(row=>row.station==='fertig')){
-  const notification=await readOrderInformed(auth,order.id);
-  if(notification.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
+ const finished=orders.filter(row=>row.station==='fertig');
+ const notifications=await readOrdersInformed(auth,finished.map(order=>order.id));
+ for(const order of finished){
+  const notification=notifications.get(order.id);
+  if(notification?.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
   const workingDays=policy===null||!notification.frozenAt?null:workingDaysBetween(berlinCalendarDay(new Date(notification.frozenAt)),berlinCalendarDay(),policy.holidays);
   if(workingDays!==null&&workingDays<0){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['DISPATCH_CALENDAR_INVALID'],unavailable:true});continue;}
   result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,
@@ -52,7 +57,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
  for(const group of groups.values()){
   const failGroup=()=>{for(const row of result.filter(item=>group.members.some(member=>member.orderId===item.orderId))){row.unavailable=true;row.reminder=undefined;row.storage=undefined;row.gaps.push('COLLECTION_PROOF_UNAVAILABLE');}};
   let history:Awaited<ReturnType<typeof readCollectionReminderHistory>>;
-  try{history=await readCollectionReminderHistory(auth,group.customerId,group.handover,group.members.map(member=>member.orderId));}catch(error){console.error('[DISPATCH_HISTORY_UNAVAILABLE]',error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/.test(error.message)?error.message:error instanceof Error?error.name:'UnknownError');failGroup();continue;}
+  try{history=await readCollectionReminderHistory(auth,group.customerId,group.handover,group.members.map(member=>member.orderId));}catch(error){console.error('[DISPATCH_HISTORY_UNAVAILABLE]',safeDispatchReadError(error));failGroup();continue;}
   histories.set(JSON.stringify([group.customerId,group.handover]),history);
   for(const row of history)if(row.sentAt&&row.threadId)group.threads.add(row.threadId);
   let noMail=false;
@@ -60,13 +65,13 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   const pausedOrderIds=group.members.filter(member=>appointments.has(member.orderId)).map(member=>member.orderId);
   const initial=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail,pausedOrderIds},policy,history);
   let calls:Awaited<ReturnType<typeof readDispatchCalls>>;
-  try{calls=await readDispatchCalls(auth,group.customerId,group.handover,initial.orderIds);}catch(error){console.error('[DISPATCH_CALL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
+  try{calls=await readDispatchCalls(auth,group.customerId,group.handover,initial.orderIds);}catch(error){console.error('[DISPATCH_CALL_READ_FAILED]',safeDispatchReadError(error));failGroup();continue;}
   const answered=new Map<string,{call?:typeof calls[number];mail?:DispatchResponseCheck['proofs'][number]}>();
   for(const member of group.members){const call=calls.find(call=>call.result==='reached'&&member.freezeId&&call.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));if(call)answered.set(member.orderId,{call});}
   try{
    const saved=await readRecordedDispatchReplies(auth,group.customerId,group.handover);
    for(const member of group.members){const reply=saved.filter(reply=>reply.proof.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)&&Date.parse(reply.proof.receivedAt)>=Date.parse(member.noticeAt??member.readyAt??'')).sort((a,b)=>Date.parse(b.proof.receivedAt)-Date.parse(a.proof.receivedAt))[0];if(reply){replies.set(member.orderId,reply);if(!answered.has(member.orderId))answered.set(member.orderId,{mail:reply.proof});}}
-  }catch(error){console.error('[DISPATCH_RECORDED_REPLY_UNAVAILABLE]',error instanceof Error?error.message:'UnknownError');failGroup();continue;}
+  }catch(error){console.error('[DISPATCH_RECORDED_REPLY_UNAVAILABLE]',safeDispatchReadError(error));failGroup();continue;}
   // Mail qualification belongs to its import/assignment command. This reader
   // consumes only the immutable recorded replies above, never Graph or a writer.
   const reaction:DispatchResponseCheck={state:'NONE',proofs:[]};
@@ -104,7 +109,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
      if(letter){
       row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':letter.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,...(letter.postalDocumentId?{postalDocumentId:letter.postalDocumentId,postalTaskId:letter.postalTaskId}:{}),callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy,letter.storageDeadline??{date:'',due:null})};
       try{const final=await readStorageFinalTaskState(auth,letter.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}
-      catch(error){console.error('[STORAGE_FINAL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');failGroup();storageUnavailable=true;break;}
+      catch(error){console.error('[STORAGE_FINAL_READ_FAILED]',safeDispatchReadError(error));failGroup();storageUnavailable=true;break;}
 
      }
      else if(row.storage.state==='DUE'&&!appointments.has(member.orderId))unsent.push(row);
@@ -135,7 +140,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   const original=originals.filter(item=>!item.voidId).at(-1),voidId=originals.filter(item=>item.voidId).at(-1)?.voidId;
   if(original){
    row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),replyEventId:reply.eventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
-   try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[REPLY_FINAL_READ_FAILED]',error instanceof Error?error.message:'UnknownError');row.unavailable=true;row.storage=undefined;}
+   try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[REPLY_FINAL_READ_FAILED]',safeDispatchReadError(error));row.unavailable=true;row.storage=undefined;}
   }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,reply.customerId,reply.handover,reply.eventId+(voidId?':void:'+voidId:''),orderIds),orderIds,due,sentAt:null,threadId:null,replyEventId:reply.eventId,freezes,finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};
  }
  for(const row of result){const appointment=appointments.get(row.orderId);if(!appointment||replyLeads(row.orderId)||row.unavailable||!row.reminder)continue;
@@ -149,7 +154,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
    const original=originals.filter(item=>!item.voidId).at(-1),voidId=originals.filter(item=>item.voidId).at(-1)?.voidId;
    if(original){
     row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),appointmentEventId:appointment.eventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
-    try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[APPOINTMENT_FINAL_READ_FAILED]',error);row.unavailable=true;row.storage=undefined;continue;}
+    try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[APPOINTMENT_FINAL_READ_FAILED]',safeDispatchReadError(error));row.unavailable=true;row.storage=undefined;continue;}
    }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,order.customerId,'pickup',appointment.eventId+(voidId?':void:'+voidId:''),[row.orderId]),orderIds:[row.orderId],due,sentAt:null,threadId:null,appointmentEventId:appointment.eventId,freezes:[{orderId:row.orderId,freezeId:member.freezeId}],finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};
    continue;
   }
@@ -161,7 +166,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
    const original=(histories.get(JSON.stringify([order.customerId,'pickup']))??[]).filter(item=>item.stage==='E4'&&item.storageOrigin?.freezes.some(proof=>proof.orderId===row.orderId&&proof.freezeId===member?.freezeId)).at(-1);
    if(original){
     row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),callTaskId:original.storageOrigin?.callTaskId,appointmentEventId:original.storageOrigin?.appointmentEventId,replyEventId:original.storageOrigin?.replyEventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
-    try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[PAUSED_ORIGINAL_READ_FAILED]',error);row.unavailable=true;row.storage=undefined;continue;}
+    try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[PAUSED_ORIGINAL_READ_FAILED]',safeDispatchReadError(error));row.unavailable=true;row.storage=undefined;continue;}
    }
   }
   if(row.storage){row.storage.state='WAIT';if(row.storage.letter){const original=row.storage.letter.finalStage;row.storage.letter.finalStage={...original,state:original.taskId?original.state:'WAIT',due:original.taskId?original.due:appointment.resumeOn,pausedUntil:appointment.resumeOn};if('positionProposal'in row.storage.letter.finalStage)row.storage.letter.finalStage.positionProposal=null;}}
