@@ -73,6 +73,7 @@ it('persists the bounded Today lease through the real settings action and active
  }},async()=>{
   expect(await withSession(full,()=>saveCompanySettingsAction({...company,todayRefreshLeaseSeconds:45}))).toMatchObject({code:'OK'});
   expect(await readTodayReadSettings({tenantId:tenant,fresh:true})).toMatchObject({todayRefreshLeaseSeconds:45});
+  expect((await refreshTodayModel(tenant,undefined,{bounded:true})).code).toBe('OK');
   const {SALES_STAGE_FEATURES}=await import('@/modules/fundament/public');
   for(const feature of SALES_STAGE_FEATURES)await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES(${tenant},${feature.id},${feature.defaultEnabled}) ON CONFLICT(tenant,feature_id) DO NOTHING`;
   const visible=await withSession(full,()=>readSettingsAction());
