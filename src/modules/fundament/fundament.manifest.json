@@ -97,9 +97,7 @@
     "20261123145308_einstellungen_aufbewahrung_kp12.sql",
     "20261123145309_einstellungen_umsatzsteuer_u10.sql",
     "20261123145310_einstellungen_umsatzsteuer_u10_position.sql",
-    "20261123145311_einstellungen_umsatzsteuer_u10_katalog.sql",
-    "20261123145312_einstellungen_einstellungen_leseindizes.sql",
-    "20261124025207_settings_vat_legacy_guard.sql"
+    "20261123145312_einstellungen_einstellungen_leseindizes.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [

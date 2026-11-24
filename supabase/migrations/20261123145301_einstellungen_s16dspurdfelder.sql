@@ -67,7 +67,7 @@ AS $$
       {"id":"kratzer","name":"Kratzer"},
       {"id":"teil_fehlt","name":"Teil fehlt"}
     ],
-    "suchalias_gruppen": [["300 SL","SL300","Mercedes 300 SL","W198"],["Chrom","Verchromen"]],
+    "suchalias_gruppen": [],
     "energie_pauschale_cent_je_verfahren": {},
     "betriebsruhe": [],
     "versandpuffer_arbeitstage": 2,
