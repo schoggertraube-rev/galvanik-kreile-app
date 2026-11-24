@@ -317,9 +317,8 @@ jobs:
             echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
           } >> "$GITHUB_ENV"
 
-      - name: Replay complete candidate for BF-008 tenant coverage
-        run: ./node_modules/.bin/supabase db reset --local --no-seed
-
+      # supabase start above applies every candidate migration on this isolated CI stack.
+      # BF-008 runs before the historical resets below without resetting the running Storage stack.
       - name: BF-008 tenant coverage check (full candidate vs F0_TENANT_COVERAGE.json)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
