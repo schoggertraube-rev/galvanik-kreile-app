@@ -6,6 +6,8 @@ DECLARE
   akteur uuid := gen_random_uuid();
   ort uuid;
   eroeffnung timestamptz := statement_timestamp() - interval '1 hour';
+  quelle jsonb := jsonb_build_object('tabelle', 'inventory_items', 'feld', 'current_stock',
+    'artikel_id', artikel, 'menge', 7, 'einheit', 'l', 'einheit_normiert', NULL, 'basiseinheit', 'l');
 BEGIN
   PERFORM set_config('app.tenant_id', mandant, true);
   INSERT INTO public.inventory_items (id, tenant_id, name)
@@ -31,18 +33,18 @@ BEGIN
 
   INSERT INTO public.stock_movements (
     tenant_id, inventory_item_id, movement_type, quantity, mengeneinheit,
-    fachzeit, revision, befehl_id, befehl_inhalt_sha256, befehl_zeile, geschaeftsgrund, mengenqualitaet
+    fachzeit, revision, befehl_id, befehl_inhalt_sha256, befehl_zeile, geschaeftsgrund, mengenqualitaet, altquelle
   ) VALUES (
     mandant, artikel, 'opening', 7, 'l', eroeffnung, 1, gen_random_uuid(), repeat('c', 64), 1,
-    'altbestand', 'unbestaetigt'
+    'altbestand', 'unbestaetigt', quelle
   );
   BEGIN
     INSERT INTO public.stock_movements (
       tenant_id, inventory_item_id, movement_type, quantity, mengeneinheit,
-      fachzeit, revision, befehl_id, befehl_inhalt_sha256, befehl_zeile, geschaeftsgrund, mengenqualitaet
+      fachzeit, revision, befehl_id, befehl_inhalt_sha256, befehl_zeile, geschaeftsgrund, mengenqualitaet, altquelle
     ) VALUES (
       mandant, artikel, 'opening', 0, 'l', eroeffnung, 1, gen_random_uuid(), repeat('d', 64), 1,
-      'altbestand', 'unbestaetigt'
+      'altbestand', 'unbestaetigt', quelle || jsonb_build_object('menge', 0)
     );
     RAISE EXCEPTION 'TEST zweite Eröffnung erlaubt';
   EXCEPTION WHEN unique_violation THEN

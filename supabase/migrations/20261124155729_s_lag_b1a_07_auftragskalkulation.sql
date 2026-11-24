@@ -50,7 +50,7 @@ BEGIN
       SELECT round(coalesce(
         sum(preis.einzelpreis * gewicht.menge) / nullif(sum(gewicht.menge), 0),
         avg(preis.einzelpreis)
-      ), 4)
+      ), 6)
       FROM gueltige_preise preis
       CROSS JOIN LATERAL (
         SELECT sum(bewegung.quantity) AS menge
@@ -61,6 +61,7 @@ BEGIN
           AND bewegung.movement_type = 'stock_in'
           AND bewegung.geschaeftsgrund = 'wareneingang'
           AND bewegung.fachzeit <= p_fachzeit
+          AND NOT EXISTS (SELECT 1 FROM public.stock_movements g WHERE g.tenant_id = bewegung.tenant_id AND g.gegenbuchung_id = bewegung.id)
       ) gewicht
     ) ELSE quelle.einzelpreis END
   FROM preisquelle quelle;

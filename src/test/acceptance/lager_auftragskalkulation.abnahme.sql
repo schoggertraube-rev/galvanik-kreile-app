@@ -4,6 +4,7 @@ DECLARE
   mandant text := 'TEST-l8-' || gen_random_uuid()::text;
   anderer text := 'TEST-l8-' || gen_random_uuid()::text;
   artikel text := 'TEST-' || gen_random_uuid()::text;
+  durchschnitt_artikel text := 'TEST-' || gen_random_uuid()::text;
   variante text := 'TEST-' || gen_random_uuid()::text;
   leer text := 'TEST-' || gen_random_uuid()::text;
   kunde text := 'TEST-' || gen_random_uuid()::text;
@@ -13,6 +14,7 @@ DECLARE
   beleg_letzter uuid := gen_random_uuid();
   letzter_preis uuid;
   gewichteter_preis numeric;
+  erster_zugang uuid;
   ort uuid;
   akteur uuid := gen_random_uuid();
   zeitpunkt timestamptz := '2026-11-20 12:00:00+01';
@@ -23,8 +25,9 @@ DECLARE
 BEGIN
   PERFORM set_config('app.tenant_id', mandant, true);
   INSERT INTO public.inventory_items (id,tenant_id,name,basiseinheit) VALUES
-    (artikel,mandant,'TEST Eisen','kg'),(variante,mandant,'TEST Eisen B','kg'),(leer,mandant,'TEST ohne EK','kg');
-  INSERT INTO public.customers (id,tenant_id,name,type) VALUES (kunde,mandant,'TEST Kunde','firma');
+    (artikel,mandant,'TEST Eisen','kg'),(variante,mandant,'TEST Eisen B','kg'),(leer,mandant,'TEST ohne EK','kg'),
+    (durchschnitt_artikel,mandant,'TEST Gegenbuchung EK','kg');
+  INSERT INTO public.customers (id,tenant_id,name,type) VALUES (kunde,mandant,'TEST Kunde','business');
   INSERT INTO public.orders (id,tenant_id,customer_id,order_number,title) VALUES (auftrag,mandant,kunde,auftrag,'TEST Verbrauch');
   INSERT INTO public.app_users (id,tenant_id,email,full_name,role)
     VALUES (akteur,mandant,akteur::text || '@test.invalid','TEST Werkstatt','werkstatt');
@@ -80,6 +83,38 @@ BEGIN
     WHERE preisquelle_id = letzter_preis;
   IF gewichteter_preis IS DISTINCT FROM 5.8125::numeric THEN
     RAISE EXCEPTION 'TEST L8: Durchschnitt der Eingangsgewichte falsch';
+  END IF;
+
+  INSERT INTO public.material_prices
+      (tenant_id,artikel_id,einzelpreis,waehrung,quelle,gueltig_ab,bestaetigt_am,beleg_id)
+    VALUES
+      (mandant,durchschnitt_artikel,0.0250,'EUR','manuell',
+       zeitpunkt - interval '4 days',zeitpunkt - interval '4 days',beleg_teuer),
+      (mandant,durchschnitt_artikel,0.0280,'EUR','manuell',
+       zeitpunkt - interval '1 day',zeitpunkt - interval '1 day',beleg_letzter);
+  SELECT bewegung_id INTO STRICT erster_zugang
+    FROM private.lager_journal_anhaengen(gen_random_uuid(), repeat('a',64), akteur, jsonb_build_array(
+      jsonb_build_object('artikel_id',durchschnitt_artikel,'art','stock_in','menge',2000,'beleg_id',beleg_teuer,
+        'ort_id',ort,'einheit','kg','fachzeit',zeitpunkt - interval '3 days','revision',1,
+        'mengenqualitaet','exakt','geschaeftsgrund','wareneingang')));
+  PERFORM private.lager_journal_anhaengen(gen_random_uuid(), repeat('b',64), akteur, jsonb_build_array(
+    jsonb_build_object('artikel_id',durchschnitt_artikel,'art','stock_in','menge',1000,'beleg_id',beleg_letzter,
+      'ort_id',ort,'einheit','kg','fachzeit',zeitpunkt - interval '1 day','revision',1,
+      'mengenqualitaet','exakt','geschaeftsgrund','wareneingang')));
+  SELECT einzelpreis INTO STRICT gewichteter_preis
+    FROM private.lager_kalkulationsbasis(durchschnitt_artikel, zeitpunkt, 'gleitender_durchschnitt');
+  IF gewichteter_preis IS DISTINCT FROM 0.026000::numeric OR scale(gewichteter_preis) <> 6 THEN
+    RAISE EXCEPTION 'TEST L8: Durchschnitt vor Gegenbuchung falsch';
+  END IF;
+
+  PERFORM private.lager_journal_anhaengen(gen_random_uuid(), repeat('c',64), akteur, jsonb_build_array(
+    jsonb_build_object('artikel_id',durchschnitt_artikel,'art','reversal','menge',-2000,
+      'gegenbuchung_id',erster_zugang,'ort_id',ort,'einheit','kg','fachzeit',zeitpunkt,'revision',1,
+      'mengenqualitaet','exakt','geschaeftsgrund','gegenbuchung')));
+  SELECT einzelpreis INTO STRICT gewichteter_preis
+    FROM private.lager_kalkulationsbasis(durchschnitt_artikel, zeitpunkt, 'gleitender_durchschnitt');
+  IF gewichteter_preis IS DISTINCT FROM 0.028000::numeric OR scale(gewichteter_preis) <> 6 THEN
+    RAISE EXCEPTION 'TEST L8: gegengebuchter Zugang zählt im Durchschnitt';
   END IF;
 
   PERFORM set_config('app.lager_kalkulationsregel',

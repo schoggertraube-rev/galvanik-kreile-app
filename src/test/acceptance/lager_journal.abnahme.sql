@@ -1,6 +1,5 @@
 BEGIN;
 GRANT UPDATE, DELETE, TRUNCATE ON public.stock_movements TO service_role;
-SET LOCAL ROLE service_role;
 DO $abnahme$
 DECLARE
   mandant text := 'TEST-p2-' || gen_random_uuid()::text;
@@ -100,6 +99,8 @@ BEGIN
     RAISE EXCEPTION 'TEST unbekannte Fundmenge als Nullmenge gespeichert';
   END IF;
 
+  -- Die Aufrufe im Schema private nutzen die Replay-Rolle. Die Schreibsperren gelten auch für service_role.
+  SET LOCAL ROLE service_role;
   BEGIN
     UPDATE public.stock_movements SET quantity = 8 WHERE id = original;
     RAISE EXCEPTION 'TEST UPDATE als service_role zugelassen';
