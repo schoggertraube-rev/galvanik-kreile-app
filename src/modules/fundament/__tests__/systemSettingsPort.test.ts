@@ -9,6 +9,8 @@ vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: w
 vi.mock("bcryptjs", () => ({ default: { hash } }));
 vi.mock("drizzle-orm", () => ({ sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }) }));
 
+const { readSystemSettings } = await import("../server/systemSettingsPort");
+
 const context = { tenantId: KREILE_TENANT_SLUG, actorId: "11111111-1111-4111-8111-111111111111", canManage: true };
 
 describe("system settings port", () => {
@@ -31,7 +33,6 @@ describe("system settings port", () => {
         areas: ["auftraege", "eingang", "kunden"],
       }])
       .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
-    const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
       snapshot: {
@@ -50,7 +51,6 @@ describe("system settings port", () => {
         { id: "22222222-2222-4222-8222-222222222222", email: null, full_name: "Christian Dieter", kuerzel: "CD", bezeichnung: null, role: "meister", active: false, areas: ["auftraege", 'preise','zahlungen','buchhaltung', "logins"] },
       ])
       .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
-    const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
       snapshot: {
@@ -67,7 +67,6 @@ describe("system settings port", () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
-    const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
       snapshot: { company: { companyName: null, country: null, paymentTermDays: null, logoUrl: null } },
@@ -86,6 +85,28 @@ describe("system settings port", () => {
     expect(execute.mock.calls[0]?.[0].text).toContain("WHERE tenant_id=");
     expect(execute.mock.calls[1]?.[0].text).toContain("INSERT INTO public.ui_events");
     expect(execute.mock.calls[1]?.[0].text).toContain("company_settings_updated");
+  });
+
+  it("validates the live Today lease limit and persists its audited readback", async () => {
+    const { updateCompanySettings } = await import("../server/systemSettingsPort");
+    const company = {
+      companyName: "Galvanik Kreile", street: "Testweg 1", zip: "12345", city: "Berlin", country: "Deutschland",
+      taxId: "DE123456789", iban: "DE0012345678", bic: "TESTDEFF", bankName: "Testbank", paymentTermDays: 14, logoUrl: "/logo.png",
+    };
+    for (const value of [0, 241, 1.5]) {
+      await expect(updateCompanySettings(context, { ...company, todayRefreshLeaseSeconds: value })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+      expect(withTransaction).not.toHaveBeenCalled();
+    }
+    for (const value of [1, 240, 45]) {
+      execute.mockReset();
+      execute.mockResolvedValueOnce([{ id: `company:${KREILE_TENANT_SLUG}` }])
+        .mockResolvedValueOnce([{ today_refresh_lease_seconds: value }])
+        .mockResolvedValueOnce([{ id: "audit" }]);
+      await expect(updateCompanySettings(context, { ...company, todayRefreshLeaseSeconds: value })).resolves.toEqual({ code: "OK" });
+      expect(execute.mock.calls[1]?.[0].text).toContain("today_refresh_lease_seconds");
+      expect(JSON.stringify(execute.mock.calls[2]?.[0])).toContain("todayRefreshLeaseSeconds");
+    }
+    expect(withTransaction).toHaveBeenCalledTimes(3);
   });
 
   it("reads complete company data for a tenant-bound document and fails closed when it is missing", async () => {
