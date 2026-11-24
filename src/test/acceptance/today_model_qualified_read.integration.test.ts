@@ -6,6 +6,7 @@ import {maskTodayOrderCard} from '@/lib/server/orderCardRead';
 import {readTodayOrderSources,type TodayOrderReadPorts} from '@/lib/server/todayOrderRead';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
 import {readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
@@ -30,6 +31,7 @@ import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {saveIntakeNoteAction,saveIntakeTaskAction,selectIntakeConcernAction,getIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {createQuoteAction,readQuoteDefaultsAction,changeQuoteLifecycleAction} from '@/app/actions/quotes.actions';
 import {saveQuoteSettingsAction} from '@/app/actions/settings.actions';
+import {saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {reklamationAusfuehrenAction} from '@/app/actions/complaints.actions';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
 import {APP_ROLES,ACCESS_AREAS,normalizeAccessAreasForRole,type AccessArea} from '@/lib/auth/authorizationContract';
@@ -59,6 +61,25 @@ const customProfiles:Array<{key:string;areas:AccessArea[]}>=[
  {key:'mails',areas:['mails']},{key:'mail-customer',areas:['mails','kunden']},{key:'mail-assignment',areas:['mails','kunden','eingang']},
  {key:'mail-money',areas:['mails','preise','zahlungen']},
 ];
+
+it('persists the bounded Today lease through the real settings action and active model reader',async()=>{
+ const company={companyName:'TEST Kreile',street:'Testweg 1',zip:'12345',city:'Berlin',country:'Deutschland',taxId:'DE123456789',iban:'DE0012345678',bic:'TESTDEFF',bankName:'Testbank',paymentTermDays:14,logoUrl:'/TEST-logo.png'};
+ expect(await withSession(full,()=>saveCompanySettingsAction(company))).toMatchObject({code:'OK'});
+ const read=async()=>{const [row]=await sql`SELECT to_jsonb(company) AS row FROM public.company_settings company WHERE tenant_id=${tenant}`;if(!row)throw Error('TEST_TODAY_LEASE_COMPANY_REQUIRED');return row.row;};
+ await withRestoredTestSource({label:'TEST bounded Today lease settings',read,restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_TODAY_LEASE_COLUMN_INVALID');
+  const names=columns.map(column=>'"'+column+'"').join(',');
+  await sql`UPDATE public.company_settings SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::public.company_settings,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND id=${String(original.id)}`;
+ }},async()=>{
+  expect(await withSession(full,()=>saveCompanySettingsAction({...company,todayRefreshLeaseSeconds:45}))).toMatchObject({code:'OK'});
+  expect(await readTodayReadSettings({tenantId:tenant,fresh:true})).toMatchObject({todayRefreshLeaseSeconds:45});
+  expect((await refreshTodayModel(tenant,undefined,{bounded:true})).code).toBe('OK');
+  const [audit]=await sql`SELECT payload FROM public.ui_events WHERE tenant_id=${tenant} AND event_type='company_settings_updated' ORDER BY created_at DESC LIMIT 1`;
+  expect(audit?.payload).toMatchObject({actorId:full.actorId,todayRefreshLeaseSeconds:45});
+  expect(await withSession(full,()=>saveCompanySettingsAction({...company,todayRefreshLeaseSeconds:241}))).toMatchObject({code:'VALIDATION_ERROR'});
+  expect(await readTodayReadSettings({tenantId:tenant,fresh:true})).toMatchObject({todayRefreshLeaseSeconds:45});
+ });
+});
 
 it('qualifies the actual source snapshot and never returns an old payload after a command, version mismatch or code change',async()=>{
  const order=await readyInvoiceOrder('TEST qualified model source');

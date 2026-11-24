@@ -42,6 +42,7 @@ import type {
 import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const validTodayRefreshLeaseSeconds=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=1&&value*1000<=MAX_TODAY_REFRESH_MS;
 export type SystemSettingsContext = {
   tenantId: string;
   actorId: string;
@@ -328,8 +329,10 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   const pageReadsRequested=Object.hasOwn(value,'pageReads');
   const pageReads=pageReadsRequested?parsePageReadSettings(value.pageReads):null;
   if(pageReadsRequested&&!pageReads)return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.invalid};
+  const leaseRequested=Object.hasOwn(value,'todayRefreshLeaseSeconds');
+  if(leaseRequested&&!validTodayRefreshLeaseSeconds(value.todayRefreshLeaseSeconds))return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.refreshLeaseInvalid(MAX_TODAY_REFRESH_MS/1000)};
   const taxNumberRequested=Object.hasOwn(value,'taxNumber');
-  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(pageReadsRequested?['pageReads']:[])].sort().join(',');
+  const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(pageReadsRequested?['pageReads']:[]),...(leaseRequested?['todayRefreshLeaseSeconds']:[])].sort().join(',');
   if (Object.keys(value).sort().join(",") !== expectedKeys) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
   const protocol=protocolRequested?parseProtocolSettings(value.protocol):null;
   if(text(value.taxId,0,40)===null||(taxNumberRequested&&text(value.taxNumber,0,40)===null))return {code:'VALIDATION_ERROR' as const,message:'Firmendaten sind ungültig.'};
@@ -387,6 +390,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING seiten_abfrage_ms AS "queryTimeoutMs",rechnung_mail_grenze AS "invoiceMailBatchLimit"`);
         if(saved.length!==1||!isDeepStrictEqual(parsePageReadSettings(saved[0]),pageReads))throw Error('PAGE_READ_SETTINGS_READBACK_MISSING');
       }
+      if(leaseRequested){
+        const saved=await tx.execute<{today_refresh_lease_seconds:number}>(sql`UPDATE public.company_settings SET today_refresh_lease_seconds=${value.todayRefreshLeaseSeconds as number}
+          WHERE tenant_id=${context.tenantId} AND id=${rows[0].id} RETURNING today_refresh_lease_seconds`);
+        if(saved.length!==1||saved[0].today_refresh_lease_seconds!==value.todayRefreshLeaseSeconds)throw Error('TODAY_REFRESH_LEASE_READBACK_MISSING');
+      }
       const audit=await tx.execute(sql`
         INSERT INTO public.ui_events (tenant_id, event_type, payload)
         VALUES (
@@ -395,10 +403,11 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
           jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text)
           ${protocol?sql`||jsonb_build_object('protocol',${JSON.stringify(protocol)}::jsonb)`:sql``}
           ${pageReads?sql`||jsonb_build_object('pageReads',${JSON.stringify(pageReads)}::jsonb)`:sql``}
+          ${leaseRequested?sql`||jsonb_build_object('todayRefreshLeaseSeconds',${value.todayRefreshLeaseSeconds as number}::integer)`:sql``}
         )
         RETURNING id
       `);
-      if((protocol||taxNumberRequested||pageReadsRequested)&&audit.length!==1)throw Error('PROTOCOL_SETTINGS_AUDIT_MISSING');
+      if((protocol||taxNumberRequested||pageReadsRequested||leaseRequested)&&audit.length!==1)throw Error('COMPANY_SETTINGS_AUDIT_MISSING');
     });
     return { code: "OK" as const };
   } catch (error) {
