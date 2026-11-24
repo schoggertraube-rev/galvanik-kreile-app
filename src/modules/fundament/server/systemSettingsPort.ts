@@ -2,7 +2,7 @@ import {cache} from 'react';
 import {DEFAULT_PAGE_READ_SETTINGS,withPageReadSettingsSource} from '@/db/readBudget';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
-import {MAX_TODAY_REFRESH_MS,parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany,validTodayRefreshLeaseSeconds} from '../public';
+import {MAX_TODAY_REFRESH_MS,parsePageReadSettings,pageReadSettingsFromCompany,todayReadSettingsFromCompany} from '../public';
 import {isInvoiceVatId} from '@/lib/domain/invoiceElectronicFields';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {MANAGED_USER_COPY} from "@/ui/situationCatalog";
@@ -42,6 +42,7 @@ import type {
 import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const validTodayRefreshLeaseSeconds=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=1&&value*1000<=MAX_TODAY_REFRESH_MS;
 export type SystemSettingsContext = {
   tenantId: string;
   actorId: string;
