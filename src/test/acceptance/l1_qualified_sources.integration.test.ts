@@ -49,7 +49,9 @@ it('reads one and twenty visible orders with the same number of SQL statements',
  const twenty=await read();
  expect(one.rows).toBe(1);
  expect(twenty.rows).toBe(20);
+ expect(one.queries).toBeGreaterThan(0);
  expect(twenty.queries).toBe(one.queries);
+ console.log(`TEST_EC2_LIST_QUERIES one=${one.queries} twenty=${twenty.queries}`);
 });
 it('batches actual Today facts once and keeps the same qualified full-card values, version and evidence for zero, one and several orders',async()=>{
  const customer=await customerFixture('TEST L1 batch customer');
