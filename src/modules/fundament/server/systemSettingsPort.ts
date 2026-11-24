@@ -111,7 +111,7 @@ function todaySettingsFromRows(rows:readonly {today_read_source:unknown}[]){
  return settings;
 }
 
-type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;today_refresh_lease_seconds?:number|null;page_read_source?:unknown };
+type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; tax_number?: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null;protokoll_aufbewahrung_tage?:number|null;protokoll_langsam_ms?:number;protokoll_haenger_ms?:number;page_read_source?:unknown };
 /** Letters need the real sender address, not invoice-only bank/tax configuration. */
 const readFreshCompanyLetterSettingsRow=async(tenantId:string,includeDeliveryNoteIdentity:boolean)=>withPrivilegedTenantTransaction({tenantId},async tx=>{
   const rows=await tx.execute<import('../public').CompanyLetterSettings>(sql`SELECT company_name AS "companyName",street,zip,city,country${includeDeliveryNoteIdentity?sql`,phone,COALESCE(NULLIF(tax_id,''),NULLIF(tax_number,'')) AS "taxId",logo_url AS "logoUrl"`:sql``} FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
@@ -218,7 +218,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
-      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,today_refresh_lease_seconds,${pageReadProjection} FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, tax_number, iban, bic, bank_name, invoice_payment_term_days, logo_url,protokoll_aufbewahrung_tage,protokoll_langsam_ms,protokoll_haenger_ms,${pageReadProjection} FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`
         SELECT users.id::text AS id,
@@ -246,7 +246,6 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           iban: company.iban, bic: company.bic, bankName: company.bank_name,
           paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
           pageReads:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.settings??null,
-          todayRefreshLeaseSeconds:company.today_refresh_lease_seconds??null,
           pageReadsSchemaReady:pageReadSettingsFromCompany(company.page_read_source,DEFAULT_PAGE_READ_SETTINGS)?.schemaReady===true,
           protocol:parseProtocolSettings({retentionDays:company.protokoll_aufbewahrung_tage,slowMs:company.protokoll_langsam_ms,hangMs:company.protokoll_haenger_ms}),
         } : EMPTY_COMPANY,
@@ -331,7 +330,7 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   const pageReads=pageReadsRequested?parsePageReadSettings(value.pageReads):null;
   if(pageReadsRequested&&!pageReads)return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.invalid};
   const leaseRequested=Object.hasOwn(value,'todayRefreshLeaseSeconds');
-  if(leaseRequested&&!validTodayRefreshLeaseSeconds(value.todayRefreshLeaseSeconds))return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.refreshLeaseInvalid};
+  if(leaseRequested&&!validTodayRefreshLeaseSeconds(value.todayRefreshLeaseSeconds))return {code:'VALIDATION_ERROR' as const,message:PAGE_READ_COPY.refreshLeaseInvalid(MAX_TODAY_REFRESH_MS/1000)};
   const taxNumberRequested=Object.hasOwn(value,'taxNumber');
   const expectedKeys=['bankName','bic','city','companyName','country','iban','logoUrl','paymentTermDays','street','taxId','zip',...(taxNumberRequested?['taxNumber']:[]),...(protocolRequested?['protocol']:[]),...(pageReadsRequested?['pageReads']:[]),...(leaseRequested?['todayRefreshLeaseSeconds']:[])].sort().join(',');
   if (Object.keys(value).sort().join(",") !== expectedKeys) return { code: "VALIDATION_ERROR" as const, message: "Firmendaten sind unvollständig." };
