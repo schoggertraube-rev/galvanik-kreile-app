@@ -188,14 +188,17 @@
     "supabase/migrations/20261108173258_quote_goods_deviation_clearance.sql",
     "supabase/migrations/20261108173803_quote_goods_clearance_history.sql",
     "20261110070400_intake_delivery_evidence_view.sql",
-    "20261110142424_intake_reply_evidence_view.sql"
+    "20261110142424_intake_reply_evidence_view.sql",
+    "20261123153000_einstellungen_crossmodule_reads.sql"
   ],
   "viewsFunctions": [
     "private.v_intake_delivery_evidence_v1",
     "private.v_intake_reply_evidence_v1",
     "public.v_intake_expected_goods_v1",
     "private.v_intake_message_contexts_v1",
-    "public.v_quote_goods_receipt_v1"
+    "public.v_quote_goods_receipt_v1",
+    "public.v_eingang_supplier_invoice_settings_v1",
+    "public.v_eingang_email_template_settings_v1"
   ],
   "ownsTables": [
     "public.intake_event",
@@ -206,7 +209,8 @@
     "public.outbox_mails",
     "private.intake_drafts",
     "public.goods_receipt",
-    "public.supplier_invoice"
+    "public.supplier_invoice",
+    "public.email_templates"
   ],
   "storagePurposes": [],
   "events": {

@@ -70,7 +70,9 @@
     "@/modules/fundament/public#boundedTodayRefreshBudgetMs",
     "@/modules/fundament/public#PageReadSettings",
     "@/modules/fundament/public#pageReadSettingsFromCompany",
-    "@/modules/fundament/public#parsePageReadSettings"
+    "@/modules/fundament/public#parsePageReadSettings",
+    "@/modules/fundament/server-public#LagerEinstellungen",
+    "@/modules/fundament/server-public#readLagerEinstellungen"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
@@ -84,7 +86,19 @@
     "20261107193000_kv_v04_content_editions.sql",
     "20261110034000_output_dispatch_policy.sql",
     "20261114034003_shipment_fee_setting.sql",
-    "20261117154638_package_feature_switch_defaults.sql"
+    "20261117154638_package_feature_switch_defaults.sql",
+    "20261123145301_einstellungen_s16dspurdfelder.sql",
+    "20261123145302_einstellungen_durchlaufzeit_v5.sql",
+    "20261123145303_einstellungen_automatik_nachrichten_d13a.sql",
+    "20261123145304_einstellungen_abmeldung_v6.sql",
+    "20261123145305_einstellungen_mehrarbeit_s16d.sql",
+    "20261123145306_einstellungen_fahrzeuge_kp10.sql",
+    "20261123145307_einstellungen_kosten_kp9_kp11.sql",
+    "20261123145308_einstellungen_aufbewahrung_kp12.sql",
+    "20261123145309_einstellungen_umsatzsteuer_u10.sql",
+    "20261123145310_einstellungen_umsatzsteuer_u10_position.sql",
+    "20261123145311_einstellungen_umsatzsteuer_u10_katalog.sql",
+    "20261123145312_einstellungen_einstellungen_leseindizes.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [
@@ -93,7 +107,12 @@
     "public.app_users",
     "public.company_settings",
     "public.tenant_features",
-    "public.ui_events"
+    "public.ui_events",
+    "public.vehicles",
+    "public.kostenposten",
+    "public.kategorie",
+    "public.dokument_aufbewahrung",
+    "public.dokument_ablaufhemmung"
   ],
   "storagePurposes": [],
   "events": {
