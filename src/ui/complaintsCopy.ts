@@ -1,0 +1,3 @@
+/** R8: PL wording pending for the approved K13K-7 duplicate boundary. */
+export const COMPLAINT_OPEN_PART_CONFLICT_COPY='Für dieses Teil ist schon eine Reklamation offen. Ergänze sie dort, statt eine zweite anzulegen.';
+export const COMPLAINT_ORDER_COPY={reworkRunning:(number:string)=>`Die Nacharbeit läuft schon in Auftrag ${number}. Schließ sie zuerst ab.`,notReady:'Du kannst eine Reklamation aufnehmen, sobald die Ware fertig ist oder bereits herausgegeben wurde.',releaseBlocked:(number:string|null)=>`Du kannst die Ware noch nicht herausgeben: ${number?'Reklamation '+number:'Eine Reklamation'} ist offen. Kläre zuerst die Reklamation.`} as const;

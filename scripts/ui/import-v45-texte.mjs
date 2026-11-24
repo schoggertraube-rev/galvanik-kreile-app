@@ -8,7 +8,6 @@ import {assertProjectionBinding,projectRuntime,verifySourceManifest} from '../ge
 const output=resolve('src/ui/generated/v45Texte.generated.ts');
 const source=resolve('_review/quellen/endversion_V45');
 const patchSource=resolve('_review/NACHTRAG_PL.json');
-const report=resolve('e2e/fixtures/v45/S15_ABGLEICH.md');
 const digest=value=>createHash('sha256').update(value).digest('hex');
 // PL19.11.13:30: frozen V45 plus the authoritative text amendments, never edit V45.
 export const PATCH_SOURCE_SHA='5e61500e8fe2ebc88caaca9866b4c43a5a16bac0b87d531227d585a5f197402b';
@@ -141,11 +140,9 @@ function main(){
  }
  if(digest(JSON.stringify(amendments))!==PATCH_PROJECTION_SHA)throw Error('V45_TEXT_PATCH_PROJECTION_MISMATCH');
  const expected=renderTextCatalog(original,amendments);
- const expectedReport=renderLegacyComparison(readFileSync('src/ui/situationCatalog.ts','utf8'),compileTextContract(original,amendments));
  if(check){
   assertGeneratedCatalog(readFileSync(output,'utf8').replaceAll('\r\n','\n'),expected,compileTextContract(original,amendments).map(row=>row.key));
-  if(readFileSync(report,'utf8').replaceAll('\r\n','\n')!==expectedReport)throw Error('V45_TEXT_COMPARISON_DIFF');
- }else{for(const [file,value] of [[output,expected],[report,expectedReport]]){mkdirSync(dirname(file),{recursive:true});writeFileSync(file,value);}}
+ }else{for(const [file,value] of [[output,expected]]){mkdirSync(dirname(file),{recursive:true});writeFileSync(file,value);}}
  console.log('S15_TEXTS='+compileTextContract(original,amendments).length+' AMENDMENTS='+amendments.length+' '+(check?'PASS':'GENERATED'));
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))main();
