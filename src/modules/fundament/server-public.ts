@@ -1,12 +1,8 @@
 import "server-only";
+// Einstellungs-Leser fundament
 export {readPackageSwitches,setPackageSwitch} from './server/packageFeaturePort';
 export type {PackageSwitchContext} from './server/packageFeaturePort';
-export {readLoggingSettings} from './server/loggingSettingsPort';
-export {readPageReadSettings,readTodayReadSettings,readModelPageSettingsInTransaction} from './server/systemSettingsPort';
-export {readQuoteSettings,readQuoteSettingsInTransaction,saveQuoteSettings} from './server/quoteSettingsPort';
-export type {QuoteCalculationSettings} from './server/quoteSettingsPort';
-export { readShippingSettings,readShippingSettingsInTransaction,updateShippingSettings,readCompanyLetterSettings } from "./server/systemSettingsPort";
-
+export {readPageReadSettings,readTodayReadSettings,readModelPageSettingsInTransaction,readCompanyLetterSettings} from './server/systemSettingsPort';
 export {
   changeOwnPin,
   createManagedUser,
@@ -20,6 +16,19 @@ export type { SystemSettingsContext } from "./server/systemSettingsPort";
 export { isFeatureEnabled, readTenantFeatures, setTenantFeature } from "./server/tenantFeaturePort";
 export type { TenantFeatureContext } from "./server/tenantFeaturePort";
 
+// Einstellungs-Leser logging
+export {readLoggingSettings} from './server/loggingSettingsPort';
+
+// Einstellungs-Leser eingang
 export {readMailboxFetchState,writeMailboxFetchState} from "./server/systemSettingsPort";
+
+// Einstellungs-Leser lager
 export {readLagerEinstellungen} from "./server/s16dSpurDSettingsPort";
 export type {LagerEinstellungen} from "./server/s16dSpurDSettingsPort";
+
+// Einstellungs-Leser quotes
+export {readQuoteSettings,readQuoteSettingsInTransaction,saveQuoteSettings} from './server/quoteSettingsPort';
+export type {QuoteCalculationSettings} from './server/quoteSettingsPort';
+
+// Einstellungs-Leser ausgang
+export { readShippingSettings,readShippingSettingsInTransaction,updateShippingSettings } from "./server/systemSettingsPort";

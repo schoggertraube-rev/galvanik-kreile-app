@@ -19,6 +19,7 @@ import { requestGlobalCreate } from "./GlobalCreateFlow";
 import styles from "./TargetShell.module.css";
 import {WasIstNeu} from './WasIstNeu';
 import {DeviceStandStatus} from '@/lib/offline/DeviceStandStatus';
+import {NAVIGATION} from '@/ui/navigation/register';
 
 function readDevice(): Geraet {
   if (window.innerWidth < 768) return "handy";
@@ -36,24 +37,11 @@ function subscribeDevice(onChange: () => void) {
 const readServerDevice = (): Geraet => "desktop";
 
 function areaForPath(pathname: string): Bereich {
-  if (pathname.startsWith("/nachrichten")) return "nachrichten";
-  if (pathname.startsWith("/warendurchlauf")) return "werkstatt";
-  if (pathname.startsWith("/orders")) return "auftraege";
-  if (pathname.startsWith("/customers")) return "kunden";
-  if (pathname.startsWith("/buchhaltung/rechnungen")) return "geld";
-  if (pathname.startsWith("/settings")) return "einstellungen";
-  return "tag";
+  return NAVIGATION.find(entry=>entry.pfad!==null&&pathname.startsWith(entry.pfad))?.id
+    ?? NAVIGATION.find(entry=>entry.pfad===null)!.id;
 }
 
-const ROUTES: Record<Bereich, string> = {
-  tag: "/",
-  nachrichten: "/nachrichten",
-  werkstatt: "/warendurchlauf",
-  auftraege: "/orders",
-  kunden: "/customers",
-  geld: "/buchhaltung/rechnungen",
-  einstellungen: "/settings",
-};
+const ROUTES: Record<Bereich,string> = Object.fromEntries(NAVIGATION.map(entry=>[entry.id,entry.route])) as Record<Bereich,string>;
 
 function berlinDate() {
   return new Intl.DateTimeFormat("de-DE", {
