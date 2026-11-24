@@ -702,6 +702,7 @@
         "getExtraWorkCatalogReceiptAction",
         "getExtraWorkRateReceiptAction",
         "getOrdersDb",
+        "getOrdersBaseDb",
         "getOrderRegisterDb",
         "getOrderCountDb",
         "createOrderDb",
