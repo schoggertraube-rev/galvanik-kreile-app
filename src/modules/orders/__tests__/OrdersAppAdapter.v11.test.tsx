@@ -85,6 +85,14 @@ describe("OrdersAppAdapter V1.1", () => {
     expect(row).not.toHaveTextContent('TEST raw database error');
     expect(screen.queryByText('Noch keine Aufträge.')).not.toBeInTheDocument();
   });
+  it('uses the same station wording as Heute for the base row',async()=>{
+    ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[{...order,station:'galvanik',status:'galvanik'}],serverReadAt:'2026-11-24T08:00:00.000Z'});
+    ports.getOrdersDb.mockReturnValue(new Promise(()=>{}));
+    render(<OrdersAppAdapter/>);
+    const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
+    expect(row).toHaveTextContent('In Galvanik');
+    expect(row).not.toHaveTextContent('In der Galvanik');
+  });
   it('stops retrying after 5, 10, 20 and 40 seconds without hiding the unknown status',async()=>{
     vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
     try{

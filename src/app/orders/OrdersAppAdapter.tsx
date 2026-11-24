@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
-import {ORDER_LIST_STATION_COPY,PAGE_READ_COPY,SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
+import {ORDER_STATION_COPY,PAGE_READ_COPY,SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import { getOrdersBaseDb, getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import {readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -170,7 +170,7 @@ function OrderRow({ order, qualification, onOpen,onCustomer,onPhoto }: { order: 
   return <div className="kr-stapel" style={{gap:4}} role="group" aria-label={'Auftrag '+order.orderNumber}><Auftragszeile
     id={order.orderNumber}
     kundeKurz={order.customerName ?? "Kunde nicht hinterlegt"}
-    titel={qualification==='ready'?orderSubject(order):(ORDER_LIST_STATION_COPY[order.station]??ORDER_LIST_STATION_COPY.unknown)}
+    titel={qualification==='ready'?orderSubject(order):(ORDER_STATION_COPY[order.station]??ORDER_STATION_COPY.unknown)}
     meta={qualification==='ready'?[detailText(order),order.offlineMatchReason].filter(Boolean).join(" · ")||undefined:[order.dueDate?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(order.dueDate)):null].filter(Boolean).join(' · ')}
     ton={qualification==='ready'?rowTone(order):undefined}
     status={qualification==='ready'?{ text: order.cardReadErrorCode?PAGE_READ_COPY.qualificationUnknown:(order.dueValue || order.statusText), ton: rowTone(order) }:qualification==='unknown'?{text:PAGE_READ_COPY.qualificationUnknown}:undefined}

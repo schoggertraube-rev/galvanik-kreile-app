@@ -1,7 +1,7 @@
 "use client";
 import dynamic from 'next/dynamic';
 const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
-import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY,ORDER_STATION_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -38,7 +38,6 @@ export type OfficeHomePorts = {
   handBackOrder: (input: { orderId: string; expectedVersion: number; clientEventId: string }) => Promise<AssignmentResult>;
 };
 
-const STATUS_LABELS: Record<string, string> = { angenommen: "Angenommen", wareneingang: "Angenommen", galvanik: "In Galvanik", fertig: "Fertig", raus: "Raus / abgeholt", abgeholt: "Raus / abgeholt", versendet: "Raus / abgeholt" };
 const FIELD_LABELS: Record<TodayItem["field"], string> = { action: "Heute zu tun", today: "Heute fällig", assign: "Zuordnen", money: "Geld einfordern", bundle: "Bündel-Vorschlag" };
 
 async function readHomeIntakeDrafts(): Promise<IntakeDraftResult> {
@@ -46,7 +45,7 @@ async function readHomeIntakeDrafts(): Promise<IntakeDraftResult> {
   return response.json() as Promise<IntakeDraftResult>;
 }
 
-export function statusLabel(order: OrdersHomeSource): string { const status = order.statusText?.trim() || order.status; return STATUS_LABELS[status.toLowerCase()] ?? STATUS_LABELS[order.station.toLowerCase()] ?? "Status nicht hinterlegt"; }
+export function statusLabel(order: OrdersHomeSource): string { const status = order.statusText?.trim() || order.status; return ORDER_STATION_COPY[status.toLowerCase()] ?? ORDER_STATION_COPY[order.station.toLowerCase()] ?? "Status nicht hinterlegt"; }
 export function dayGreeting(hour: number): string { return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
 function berlinHour(now: Date): number { const hour = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "numeric", hourCycle: "h23" }).formatToParts(now).find((part) => part.type === "hour")?.value; return Number(hour ?? now.getHours()); }
 export type DayLine = { salutation: string; urgent: number; other: number };

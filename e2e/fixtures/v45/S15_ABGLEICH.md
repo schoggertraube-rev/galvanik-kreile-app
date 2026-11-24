@@ -3,7 +3,7 @@
 Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 Ähnlich = NFC/Kleinschreibung/Interpunktion/Platzhalternamen mechanisch normalisiert. Bestand bleibt unverändert.
 
-## Gleicher Wortlaut (73)
+## Gleicher Wortlaut (71)
 
 - `E_INVOICE_COPY.collectionNotDue`: "Die Sammlung ist noch nicht fällig oder wurde inzwischen abgerechnet." → `collection.not_due`
 - `DELIVERY_NOTE_COPY.title`: "Lieferschein" → `document.delivery_kind`, `intake.fact.delivery_number`, `ws.slip`
@@ -75,9 +75,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `COMPONENT_PREVIEW_COPY.names.mehrarbeit`: "Mehrarbeit" → `bundle.book_extra`, `work.extra_short`
 - `COMPONENT_PREVIEW_COPY.names.kundenbild`: "Kundenbild" → `customer.tab.insights`, `settings.group.bewertung`
 - `PENDING_UNDO_COPY.undo`: "Rückgängig" → `bundle.undo`, `undo.action`
-- `ORDER_LIST_STATION_COPY.wareneingang`: "Wareneingang" → `filter.intake`
-- `ORDER_LIST_STATION_COPY.fertig`: "Fertig" → `filter.ready`
-- `ORDER_LIST_STATION_COPY.abgeholt`: "Abgeholt" → `order.stage.abgeholt`
+- `ORDER_STATION_COPY.fertig`: "Fertig" → `filter.ready`
 
 ## Ähnlicher Wortlaut (102)
 
@@ -184,7 +182,7 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `SHIPPING_FEE_COPY.orderQuoteMissing`: "…" → `work.sign_missing`
 - `SURFACE_ASSIGNMENT_COPY.title`: "…" → `work.sign_missing`
 
-## Nur im Bestand (814)
+## Nur im Bestand (816)
 
 - `INVOICE_MAIL_COMPOSER_COPY.body`: "Guten Tag,\n\nanbei erhalten Sie Ihre Rechnungsunterlagen.\n\nMit freundlichen Grüßen"
 - `EVIDENCE_READ_COPY.unavailable`: "Nachweise konnten nicht sicher geladen werden."
@@ -986,11 +984,13 @@ Erzeugt; keine semantische Zuordnung. Funktionsliterale sind einzelne Fragmente.
 - `TODAY_MODEL_COPY.rebuildButton`: "Startseite neu aufbauen"
 - `TODAY_MODEL_COPY.rebuildRunning`: "Ich baue die Startseite gerade neu auf – das dauert ein paar Sekunden."
 - `TODAY_MODEL_COPY.rebuildDone`: "Die Startseite ist neu aufgebaut."
-- `ORDER_LIST_STATION_COPY.angenommen`: "Angenommen"
-- `ORDER_LIST_STATION_COPY.galvanik`: "In der Galvanik"
-- `ORDER_LIST_STATION_COPY.raus`: "Herausgegeben"
-- `ORDER_LIST_STATION_COPY.versendet`: "Versendet"
-- `ORDER_LIST_STATION_COPY.unknown`: "Station nicht erfasst"
+- `ORDER_STATION_COPY.wareneingang`: "Angenommen"
+- `ORDER_STATION_COPY.angenommen`: "Angenommen"
+- `ORDER_STATION_COPY.galvanik`: "In Galvanik"
+- `ORDER_STATION_COPY.raus`: "Raus / abgeholt"
+- `ORDER_STATION_COPY.abgeholt`: "Raus / abgeholt"
+- `ORDER_STATION_COPY.versendet`: "Raus / abgeholt"
+- `ORDER_STATION_COPY.unknown`: "Station nicht erfasst"
 - `PAGE_READ_COPY.loading`: "Deine Arbeitsfläche wird geladen."
 - `PAGE_READ_COPY.sourceIncomplete`: "Diese Quelle ist gerade nicht erreichbar · Erneut laden."
 - `PAGE_READ_COPY.qualificationUnknown`: "Den Status kann ich gerade nicht laden."
