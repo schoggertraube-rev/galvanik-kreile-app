@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, bigserial, text, timestamp, time, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey, pgSchema, date, bigint, foreignKey, unique, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, bigserial, text, timestamp, time, boolean, integer, smallint, jsonb, uuid, varchar, numeric, primaryKey, pgSchema, date, bigint, foreignKey, unique, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // AP-EIN Teil 4: eigenständige Aufgaben; orders.task bleibt die Auftragsbeschreibung.
@@ -327,7 +327,7 @@ export const inventoryItems = pgTable("inventory_items", {
   tenantId: text("tenant_id"),
   name: text("name").notNull(),
   category: varchar("category", { length: 100 }),
-  currentStock: integer("current_stock").default(0),
+  currentStock: integer("current_stock"),
   minStock: integer("min_stock").default(0),
   unit: varchar("unit", { length: 20 }),
   einkaufspreisEur: numeric("einkaufspreis_eur", { precision: 10, scale: 4 }),
@@ -342,7 +342,7 @@ export const stockMovements = pgTable("stock_movements", {
   tenantId: text("tenant_id").notNull(),
   inventoryItemId: text("inventory_item_id").notNull(),
   movementType: text("movement_type").notNull(),
-  quantity: numeric("quantity").notNull(),
+  quantity: numeric("quantity"),
   reason: text("reason"),
   orderId: text("order_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -353,6 +353,35 @@ export const stockMovements = pgTable("stock_movements", {
   vorlageId: uuid("vorlage_id"),
   snapshotEinkaufspreisEur: numeric("snapshot_einkaufspreis_eur", { precision: 10, scale: 4 }),
   notiz: text("notiz"),
+  ortId: uuid("ort_id"),
+  mengeneinheit: text("mengeneinheit"),
+  befehlId: uuid("befehl_id"),
+  befehlInhaltSha256: text("befehl_inhalt_sha256"),
+  befehlZeile: smallint("befehl_zeile"),
+  fachzeit: timestamp("fachzeit", { withTimezone: true }),
+  revision: integer("revision"),
+  belegId: uuid("beleg_id"),
+  originalDateiId: uuid("original_datei_id"),
+  gegenbuchungId: uuid("gegenbuchung_id"),
+  mengenqualitaet: text("mengenqualitaet"),
+  bestandsart: text("bestandsart").notNull().default("verfuegbar"),
+  eigentum: text("eigentum").notNull().default("eigen"),
+  geschaeftsgrund: text("geschaeftsgrund"),
+  lagerwirksam: boolean("lagerwirksam").notNull().default(true),
+  imPreisEnthalten: boolean("im_preis_enthalten"),
+  altquelle: jsonb("altquelle"),
+  metallCode: text("metall_code"),
+  metallFeinG: numeric("metall_fein_g"),
+  metallEinstandEur: numeric("metall_einstand_eur"),
+  metallPreisquelleId: uuid("metall_preisquelle_id"),
+  kalkEk: numeric("kalk_ek"),
+  preisquelleId: uuid("preisquelle_id"),
+  kalkVorlaeufig: boolean("kalk_vorlaeufig"),
+  aufschlagPct: numeric("aufschlag_pct"),
+  regelVersion: text("regel_version"),
+  w1OriginalId: uuid("w1_original_id"),
+  w1Zuordnung: text("w1_zuordnung"),
+  badId: text("bad_id"),
 });
 
 // Legacy aliases for backward compatibility with old actions

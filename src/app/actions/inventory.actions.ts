@@ -16,7 +16,7 @@ import type {
   StockMovement,
   StockMovementType,
 } from "@/lib/types/inventory";
-import { and, desc, eq, type InferSelectModel } from "drizzle-orm";
+import { and, desc, eq, isNull, sql, type InferSelectModel } from "drizzle-orm";
 
 type InventoryRow = InferSelectModel<typeof inventoryItems>;
 
@@ -128,7 +128,8 @@ function movementSelection() {
     id: stockMovements.id,
     inventoryItemId: stockMovements.inventoryItemId,
     movementType: stockMovements.movementType,
-    quantity: stockMovements.quantity,
+    // Der Altzeilen-Constraint verlangt eine Menge bei fehlender Befehls-ID.
+    quantity: sql<string>`${stockMovements.quantity}`,
     unit: inventoryItems.unit,
     normalizedUnit: inventoryItems.einheitNormiert,
     orderId: stockMovements.orderId,
@@ -179,7 +180,7 @@ export async function getInventoryMovementsAction(): Promise<ActionResult<StockM
         and(eq(inventoryItems.id, stockMovements.inventoryItemId),eq(inventoryItems.tenantId,auth.data.tenantId)),
       )
       .leftJoin(appUsers, and(eq(appUsers.id, stockMovements.erfasstVon),eq(appUsers.tenantId,auth.data.tenantId)))
-      .where(eq(stockMovements.tenantId, auth.data.tenantId))
+      .where(and(eq(stockMovements.tenantId, auth.data.tenantId), isNull(stockMovements.befehlId)))
       .orderBy(desc(stockMovements.createdAt));
 
     return { ok: true, data: rows.map(toStockMovement) };
@@ -253,6 +254,7 @@ export async function getInventoryMovementsByItemAction(
         and(
           eq(stockMovements.tenantId, auth.data.tenantId),
           eq(stockMovements.inventoryItemId, inventoryItemId),
+          isNull(stockMovements.befehlId),
         ),
       )
       .orderBy(desc(stockMovements.createdAt));

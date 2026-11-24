@@ -22,7 +22,8 @@
     "@/modules/lager/server-public#getLagerOrte",
     "@/modules/lager/server-public#readMetallstammInTransaction",
     "@/modules/lager/server-public#readMetallkursInTransaction",
-    "@/modules/lager/server-public#LagerTaskPorts"
+    "@/modules/lager/server-public#LagerTaskPorts",
+    "@/modules/lager/server-public#readLagerBestandsqualifikationInTransaction"
   ],
   "capabilities": [
     "lager.lesen",
@@ -37,7 +38,17 @@
     "20261122153940_s_lag_p1_stammbefehle.sql",
     "20261122153942_s_lag_p1_ladezeit.sql",
     "20261122180025_lager_today_source_coverage.sql",
-    "20261122200120_lager_today_trigger_contract.sql"
+    "20261122200120_lager_today_trigger_contract.sql",
+    "20261124155723_s_lag_b1a_01_ortshierarchie.sql",
+    "20261124155724_s_lag_b1a_02_journal.sql",
+    "20261124155725_s_lag_b1a_03_metallbewegung.sql",
+    "20261124155726_s_lag_b1a_04_altbestand.sql",
+    "20261124155727_s_lag_b1a_05_klaeraufgabe.sql",
+    "20261124155728_s_lag_b1a_06_inventursitzung.sql",
+    "20261124155729_s_lag_b1a_07_auftragskalkulation.sql",
+    "20261124155730_s_lag_b1a_08_w1_altverbrauch.sql",
+    "20261124155731_s_lag_b1a_09_badanker.sql",
+    "20261124155732_s_lag_b1a_10_badanalyse.sql"
   ],
   "viewsFunctions": [
     "private.lager_naechste_kurznummer",
@@ -47,7 +58,26 @@
     "public.v_lager_stammereignisse_v1",
     "public.v_lager_artikel_status_v1",
     "public.v_lager_entwurf_aufgaben_v1",
-    "public.v_lager_lieferanten_v1"
+    "public.v_lager_lieferanten_v1",
+    "private.lager_bewegungsart_ist_gueltig",
+    "private.lager_journal_unveraenderlich",
+    "private.lager_journal_anhaengen",
+    "private.lager_metall_einstand_je_g",
+    "private.lager_metallbewegung_sichern",
+    "private.lager_altbestand_schuetzen",
+    "private.material_stock_at",
+    "private.material_stock",
+    "private.lager_basiseinheit_schuetzen",
+    "private.lager_kalkulationsbasis",
+    "private.lager_kalkulationsbasis_sichern",
+    "private.lager_w1_original_anhaengen",
+    "private.lager_w1_vorschlaege",
+    "private.lager_w1_altverbrauch",
+    "private.lager_w1_auftragskosten",
+    "private.lager_w1_entscheiden",
+    "private.lager_w1_uebernahmeprotokoll",
+    "private.lager_badanalyse_speichern",
+    "private.lager_badprozessbestand_am"
   ],
   "ownsTables": [
     "public.inventory_items",
@@ -59,7 +89,12 @@
     "public.lager_artikel_kennungen",
     "public.lager_artikel_dateien",
     "public.material_prices",
-    "public.metallkurse"
+    "public.metallkurse",
+    "public.stock_movements",
+    "public.inventory_sessions",
+    "public.consumable_uses",
+    "public.baths",
+    "public.bath_measurements"
   ],
   "events": {
     "emits": [

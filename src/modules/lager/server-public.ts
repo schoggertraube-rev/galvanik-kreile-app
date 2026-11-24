@@ -99,6 +99,7 @@ export async function getLagerEntwuerfeFuerHeute() {
 }
 
 export { readMetallstammInTransaction, readMetallkursInTransaction } from "./metall-intern";
+export { readLagerBestandsqualifikationInTransaction } from "./server/stammdatenLesen";
 
 export async function getLagerOrte() {
   const auth = await resolveAuthorization();

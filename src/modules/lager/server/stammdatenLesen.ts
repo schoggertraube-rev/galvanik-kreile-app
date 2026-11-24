@@ -146,14 +146,40 @@ export async function leseLagerEntwuerfeFuerHeute(tx: PrivilegedTenantTransactio
 }
 
 export async function leseLagerOrte(tx: PrivilegedTenantTransaction, mandant: string) {
-  const rows = await tx.execute<{ id: string; stockwerk: string; bereich: string }>(sql`
-    SELECT id::text, stockwerk, bereich FROM public.stock_locations
+  const rows = await tx.execute<{ id: string; stockwerk: string; bereich: string; parentId: string | null }>(sql`
+    SELECT id::text, stockwerk, bereich, parent_id::text AS "parentId"
+    FROM public.stock_locations
     WHERE tenant_id = ${mandant}
       AND tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '')
       AND aktiv
+      AND bereich IS NOT NULL
     ORDER BY stockwerk, bereich, id
   `);
   return [...rows];
+}
+
+export async function readLagerBestandsqualifikationInTransaction(
+  tx: PrivilegedTenantTransaction,
+  mandant: string,
+  artikelId: string,
+) {
+  const [artikel] = await tx.execute<{ artikelId: string; name: string }>(sql`
+    SELECT id AS "artikelId", name
+    FROM public.inventory_items
+    WHERE tenant_id = ${mandant} AND id = ${artikelId}
+      AND tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '')
+    FOR UPDATE
+  `);
+  if (!artikel) return null;
+
+  const [bestand] = await tx.execute<{ negativ: boolean; heute: string }>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM private.material_stock_at(statement_timestamp())
+      WHERE artikel_id = ${artikelId} AND eigentum = 'eigen' AND menge < 0
+    ) AS negativ,
+    to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD') AS heute
+  `);
+  return { ...artikel, ...bestand };
 }
 
 
