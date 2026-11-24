@@ -61,8 +61,8 @@ export function checkPaths(config, branch, paths, body = "") {
 
 function mainConfig() {
   try {
-    git("cat-file", "-e", "origin/main:scripts/quality/check-besitz.mjs");
-    git("cat-file", "-e", "origin/main:besitz.json");
+    execFileSync("git", ["cat-file", "-e", "origin/main:scripts/quality/check-besitz.mjs"], { stdio: "ignore" });
+    execFileSync("git", ["cat-file", "-e", "origin/main:besitz.json"], { stdio: "ignore" });
     return JSON.parse(git("show", "origin/main:besitz.json"));
   } catch {
     return JSON.parse(readFileSync("besitz.json", "utf8"));
