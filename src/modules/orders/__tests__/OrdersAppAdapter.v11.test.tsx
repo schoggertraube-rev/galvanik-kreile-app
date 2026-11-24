@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrdersAppAdapter } from "@/app/orders/OrdersAppAdapter";
 
@@ -68,8 +68,9 @@ describe("OrdersAppAdapter V1.1", () => {
     render(<OrdersAppAdapter/>);
     const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
     expect(row).toHaveTextContent('Sabrina Schmidt');
-    expect(row).toHaveTextContent('angenommen');
-    expect(row).not.toHaveTextContent('27.10.2026');
+    expect(row).toHaveTextContent('Angenommen');
+    expect(row).toHaveTextContent('27.10.2026');
+    expect(row).not.toHaveTextContent('angenommen · angenommen');
     expect(row).not.toHaveTextContent('stosstange');
     finish({ok:true,data:[order]});
     await waitFor(()=>expect(row).toHaveTextContent('27.10.2026'));
@@ -80,9 +81,26 @@ describe("OrdersAppAdapter V1.1", () => {
     ports.getOrdersDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST raw database error'});
     render(<OrdersAppAdapter/>);
     const row=await screen.findByRole('group',{name:'Auftrag A-2026-0001'});
-    await waitFor(()=>expect(row).toHaveTextContent('Status unbekannt · wird erneut geladen.'));
+    await waitFor(()=>expect(row).toHaveTextContent('Den Status kann ich gerade nicht laden.'));
     expect(row).not.toHaveTextContent('TEST raw database error');
     expect(screen.queryByText('Noch keine Aufträge.')).not.toBeInTheDocument();
+  });
+  it('stops retrying after 5, 10, 20 and 40 seconds without hiding the unknown status',async()=>{
+    vi.useFakeTimers({toFake:['setTimeout','clearTimeout']});
+    try{
+      ports.getOrdersBaseDb.mockResolvedValue({ok:true,data:[order],serverReadAt:'2026-11-24T08:00:00.000Z'});
+      ports.getOrdersDb.mockResolvedValue({ok:false,error:'DB_ERROR',message:'TEST unavailable'});
+      render(<OrdersAppAdapter/>);
+      await act(async()=>{await vi.advanceTimersByTimeAsync(0);});
+      expect(ports.getOrdersDb).toHaveBeenCalledTimes(1);
+      for(const [index,delay] of [5000,10000,20000,40000].entries()){
+        await act(async()=>{await vi.advanceTimersByTimeAsync(delay);});
+        expect(ports.getOrdersDb).toHaveBeenCalledTimes(index+2);
+        expect(screen.getByRole('group',{name:'Auftrag A-2026-0001'})).toHaveTextContent('Den Status kann ich gerade nicht laden.');
+      }
+      await act(async()=>{await vi.advanceTimersByTimeAsync(80000);});
+      expect(ports.getOrdersDb).toHaveBeenCalledTimes(5);
+    }finally{vi.useRealTimers();}
   });
   it('renders the same retained list offline without a server request',async()=>{
     ports.offline24h=true;ports.offlineScope='a'.repeat(64);
@@ -90,6 +108,17 @@ describe("OrdersAppAdapter V1.1", () => {
     ports.readDevice.mockResolvedValue({code:'OK',value:{port:'orders.list',serverReadAt:'2026-11-13T10:00:00.000Z',response:{result:{ok:true,data:[order]},datenluecken:[]}}});
     render(<OrdersAppAdapter/>);
     await screen.findByText(order.orderNumber);
+    expect(ports.getOrdersDb).not.toHaveBeenCalled();
+    expect(ports.readDevice).toHaveBeenCalledWith(ports.offlineScope,true,{port:'orders.list',objectId:'orders'});
+  });
+  it('uses the retained list when a base request loses server reachability',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);
+    const online=vi.spyOn(navigator,'onLine','get').mockReturnValue(true);
+    ports.getOrdersBaseDb.mockImplementation(async()=>{online.mockReturnValue(false);throw Error('TEST server unreachable');});
+    ports.readDevice.mockResolvedValue({code:'OK',value:{port:'orders.list',serverReadAt:'2026-11-13T10:00:00.000Z',response:{result:{ok:true,data:[order]},datenluecken:[]}}});
+    render(<OrdersAppAdapter/>);
+    await screen.findByText(order.orderNumber);
+    expect(ports.getOrdersBaseDb).toHaveBeenCalledTimes(1);
     expect(ports.getOrdersDb).not.toHaveBeenCalled();
     expect(ports.readDevice).toHaveBeenCalledWith(ports.offlineScope,true,{port:'orders.list',objectId:'orders'});
   });
@@ -115,6 +144,15 @@ describe("OrdersAppAdapter V1.1", () => {
     expect(screen.queryByText(order.orderNumber)).not.toBeInTheDocument();
     expect(screen.queryByText('Noch keine Aufträge.')).not.toBeInTheDocument();
     expect(ports.getOrdersDb).not.toHaveBeenCalled();
+  });
+  it('retains a live base-reader denial before any full read',async()=>{
+    ports.offline24h=true;ports.offlineScope='a'.repeat(64);
+    ports.getOrdersBaseDb.mockResolvedValue({ok:false,error:'FORBIDDEN',message:'TEST right revoked',serverReadAt:'2026-11-24T08:00:00.000Z',cacheLoginScope:'b'.repeat(64)});
+    render(<OrdersAppAdapter/>);
+    await screen.findByText('TEST right revoked');
+    expect(ports.getOrdersDb).not.toHaveBeenCalled();
+    expect(ports.retainDevice).toHaveBeenCalledWith(ports.offlineScope,true,expect.objectContaining({response:{result:{ok:false,error:'FORBIDDEN',message:'TEST right revoked'},datenluecken:[]}}),null);
+    expect(screen.queryByText(order.orderNumber)).not.toBeInTheDocument();
   });
   it('does not turn a missing device source into a successful empty list',async()=>{
     ports.offline24h=true;ports.offlineScope='a'.repeat(64);

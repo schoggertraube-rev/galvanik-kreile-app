@@ -755,11 +755,11 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
 }
 
 /** The first list paint uses the same tenant-bound source as the full card read. */
-export async function getOrdersBaseDb(): Promise<ActionResult<OrderResponse[]> & {serverReadAt?:string}> {
+export async function getOrdersBaseDb(): Promise<ActionResult<OrderResponse[]> & {serverReadAt?:string;cacheLoginScope?:string}> {
  return observeAction('getOrdersBaseDb',subjectForAction('getOrdersDb',undefined),async()=>{
   noStore();
   const authorization=await resolveOperationalReadAuthorization();
-  if(!authorization.ok)return authorization;
+  if(!authorization.ok)return authorization.error==='FORBIDDEN'||authorization.error==='UNAUTHORIZED'?{...authorization,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:authorization;
   try{
    const {getOperationalOrders}=await import('@/lib/server/operationalOrders');
    const data=await withPageReadPhase('orders.list.base',()=>getOperationalOrders(authorization.data,{purpose:'today'}));

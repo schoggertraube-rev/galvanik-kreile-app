@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
-import {PAGE_READ_COPY,SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
+import {ORDER_LIST_STATION_COPY,PAGE_READ_COPY,SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import { getOrdersBaseDb, getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import {readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -170,8 +170,8 @@ function OrderRow({ order, qualification, onOpen,onCustomer,onPhoto }: { order: 
   return <div className="kr-stapel" style={{gap:4}} role="group" aria-label={'Auftrag '+order.orderNumber}><Auftragszeile
     id={order.orderNumber}
     kundeKurz={order.customerName ?? "Kunde nicht hinterlegt"}
-    titel={qualification==='ready'?orderSubject(order):order.station}
-    meta={qualification==='ready'?[detailText(order),order.offlineMatchReason].filter(Boolean).join(" · ")||undefined:[order.dueDate,order.station].filter(Boolean).join(' · ')}
+    titel={qualification==='ready'?orderSubject(order):(ORDER_LIST_STATION_COPY[order.station]??ORDER_LIST_STATION_COPY.unknown)}
+    meta={qualification==='ready'?[detailText(order),order.offlineMatchReason].filter(Boolean).join(" · ")||undefined:[order.dueDate?new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin'}).format(new Date(order.dueDate)):null].filter(Boolean).join(' · ')}
     ton={qualification==='ready'?rowTone(order):undefined}
     status={qualification==='ready'?{ text: order.cardReadErrorCode?PAGE_READ_COPY.qualificationUnknown:(order.dueValue || order.statusText), ton: rowTone(order) }:qualification==='unknown'?{text:PAGE_READ_COPY.qualificationUnknown}:undefined}
     karte
@@ -204,22 +204,18 @@ export function OrdersAppAdapter() {
     let active = true;
     let loadRevision=0;
     let retryTimer:ReturnType<typeof setTimeout>|null=null;
+    let retryAttempt=0;
     const load = async (retry=false) => {
       const revision=++loadRevision;
       if(retryTimer){clearTimeout(retryTimer);retryTimer=null;}
+      if(!retry)retryAttempt=0;
       setState(previous=>retry&&previous.kind==='data'?previous:{kind:'loading'});
       let baseReady=false;
+      const scheduleRetry=()=>{
+        const delay=[5000,10000,20000,40000][retryAttempt++];
+        if(delay!==undefined)retryTimer=setTimeout(()=>{if(active)void load(true);},delay);
+      };
       try {
-        const base=offline24h&&offlineScope&&!navigator.onLine?null:await getOrdersBaseDb();
-        if(!active||revision!==loadRevision)return;
-        if(base&&!base.ok&&(base.error==='FORBIDDEN'||base.error==='UNAUTHORIZED')){
-          setState({kind:'denied',message:base.message});
-          return;
-        }
-        if(base?.ok){
-          baseReady=true;
-          setState({kind:'data',orders:base.data.map(toOrderListRow),loadedAt:base.serverReadAt??new Date().toISOString(),source:'online',qualification:'pending'});
-        }
         let device=false;
         const readDevice=async():Promise<Awaited<ReturnType<typeof getOrdersDb>>>=>{
           if(!offlineScope)throw Error('OFFLINE_ORDER_SCOPE_REQUIRED');
@@ -229,30 +225,41 @@ export function OrdersAppAdapter() {
           return {...stored.value.response.result,serverReadAt:stored.value.serverReadAt};
         };
         const readFence=offlineScope?await captureDeviceReadFence(offlineScope,offline24h):null;
-        const result = await readWithDeviceFallback(getOrdersDb,readDevice,!!(offline24h&&offlineScope));
+        const readOnline=async():Promise<Awaited<ReturnType<typeof getOrdersDb>>>=>{
+          const base=await getOrdersBaseDb();
+          if(!active||revision!==loadRevision)throw Error('ORDER_READ_SUPERSEDED');
+          if(!base.ok&&(base.error==='FORBIDDEN'||base.error==='UNAUTHORIZED'))return base;
+          if(base.ok){
+            baseReady=true;
+            setState(previous=>({kind:'data',orders:base.data.map(toOrderListRow),loadedAt:base.serverReadAt??new Date().toISOString(),source:'online',qualification:retry&&previous.kind==='data'?'unknown':'pending'}));
+          }
+          return getOrdersDb();
+        };
+        const result = await readWithDeviceFallback(readOnline,readDevice,!!(offline24h&&offlineScope));
         if (!active||revision!==loadRevision) return;
         if(!device&&offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'orders.list',portVersion:1,objectId:'orders',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},readFence);
         if(!active||revision!==loadRevision)return;
         if (!result.ok) {
           if(baseReady&&result.error!=='FORBIDDEN'&&result.error!=='UNAUTHORIZED'){
             setState(previous=>previous.kind==='data'?{...previous,qualification:'unknown'}:previous);
-            retryTimer=setTimeout(()=>{if(active)void load(true);},5000);
+            scheduleRetry();
             return;
           }
           setState({
             kind: result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN" ? "denied" : result.error === "CONFLICT" ? "conflict" : "error",
             message: result.message,
           });
+          if(result.error!=="UNAUTHORIZED"&&result.error!=="FORBIDDEN")scheduleRetry();
           return;
         }
-        if(active&&revision===loadRevision)setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:device?'device':"online",qualification:'ready' });
+        if(active&&revision===loadRevision){retryAttempt=0;setState({ kind: "data", orders: result.data.map(toOrderListRow), loadedAt: result.serverReadAt??new Date().toISOString(),source:device?'device':"online",qualification:'ready' });}
       } catch (error) {
         console.error('[ORDERS_READ_FAILED]',error instanceof Error?error.name:'UnknownError');
         if (active&&revision===loadRevision){
           if(baseReady){
             setState(previous=>previous.kind==='data'?{...previous,qualification:'unknown'}:previous);
-            retryTimer=setTimeout(()=>{if(active)void load(true);},5000);
-          }else setState({kind:'error',message:'Aufträge konnten nicht sicher geladen werden.'});
+            scheduleRetry();
+          }else {setState({kind:'error',message:'Aufträge konnten nicht sicher geladen werden.'});scheduleRetry();}
         }
       }
     };

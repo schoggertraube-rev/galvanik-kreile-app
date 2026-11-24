@@ -1,5 +1,15 @@
 [
   {
+    "datum": "2026-11-24",
+    "pr": 269,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Du siehst die Auftragsliste schon, während die Kartenangaben noch geladen werden.",
+      "Du kannst währenddessen einen Auftrag öffnen."
+    ]
+  },
+  {
     "datum": "2026-11-23",
     "pr": 268,
     "seite": "heute",
@@ -32,7 +42,7 @@
     "seite": "heute",
     "ziel": "/",
     "punkte": [
-      "Deine Heute-Liste erscheint vor den ergänzenden Bereichen."
+      "Deine Heute-Liste erscheint vor dem vollständigen Tagesstand."
     ]
   },
   {
