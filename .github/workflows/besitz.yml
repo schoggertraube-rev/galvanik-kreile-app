@@ -1,0 +1,35 @@
+name: besitz
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  besitz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.0'
+      - name: Check date ownership
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git fetch origin main
+          if git cat-file -e origin/main:scripts/quality/check-besitz.mjs 2>/dev/null && git cat-file -e origin/main:besitz.json 2>/dev/null; then
+            git show origin/main:scripts/quality/check-besitz.mjs > "$RUNNER_TEMP/check-besitz.mjs"
+            node "$RUNNER_TEMP/check-besitz.mjs"
+          else
+            node scripts/quality/check-besitz.mjs
+          fi
