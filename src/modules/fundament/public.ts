@@ -13,11 +13,12 @@ export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
   taxId: string; taxNumber?: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
   pageReads?:PageReadSettings;
+  todayRefreshLeaseSeconds?:number;
 };
 export type ProtocolSettings={retentionDays:number|null;slowMs:number;hangMs:number};
-export type CompanySettingsSnapshot = {
+export type CompanySettingsSnapshot = Omit<{
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
-}&{protocol?:ProtocolSettings|null;pageReadsSchemaReady?:boolean};
+},'todayRefreshLeaseSeconds'>&{protocol?:ProtocolSettings|null;pageReadsSchemaReady?:boolean};
 export type CompanyLetterSettings=Pick<CompanySettingsInput,'companyName'|'street'|'zip'|'city'|'country'>&{phone?:string|null;taxId?:string|null;logoUrl?:string|null};
 export type ShippingSettings = {
   shippingFeeCents?:number|null;
