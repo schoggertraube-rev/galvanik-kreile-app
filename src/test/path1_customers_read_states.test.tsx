@@ -38,6 +38,20 @@ beforeEach(() => {
 afterEach(() => {cleanup();vi.restoreAllMocks();});
 
 describe("CustomersAppAdapter", () => {
+  it('finds the same customer online by folded name and marks only the spelling alternative',async()=>{
+    ports.getCustomersDb.mockResolvedValue({ok:true,data:[{...customer({name:'TEST Müller'}),activeOrderCount:1}]});
+    render(<CustomersAppAdapter/>);
+    await screen.findByText('TEST Müller');
+    const input=screen.getByPlaceholderText('Name, Ort, Auftrag oder Stichwort');
+    fireEvent.change(input,{target:{value:'Mueller'}});
+    expect(screen.getByText('TEST Müller')).toBeInTheDocument();
+    expect(screen.queryByText(/Klingt gleich/)).not.toBeInTheDocument();
+    fireEvent.change(input,{target:{value:'Muller'}});
+    expect(screen.getByText('TEST Müller')).toBeInTheDocument();
+    expect(screen.getByText(/Klingt gleich/)).toBeInTheDocument();
+    fireEvent.change(input,{target:{value:'Xyzq'}});
+    expect(screen.queryByText('TEST Müller')).not.toBeInTheDocument();
+  });
   // Explicit synthetic component boundaries; native Auth/DB/IDB proof remains separate.
   it('reads the retained list offline and uses the canonical name alternative',async()=>{
     ports.offline24h=true;ports.offlineScope='a'.repeat(64);vi.spyOn(navigator,'onLine','get').mockReturnValue(false);

@@ -1,4 +1,5 @@
 import "server-only";
+import {foldedIncludes,foldSearchText} from '@/lib/domain/searchText';
 
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
@@ -13,8 +14,7 @@ type SearchProviderReads = {
   readAuxiliary: () => Promise<AuxiliarySearchRecords>;
 };
 
-const normalized = (value: string) => value.trim().toLocaleLowerCase("de-DE");
-const contains = (value: string | null, query: string) => value !== null && normalized(value).includes(query);
+const contains = foldedIncludes;
 
 function quoteHit(quote: QuoteReadback, query: string,canReadMoney:boolean): SearchHit | null {
   const position = quote.positions.find((item) => [item.name, item.material, item.surfaceRequested].some((value) => contains(value, query)));
@@ -83,7 +83,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
       search: async (query) => {
         const result = await reads.readQuotes();
         if (result.code !== "OK") throw new Error("SEARCH_QUOTES_UNAVAILABLE");
-        const lowered = normalized(query);
+        const lowered = foldSearchText(query);
         return { hits: result.quotes.map((quote) => quoteHit(quote, lowered,hasAuthorizationArea(authorization,'preise'))).filter((hit): hit is SearchHit => hit !== null), exhaustive: result.quotes.length < 100 };
       },
     });
@@ -95,7 +95,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
       search: async (query) => {
         const result = await reads.readInvoices();
         if (result.code !== "OK") throw new Error("SEARCH_INVOICES_UNAVAILABLE");
-        const lowered = normalized(query);
+        const lowered = foldSearchText(query);
         return { hits: result.data.map((invoice) => invoiceHit(invoice, lowered)).filter((hit): hit is SearchHit => hit !== null), exhaustive: result.data.length < 250 };
       },
     });
@@ -105,7 +105,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
     const auxiliary = () => auxiliaryPromise ??= reads.readAuxiliary();
     providers.push({
       id: "documents", label: "Dokumente", search: async (query) => {
-        const batch = await auxiliary(); const lowered = normalized(query);
+        const batch = await auxiliary(); const lowered = foldSearchText(query);
         return { exhaustive: batch.exhaustive, hits: batch.documents.filter((row) => contains(row.customerName, lowered) || contains(row.orderNumber, lowered) || contains(row.content, lowered) || contains(row.mimeType, lowered)).map((row) => ({
           type:"DOCUMENT", id:row.id, title:row.mimeType === "application/pdf" ? "PDF-Dokument" : "Foto / Dokument", subtitle:[row.customerName,row.orderNumber].filter(Boolean).join(" · "), status:row.status,
           matchField:"note", source:"Dokumente", matchLabel:"Dokumentinhalt", matchValue:contains(row.content, lowered) ? query : contains(row.orderNumber, lowered) ? row.orderNumber ?? "" : row.customerName,
@@ -115,7 +115,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
     });
     if(hasAuthorizationArea(authorization,'mails'))providers.push({
       id: "mails", label: "Mails", search: async (query) => {
-        const batch = await auxiliary(); const lowered = normalized(query);
+        const batch = await auxiliary(); const lowered = foldSearchText(query);
         return { exhaustive: batch.exhaustive, hits: batch.mails.filter((row) => contains(row.subject, lowered) || contains(row.body, lowered) || contains(row.customerName, lowered) || contains(row.orderNumber, lowered)).map((row) => ({
           type:"MAIL", id:row.id, title:row.subject, subtitle:[row.customerName,row.orderNumber].filter(Boolean).join(" · "), status:row.status,
           matchField:contains(row.subject, lowered) ? "title" : "note", source:"Mails", matchLabel:contains(row.subject, lowered) ? "Betreff" : "Mailinhalt", matchValue:contains(row.subject, lowered) ? row.subject : query,
@@ -125,7 +125,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
     });
     providers.push({
       id: "appointments", label: "Termine", search: async (query) => {
-        const batch = await auxiliary(); const lowered = normalized(query);
+        const batch = await auxiliary(); const lowered = foldSearchText(query);
         return { exhaustive: batch.exhaustive, hits: batch.appointments.filter((row) => contains(row.title, lowered) || contains(row.customerName, lowered) || contains(row.orderNumber, lowered) || contains(row.startsAt, lowered)).map((row) => ({
           type:"APPOINTMENT", id:row.id, title:row.title, subtitle:[row.customerName,row.orderNumber,new Date(row.startsAt).toLocaleString("de-DE")].filter(Boolean).join(" · "), status:row.status,
           matchField:contains(row.startsAt, lowered) ? "dueDate" : "title", source:"Termine", matchLabel:contains(row.startsAt, lowered) ? "Termin" : "Titel", matchValue:contains(row.startsAt, lowered) ? row.startsAt : row.title,

@@ -4,17 +4,8 @@ import {rejectDeferredLegacy} from "@/lib/server/authHelper";
 
 import { db } from "@/db";
 import { segment } from "@/db/schema_marketing";
-import { eq, ilike } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-
-export async function getSegments(query?: string) {
-  await rejectDeferredLegacy("buchhaltung");
-
-  if (query) {
-    return await db.select().from(segment).where(ilike(segment.name, `%${query}%`)).orderBy(segment.name);
-  }
-  return await db.select().from(segment).orderBy(segment.name);
-}
 
 export async function getSegmentById(id: string) {
   await rejectDeferredLegacy("buchhaltung");

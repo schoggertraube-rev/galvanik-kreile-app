@@ -10,9 +10,9 @@
     "api_routes": 8,
     "server_action_groups": 48,
     "kpi_definitions": 7,
-    "provider_connections": 16,
+    "provider_connections": 15,
     "nav_links_without_page": 3,
-    "total": 97
+    "total": 96
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1006,7 +1006,6 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/marketing/segmente/actions.ts",
       "exported_functions": [
-        "getSegments",
         "getSegmentById",
         "createSegment",
         "updateSegment",
@@ -1412,17 +1411,6 @@
       "reachable": false,
       "classification": "LEGACY_REMOVE",
       "open_reason": "MockOcrProvider in src/lib is not an isolated test fixture it is a production-path mock in the provider layer. Scheduled for removal before F1.2."
-    },
-    {
-      "stable_id": "provider.mock-buchhaltung",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "Mock/Buchhaltung",
-      "adapter_file": "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts",
-      "env_vars": [],
-      "visible": false,
-      "reachable": false,
-      "classification": "LEGACY_REMOVE",
-      "open_reason": "MockBuchhaltungProvider in src/lib is not an isolated test fixture it is a production-path mock provider. Scheduled for removal before F1.2."
     },
     {
       "stable_id": "provider.mock-marketing",

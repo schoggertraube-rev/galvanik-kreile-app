@@ -59,6 +59,20 @@ beforeEach(() => {
 afterEach(()=>{cleanup();vi.restoreAllMocks();});
 
 describe("OrdersAppAdapter V1.1", () => {
+  it('uses the same folded name and spelling alternative for online rows after qualification',async()=>{
+    ports.getOrdersDb.mockResolvedValue({ok:true,data:[{...order,customerName:'TEST Müller'}]});
+    render(<OrdersAppAdapter/>);
+    await screen.findByText(order.orderNumber);
+    const input=screen.getByRole('textbox');
+    fireEvent.change(input,{target:{value:'Mueller'}});
+    expect(screen.getByText(order.orderNumber)).toBeInTheDocument();
+    expect(screen.queryByText(/Klingt gleich/)).not.toBeInTheDocument();
+    fireEvent.change(input,{target:{value:'Muller'}});
+    expect(screen.getByText(order.orderNumber)).toBeInTheDocument();
+    expect(screen.getByText(/Klingt gleich/)).toBeInTheDocument();
+    fireEvent.change(input,{target:{value:'Xyzq'}});
+    expect(screen.queryByText(order.orderNumber)).not.toBeInTheDocument();
+  });
   // Explicit synthetic component states. Native Actions/Auth/DB/IDB proof is
   // offline_workshop_sync.browser.integration.test.ts, not this mocked boundary.
   it('shows guarded base fields before qualification and keeps the same order row',async()=>{

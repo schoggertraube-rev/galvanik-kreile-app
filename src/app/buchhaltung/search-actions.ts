@@ -4,7 +4,8 @@ import {rejectDeferredLegacy} from "@/lib/server/authHelper";
 
 import { db } from "@/db";
 import { beleg } from "@/db/schema_buchhaltung";
-import { ilike, or } from "drizzle-orm";
+import { or } from "drizzle-orm";
+import {foldedSqlContains} from '@/lib/server/searchTextSql';
 
 export async function searchBelegeByOcrTextAction(term: string) {
   await rejectDeferredLegacy("buchhaltung");
@@ -24,8 +25,8 @@ export async function searchBelegeByOcrTextAction(term: string) {
     .from(beleg)
     .where(
       or(
-        ilike(beleg.ocrRohtext, `%${term}%`),
-        ilike(beleg.lieferantText, `%${term}%`)
+        foldedSqlContains(beleg.ocrRohtext, term),
+        foldedSqlContains(beleg.lieferantText, term)
       )
     )
     .limit(5);

@@ -1367,14 +1367,6 @@
       "Unbekannt": 1,
       "Nicht erfasst": 1
     },
-    "src/components/galvanik/GalvanikQueue.tsx": {
-      "Aufträge in der Galvanik": 1,
-      "Minimalansicht (Nach Dringlichkeit)": 1,
-      "Suchen nach Kunde oder ID...": 1,
-      "Fälligkeit": 1,
-      "Kunde": 1,
-      "Keine Aufträge in der Galvanik gefunden.": 1
-    },
     "src/components/home/DayTimeline.tsx": {
       "Tagesablauf auf einen Blick": 1
     },
