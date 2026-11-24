@@ -13,8 +13,8 @@ import type {AppSession} from '@/lib/server/appSession';
 
 (globalThis as typeof globalThis & {AsyncLocalStorage:typeof AsyncLocalStorage}).AsyncLocalStorage=AsyncLocalStorage;
 const url=process.env.DATABASE_URL;
-const expected=process.env.P3_SEARCH_EXPECTED_DATABASE_URL;
-if(!url||url!==expected)throw Error('SUCHREGEL_LOCAL_DATABASE_REQUIRED');
+const expected=[process.env.P3_SEARCH_EXPECTED_DATABASE_URL,process.env.H18_EXPECTED_DATABASE_URL].filter(Boolean);
+if(!url||!expected.includes(url))throw Error('SUCHREGEL_LOCAL_DATABASE_REQUIRED');
 const address=new URL(url);
 if(address.protocol!=='postgresql:'||address.hostname!=='127.0.0.1'||address.pathname!=='/postgres'||address.username!=='postgres'||process.env.SUPABASE_SERVICE_ROLE_KEY)throw Error('SUCHREGEL_LOCAL_DATABASE_REQUIRED');
 const native=postgres(url,{max:2,prepare:false});
