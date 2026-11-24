@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "stand": "PL 2026-11-23 abends, nach REDTEAM_START_V2.md V7–V9 und B1a H3; Vorlage für besitz.json in der Wurzel des App-Repos (R20e)",
+  "version": 4,
+  "stand": "PL 2026-11-25, Nähte-PR (pakete/NAEHTE.md): Textdateien und Navigations-Einträge je Modul, Was ist neu je Schreiber, Sammelstellen nur_haupt",
   "vorrang": ["register", "nur_haupt", "codex-b", "gemeinsam", "rest_haupt"],
   "regel": "Erster Treffer in der Reihenfolge 'vorrang' gilt. Zweig codex-b/…: register grün; nur_haupt rot; codex-b grün; gemeinsam und rest_haupt nur mit PR-Zeile 'GEMEINSAM <Pfad oder Muster> <Grund>' grün, sonst rot. Zweig codex/…: codex-b nur mit GEMEINSAM-Zeile grün; alles andere grün. Jeder andere Zweig rot ('Zweig ohne Schreiber').",
   "muster": "** = beliebig viele Ordner (auch keiner), * = beliebige Zeichen innerhalb eines Ordners; Vergleich auf dem Pfad relativ zur Repo-Wurzel mit '/'.",
@@ -40,7 +40,24 @@
     "src/modules/tasks/**",
     "src/modules/katalog/**",
     "src/modules/takt/**",
-    "src/ui/vorlage/**"
+    "src/ui/vorlage/**",
+    "src/ui/situationCatalog.ts",
+    "src/ui/generated/**",
+    "src/ui/automatikNachrichtenTexte.ts",
+    "src/ui/inaktivitaetTexte.ts",
+    "src/ui/eingang*Copy.ts",
+    "src/ui/suche*Copy.ts",
+    "src/ui/offline*Copy.ts",
+    "src/ui/allgemein*Copy.ts",
+    "src/ui/navigation/register.ts",
+    "src/ui/navigation/fundament.ts",
+    "src/ui/navigation/eingang.ts",
+    "src/ui/kr/AppShell.tsx",
+    "src/components/layout/KreileAppShell.tsx",
+    "src/components/layout/MoreMenu.tsx",
+    "src/components/layout/WasIstNeu.tsx",
+    "src/lib/server/todayProjection.ts",
+    "src/content/was-ist-neu.json"
   ],
   "codex-b": [
     "src/app/actions/lager*.ts",
@@ -64,7 +81,26 @@
     "src/modules/quotes/**",
     "src/app/quotes/**",
     "src/modules/ausgang/**",
-    "src/modules/kalender/**"
+    "src/modules/kalender/**",
+    "src/ui/lager*Copy.ts",
+    "src/ui/werkstatt*Copy.ts",
+    "src/ui/orders*Copy.ts",
+    "src/ui/complaints*Copy.ts",
+    "src/ui/accounting*Copy.ts",
+    "src/ui/customers*Copy.ts",
+    "src/ui/quotes*Copy.ts",
+    "src/ui/ausgang*Copy.ts",
+    "src/ui/kalender*Copy.ts",
+    "src/ui/navigation/lager.ts",
+    "src/ui/navigation/werkstatt.ts",
+    "src/ui/navigation/orders.ts",
+    "src/ui/navigation/complaints.ts",
+    "src/ui/navigation/accounting.ts",
+    "src/ui/navigation/customers.ts",
+    "src/ui/navigation/quotes.ts",
+    "src/ui/navigation/ausgang.ts",
+    "src/ui/navigation/kalender.ts",
+    "src/content/was-ist-neu-bau2.json"
   ],
   "gemeinsam": [
     "supabase/migrations/**",
@@ -84,5 +120,5 @@
     "public/**",
     "**/fixtures/**"
   ],
-  "hinweis": "register: beide Schreiber dürfen neue Einträge ergänzen, nie fremde Einträge ändern oder löschen. src/ui/vorlage/** gehört dem Haupt-Codex (Token, Glas-Renderer, Bewegungsmodul A0 – eine Wahrheit). src/app/settings/** ist gemeinsam: Haupt-Codex frei, Kreile Bau 2 mit GEMEINSAM-Zeile (B4). Migrationsplatz: höchstens ein offener PR (Entwürfe eingeschlossen) mit Dateien unter supabase/migrations/** über beide Schreiber; früher = kleinere PR-Nummer."
+  "hinweis": "register: beide Schreiber dürfen neue Einträge ergänzen, nie fremde Einträge ändern oder löschen. src/ui/vorlage/** gehört dem Haupt-Codex (Token, Glas-Renderer, Bewegungsmodul A0 – eine Wahrheit). src/app/settings/** ist gemeinsam: Haupt-Codex frei, Kreile Bau 2 mit GEMEINSAM-Zeile (B4). Migrationsplatz: höchstens ein offener PR (Entwürfe eingeschlossen) mit Dateien unter supabase/migrations/** über beide Schreiber; früher = kleinere PR-Nummer. Nähte (pakete/NAEHTE.md): Texte eines Moduls stehen in src/ui/<modul>*Copy.ts, Navigations-Einträge in src/ui/navigation/<modul>.ts, Tag-Quellen in src/modules/<modul>/server/tagQuellen.ts, Was-ist-neu-Einträge in der Datei des eigenen Schreibers. Sammelstellen (src/ui/situationCatalog.ts, src/ui/navigation/register.ts, src/lib/server/todayProjection.ts, src/lib/today/**, src/modules/fundament/server-public.ts, WasIstNeu.tsx) enthalten nur Import und Registrierung. Rechte-Bedingung und Mehr-Menü-Kachel eines neuen Navigations-Eintrags bestellt Kreile Bau 2 mit 'AN HAUPT: NAHT <Modul> Navigation <Recht>'; einen Text in einer fremden Textdatei mit 'AN HAUPT: TEXT <Datei> <Schlüssel> <Wortlaut>'."
 }

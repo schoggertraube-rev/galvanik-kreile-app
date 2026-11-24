@@ -3,10 +3,11 @@ import {useCallback,useState,useSyncExternalStore,type MouseEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Button,Dialog,Hinweis,Icon,type Geraet} from '@/ui/kr';
 import entries from '@/content/was-ist-neu.json';
+import entriesBau2 from '@/content/was-ist-neu-bau2.json';
 
 const CHANGED='kreile:was-ist-neu-gelesen',UNAVAILABLE='__STORAGE_UNAVAILABLE__';
 const fingerprint=(entry:typeof entries[number])=>JSON.stringify(entry);
-const ordered=[...entries].sort((a,b)=>b.datum.localeCompare(a.datum)||b.pr-a.pr);
+const ordered=[...entries,...entriesBau2].sort((a,b)=>b.datum.localeCompare(a.datum)||b.pr-a.pr);
 function readSeen(raw:string|null):string[]{if(!raw||raw===UNAVAILABLE)return [];try{const value:unknown=JSON.parse(raw);return Array.isArray(value)&&value.every(item=>typeof item==='string')?value:[];}catch(error){console.warn('[WHAT_NEW_MARKER_INVALID]',{code:error instanceof Error?error.name:'INVALID_MARKER'});return [];}}
 
 /** UI reading history only. All release content comes from the one committed JSON source. */

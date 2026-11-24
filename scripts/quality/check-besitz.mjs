@@ -139,11 +139,14 @@ function selftest() {
       && checkMigrations({ changedPaths: ["docs/a.md"], newPaths: [], otherPulls: [{ number: 7, files: ["supabase/migrations/a.sql"] }], selfNumber: 8, maxMainStamp: "0" }).length === 0
       && checkMigrations({ changedPaths: ["supabase/migrations/20261123010101_x.sql"], newPaths: ["supabase/migrations/20261123010101_x.sql"], otherPulls: [], selfNumber: 8, maxMainStamp: "20261123010101" }).some(error => error.includes("Zeitstempel zu alt")),
     !checkPaths({ ...config, nur_haupt: config.nur_haupt.filter(pattern => pattern !== ".github/**") }, "codex-b/x", ["besitz.json", ".github/x.yml"])[1].ok,
+    check("codex-b/x", ["src/ui/lagerBuchungCopy.ts"]),
+    !check("codex-b/x", ["src/ui/situationCatalog.ts"], "GEMEINSAM src/ui/** x"),
+    check("codex-b/x", ["src/content/was-ist-neu-bau2.json"]),
   ];
   for (const [index, passed] of tests.entries()) {
-    console.log(`besitz Selbsttest ${index + 1}/16: ${passed ? "grün" : "rot"}`);
+    console.log(`besitz Selbsttest ${index + 1}/19: ${passed ? "grün" : "rot"}`);
   }
-  if (tests.length !== 16 || tests.some(passed => !passed)) throw Error("besitz Selbsttest fehlgeschlagen");
+  if (tests.length !== 19 || tests.some(passed => !passed)) throw Error("besitz Selbsttest fehlgeschlagen");
 }
 
 async function main() {
