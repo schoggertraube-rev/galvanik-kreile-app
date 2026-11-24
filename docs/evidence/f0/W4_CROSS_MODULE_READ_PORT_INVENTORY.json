@@ -204,6 +204,9 @@
       "private.v_user_last_seen_receipts_v1",
       "private.v_user_last_seen_v1"
     ],
+    "src/lib/server/werkstattStationszahlen.ts": [
+      "private.v_operational_station_queue_v1"
+    ],
     "src/modules/complaints/server/complaintRead.ts": [
       "public.v_complaint_rework_context_v1"
     ],

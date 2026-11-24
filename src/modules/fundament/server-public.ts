@@ -21,3 +21,5 @@ export { isFeatureEnabled, readTenantFeatures, setTenantFeature } from "./server
 export type { TenantFeatureContext } from "./server/tenantFeaturePort";
 
 export {readMailboxFetchState,writeMailboxFetchState} from "./server/systemSettingsPort";
+export {readLagerEinstellungen} from "./server/s16dSpurDSettingsPort";
+export type {LagerEinstellungen} from "./server/s16dSpurDSettingsPort";
