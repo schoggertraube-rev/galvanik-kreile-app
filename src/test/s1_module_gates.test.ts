@@ -725,6 +725,15 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     for (const candidate of invalid) expect(validTodayProjectorComposition(candidate), candidate).toBe(false);
   });
 
+  it("E2 erlaubt tagQuellen aus lager nur mit dem festen Exportnamen", () => {
+      const source = `${IMP} 'server-only';\n${IMP} { tagQuellen as lagerTagQuellen } from '@/modules/lager/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return lagerTagQuellen;}\n${EXP} async function rebuildTodayModel(){return lagerTagQuellen;}\n`;
+      expect(validTodayProjectorComposition(source)).toBe(true);
+    });
+
+  it("E2 lehnt einen anderen lager-Export weiterhin ab", () => {
+      const source = `${IMP} 'server-only';\n${IMP} { readLagerEinstellungen as lagerTagQuellen } from '@/modules/lager/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return lagerTagQuellen;}\n${EXP} async function rebuildTodayModel(){return lagerTagQuellen;}\n`;
+      expect(validTodayProjectorComposition(source)).toBe(false);
+    });
   it("Im eigenen Modul nur relative Imports; @/modules/<eigen>/... = FAIL", () => {
     const root = repo({
       ...goodModule,
