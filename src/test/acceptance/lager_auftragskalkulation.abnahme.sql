@@ -28,7 +28,8 @@ BEGIN
     (artikel,mandant,'TEST Eisen','kg'),(variante,mandant,'TEST Eisen B','kg'),(leer,mandant,'TEST ohne EK','kg'),
     (durchschnitt_artikel,mandant,'TEST Gegenbuchung EK','kg');
   INSERT INTO public.customers (id,tenant_id,name,type) VALUES (kunde,mandant,'TEST Kunde','business');
-  INSERT INTO public.orders (id,tenant_id,customer_id,order_number,title) VALUES (auftrag,mandant,kunde,auftrag,'TEST Verbrauch');
+  INSERT INTO public.orders (id,tenant_id,customer_id,order_number,title,station,current_station_id,status)
+    VALUES (auftrag,mandant,kunde,auftrag,'TEST Verbrauch','angenommen','angenommen','angenommen');
   INSERT INTO public.app_users (id,tenant_id,email,full_name,role)
     VALUES (akteur,mandant,akteur::text || '@test.invalid','TEST Werkstatt','werkstatt');
   INSERT INTO public.stock_locations (tenant_id,stockwerk,bereich)
