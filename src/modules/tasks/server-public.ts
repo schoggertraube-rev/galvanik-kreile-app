@@ -35,3 +35,4 @@ export {projectQuoteFollowupSources} from './server/taskService';
 
 export {synchronizeLagerEntwurfTask} from './server/taskService';
 export {synchronizeLagerBestandTask} from './server/taskService';
+export {synchronizeLagerPreisTask} from './server/taskService';
