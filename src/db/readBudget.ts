@@ -54,7 +54,7 @@ export const DEFAULT_PAGE_READ_SETTINGS={
 } as const;
 
 /** Request-local only. Commands outside a page read retain their transaction contract. */
-type ReadBudget={startedAt:number;deadline:number;cancel:Set<()=>void>;aborted:{value:boolean};queries:PageReadQueryObservation;sourceWarnings?:Set<string>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
+type ReadBudget={startedAt:number;deadline:number;hardDeadline?:number;cancel:Set<()=>void>;aborted:{value:boolean};queries:PageReadQueryObservation;sourceWarnings?:Set<string>;kind?:'authorization';prepareStatement?:(()=>Promise<unknown>);timeoutSetAt?:number;sourcesReady?:Promise<void>};
 const budgets=new AsyncLocalStorage<ReadBudget>();
 export const hasPageReadBudget=():boolean=>budgets.getStore()!==undefined;
 /** The one request scope joins independent readers without suppressing unknown faults. */
@@ -120,7 +120,24 @@ export function withPageReadBudget<T>(work:()=>Promise<T>,timeoutMs:number):Prom
 export function configurePageReadBudget(timeoutMs:number):void{
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<=0)throw Error('PAGE_READ_TIMEOUT_SETTING_INVALID');
   const budget=budgets.getStore();
-  if(budget)budget.deadline=budget.startedAt+timeoutMs;
+  if(budget)budget.deadline=Math.min(budget.startedAt+timeoutMs,budget.hardDeadline??Infinity);
+}
+
+/** A scheduler request may spend less time than the configured page deadline. */
+export function withPageReadHardDeadline<T>(work:()=>Promise<T>,timeoutMs:number,signal?:AbortSignal):Promise<T>{
+ const inherited=budgets.getStore()?.deadline??Infinity;
+ return outsidePageReadBudget(()=>withPageReadBudget(async()=>{
+  const budget=budgets.getStore();
+  if(!budget)throw Error('PAGE_READ_TIMEOUT_SCOPE_MISSING');
+  budget.hardDeadline=budget.deadline=Math.min(budget.deadline,inherited);
+  const abort=()=>budgets.run(budget,expirePageReadBudget);
+  signal?.addEventListener('abort',abort,{once:true});
+  try{
+   if(signal?.aborted)abort();
+   assertPageReadBudgetActive();
+   return await work();
+  }finally{signal?.removeEventListener('abort',abort);}
+ },timeoutMs));
 }
 
 function withinBudget<T>(work:()=>PromiseLike<T>,cancel?:()=>unknown):Promise<T>{

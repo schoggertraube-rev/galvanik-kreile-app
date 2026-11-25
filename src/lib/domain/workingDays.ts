@@ -123,3 +123,22 @@ export function berlinCalendarDay(now = new Date()): string {
   const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   return `${read("year")}-${read("month")}-${read("day")}`;
 }
+
+/** Clock time in Berlin, including the daylight-saving transition. */
+export function berlinUhrzeit(now = new Date()): string {
+  const parts = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${read("hour")}:${read("minute")}`;
+}
+
+/** One due key per Berlin calendar day, including either DST transition. */
+export function taeglichFaelligAb(jetzt: Date, letzterOk: Date | null, uhrzeit: '02:00' | '03:00'): string | null {
+  if (berlinUhrzeit(jetzt) < uhrzeit) return null;
+  const tag = berlinCalendarDay(jetzt);
+  return letzterOk !== null && berlinCalendarDay(letzterOk) === tag ? null : tag;
+}
