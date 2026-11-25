@@ -17,7 +17,7 @@ export interface InventoryItem {
   storageLocation?: string;
   isConsumable: boolean;
   isHazardous?: boolean;
-  pricePerUnit?: number;
+  pricePerUnit?: number | null;
 }
 
 export type StockMovementType =

@@ -73,7 +73,7 @@ export async function leseLagerArtikelAltvertrag(
   return imLagerLesen(artikelId, async (tx, mandant, werte) => {
     const filter = artikelId === undefined ? sql`` : sql`AND artikel.id = ${artikelId}`;
     const methode = werte ? leseBilanzbewertungMethode(await liesEinstellungen(mandant, tx)) : null;
-    if (werte && !methode) throw Error("LAGER_BEWERTUNGSMETHODE_UNGUELTIG");
+    if (werte && !methode) recordObservedFailure("LAGER_BEWERTUNGSMETHODE_FEHLT");
     const preis = methode ? sql`(
       SELECT einzelpreis::text
       FROM private.lager_kalkulationsbasis(artikel.id, statement_timestamp(), ${methode})
@@ -106,7 +106,7 @@ export async function leseLagerArtikelAltvertrag(
         currentStock: zeile.currentStock === null ? null : Number(zeile.currentStock),
         availableStock: zeile.availableStock === null ? null : Number(zeile.availableStock),
         minStock: zeile.minStock, isConsumable: category !== "tooling",
-        ...(werte && zeile.pricePerUnit !== null ? { pricePerUnit: Number(zeile.pricePerUnit) } : {}),
+        ...(werte ? { pricePerUnit: zeile.pricePerUnit === null ? null : Number(zeile.pricePerUnit) } : {}),
       };
     });
   });
