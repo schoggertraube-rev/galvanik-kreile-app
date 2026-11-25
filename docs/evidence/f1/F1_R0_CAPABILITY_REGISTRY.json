@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 8,
-    "server_action_groups": 50,
+    "server_action_groups": 48,
     "kpi_definitions": 7,
     "provider_connections": 15,
     "nav_links_without_page": 3,
-    "total": 98
+    "total": 96
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
