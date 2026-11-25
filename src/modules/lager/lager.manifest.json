@@ -28,7 +28,23 @@
     "@/modules/lager/server-public#readMetallstammInTransaction",
     "@/modules/lager/server-public#readMetallkursInTransaction",
     "@/modules/lager/server-public#LagerTaskPorts",
-    "@/modules/lager/server-public#readLagerBestandsqualifikationInTransaction"
+    "@/modules/lager/server-public#readLagerBestandsqualifikationInTransaction",
+    "@/modules/lager/server-public#lagerBefehlId",
+    "@/modules/lager/server-public#bucheLagerEinzeln",
+    "@/modules/lager/server-public#bucheLagerGegenbuchung",
+    "@/modules/lager/server-public#LagerBuchungsbeleg",
+    "@/modules/lager/server-public#LagerBestandsaufgabe",
+    "@/modules/lager/server-public#leseLagerArtikelAltvertrag",
+    "@/modules/lager/server-public#leseLagerBewegungenAltvertrag",
+    "@/modules/lager/server-public#leseLagerBefehlsstand",
+    "@/modules/lager/server-public#LagerBewegungssuche",
+    "@/modules/lager/server-public#bucheAuftragsverbrauch",
+    "@/modules/lager/server-public#leseLagerAuftragsmaterialInTransaction",
+    "@/modules/lager/server-public#leseLagerW1Vorschlaege",
+    "@/modules/lager/server-public#leseLagerW1VorschlaegeInTransaction",
+    "@/modules/lager/server-public#entscheideLagerW1Vorschlag",
+    "@/modules/lager/server-public#speichereLagerBadanalyseInTransaction",
+    "@/modules/lager/server-public#leseLagerBadprozessbestandInTransaction"
   ],
   "capabilities": [
     "lager.lesen",
@@ -63,7 +79,8 @@
     "20261124155739_s_lag_b1a_17_zaehlrevision.sql",
     "20261124155740_s_lag_b1a_18_abschlussoriginale.sql",
     "20261124155741_s_lag_b1a_19_ladezeit.sql",
-    "20261124155742_s_lag_b1a_20_ortplatz.sql"
+    "20261124155742_s_lag_b1a_20_ortplatz.sql",
+    "20261125124200_s_lag_b1a_auftragskosten_gegenbuchung.sql"
   ],
   "viewsFunctions": [
     "private.lager_naechste_kurznummer",
@@ -71,6 +88,8 @@
     "private.lager_stammereignis_anlegen",
     "public.v_lager_eingangsoriginale_v1",
     "public.v_lager_stammereignisse_v1",
+    "public.v_lager_befehlsereignisse_v1",
+    "public.v_lager_akteure_v1",
     "public.v_lager_artikel_status_v1",
     "public.v_lager_entwurf_aufgaben_v1",
     "public.v_lager_lieferanten_v1",

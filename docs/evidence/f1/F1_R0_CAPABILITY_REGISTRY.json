@@ -1510,7 +1510,13 @@
       "entry_point": "src/app/actions/lager.actions.ts",
       "exported_functions": [
         "speichereLagerStammdatenAction",
-        "bestaetigeLagerEtikettZuordnungAction"
+        "bestaetigeLagerEtikettZuordnungAction",
+        "bucheLagerAction",
+        "bucheLagerGegenbuchungAction",
+        "bucheAuftragsverbrauchAction",
+        "leseLagerBestandAction",
+        "leseLagerBewegungenAction",
+        "leseLagerBefehlsstandAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Approved Lager P1 command composition through existing module and TaskWriter. Local native integration is in progress; no independent full-step acceptance claimed.",
