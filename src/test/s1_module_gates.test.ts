@@ -847,6 +847,24 @@ describe("S1 Naht 4 — Cross-Modul-Fakten nur ueber v_*-Views", () => {
     expect(findingsOf(root)).toContainEqual(expect.stringContaining("private View 'private.lager_w1_vorschlaege' gehoert lager"));
   });
 
+  it.each([
+    "-- CREATE VIEW private.test_zaehler AS SELECT 1;\n",
+    "/*\nCREATE VIEW private.test_zaehler AS SELECT 1;\n*/\n",
+    "/* /* SQL-Beispiel */\nCREATE VIEW private.test_zaehler AS SELECT 1;\n*/\n",
+  ])("verwehrt die fremde Tabelle bei auskommentierter Sicht (%s)", auskommentiert => {
+    const root = repo({
+      ...goodModule,
+      "supabase/migrations/20261125130000_test_zaehler.sql":
+        auskommentiert + "CREATE TABLE private.test_zaehler (id integer);\n",
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["private.test_zaehler"] }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/lager/lager.manifest.json": manifest("lager", { viewsFunctions: ["private.test_zaehler"] }),
+      "src/modules/lager/public.ts": "export {};\n",
+      "src/modules/lager/server/read.ts": "export const q = sql`SELECT * FROM private.test_zaehler`;\n",
+    });
+    expect(findingsOf(root)).toContainEqual(expect.stringContaining("Tabelle 'private.test_zaehler' gehoert nicht zu Modul 'lager'"));
+  });
+
   it("erlaubt public Views moduluebergreifend, private Views/Funktionen aber nur ihrem deklarierenden Modul", () => {
     const root = repo({
       ...goodModule,
