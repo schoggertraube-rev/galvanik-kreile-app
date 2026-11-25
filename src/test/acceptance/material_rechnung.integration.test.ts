@@ -191,7 +191,7 @@ describe("Material am Auftrags- und Rechnungsoriginal", () => {
     const anfrage = await bereiteAuftragVor("B3-a Altoriginal " + schemaVersion);
     const ausgestellt = await withSession(full, () => issueInvoiceAction(anfrage));
     if (ausgestellt.code !== "OK") throw Error("TEST_ALTRECHNUNG_FEHLT: " + ausgestellt.code);
-    const { invoiceId, invoiceNumber } = ausgestellt.receipt;
+    const { invoiceId, invoiceNumber, eventId } = ausgestellt.receipt;
     type JsonWert = Parameters<typeof sql.json>[0];
     type JsonObjekt = Record<string, JsonWert>;
     const [row] = await sql<{ snapshot: JsonObjekt & {
@@ -217,11 +217,15 @@ describe("Material am Auftrags- und Rechnungsoriginal", () => {
       ])),
     };
     await sql.begin(async tx => {
-      // Das TEST-Original stellt einen vorhandenen Altbestand nach. Die Prüf-Constraints bleiben aktiv.
-      await tx`ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard`;
+      // Nur diese Transaktion überführt die frisch erzeugten TEST-Belege in den historischen Stand.
+      // Constraints bleiben aktiv und der Lese- und Stornoweg läuft danach mit den normalen Triggern.
+      await tx`SET LOCAL session_replication_role = replica`;
+      await tx`UPDATE public.events SET payload = jsonb_set(payload, '{vatRateBasisPoints}',
+          coalesce(to_jsonb(${steuersatz}::integer), 'null'::jsonb))
+        WHERE tenant_id = ${mandant} AND id = ${eventId} AND order_id = ${anfrage.orderId}`;
       await tx`UPDATE public.invoices SET snapshot = ${tx.json(altoriginal)}::jsonb, vat_rate_basis_points = ${steuersatz}
-        WHERE tenant_id = ${mandant} AND id = ${invoiceId}::uuid`;
-      await tx`ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard`;
+        WHERE tenant_id = ${mandant} AND id = ${invoiceId}::uuid AND issue_event_id = ${eventId}`;
+      await tx`SET LOCAL session_replication_role = origin`;
     });
     expect(await withSession(full, () => getInvoiceReceiptAction({
       orderId: anfrage.orderId, clientEventId: anfrage.clientEventId,
@@ -469,9 +473,14 @@ describe("Material am Auftrags- und Rechnungsoriginal", () => {
     const neueBuchung = await withSession(werkstatt, () => bucheAuftragsverbrauchAction(korrigiert));
     if (!neueBuchung.ok) throw Error("TEST_KORREKTURBUCHUNG_FEHLT");
     const ersatz = await withSession(full, () => cancelInvoiceAction(storno));
-    if (ersatz.code !== "OK" || !ersatz.replacementReceipt) throw Error("TEST_ERSATZRECHNUNG: " + ersatz.code);
+    if (ersatz.code !== "OK" || !ersatz.replacementReceipt) {
+      const hinweis = "message" in ersatz ? " – " + ersatz.message : "";
+      throw Error("TEST_ERSATZRECHNUNG: " + ersatz.code + hinweis);
+    }
     const [original] = await sql`SELECT snapshot FROM public.invoices
       WHERE tenant_id = ${mandant} AND id = ${ersatz.replacementReceipt.invoiceId}::uuid`;
+    expect(original.snapshot.lines.filter((zeile: { type: string }) => zeile.type === "BASE"))
+      .toEqual(storniert.snapshot.lines.filter((zeile: { type: string }) => zeile.type === "BASE"));
     expect(original.snapshot.lines.filter((zeile: { type: string }) => zeile.type !== "BASE")).toEqual([
       expect.objectContaining({ type: "MATERIAL", lineNetAmountCents: 408, eventIds: [neueBuchung.data.eventId] }),
     ]);

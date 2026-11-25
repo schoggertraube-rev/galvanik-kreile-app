@@ -409,3 +409,26 @@ BEGIN
  RETURN sum_net=net AND sum_vat=vat AND sum_gross=gross;
 EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range OR invalid_parameter_value THEN RETURN false;
 END $function$;
+
+-- S09 übernimmt Grundpositionen und Mehrarbeit unverändert. Material kommt
+-- beim Ersatz aus dem aktuellen Lagerjournal, Versandkosten entfallen weiter.
+DO $migration$
+DECLARE
+  definition text;
+  alte_zeilen constant text := $alt$WHERE line->>'type'<>'SHIPPING';$alt$;
+  neuer_ursprung constant text := $neu$WHERE line->>'type' NOT IN ('SHIPPING','MATERIAL');$neu$;
+  alter_vergleich constant text := $alt$NEW.snapshot->'lines' IS DISTINCT FROM goods$alt$;
+  neuer_vergleich constant text := $neu$(
+    SELECT jsonb_agg(line ORDER BY ordinal)
+    FROM jsonb_array_elements(NEW.snapshot->'lines') WITH ORDINALITY source(line,ordinal)
+    WHERE line->>'type' <> 'MATERIAL'
+  ) IS DISTINCT FROM goods$neu$;
+BEGIN
+  definition := pg_get_functiondef('private.guard_invoice_reissue_original_v1()'::regprocedure);
+  IF length(definition)-length(replace(definition,alte_zeilen,'')) <> length(alte_zeilen)
+     OR length(definition)-length(replace(definition,alter_vergleich,'')) <> length(alter_vergleich) THEN
+    RAISE EXCEPTION 'B3A_S09_ORIGINALPRUEFUNG_GEAENDERT';
+  END IF;
+  EXECUTE replace(replace(definition,alte_zeilen,neuer_ursprung),alter_vergleich,neuer_vergleich);
+END
+$migration$;
