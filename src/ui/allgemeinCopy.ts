@@ -86,3 +86,18 @@ export const DIALOG_LOAD_COPY={unavailable:'Der Dialog hat sich nicht geladen �
 export const TODAY_MODEL_COPY={homeTitle:'Der Tag',cardRefreshing:'Diese Karte holt sich gerade den neuesten Stand.',reload:'Jetzt laden',mainRefreshing:'Ich hole gerade den neuesten Stand – dein nächster Schritt erscheint gleich.',rebuildButton:'Startseite neu aufbauen',rebuildRunning:'Ich baue die Startseite gerade neu auf – das dauert ein paar Sekunden.',rebuildDone:'Die Startseite ist neu aufgebaut.'} as const;
 export const PAGE_READ_COPY={orderIncomplete:(number:string)=>`Auftrag ${number} ist gerade nicht lesbar · öffne den Auftrag.`,loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",qualificationUnknown:"Den Status kann ich gerade nicht laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null.",refreshLeaseInvalid:(seconds:number)=>`Du kannst die Nachlauf-Frist nur zwischen 1 und ${seconds} Sekunden speichern.`,refreshLeaseTooLong:(seconds:number)=>`Du kannst die Nachlauf-Frist auf höchstens ${seconds} Sekunden setzen.`} as const;
 export const KREILE_KOPF_KUERZEL = 'GK';
+
+/** Wortlaut der Eingabewähler aus dem eingefrorenen Owner-Design. */
+export const FELDWAHL_COPY = {
+  datum: 'Datum', uhrzeit: 'Uhrzeit', wert: 'Wert direkt eingeben',
+  abbrechen: 'Abbrechen', ausserhalb: 'Dieser Wert liegt außerhalb des verfügbaren Bereichs.',
+  vorherigerMonat: 'Vorheriger Monat', naechsterMonat: 'Nächster Monat',
+  stunden: 'Stunden', minuten: 'Minuten',
+  groesser: (einheit: string) => einheit + ' erhöhen',
+  kleiner: (einheit: string) => einheit + ' verringern',
+  zeitWaehlen: (wert: string) => wert + ' wählen',
+  zeitEinsetzen: (wert: string) => wert + ' Uhr ins Formular einsetzen',
+  ziffern: 'Ziffern', komma: 'Dezimalkomma', loeschen: 'Letzte Stelle löschen',
+  tastatur: 'Gerätetastatur', leeren: 'Leeren', uebernehmen: 'Wert übernehmen',
+  plus: 'Um einen Schritt erhöhen', minus: 'Um einen Schritt verringern',
+} as const;

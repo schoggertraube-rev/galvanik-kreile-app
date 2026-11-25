@@ -2,6 +2,7 @@
 
 // Erweitert src/ui/kr/Formularfeld.tsx. Weitere Feldvarianten bleiben dort bestehen.
 import { useId, useLayoutEffect, useRef, type KeyboardEventHandler, type ReactNode } from 'react';
+import { EingabeMitWahl } from './Eingabewahl';
 import styles from './Textfeld.module.css';
 
 interface TextfeldProps {
@@ -52,6 +53,7 @@ export function Textfeld({ label, wert, onWert, id, platzhalter, mehrzeilig, pfl
   };
   const eins = useRef<HTMLInputElement>(null);
   const mehr = useRef<HTMLTextAreaElement>(null);
+  const Eingabe = typ === 'date' || typ === 'number' ? EingabeMitWahl : 'input';
 
   useLayoutEffect(() => {
     const feld = mehr.current ?? eins.current;
@@ -81,7 +83,7 @@ export function Textfeld({ label, wert, onWert, id, platzhalter, mehrzeilig, pfl
     <label className={labelVerborgen ? 'kr-sr' : styles.label} htmlFor={feldId}>{label}</label>
     {mehrzeilig
       ? <textarea {...optionen} ref={mehr} className={styles.eingabe} onChange={(event) => onWert(event.currentTarget.value)} />
-      : <input {...optionen} ref={eins} type={typ} min={grenzen?.min} max={grenzen?.max} step={grenzen?.schritt}
+      : <Eingabe {...optionen} ref={eins} type={typ} min={grenzen?.min} max={grenzen?.max} step={grenzen?.schritt}
           className={styles.eingabe} onChange={(event) => onWert(event.currentTarget.value)} />}
     {fehler && <p id={beschreibungId} data-spec-id={fehlerSpecId} className={styles.fehler} role="status">{fehler}</p>}
   </div>;

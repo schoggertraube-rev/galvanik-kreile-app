@@ -45,7 +45,7 @@ function UhrRad({ name, kleinerText, groesserText, optionen, wert, onWahl, fokus
       const element = rad.current;
       const zeile = element?.querySelector<HTMLElement>('[data-uhr-zeile]');
       if (element && zeile && auswahl >= 0) {
-        element.scrollTo({top:auswahl * zeile.offsetHeight,behavior:'instant'});
+        element.scrollTo?.({top:auswahl * zeile.offsetHeight,behavior:'instant'});
         zeigeBeiOeffnung.current = true;
       }
     });
@@ -57,7 +57,7 @@ function UhrRad({ name, kleinerText, groesserText, optionen, wert, onWahl, fokus
     const element = rad.current;
     if (option && zentrieren && element) {
       const zeile = element.querySelector<HTMLElement>('[data-uhr-zeile]');
-      if (zeile) element.scrollTo({top:index * zeile.offsetHeight,behavior:'instant'});
+      if (zeile) element.scrollTo?.({top:index * zeile.offsetHeight,behavior:'instant'});
     }
     if (option && index !== auswahlRef.current) {
       auswahlRef.current = index;
@@ -67,7 +67,7 @@ function UhrRad({ name, kleinerText, groesserText, optionen, wert, onWahl, fokus
 
   return <div className={styles.spalte}>
     <span className={styles.einheit}>{name}</span>
-    <button type="button" className={styles.schritt} aria-label={kleinerText} disabled={max < 0} onClick={() => waehlen((auswahl + max) % (max + 1))}>{minusSymbol}</button>
+    <button type="button" className={styles.schritt} aria-label={kleinerText} disabled={max < 0} onClick={() => waehlen(auswahl < 0 ? max : (auswahl + max) % (max + 1))}>{minusSymbol}</button>
     <div
       className={styles.rad}
       ref={rad}
