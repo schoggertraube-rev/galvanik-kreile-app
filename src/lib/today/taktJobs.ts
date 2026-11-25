@@ -1,6 +1,7 @@
 import 'server-only';
 import {taeglichFaelligAb} from '@/lib/domain/workingDays';
 import {rebuildTodayModel, refreshTodayModel} from '@/lib/server/todayProjection';
+import {TAKT_JOB_BUDGET_MS} from '@/modules/takt/public';
 
 /** The stale path uses the existing bounded projector, with the same receipt key. */
 export async function fuehreHeuteAuffrischung(tenantId: string, signal: AbortSignal): Promise<'ok' | 'ohne_arbeit'> {
@@ -16,8 +17,8 @@ export async function fuehreHeuteAuffrischung(tenantId: string, signal: AbortSig
 export const HEUTE_TAKT_JOBS = [{
   schluessel: 'heute_neuaufbau',
   paket: null,
-  faellig: (jetzt: Date, letzterTermin: string | null) => taeglichFaelligAb(jetzt, letzterTermin, '02:00'),
-  fristMs: 25_000,
+  faellig: (jetzt: Date, letzterTermin: Date | null) => taeglichFaelligAb(jetzt, letzterTermin, '02:00'),
+  fristMs: TAKT_JOB_BUDGET_MS,
   ausfuehren: async (tenantId: string, signal: AbortSignal) => {
     signal.throwIfAborted();
     const result = await rebuildTodayModel(tenantId, undefined, {bounded: true, signal});

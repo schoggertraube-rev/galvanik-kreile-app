@@ -50,15 +50,16 @@ it('löscht nur eigene alte Laufzeilen im Mandantenkontext', async () => {
   const eigeneLaufId = '11111111-1111-4111-8111-111111111111';
   await loescheAlteLaeufe('tenant-a', 0, eigeneLaufId);
   expect(transaction).toHaveBeenCalledWith({tenantId: 'tenant-a'}, expect.any(Function));
-  expect(execute).toHaveBeenCalledOnce();
-  const query = execute.mock.calls[0][0];
+  expect(execute).toHaveBeenCalledTimes(2);
+  expect(sqlText(execute.mock.calls[0][0])).toContain("status='läuft' AND reserviert_bis<=statement_timestamp()");
+  const query = execute.mock.calls[1][0];
   const command = sqlText(query);
   expect(command).toContain('DELETE FROM public.takt_job_runs WHERE tenant_id=');
   expect(command).toContain('gestartet_um < statement_timestamp()');
   expect(command).toContain('AND id <>');
   expect(command).toContain('::uuid');
   expect(command).toContain("AND status<>'läuft'");
-  expect(command).toContain("faellig_fuer=to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin'");
+  expect(command).toContain("faellig_fuer::timestamptz<>date_trunc('minute',statement_timestamp())");
   expect(JSON.stringify(query)).toContain(eigeneLaufId);
 });
 
@@ -107,9 +108,9 @@ it('schließt einen abgelaufenen Versuch unter der Sperre ab und verwendet spät
 it('gibt bei parallelem oder bereits beendetem Lauf keine zweite Reservierung aus', async () => {
   const execute = vi.fn().mockResolvedValue([]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
-  expect(await reserviereLauf('tenant-a', 'takt.nachholen', '2026-11-25T06:00', 25_000)).toBe(null);
+  expect(await reserviereLauf('tenant-a', 'takt.nachholen', '2026-11-25T06:00+01:00', 25_000)).toBe(null);
   expect(execute).toHaveBeenCalledOnce();
-  expect(sqlText(execute.mock.calls[0][0])).toContain('ON CONFLICT(tenant_id,job_schluessel,faellig_fuer) DO NOTHING');
+  expect(sqlText(execute.mock.calls[0][0])).toContain("ON CONFLICT(tenant_id,job_schluessel,faellig_fuer) WHERE faellig_fuer NOT LIKE 'hand:%' DO NOTHING");
 });
 
 it('schließt nur den eigenen Versuch ab und verliert keinen fehlenden Beleg', async () => {
@@ -124,9 +125,10 @@ it('schließt nur den eigenen Versuch ab und verliert keinen fehlenden Beleg', a
 });
 
 it('liest ausschließlich den letzten belegten Erfolg desselben Jobs und Mandanten', async () => {
-  const execute = vi.fn().mockResolvedValueOnce([{faellig_fuer: '2026-11-24'}]).mockResolvedValueOnce([]);
+  const letzterTermin = new Date('2026-11-23T23:00:00Z');
+  const execute = vi.fn().mockResolvedValueOnce([{faellig_ms: letzterTermin.getTime()}]).mockResolvedValueOnce([]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
-  expect(await liesLetztenOk('tenant-a', 'heute_neuaufbau')).toEqual('2026-11-24');
+  expect(await liesLetztenOk('tenant-a', 'heute_neuaufbau')).toEqual(letzterTermin);
   expect(await liesLetztenOk('tenant-a', 'heute_neuaufbau')).toBe(null);
   expect(transaction).toHaveBeenCalledWith({tenantId: 'tenant-a'}, expect.any(Function));
   const command = execute.mock.calls[0][0].queryChunks.map((part: {value?: string[]}) => part.value?.join('') ?? '').join('');
@@ -135,8 +137,8 @@ it('liest ausschließlich den letzten belegten Erfolg desselben Jobs und Mandant
 });
 
 it('wertet eine fünfminütige Auffrischung nicht als täglichen Vollaufbau', async () => {
-  const execute = vi.fn().mockResolvedValue([{faellig_fuer: '2026-11-25'}]);
+  const execute = vi.fn().mockResolvedValue([]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
   await liesLetztenOk('tenant-a', 'heute_neuaufbau');
-  expect(JSON.stringify(execute.mock.calls[0][0])).toContain("faellig_fuer NOT LIKE '%T%'");
+  expect(sqlText(execute.mock.calls[0][0])).toContain('length(faellig_fuer)=10');
 });

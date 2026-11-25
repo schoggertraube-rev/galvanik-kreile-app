@@ -28,6 +28,7 @@ async function liesAnstehendeJobs(
       job: job.schluessel === 'heute_neuaufbau' && eintrag.faelligFuer.includes('T')
         ? {...job, ausfuehren: fuehreHeuteAuffrischung} : job,
       faelligFuer: eintrag.faelligFuer,
+      wiederholung: true,
     });
   }
   const frei = jobs.filter(job => !blockiert.has(job.schluessel));
@@ -35,9 +36,7 @@ async function liesAnstehendeJobs(
   if (!faellige.some(eintrag => eintrag.job.schluessel === 'heute_neuaufbau')) {
     const heute = frei.find(job => job.schluessel === 'heute_neuaufbau');
     if (heute && await liesTodayModellVeraltet(tenantId, jetzt)) {
-      const minute = nachholMinuteBerlin(jetzt);
-      const gerundet = Math.floor(Number(minute.slice(-2)) / 5) * 5;
-      faellige.push({job: {...heute, ausfuehren: fuehreHeuteAuffrischung}, faelligFuer: `${minute.slice(0, -2)}${String(gerundet).padStart(2, '0')}`});
+      faellige.push({job: {...heute, ausfuehren: fuehreHeuteAuffrischung}, faelligFuer: nachholMinuteBerlin(jetzt, 5)});
     }
   }
   return [...zuerst, ...faellige];
@@ -54,6 +53,7 @@ export async function fuehreTaktAus(options: Readonly<{
 }> = {}): Promise<Readonly<{mandanten: number; laeufe: number; restOffen: boolean; erfolglos?: true; besetzt?: true}>> {
   const budgetMs = options.budgetMs ?? TAKT_BUDGET_MS;
   if (!Number.isSafeInteger(budgetMs) || budgetMs < 1 || budgetMs > TAKT_BUDGET_MS) throw Error('TAKT_BUDGET_INVALID');
+  if (options.nurJob && !options.tenantId) throw Error('TAKT_HANDLAUF_MANDANT_FEHLT');
   const started = performance.now();
   const signal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(budgetMs)]) : AbortSignal.timeout(budgetMs);
   const rest = () => zeitUebrig(started, budgetMs);
@@ -70,25 +70,44 @@ export async function fuehreTaktAus(options: Readonly<{
   let besetzt = false;
   try {
     mandanten = options.tenantId ? [options.tenantId] : await lies(liesTaktMandanten);
-    for (const tenantId of mandanten) {
+  } catch (error) {
+    if (signal.aborted || error instanceof PageReadTimeout) return {mandanten: 0, laeufe, restOffen: true, erfolglos: true};
+    throw error;
+  }
+  for (const tenantId of mandanten) {
+    if (signal.aborted || rest() < 1) break;
+    try {
       if (options.nurJob === 'heute_neuaufbau' && await lies(() => liesTodayModellBesetzt(tenantId))) {
         return {mandanten: mandanten.length, laeufe, restOffen: false, erfolglos: true, besetzt: true};
       }
       const leser = baueTaktLeser(tenantId);
-      const paketAktiv = options.paketAktiv ? (paket: PackageSwitchId) => options.paketAktiv!(tenantId, paket) : bauePaketAktiv(tenantId);
-      const faellige = await lies(() => liesAnstehendeJobs(tenantId, jobs, jetzt));
-      for (const eintrag of faellige) {
+      const paketAbfrage = options.paketAktiv;
+      const paketAktiv = paketAbfrage ? (paket: PackageSwitchId) => paketAbfrage(tenantId, paket) : bauePaketAktiv(tenantId);
+      const faellige: readonly FaelligerJob[] = options.nurJob
+        ? jobs.map(job => ({job, faelligFuer: `hand:${jetzt.toISOString().slice(0, 16)}Z`}))
+        : await lies(() => liesAnstehendeJobs(tenantId, jobs, jetzt));
+      const ausfuehren = async (eintrag: FaelligerJob) => {
         const budget = rest();
         if (signal.aborted || budget < 1) throw new PageReadTimeout();
         const result = await fuehreFaelligenJobAus(tenantId, eintrag, leser, paketAktiv, budget, signal);
         if (result !== 'nicht_reserviert') laeufe++;
         if (result === 'besetzt') besetzt = true;
         if (result === 'fehler' || result === 'abgebrochen' || result === 'besetzt') erfolglos = true;
+        return result;
+      };
+      for (const eintrag of faellige) {
+        const result = await ausfuehren(eintrag);
+        if (eintrag.wiederholung && (result === 'ok' || result === 'ohne_arbeit')) {
+          const regulaer = jobs.find(job => job.schluessel === eintrag.job.schluessel);
+          if (!regulaer) throw Error('TAKT_JOB_NICHT_REGISTRIERT');
+          const [heute] = await lies(() => liesFaelligeJobs([regulaer], jetzt, key => liesLetztenOk(tenantId, key)));
+          if (heute && heute.faelligFuer !== eintrag.faelligFuer) await ausfuehren(heute);
+        }
       }
+    } catch {
+      erfolglos = true;
+      if (!signal.aborted && rest() > 0) console.error('[TAKT_TENANT_FAILED]', {code: 'SOURCE_INCOMPLETE'});
     }
-  } catch (error) {
-    if (signal.aborted || error instanceof PageReadTimeout) return {mandanten: mandanten.length, laeufe, restOffen: true, erfolglos: true};
-    throw error;
   }
   const restOffen = signal.aborted || rest() < 1;
   return {mandanten: mandanten.length, laeufe, restOffen, ...(erfolglos || restOffen ? {erfolglos: true as const} : {}), ...(besetzt ? {besetzt: true as const} : {})};

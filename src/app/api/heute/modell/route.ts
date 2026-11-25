@@ -1,6 +1,7 @@
 import {after} from 'next/server';
 import {readTodayHomeRevision,readTodayHomePart} from '@/app/actions/orders.actions';
 import {holeTaktNach} from '@/modules/takt/server-public';
+import {TAKT_READ_BUDGET_MS} from '@/modules/takt/public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {resolveAuthorization,hasAnyAuthorizationArea} from '@/lib/server/authorization';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
@@ -44,7 +45,7 @@ export async function GET(request:Request){
   }));}
   catch{console.error('[TAKT_CATCHUP_SCHEDULE_FAILED]',{code:'SOURCE_INCOMPLETE'});}
   return response;
- },5_000);}catch{
+ },TAKT_READ_BUDGET_MS);}catch{
   console.error('[TODAY_MODEL_READ_FAILED]',{code:'SOURCE_INCOMPLETE'});
   return Response.json({code:'SOURCE_INCOMPLETE'},{status:503,headers:responseHeaders});
  }

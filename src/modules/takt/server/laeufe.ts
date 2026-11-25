@@ -4,7 +4,7 @@ import {outsidePageReadBudget} from '@/db/readBudget';
 import {listeTodayMandanten} from '@/lib/server/todayProjectionSchedule';
 import {withPrivilegedTenantTransaction, withTaktStatementTimeout, type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {hasAuthorizationArea, type AuthorizationSnapshot} from '@/lib/server/authorization';
-import {TAKT_BUDGET_MS} from '../public';
+import {TAKT_BUDGET_MS, TAKT_RETENTION_BUDGET_MS} from '../public';
 import {naechsteReservierung} from './wiederholung';
 
 export type LaufReservierung = Readonly<{id: string; versuch: number}>;
@@ -55,24 +55,27 @@ export async function liesOffeneWiederholungen(tenantId: string, schluessel: rea
     SELECT job_schluessel AS schluessel,faellig_fuer AS "faelligFuer",reserviert_bis<=statement_timestamp() AS bereit
     FROM public.takt_job_runs
     WHERE tenant_id=${tenantId} AND job_schluessel IN (${sql.join(schluessel.map(key=>sql`${key}`),sql`, `)})
+      AND faellig_fuer NOT LIKE 'hand:%'
+      AND length(faellig_fuer) IN (10,22)
       AND reserviert_bis IS NOT NULL AND (status='läuft' OR (status IN ('fehler','abgebrochen') AND versuch<4))
-    ORDER BY faellig_fuer,job_schluessel`)]);
+    ORDER BY CASE WHEN length(faellig_fuer)=10 THEN faellig_fuer::date::timestamp AT TIME ZONE 'Europe/Berlin'
+      ELSE faellig_fuer::timestamptz END,job_schluessel`)]);
 }
 
 /** Ein nach Mitternacht beendeter Tageslauf bleibt dem ursprünglichen Termin zugeordnet. */
-export async function liesLetztenOk(tenantId: string, schluessel: string): Promise<string | null> {
+export async function liesLetztenOk(tenantId: string, schluessel: string): Promise<Date | null> {
   if (!tenantId || !/^[a-z][a-z0-9_.]{1,79}$/.test(schluessel)) throw Error('TAKT_LETZTER_OK_INVALID');
   return withPrivilegedTenantTransaction({tenantId}, async tx => {
-    const rows = await tx.execute<{faellig_fuer: string}>(sql`
-      SELECT faellig_fuer
+    const rows = await tx.execute<{faellig_ms: number}>(sql`
+      SELECT (EXTRACT(epoch FROM (faellig_fuer::date::timestamp AT TIME ZONE 'Europe/Berlin'))*1000)::double precision AS faellig_ms
       FROM public.takt_job_runs
       WHERE tenant_id=${tenantId} AND job_schluessel=${schluessel} AND status='ok' AND beendet_um IS NOT NULL
-        AND faellig_fuer NOT LIKE '%T%'
+        AND length(faellig_fuer)=10
       ORDER BY faellig_fuer DESC LIMIT 1`);
     const row = rows[0];
     if (!row) return null;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.faellig_fuer)) throw Error('TAKT_LETZTER_OK_ZEIT_INVALID');
-    return row.faellig_fuer;
+    if (!Number.isFinite(row.faellig_ms)) throw Error('TAKT_LETZTER_OK_ZEIT_INVALID');
+    return new Date(row.faellig_ms);
   });
 }
 
@@ -108,17 +111,19 @@ export async function liesTaktLaeufe(auth: AuthorizationSnapshot, filter: Readon
 
 /** A unique due key is claimed once; a failed claim may reuse that same row. */
 export async function reserviereLauf(tenantId: string, schluessel: string, faelligFuer: string, fristMs: number): Promise<LaufReservierung | null> {
+  const handlauf = schluessel === 'heute_neuaufbau' && /^hand:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/.test(faelligFuer);
+  const automatik = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}[+-]\d{2}:\d{2})?$/.test(faelligFuer);
   if (!tenantId || !/^[a-z][a-z0-9_.]{1,79}$/.test(schluessel) ||
-      !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/.test(faelligFuer) ||
+      (!handlauf && !automatik) ||
       !Number.isSafeInteger(fristMs) || fristMs < 1 || fristMs > TAKT_BUDGET_MS) throw Error('TAKT_RESERVIERUNG_INVALID');
   return withPrivilegedTenantTransaction({tenantId}, async tx => {
     const inserted = await tx.execute<LaufReservierung>(sql`
       INSERT INTO public.takt_job_runs(tenant_id,job_schluessel,faellig_fuer,gestartet_um,status,versuch,reserviert_bis)
       VALUES(${tenantId},${schluessel},${faelligFuer},statement_timestamp(),'läuft',1,statement_timestamp()+(${fristMs}*interval '1 millisecond'))
-      ON CONFLICT(tenant_id,job_schluessel,faellig_fuer) DO NOTHING
+      ON CONFLICT(tenant_id,job_schluessel,faellig_fuer) WHERE faellig_fuer NOT LIKE 'hand:%' DO NOTHING
       RETURNING id::text,versuch`);
     if (inserted.length === 1) return inserted[0];
-    if (schluessel === TAKT_NACHHOLEN) return null;
+    if (handlauf || schluessel === TAKT_NACHHOLEN) return null;
     const retried = await tx.execute<LaufReservierung>(sql`
       UPDATE public.takt_job_runs SET status='läuft',versuch=versuch+1,gestartet_um=statement_timestamp(),
         beendet_um=NULL,fehlercode=NULL,dauer_ms=NULL,reserviert_bis=statement_timestamp()+(${fristMs}*interval '1 millisecond')
@@ -145,7 +150,8 @@ async function schreibeLaufabschluss(tx: PrivilegedTenantTransaction, tenantId: 
     ? naechsteReservierung(reservierung.versuch, new Date()) : null;
   const updated = await tx.execute<{id: string}>(sql`
     UPDATE public.takt_job_runs SET status=${status},beendet_um=statement_timestamp(),dauer_ms=${dauerMs},
-      fehlercode=${fehlercode},reserviert_bis=${next?.toISOString() ?? null}::timestamptz
+      fehlercode=${fehlercode},reserviert_bis=CASE WHEN faellig_fuer LIKE 'hand:%' OR job_schluessel=${TAKT_NACHHOLEN} THEN NULL
+        ELSE ${next?.toISOString() ?? null}::timestamptz END
     WHERE tenant_id=${tenantId} AND id=${reservierung.id}::uuid AND status='läuft' AND versuch=${reservierung.versuch}
     RETURNING id::text`);
   if (updated.length !== 1) throw Error('TAKT_RESERVIERUNG_VERLOREN');
@@ -154,10 +160,17 @@ async function schreibeLaufabschluss(tx: PrivilegedTenantTransaction, tenantId: 
 /** Retention of Takt's own run rows; called only after the Logging job succeeded. */
 export async function loescheAlteLaeufe(tenantId: string, tage: number, eigeneLaufId: string, signal?: AbortSignal): Promise<void> {
   if (!tenantId || !Number.isSafeInteger(tage) || tage < 0 || !/^[0-9a-f-]{36}$/i.test(eigeneLaufId)) throw Error('TAKT_RETENTION_SETTING_INVALID');
-  await withTaktStatementTimeout(15_000, () => withPrivilegedTenantTransaction({tenantId}, async tx => {
+  await withTaktStatementTimeout(TAKT_RETENTION_BUDGET_MS, () => withPrivilegedTenantTransaction({tenantId}, async tx => {
+    await tx.execute(sql`UPDATE public.takt_job_runs SET status='abgebrochen',beendet_um=statement_timestamp(),
+      dauer_ms=LEAST(2147483647,GREATEST(0,FLOOR(EXTRACT(epoch FROM statement_timestamp()-gestartet_um)*1000)))::integer,
+      reserviert_bis=NULL
+      WHERE tenant_id=${tenantId} AND status='läuft' AND reserviert_bis<=statement_timestamp()
+        AND (job_schluessel=${TAKT_NACHHOLEN} OR faellig_fuer LIKE 'hand:%')`);
     await tx.execute(sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenantId} AND gestartet_um < statement_timestamp()-(${tage}*interval '1 day')
       AND id <> ${eigeneLaufId}::uuid AND status<>'läuft'
       AND NOT (job_schluessel<>${TAKT_NACHHOLEN} AND status IN ('fehler','abgebrochen') AND reserviert_bis IS NOT NULL AND versuch<4)
-      AND NOT (job_schluessel=${TAKT_NACHHOLEN} AND faellig_fuer=to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD"T"HH24:MI'))`);
+      AND CASE WHEN job_schluessel=${TAKT_NACHHOLEN} AND length(faellig_fuer)=22
+        THEN faellig_fuer::timestamptz<>date_trunc('minute',statement_timestamp())
+        ELSE true END`);
   }), signal);
 }

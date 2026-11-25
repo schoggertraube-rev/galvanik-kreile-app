@@ -61,13 +61,16 @@ async function verifyTakt(db, cookie) {
   const before = await list();
   const takt = await read('/api/takt', 55_000);
   await takt.body?.cancel();
-  assert.equal(takt.status, 200, 'S38B_DIAGNOSTIC_RUN_HTTP');
   const scheduled = (await list()).filter(row => row.job_schluessel !== 'takt.nachholen' &&
     !before.some(old => old.job_schluessel === row.job_schluessel && old.faellig_fuer === row.faellig_fuer));
-  assert.ok(scheduled.length > 0, 'S38B_TODAY_RUN_RECEIPT');
+  assert.ok(scheduled.some(row => row.job_schluessel === 'heute_neuaufbau' && row.status === 'ok'), 'S38B_TODAY_RUN_RECEIPT');
+  const failed = scheduled.filter(row => row.status !== 'ok');
+  assert.ok(failed.every(row => row.job_schluessel === 'protokoll_aufbewahrung' && row.status === 'fehler'),
+    'S38B_UNEXPECTED_JOB_FAILURE');
+  assert.equal(takt.status, failed.length > 0 ? 503 : 200, 'S38B_DIAGNOSTIC_RUN_HTTP');
 
   const minute = async () => {
-    const [clock] = await db`SELECT to_char(clock_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD"T"HH24:MI') AS key,
+    const [clock] = await db`SELECT date_trunc('minute',clock_timestamp())::text AS key,
       extract(second FROM clock_timestamp())::int AS second`;
     return clock;
   };
@@ -84,11 +87,12 @@ async function verifyTakt(db, cookie) {
 
   for (let attempt = 0; attempt < 25; attempt++) {
     const rows = await db`SELECT job_schluessel,faellig_fuer,status,versuch FROM public.takt_job_runs
-      WHERE tenant_id=${tenantId} AND job_schluessel='takt.nachholen' AND faellig_fuer=${first.key}`;
+      WHERE tenant_id=${tenantId} AND job_schluessel='takt.nachholen'
+        AND CASE WHEN length(faellig_fuer)=22 THEN faellig_fuer::timestamptz=${first.key}::timestamptz ELSE false END`;
     assert.ok(rows.length <= 1, 'S38B_DUPLICATE_CATCHUP');
     if (rows[0]?.status === 'ok') {
       assert.equal(rows[0].versuch, 1, 'S38B_CATCHUP_ATTEMPT');
-      return { diagnosticHttp: takt.status, todayHttp: [200, 200], berlinMinute: first.key, scheduled, catchUp: rows };
+      return { diagnosticHttp: takt.status, todayHttp: [200, 200], berlinMinute: rows[0].faellig_fuer, scheduled, catchUp: rows };
     }
     await sleep(400);
   }

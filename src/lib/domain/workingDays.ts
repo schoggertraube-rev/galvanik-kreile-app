@@ -137,8 +137,8 @@ export function berlinUhrzeit(now = new Date()): string {
 }
 
 /** One due key per Berlin calendar day, including either DST transition. */
-export function taeglichFaelligAb(jetzt: Date, letzterFaelligerTag: string | null, uhrzeit: '02:00' | '03:00'): string | null {
+export function taeglichFaelligAb(jetzt: Date, letzterOk: Date | null, uhrzeit: '02:00' | '03:00'): string | null {
   if (berlinUhrzeit(jetzt) < uhrzeit) return null;
   const tag = berlinCalendarDay(jetzt);
-  return letzterFaelligerTag === tag ? null : tag;
+  return letzterOk !== null && berlinCalendarDay(letzterOk) === tag ? null : tag;
 }

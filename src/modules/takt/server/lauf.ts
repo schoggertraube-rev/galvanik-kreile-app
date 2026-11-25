@@ -6,12 +6,12 @@ import {type TaktJob, type TaktLeser} from '../public';
 import type {PackageSwitchId} from '@/modules/fundament/public';
 import {beendeAbgelaufenenLauf, beendeLauf, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf, type LaufAbschluss} from './laeufe';
 
-export type FaelligerJob = Readonly<{job: TaktJob; faelligFuer: string}>;
+export type FaelligerJob = Readonly<{job: TaktJob; faelligFuer: string; wiederholung?: true}>;
 export type JobErgebnis = 'nicht_reserviert' | 'ok' | 'ohne_arbeit' | 'übersprungen' | 'fehler' | 'abgebrochen' | 'besetzt';
 
 /** Preserve registration order while qualifying each job against its own success. */
 export async function liesFaelligeJobs(
-  jobs: readonly TaktJob[], jetzt: Date, letzterOk: (schluessel: string) => Promise<string | null>,
+  jobs: readonly TaktJob[], jetzt: Date, letzterOk: (schluessel: string) => Promise<Date | null>,
 ): Promise<FaelligerJob[]> {
   if (!Number.isFinite(jetzt.getTime())) throw Error('TAKT_ZEIT_INVALID');
   const faellige: FaelligerJob[] = [];
@@ -22,10 +22,16 @@ export async function liesFaelligeJobs(
   return faellige;
 }
 
-/** Catch-up is unique per Berlin minute, even during the repeated autumn hour. */
-export function nachholMinuteBerlin(jetzt: Date): string {
+const berlinOffset = new Intl.DateTimeFormat('en-GB', {timeZone: 'Europe/Berlin', timeZoneName: 'longOffset'});
+
+/** The offset distinguishes the two occurrences of a Berlin autumn minute. */
+export function nachholMinuteBerlin(jetzt: Date, raster: 1 | 5 = 1): string {
   if (!Number.isFinite(jetzt.getTime())) throw Error('TAKT_ZEIT_INVALID');
-  return `${berlinCalendarDay(jetzt)}T${berlinUhrzeit(jetzt)}`;
+  const schritt = raster * 60_000;
+  const minute = new Date(Math.floor(jetzt.getTime() / schritt) * schritt);
+  const offset = berlinOffset.formatToParts(minute).find(part => part.type === 'timeZoneName')?.value.slice(3);
+  if (!offset || !/^[+-]\d{2}:\d{2}$/.test(offset)) throw Error('TAKT_ZEITZONE_INVALID');
+  return `${berlinCalendarDay(minute)}T${berlinUhrzeit(minute)}${offset}`;
 }
 
 /** One reserved run is the only receipt for a job and its retention follow-up. */
@@ -35,6 +41,7 @@ export async function fuehreFaelligenJobAus(
   restbudgetMs = faellig.job.fristMs, abbruch?: AbortSignal,
 ): Promise<JobErgebnis> {
   const {job, faelligFuer} = faellig;
+  const handlauf = faelligFuer.startsWith('hand:');
   if (abbruch?.aborted || restbudgetMs < 1) return 'nicht_reserviert';
   const start = performance.now();
   const innerhalb = await mitTaktLaufsperre(tenantId, job.schluessel, async (): Promise<JobErgebnis> => {
@@ -44,7 +51,7 @@ export async function fuehreFaelligenJobAus(
     const deadline = AbortSignal.timeout(budget);
     const signal = abbruch ? AbortSignal.any([deadline, abbruch]) : deadline;
     const vorbereitung = await withTaktStatementTimeout(budget, async () => {
-      if (await beendeAbgelaufenenLauf(tenantId, job.schluessel, faelligFuer)) return 'abgebrochen' as const;
+      if (!handlauf && await beendeAbgelaufenenLauf(tenantId, job.schluessel, faelligFuer)) return 'abgebrochen' as const;
       return reserviereLauf(tenantId, job.schluessel, faelligFuer, budget);
     }, signal);
     if (vorbereitung === 'abgebrochen') return vorbereitung;
@@ -88,5 +95,5 @@ export async function fuehreFaelligenJobAus(
     await beendeLauf(tenantId, reservierung, status, Math.max(0, Math.floor(performance.now() - start)), fehlercode);
     return ergebnis;
   }, {budgetMs: Math.min(job.fristMs, Math.floor(restbudgetMs)), signal: abbruch});
-  return innerhalb ?? 'nicht_reserviert';
+  return innerhalb ?? (handlauf ? 'besetzt' : 'nicht_reserviert');
 }

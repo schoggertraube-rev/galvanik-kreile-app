@@ -2,11 +2,11 @@
 import {randomUUID} from 'node:crypto';
 import postgres from 'postgres';
 import {afterAll, expect, it, vi} from 'vitest';
-import {taeglichFaelligAb} from '@/lib/domain/workingDays';
+import {berlinCalendarDay, taeglichFaelligAb} from '@/lib/domain/workingDays';
 import {bauePaketAktiv, TAKT_JOBS} from '../../jobs';
 import type {TaktJob} from '../../public';
-import {beendeAbgelaufenenLauf, beendeLauf, liesLetztenOk, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf, TAKT_NACHHOLEN} from '../laeufe';
-import {fuehreFaelligenJobAus} from '../lauf';
+import {beendeAbgelaufenenLauf, beendeLauf, liesLetztenOk, liesOffeneWiederholungen, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf, TAKT_NACHHOLEN} from '../laeufe';
+import {fuehreFaelligenJobAus, nachholMinuteBerlin} from '../lauf';
 import {configurePageReadBudget} from '@/db/readBudget';
 import {sql as statement} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction, withTaktStatementTimeout} from '@/lib/server/privilegedDb';
@@ -20,7 +20,7 @@ if (!database || database !== process.env.H18_EXPECTED_DATABASE_URL ||
 const sql = postgres(database, {max: 2, prepare: false});
 const tenant = `TEST-ablauf-takt-${randomUUID()}`;
 const catchupTenant = `${tenant}-nachholen`;
-const minute = '2026-11-25T10:00';
+const minute = '2026-11-25T10:00+01:00';
 
 afterAll(async () => {
   try {
@@ -61,8 +61,9 @@ it('reserviert denselben Mandanten und dieselbe Minute parallel genau einmal', a
   await expect(reserviereLauf(tenant, schluessel, minute, 25_000)).resolves.toBeNull();
 });
 
-it('hält das Nachholen in der Berliner Minute auch nach der Aufbewahrung einmalig', async () => {
-  const [{due}] = await sql<{due:string}[]>`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD"T"HH24:MI') AS due`;
+it('hält das Nachholen in der Berliner Minute einmalig und schließt abgelaufene Arbeit', async () => {
+  const jetzt = new Date();
+  const due = nachholMinuteBerlin(jetzt);
   const reservierungen = await Promise.all([
     reserviereLauf(catchupTenant, TAKT_NACHHOLEN, due, 25_000),
     reserviereLauf(catchupTenant, TAKT_NACHHOLEN, due, 25_000),
@@ -71,12 +72,32 @@ it('hält das Nachholen in der Berliner Minute auch nach der Aufbewahrung einmal
   const nachholen = reservierungen.find(r => r !== null);
   const aufbewahrung = await reserviereLauf(catchupTenant, 'protokoll_aufbewahrung', due.slice(0,10), 25_000);
   if (!nachholen || !aufbewahrung) throw Error('TEST_TAKT_RESERVIERUNG_FEHLT');
+  const alt = await reserviereLauf(catchupTenant, TAKT_NACHHOLEN, nachholMinuteBerlin(new Date(jetzt.getTime()-120_000)), 25_000);
+  if (!alt) throw Error('TEST_TAKT_RESERVIERUNG_FEHLT');
+  await sql`UPDATE public.takt_job_runs SET reserviert_bis=statement_timestamp()-interval '1 second'
+    WHERE tenant_id=${catchupTenant} AND id=${alt.id}::uuid`;
   await beendeLauf(catchupTenant, nachholen, 'abgebrochen', 1);
+  await loescheAlteLaeufe(catchupTenant, 1, aufbewahrung.id);
+  expect(await sql`SELECT status, beendet_um IS NOT NULL AS abgeschlossen, reserviert_bis
+    FROM public.takt_job_runs WHERE tenant_id=${catchupTenant} AND id=${alt.id}::uuid`)
+    .toEqual([{status:'abgebrochen',abgeschlossen:true,reserviert_bis:null}]);
   await loescheAlteLaeufe(catchupTenant, 0, aufbewahrung.id);
   await expect(reserviereLauf(catchupTenant, TAKT_NACHHOLEN, due, 25_000)).resolves.toBeNull();
   expect(await sql`SELECT id::text,status,versuch FROM public.takt_job_runs
     WHERE tenant_id=${catchupTenant} AND job_schluessel=${TAKT_NACHHOLEN}`)
     .toEqual([{id:nachholen.id,status:'abgebrochen',versuch:1}]);
+});
+
+it('reserviert beide Berliner Herbst-Minuten und jede physische Ausführung nur einmal', async () => {
+  const winter = nachholMinuteBerlin(new Date('2026-10-25T01:30:00Z'));
+  const sommer = nachholMinuteBerlin(new Date('2026-10-25T00:30:00Z'));
+  const job = 'takt.test_herbstminute';
+  expect(await reserviereLauf(tenant, job, sommer, 25_000)).toMatchObject({versuch: 1});
+  expect(await reserviereLauf(tenant, job, winter, 25_000)).toMatchObject({versuch: 1});
+  expect(await reserviereLauf(tenant, job, sommer, 25_000)).toBeNull();
+  expect(await sql`SELECT faellig_fuer,status FROM public.takt_job_runs WHERE tenant_id=${tenant} AND job_schluessel=${job} ORDER BY faellig_fuer`)
+    .toEqual([{faellig_fuer:winter,status:'läuft'},{faellig_fuer:sommer,status:'läuft'}]);
+  expect((await liesOffeneWiederholungen(tenant, [job])).map(row=>row.faelligFuer)).toEqual([sommer,winter]);
 });
 
 it('begrenzt native SQL auch wenn der Projektor mehr Zeit einstellt', async () => {
@@ -171,7 +192,7 @@ it('zählt einen nach Mitternacht abgeschlossenen Versuch für seinen ursprüngl
     FROM public.takt_job_runs WHERE tenant_id=${tenant} AND id=${reservierung.id}::uuid`;
   expect(tag.datum).toBe(heute);
   const letzterTermin = await liesLetztenOk(tenant, schluessel);
-  expect(letzterTermin).toBe(gestern);
+  expect(letzterTermin && berlinCalendarDay(letzterTermin)).toBe(gestern);
   expect(taeglichFaelligAb(new Date(`${heute}T12:00:00Z`), letzterTermin, '03:00')).toBe(heute);
 });
 

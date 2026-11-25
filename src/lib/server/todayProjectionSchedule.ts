@@ -3,9 +3,17 @@ import {sql} from 'drizzle-orm';
 import {withPageReadBudget} from '@/db/readBudget';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
+import {TAKT_READ_BUDGET_MS} from '@/modules/takt/public';
 
 export const TODAY_PROJECTOR_VERSION=1;
 export const TODAY_MODEL_LIST_KINDS=['orders','messages','money','complaints','quote_followups','quotes','tasks','company'] as const;
+
+/** A partial row becomes runnable again after a new source invalidation. */
+export function todaySourceNeedsRebuild(day:string){
+ return sql`(source.source_seq<>source.built_seq OR source.built_tenant_seq<>tenant.tenant_seq
+  OR source.built_day IS DISTINCT FROM ${day}::date OR source.projector_version<>${TODAY_PROJECTOR_VERSION}
+  OR source.status='PENDING')`;
+}
 
 /** One ordered tenant source for the central Takt and the Today core. */
 export async function listeTodayMandanten():Promise<string[]>{
@@ -24,7 +32,7 @@ export async function liesTodayModellVeraltet(tenantId:string,jetzt:Date):Promis
  return withPageReadBudget(()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
   const result=await readTodayModelInTransaction(tx,{tenantId},berlinCalendarDay(jetzt),true);
   return result.needsRebuild;
- }),5000);
+ }),TAKT_READ_BUDGET_MS);
 }
 
 /** The manual refresh reports an occupied lease without altering the model. */

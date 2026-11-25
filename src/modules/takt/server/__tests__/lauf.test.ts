@@ -10,23 +10,23 @@ it('prüft jeden Job in Registerfolge anhand seines eigenen Erfolgs', async () =
   const now = new Date('2026-11-25T05:00:00Z');
   const jobs = ['a', 'b'].map(schluessel => ({
     schluessel, paket: null, fristMs: 25_000,
-    faellig: (_jetzt: Date, letzterOk: string | null) => letzterOk ? null : '2026-11-25',
+    faellig: (_jetzt: Date, letzterOk: Date | null) => letzterOk ? null : '2026-11-25',
     ausfuehren: async () => 'ok' as const,
   })) satisfies TaktJob[];
   const gelesen: string[] = [];
   const result = await liesFaelligeJobs(jobs, now, async schluessel => {
     gelesen.push(schluessel);
-    return schluessel === 'a' ? '2026-11-25' : null;
+    return schluessel === 'a' ? now : null;
   });
   expect(gelesen).toEqual(['a', 'b']);
   expect(result).toEqual([{job: jobs[1], faelligFuer: '2026-11-25'}]);
 });
 
 it('bindet Nachholen an die Berliner Minute und deren Sommerzeitwechsel', () => {
-  expect(nachholMinuteBerlin(new Date('2026-11-25T05:02:05Z'))).toBe('2026-11-25T06:02');
-  expect(nachholMinuteBerlin(new Date('2026-11-25T05:02:59Z'))).toBe('2026-11-25T06:02');
-  expect(nachholMinuteBerlin(new Date('2026-10-25T00:30:00Z'))).toBe('2026-10-25T02:30');
-  expect(nachholMinuteBerlin(new Date('2026-10-25T01:30:00Z'))).toBe('2026-10-25T02:30');
+  expect(nachholMinuteBerlin(new Date('2026-11-25T05:02:05Z'))).toBe('2026-11-25T06:02+01:00');
+  expect(nachholMinuteBerlin(new Date('2026-11-25T05:02:59Z'))).toBe('2026-11-25T06:02+01:00');
+  expect(nachholMinuteBerlin(new Date('2026-10-25T00:34:00Z'), 5)).toBe('2026-10-25T02:30+02:00');
+  expect(nachholMinuteBerlin(new Date('2026-10-25T01:34:00Z'), 5)).toBe('2026-10-25T02:30+01:00');
 });
 
 it('legt für dieselbe Fälligkeit nur die drei freigegebenen Wiederholungen fest', () => {

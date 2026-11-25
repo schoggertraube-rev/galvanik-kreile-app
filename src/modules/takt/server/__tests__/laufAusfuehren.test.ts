@@ -23,7 +23,7 @@ const testJobs = vi.hoisted(() => ({
 }));
 vi.mock('../../jobs', () => ({
   TAKT_JOBS: [{schluessel: 'heute_neuaufbau', paket: null, fristMs: 25_000,
-    faellig: (_jetzt: Date, letzterOk: string | null) => letzterOk ? null : '2026-11-25', ausfuehren: testJobs.ausfuehren}],
+    faellig: (_jetzt: Date, letzterOk: Date | null) => letzterOk ? null : '2026-11-25', ausfuehren: testJobs.ausfuehren}],
   baueTaktLeser: () => ({protokollAufbewahrungTage: async () => 0}),
   bauePaketAktiv: () => async () => true,
 }));
@@ -53,10 +53,10 @@ it('frischt ein veraltetes Modell nur einmal je Berliner Fünfminutenfenster auf
   await fuehreTaktAus({tenantId: 'tenant-a', jetzt: new Date('2026-11-25T05:07:00Z')});
   // The daily full build takes priority while it is due.
   expect(refresh).not.toHaveBeenCalled();
-  ports.liesLetztenOk.mockResolvedValueOnce('2026-11-25');
+  ports.liesLetztenOk.mockResolvedValueOnce(new Date('2026-11-24T23:00:00Z'));
   testJobs.ausfuehren.mockClear();
   await fuehreTaktAus({tenantId: 'tenant-a', jetzt: new Date('2026-11-25T05:07:00Z')});
-  expect(ports.reserviereLauf).toHaveBeenLastCalledWith('tenant-a', 'heute_neuaufbau', '2026-11-25T06:05', 25_000);
+  expect(ports.reserviereLauf).toHaveBeenLastCalledWith('tenant-a', 'heute_neuaufbau', '2026-11-25T06:05+01:00', 25_000);
   expect(refresh).toHaveBeenCalledOnce();
   expect(testJobs.ausfuehren).not.toHaveBeenCalled();
 });
@@ -68,8 +68,8 @@ it('läuft ohne Login über alle Mandanten der einzigen Today-Liste', async () =
   expect(testJobs.ausfuehren.mock.calls.map(call => call[0])).toEqual(['tenant-a', 'tenant-b']);
 });
 
-it('behält den älteren offenen Termin bis zu seiner Wiederholung und reserviert keinen neuen', async () => {
-  const faelligFuer = '2026-11-24T14:05';
+it('hält den älteren offenen Termin zurück und führt nach Erfolg auch den fälligen Tag aus', async () => {
+  const faelligFuer = '2026-11-24T14:05+01:00';
   const jetzt = new Date('2026-11-25T05:07:00Z');
   ports.liesOffeneWiederholungen.mockResolvedValueOnce([{schluessel:'heute_neuaufbau',faelligFuer,bereit:false}]);
   modelStale.mockResolvedValue(true);
@@ -77,9 +77,18 @@ it('behält den älteren offenen Termin bis zu seiner Wiederholung und reservier
   expect(ports.reserviereLauf).not.toHaveBeenCalled();
   ports.liesOffeneWiederholungen.mockResolvedValueOnce([{schluessel:'heute_neuaufbau',faelligFuer,bereit:true}]);
   await fuehreTaktAus({tenantId:'tenant-a',jetzt});
-  expect(ports.reserviereLauf.mock.calls.map(call=>call.slice(0,3))).toEqual([['tenant-a','heute_neuaufbau',faelligFuer]]);
+  expect(ports.reserviereLauf.mock.calls.map(call=>call.slice(0,3))).toEqual([
+    ['tenant-a','heute_neuaufbau',faelligFuer],
+    ['tenant-a','heute_neuaufbau','2026-11-25'],
+  ]);
   expect(refresh).toHaveBeenCalledOnce();
-  expect(testJobs.ausfuehren).not.toHaveBeenCalled();
+  expect(testJobs.ausfuehren).toHaveBeenCalledOnce();
+});
+
+it('setzt nach einer nicht verfügbaren Mandantenquelle bei den übrigen Mandanten fort', async () => {
+  ports.liesLetztenOk.mockRejectedValueOnce(Error('TEST_TENANT_READ_FAILED'));
+  expect(await fuehreTaktAus()).toEqual({mandanten: 2, laeufe: 1, restOffen: false, erfolglos: true});
+  expect(testJobs.ausfuehren.mock.calls.map(call => call[0])).toEqual(['tenant-b']);
 });
 
 it('stoppt nach dem Zeitbudget vor dem nächsten Mandanten, ohne dessen Lauf zu reservieren', async () => {

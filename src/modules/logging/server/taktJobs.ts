@@ -2,6 +2,7 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 import {taeglichFaelligAb} from '@/lib/domain/workingDays';
 import {withPrivilegedTenantTransaction, withTaktStatementTimeout} from '@/lib/server/privilegedDb';
+import {TAKT_JOB_BUDGET_MS, TAKT_RETENTION_BUDGET_MS} from '@/modules/takt/public';
 
 type AufbewahrungsLeser = Readonly<{protokollAufbewahrungTage: () => Promise<number | null>}>;
 
@@ -9,15 +10,15 @@ type AufbewahrungsLeser = Readonly<{protokollAufbewahrungTage: () => Promise<num
 export const taktJobs = [{
   schluessel: 'protokoll_aufbewahrung',
   paket: null,
-  faellig: (jetzt: Date, letzterTermin: string | null) => taeglichFaelligAb(jetzt, letzterTermin, '03:00'),
-  fristMs: 25_000,
+  faellig: (jetzt: Date, letzterTermin: Date | null) => taeglichFaelligAb(jetzt, letzterTermin, '03:00'),
+  fristMs: TAKT_JOB_BUDGET_MS,
   ausfuehren: async (tenantId: string, signal: AbortSignal, leser: AufbewahrungsLeser) => {
     signal.throwIfAborted();
     const days = await leser.protokollAufbewahrungTage();
     signal.throwIfAborted();
     if (days === null) return 'ok' as const;
     if (!Number.isSafeInteger(days) || days < 0) throw Error('TAKT_RETENTION_SETTING_INVALID');
-    await withTaktStatementTimeout(15_000, () => withPrivilegedTenantTransaction({tenantId}, async tx => {
+    await withTaktStatementTimeout(TAKT_RETENTION_BUDGET_MS, () => withPrivilegedTenantTransaction({tenantId}, async tx => {
       await tx.execute(sql`SET LOCAL app.protocol_retention='on'`);
       signal.throwIfAborted();
       await tx.execute(sql`DELETE FROM public.technical_protocol WHERE tenant_id=${tenantId} AND recorded_at<statement_timestamp()-(${days}*interval '1 day')`);
