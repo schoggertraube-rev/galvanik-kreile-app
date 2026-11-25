@@ -11,7 +11,7 @@ export type JobErgebnis = 'nicht_reserviert' | 'ok' | 'ohne_arbeit' | 'überspru
 
 /** Preserve registration order while qualifying each job against its own success. */
 export async function liesFaelligeJobs(
-  jobs: readonly TaktJob[], jetzt: Date, letzterOk: (schluessel: string) => Promise<Date | null>,
+  jobs: readonly TaktJob[], jetzt: Date, letzterOk: (schluessel: string) => Promise<string | null>,
 ): Promise<FaelligerJob[]> {
   if (!Number.isFinite(jetzt.getTime())) throw Error('TAKT_ZEIT_INVALID');
   const faellige: FaelligerJob[] = [];

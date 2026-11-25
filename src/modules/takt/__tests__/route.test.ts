@@ -36,6 +36,12 @@ it('antwortet ohne Mandanten ohne Laufbeleg', async () => {
   expect((await GET(new Request('https://example.test/api/takt'))).status).toBe(204);
 });
 
+it('unterscheidet eine abgebrochene Mandantenabfrage von einer leeren Liste', async () => {
+  zugriff.mockResolvedValue({code: 'CRON'});
+  lauf.mockResolvedValue({mandanten: 0, laeufe: 0, restOffen: true, erfolglos: true});
+  expect((await GET(new Request('https://example.test/api/takt'))).status).toBe(503);
+});
+
 it('startet am alten Endpunkt nur den Heute-Job für einen berechtigten Mandanten', async () => {
   handzugriff.mockResolvedValueOnce({code: 'DENIED', status: 403}).mockResolvedValueOnce({code: 'LOGIN', tenantId: 'tenant-a'});
   expect((await handGET(new Request('https://example.test/api/heute/neuaufbau'))).status).toBe(403);

@@ -13,7 +13,8 @@ export async function GET(request: Request): Promise<Response> {
     const result = await fuehreTaktAus(zugriff.code === 'LOGIN'
       ? {tenantId: zugriff.tenantId, budgetMs: TAKT_BUDGET_MS}
       : {budgetMs: TAKT_BUDGET_MS});
-    return new Response(null, {status: result.mandanten === 0 ? 204 : 200, headers: {'Cache-Control': 'private, no-store'}});
+    const status = result.mandanten > 0 ? 200 : result.erfolglos || result.restOffen ? 503 : 204;
+    return new Response(null, {status, headers: {'Cache-Control': 'private, no-store'}});
   } catch {
     console.error('[TAKT_RUN_FAILED]', {code: 'SOURCE_INCOMPLETE'});
     return new Response(null, {status: 503, headers: {'Cache-Control': 'private, no-store'}});

@@ -31,7 +31,7 @@ async function liesAnstehendeJobs(
     });
   }
   const frei = jobs.filter(job => !blockiert.has(job.schluessel));
-  const faellige = await liesFaelligeJobs(frei, jetzt, schluessel => liesLetztenOk(tenantId, schluessel, schluessel === 'heute_neuaufbau'));
+  const faellige = await liesFaelligeJobs(frei, jetzt, schluessel => liesLetztenOk(tenantId, schluessel));
   if (!faellige.some(eintrag => eintrag.job.schluessel === 'heute_neuaufbau')) {
     const heute = frei.find(job => job.schluessel === 'heute_neuaufbau');
     if (heute && await liesTodayModellVeraltet(tenantId, jetzt)) {

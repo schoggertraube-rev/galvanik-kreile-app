@@ -5,7 +5,7 @@ export type TaktLeser = Readonly<{ protokollAufbewahrungTage: () => Promise<numb
 export type TaktJob = Readonly<{
   schluessel: string;
   paket: PackageSwitchId | null;
-  faellig: (jetztBerlin: Date, letzterOk: Date | null) => string | null;
+  faellig: (jetztBerlin: Date, letzterErfolgreicherTermin: string | null) => string | null;
   fristMs: number;
   ausfuehren: (tenantId: string, signal: AbortSignal, leser: TaktLeser) => Promise<'ok' | 'ohne_arbeit'>;
 }>;

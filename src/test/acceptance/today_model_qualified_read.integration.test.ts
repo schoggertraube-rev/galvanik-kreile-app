@@ -112,6 +112,18 @@ it('qualifies the actual source snapshot and never returns an old payload after 
  });
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
  expect((await read()).rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId)).toMatchObject({fresh:true,sourceVersion:order.version+1,currentVersion:order.version+1});
+ await withRestoredTestSource({label:'TEST targeted invalidation of the built orders list',read:async()=>{
+  const [row]=await sql<{seq:string}[]>`SELECT source_seq::text AS seq FROM private.today_source_v1
+    WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  if(!row)throw Error('TEST_ORDERS_LIST_SOURCE_REQUIRED');return row.seq;
+ },restore:async seq=>{
+  await sql`UPDATE private.today_source_v1 SET source_seq=${seq}::bigint WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+ }},async()=>{
+  await sql`UPDATE private.today_source_v1 SET source_seq=source_seq+1 WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  const invalidatedList=await read();
+  expect(invalidatedList.needsRebuild).toBe(true);
+  expect(invalidatedList.rows.find(row=>row.kind==='orders'&&row.sourceId==='*')).toMatchObject({needsRebuild:true,fresh:false,payload:null});
+ });
  await withRestoredTestSource({label:'TEST complete derived projector source',read:saved,restore},async()=>{
   await sql`UPDATE private.today_source_v1 SET projector_version=projector_version+1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
   const wrongCode=await read();expect(wrongCode.needsRebuild).toBe(true);

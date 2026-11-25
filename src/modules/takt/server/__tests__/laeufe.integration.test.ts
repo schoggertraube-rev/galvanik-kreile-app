@@ -157,23 +157,22 @@ it('führt ein abgeschaltetes Paket und ein Paket mit Lesefehler nie aus', async
     .toEqual([{status: 'übersprungen', fehlercode: null}, {status: 'fehler', fehlercode: 'takt_paket_lesen'}]);
 });
 
-it('liest einen echten Abschluss als Datum mit Berliner Tagesgrenze', async () => {
+it('zählt einen nach Mitternacht abgeschlossenen Versuch für seinen ursprünglichen Berliner Termin', async () => {
   const schluessel = 'takt.test_abschluss';
-  const reservierung = await reserviereLauf(tenant, schluessel, '2026-11-25', 5_000);
+  const [{heute, gestern}] = await sql<{heute: string; gestern: string}[]>`
+    SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS heute,
+      ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1)::text AS gestern`;
+  const reservierung = await reserviereLauf(tenant, schluessel, gestern, 5_000);
   if (!reservierung) throw Error('TAKT_TEST_RESERVIERUNG_FEHLT');
   await beendeLauf(tenant, reservierung, 'ok', 1);
 
-  const beendetUm = await liesLetztenOk(tenant, schluessel);
-  expect(beendetUm).toBeInstanceOf(Date);
-  if (!beendetUm) throw Error('TAKT_TEST_ABSCHLUSS_FEHLT');
-  const [row] = await sql<{millis: number}[]>`
-    SELECT (extract(epoch FROM beendet_um)*1000)::double precision AS millis
-    FROM public.takt_job_runs WHERE tenant_id=${tenant} AND id=${reservierung.id}::uuid`;
-  expect(beendetUm.getTime()).toBe(Math.trunc(row.millis));
   const [tag] = await sql<{datum: string}[]>`
     SELECT ((beendet_um AT TIME ZONE 'Europe/Berlin')::date)::text AS datum
     FROM public.takt_job_runs WHERE tenant_id=${tenant} AND id=${reservierung.id}::uuid`;
-  expect(taeglichFaelligAb(new Date(`${tag.datum}T12:00:00Z`), beendetUm, '03:00')).toBeNull();
+  expect(tag.datum).toBe(heute);
+  const letzterTermin = await liesLetztenOk(tenant, schluessel);
+  expect(letzterTermin).toBe(gestern);
+  expect(taeglichFaelligAb(new Date(`${heute}T12:00:00Z`), letzterTermin, '03:00')).toBe(heute);
 });
 
 it('räumt bei 0 Tagen alte Takt-Läufe auf und belegt den aktuellen Abschluss', async () => {

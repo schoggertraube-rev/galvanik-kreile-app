@@ -9,7 +9,7 @@ type AufbewahrungsLeser = Readonly<{protokollAufbewahrungTage: () => Promise<num
 export const taktJobs = [{
   schluessel: 'protokoll_aufbewahrung',
   paket: null,
-  faellig: (jetzt: Date, letzterOk: Date | null) => taeglichFaelligAb(jetzt, letzterOk, '03:00'),
+  faellig: (jetzt: Date, letzterTermin: string | null) => taeglichFaelligAb(jetzt, letzterTermin, '03:00'),
   fristMs: 25_000,
   ausfuehren: async (tenantId: string, signal: AbortSignal, leser: AufbewahrungsLeser) => {
     signal.throwIfAborted();

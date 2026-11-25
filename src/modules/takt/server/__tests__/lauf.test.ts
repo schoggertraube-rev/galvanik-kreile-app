@@ -10,13 +10,13 @@ it('prüft jeden Job in Registerfolge anhand seines eigenen Erfolgs', async () =
   const now = new Date('2026-11-25T05:00:00Z');
   const jobs = ['a', 'b'].map(schluessel => ({
     schluessel, paket: null, fristMs: 25_000,
-    faellig: (_jetzt: Date, letzterOk: Date | null) => letzterOk ? null : '2026-11-25',
+    faellig: (_jetzt: Date, letzterOk: string | null) => letzterOk ? null : '2026-11-25',
     ausfuehren: async () => 'ok' as const,
   })) satisfies TaktJob[];
   const gelesen: string[] = [];
   const result = await liesFaelligeJobs(jobs, now, async schluessel => {
     gelesen.push(schluessel);
-    return schluessel === 'a' ? now : null;
+    return schluessel === 'a' ? '2026-11-25' : null;
   });
   expect(gelesen).toEqual(['a', 'b']);
   expect(result).toEqual([{job: jobs[1], faelligFuer: '2026-11-25'}]);

@@ -50,13 +50,13 @@ describe('tägliche Berliner Fälligkeit', () => {
     const jetzt = new Date('2026-11-25T01:00:00Z');
     expect(taeglichFaelligAb(new Date('2026-11-24T00:59:00Z'), null, '02:00')).toBe(null);
     expect(taeglichFaelligAb(jetzt, null, '02:00')).toBe('2026-11-25');
-    expect(taeglichFaelligAb(jetzt, new Date('2026-11-24T01:00:00Z'), '02:00')).toBe('2026-11-25');
-    expect(taeglichFaelligAb(jetzt, jetzt, '02:00')).toBe(null);
+    expect(taeglichFaelligAb(jetzt, '2026-11-24', '02:00')).toBe('2026-11-25');
+    expect(taeglichFaelligAb(jetzt, '2026-11-25', '02:00')).toBe(null);
   });
 
   it('verwendet bei beiden Zeitumstellungen den Berliner Kalendertag', () => {
     expect(taeglichFaelligAb(new Date('2026-03-29T00:59:00Z'), null, '03:00')).toBe(null);
     expect(taeglichFaelligAb(new Date('2026-03-29T01:00:00Z'), null, '03:00')).toBe('2026-03-29');
-    expect(taeglichFaelligAb(new Date('2026-10-25T01:30:00Z'), new Date('2026-10-25T00:30:00Z'), '02:00')).toBe(null);
+    expect(taeglichFaelligAb(new Date('2026-10-25T01:30:00Z'), '2026-10-25', '02:00')).toBe(null);
   });
 });

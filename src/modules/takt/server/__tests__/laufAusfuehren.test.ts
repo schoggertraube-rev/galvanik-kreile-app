@@ -23,7 +23,7 @@ const testJobs = vi.hoisted(() => ({
 }));
 vi.mock('../../jobs', () => ({
   TAKT_JOBS: [{schluessel: 'heute_neuaufbau', paket: null, fristMs: 25_000,
-    faellig: (_jetzt: Date, letzterOk: Date | null) => letzterOk ? null : '2026-11-25', ausfuehren: testJobs.ausfuehren}],
+    faellig: (_jetzt: Date, letzterOk: string | null) => letzterOk ? null : '2026-11-25', ausfuehren: testJobs.ausfuehren}],
   baueTaktLeser: () => ({protokollAufbewahrungTage: async () => 0}),
   bauePaketAktiv: () => async () => true,
 }));
@@ -53,7 +53,7 @@ it('frischt ein veraltetes Modell nur einmal je Berliner Fünfminutenfenster auf
   await fuehreTaktAus({tenantId: 'tenant-a', jetzt: new Date('2026-11-25T05:07:00Z')});
   // The daily full build takes priority while it is due.
   expect(refresh).not.toHaveBeenCalled();
-  ports.liesLetztenOk.mockResolvedValueOnce(new Date('2026-11-25T03:00:00Z'));
+  ports.liesLetztenOk.mockResolvedValueOnce('2026-11-25');
   testJobs.ausfuehren.mockClear();
   await fuehreTaktAus({tenantId: 'tenant-a', jetzt: new Date('2026-11-25T05:07:00Z')});
   expect(ports.reserviereLauf).toHaveBeenLastCalledWith('tenant-a', 'heute_neuaufbau', '2026-11-25T06:05', 25_000);

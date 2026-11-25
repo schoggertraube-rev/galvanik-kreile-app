@@ -16,7 +16,7 @@ export async function fuehreHeuteAuffrischung(tenantId: string, signal: AbortSig
 export const HEUTE_TAKT_JOBS = [{
   schluessel: 'heute_neuaufbau',
   paket: null,
-  faellig: (jetzt: Date, letzterOk: Date | null) => taeglichFaelligAb(jetzt, letzterOk, '02:00'),
+  faellig: (jetzt: Date, letzterTermin: string | null) => taeglichFaelligAb(jetzt, letzterTermin, '02:00'),
   fristMs: 25_000,
   ausfuehren: async (tenantId: string, signal: AbortSignal) => {
     signal.throwIfAborted();

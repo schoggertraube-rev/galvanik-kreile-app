@@ -59,21 +59,20 @@ export async function liesOffeneWiederholungen(tenantId: string, schluessel: rea
     ORDER BY faellig_fuer,job_schluessel`)]);
 }
 
-/** The scheduler reads the last qualified success from its own run source. */
-export async function liesLetztenOk(tenantId: string, schluessel: string, nurTageslauf = false): Promise<Date | null> {
+/** Ein nach Mitternacht beendeter Tageslauf bleibt dem ursprünglichen Termin zugeordnet. */
+export async function liesLetztenOk(tenantId: string, schluessel: string): Promise<string | null> {
   if (!tenantId || !/^[a-z][a-z0-9_.]{1,79}$/.test(schluessel)) throw Error('TAKT_LETZTER_OK_INVALID');
   return withPrivilegedTenantTransaction({tenantId}, async tx => {
-    const rows = await tx.execute<{beendet_ms: number}>(sql`
-      SELECT (extract(epoch FROM beendet_um)*1000)::double precision AS beendet_ms
+    const rows = await tx.execute<{faellig_fuer: string}>(sql`
+      SELECT faellig_fuer
       FROM public.takt_job_runs
       WHERE tenant_id=${tenantId} AND job_schluessel=${schluessel} AND status='ok' AND beendet_um IS NOT NULL
-        ${nurTageslauf ? sql`AND faellig_fuer NOT LIKE '%T%'` : sql``}
-      ORDER BY beendet_um DESC LIMIT 1`);
+        AND faellig_fuer NOT LIKE '%T%'
+      ORDER BY faellig_fuer DESC LIMIT 1`);
     const row = rows[0];
     if (!row) return null;
-    const beendet = new Date(row.beendet_ms);
-    if (!Number.isFinite(beendet.getTime())) throw Error('TAKT_LETZTER_OK_ZEIT_INVALID');
-    return beendet;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.faellig_fuer)) throw Error('TAKT_LETZTER_OK_ZEIT_INVALID');
+    return row.faellig_fuer;
   });
 }
 
