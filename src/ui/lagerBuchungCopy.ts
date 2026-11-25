@@ -16,7 +16,6 @@ export const LAGER_BUCHUNG_COPY = {
   gegenbuchungNichtMoeglich: "Diese Bewegung lässt sich nicht zurücknehmen.",
   zielOrtFehlt: "Wähle einen aktiven Zielort.",
   artikelFehlt: "Wähle einen vorhandenen Artikel oder leg einen Entwurf an.",
-  artikelIdUngueltig: "Artikel-ID ist ungültig.",
   artikelGeaendert: "Öffne den Artikel erneut, damit du mit der aktuellen Version buchst.",
   fachzeit: "Buch den tatsächlichen Zeitpunkt der Bewegung.",
   ortFehlt: "Wähle einen aktiven Lagerort.",

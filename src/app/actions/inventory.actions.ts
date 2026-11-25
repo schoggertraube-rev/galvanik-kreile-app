@@ -14,7 +14,7 @@ import { LAGER_BUCHUNG_COPY } from "@/ui/lagerBuchungCopy";
 
 function fehlendeArtikelId(artikelId: unknown) {
   if (typeof artikelId === "string" && artikelId.trim() !== "") return null;
-  return { ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.artikelIdUngueltig } as const;
+  return { ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.artikelFehlt } as const;
 }
 
 export async function getInventoryItemsAction(): Promise<ActionResult<InventoryItem[]>> {

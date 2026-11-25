@@ -72,7 +72,7 @@ describe("Lageranschluss der bisherigen Inventory-Actions", () => {
 
   it.each([undefined, "", " "])("verlangt bei beiden Artikelaufrufen eine Artikel-ID (%j)", async artikelId => {
     const id = artikelId as string;
-    const fehler = { ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.artikelIdUngueltig };
+    const fehler = { ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.artikelFehlt };
     await expect(getInventoryItemAction(id)).resolves.toEqual(fehler);
     await expect(getInventoryMovementsByItemAction(id)).resolves.toEqual(fehler);
     expect(ports.transaktion).not.toHaveBeenCalled();
