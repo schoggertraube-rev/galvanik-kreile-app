@@ -68,13 +68,20 @@ export function AppShell(p: AppShellProps) {
     specId: `navigation.${entry.id}`, gruppe: entry.platz === 'unten' ? 'unten' : 'haupt',
     zaehler: p.badges?.[entry.id]?.n, aufrufen: () => p.onNav(entry.id),
   }));
+  const planung: Glaseintrag | null = p.onPlanung
+    ? {id: 'planung', text: 'Planung', icon: <Icon name="list" />, dockSpalte: 4,
+      specId: 'navigation.planung', aufrufen: p.onPlanung}
+    : null;
+  if (planung) {
+    const werkstattIndex = sichtbareZiele.findIndex(eintrag => eintrag.id === 'werkstatt');
+    sichtbareZiele.splice(werkstattIndex + 1, 0, planung);
+  }
   const dockEintraege = sichtbareZiele.flatMap<Glaseintrag>(entry => {
     if (entry.id === 'tag') return [{...entry, text: 'Dein Tag', dockSpalte: 1}];
     if (entry.id === 'werkstatt') return [{...entry, dockSpalte: 2}];
+    if (entry.id === 'planung') return [entry];
     return [];
   });
-  if (p.onPlanung) dockEintraege.push({ id: 'planung', text: 'Planung', icon: <Icon name="list" />,
-    dockSpalte: 4, specId: 'navigation.planung', aufrufen: p.onPlanung });
   const weitereZiele = sichtbareZiele.filter(entry => !dockEintraege.some(dock => dock.id === entry.id));
   const erfassung = p.onNeuerEingang && {text: 'Eingang', icon: <Icon name="plus" />, ausloesen: p.onNeuerEingang};
   const werkzeuge = werkstatt ? [] : [

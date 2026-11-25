@@ -51,6 +51,16 @@ describe('Nähte-b: neues Menü mit den bestehenden Zielen',()=>{
   expect(onPlanung).toHaveBeenCalledOnce();
   expect(onNav).toHaveBeenCalledExactlyOnceWith('mehr');
  });
+ it('öffnet dieselbe Planung auch aus dem Desktop-Menü',()=>{
+  const onPlanung=vi.fn();
+  render(<AppShell geraet="desktop" variante="buero" aktiv="tag" kuerzel="GK"
+   suche={null} plus={null} onNav={()=>{}} onStart={()=>{}} onKonto={()=>{}} onPlanung={onPlanung}
+  ><section>TEST Inhalt</section></AppShell>);
+  const nav=within(screen.getByRole('navigation',{name:'Hauptnavigation'}));
+  fireEvent.click(nav.getByRole('button',{name:'Menü öffnen'}));
+  fireEvent.click(nav.getByRole('button',{name:'Planung'}));
+  expect(onPlanung).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({type:'click'}));
+ });
  it('behält die Werkstattbefehle am gemeinsamen Handy-Menü und zeigt nur Öffnen als Hauptaktion',()=>{
   const onNav=vi.fn(), onAuftragOeffnen=vi.fn(), onFertigMelden=vi.fn(), onNeuerEingang=vi.fn();
   render(<AppShell geraet="handy" variante="werkstatt" aktiv="werkstatt" kuerzel="GK"
