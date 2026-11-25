@@ -36,6 +36,9 @@ import {reklamationAusfuehrenAction} from '@/app/actions/complaints.actions';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
 import {APP_ROLES,ACCESS_AREAS,normalizeAccessAreasForRole,type AccessArea} from '@/lib/auth/authorizationContract';
 import {GET as getModelRoute} from '@/app/api/heute/modell/route';
+import {GET as taktGET} from '@/app/api/takt/route';
+import {GET as rebuildGET} from '@/app/api/heute/neuaufbau/route';
+import {fuehreTaktAus} from '@/modules/takt/server-public';
 
 
 // Public Action always resolves the actual request actor and its server clock.
@@ -93,8 +96,10 @@ it('qualifies the actual source snapshot and never returns an old payload after 
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-08-04',reason:'TEST qualified model after actual command',clientEventId:globalThis.crypto.randomUUID()};
  const changed=await withSession(full,()=>changeOrderPromisedDueDateAction(input));expect(changed.code).toBe('OK');
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))))).toEqual({...changed,replayed:true});
- const stale=(await read()).rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId);
- expect(stale).toMatchObject({fresh:false,payload:null,sourceVersion:order.version,currentVersion:order.version+1});
+ const invalidated=await read();
+ expect(invalidated.needsRebuild).toBe(true);
+ const stale=invalidated.rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId);
+ expect(stale).toMatchObject({fresh:false,payload:null,needsRebuild:true,sourceVersion:order.version,currentVersion:order.version+1});
  const saved=async()=>{const [source]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;if(!source)throw Error('TEST_CACHE_SOURCE_REQUIRED');return source.row;};
  const restore=async(original:Awaited<ReturnType<typeof saved>>)=>{
   const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_MODEL_COLUMN_INVALID');
@@ -109,6 +114,27 @@ it('qualifies the actual source snapshot and never returns an old payload after 
  });
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
  expect((await read()).rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId)).toMatchObject({fresh:true,sourceVersion:order.version+1,currentVersion:order.version+1});
+ await withRestoredTestSource({label:'TEST targeted invalidation of the incomplete orders list',read:async()=>{
+  const [row]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source
+    WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  if(!row)throw Error('TEST_ORDERS_LIST_SOURCE_REQUIRED');return row.row;
+ },restore:async original=>{
+  const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_LIST_COLUMN_INVALID');
+  const names=columns.map(column=>'"'+column+'"').join(',');
+  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb))
+    WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+ }},async()=>{
+  const list = (result:Awaited<ReturnType<typeof read>>)=>result.rows.find(row=>row.kind==='orders'&&row.sourceId==='*');
+  await sql`UPDATE private.today_source_v1 SET status='SOURCE_INCOMPLETE',error_code='TEST_DERIVED_SOURCE_FAILURE'
+    WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  expect(list(await read())).toMatchObject({needsRebuild:false,fresh:false});
+  await sql`UPDATE private.today_source_v1 SET source_seq=source_seq+1 WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  const invalidatedList=await read();
+  expect(invalidatedList.needsRebuild).toBe(true);
+  expect(list(invalidatedList)).toMatchObject({needsRebuild:true,fresh:false,payload:null});
+  expect(await refreshTodayModel(tenant)).toMatchObject({code:'OK',built:1});
+  expect(list(await read())).toMatchObject({needsRebuild:false,fresh:true,builtSeq:list(invalidatedList)?.sourceSeq});
+ });
  await withRestoredTestSource({label:'TEST complete derived projector source',read:saved,restore},async()=>{
   await sql`UPDATE private.today_source_v1 SET projector_version=projector_version+1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
   const wrongCode=await read();expect(wrongCode.needsRebuild).toBe(true);
@@ -244,16 +270,20 @@ it('actual GET returns a command-stale model promptly while the scheduled projec
  const order=await readyInvoiceOrder('TEST native model GET');
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-08-05',reason:'TEST actual GET after source command',clientEventId:randomUUID()};
- const saved=await withSession(full,()=>changeOrderPromisedDueDateAction(input));expect(saved.code).toBe('OK');
+ const saved=await withSession(full,()=>changeOrderPromisedDueDateAction(input),true);expect(saved.code).toBe('OK');
+ const laufBelege=()=>sql`SELECT status FROM public.takt_job_runs WHERE tenant_id=${tenant} AND job_schluessel='takt.nachholen'`;
+ expect(await laufBelege()).toHaveLength(0);
  const response=await withSession(full,()=>getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet')),true);
  expect(response.status).toBe(200);expect(response.headers.get('Cache-Control')).toBe('private, no-store');
  const result=await response.json();expect(result.code).toBe('OK');
  expect(result.model.modelRead).toMatchObject({source:'modell',pending:true});
  expect(result.model.kind).not.toBe('partial');
  expect(result.model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)).toMatchObject({version:order.version+1});
- expect((await refreshTodayModel(tenant)).code).toBe('OK');
+ expect(await laufBelege()).toEqual([{status:'ok'}]);
  const settled=await withSession(full,()=>getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet')),true);
- expect((await settled.json()).model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)?.version).toBe(order.version+1);
+ const nachgelesen=await settled.json();
+ expect(nachgelesen.model.modelRead).toMatchObject({source:'modell',pending:false});
+ expect(nachgelesen.model.dashboard.orderActions.rows.find((row:{orderId:string})=>row.orderId===order.orderId)?.version).toBe(order.version+1);
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))))).toEqual({...saved,replayed:true});
  expect(await sql`SELECT count(*)::integer AS count FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId} AND event_type='ORDER_PROMISED_DUE_DATE_CHANGED_V1'`).toEqual([{count:1}]);
 });
@@ -438,3 +468,92 @@ it('retains the known Today dashboard when a TEST cached order cannot form a com
   expect(actual.dashboard.datenluecken).toContain('ORDERS_HOME_PROJECTION_SOURCE');
  });
 });
+
+it('meldet den echten Takt ohne Sitzung bei Teilausfall als fehlgeschlagen und führt den nächsten Mandanten aus', async () => {
+  const testTenant = `TEST-ablauf-01-cron-${randomUUID()}`;
+  const blockedTenant = `TEST-ablauf-00-cron-${randomUUID()}`;
+  const actor = randomUUID();
+  const cronSecret = randomUUID();
+  const previous = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = cronSecret;
+  const url = 'http://127.0.0.1/api/takt';
+  const runs = () => sql`SELECT job_schluessel,status,versuch,beendet_um IS NOT NULL AS abgeschlossen
+    FROM public.takt_job_runs WHERE tenant_id=${testTenant} AND job_schluessel='heute_neuaufbau'`;
+  try {
+    // Isolated TEST profile for the existing projection reader. No Auth session.
+    await sql`INSERT INTO public.app_users (id,tenant_id,email,full_name,role,active)
+      VALUES (${actor}::uuid,${testTenant},${`test-cron-${actor}@local.invalid`},'TEST Cron','developer',true)`;
+    await sql`INSERT INTO private.today_tenant_v1 (tenant_id) VALUES (${testTenant}) ON CONFLICT DO NOTHING`;
+    await sql`INSERT INTO private.today_tenant_v1 (tenant_id,refresh_lease_until)
+      VALUES (${blockedTenant},statement_timestamp()+interval '1 minute')`;
+    expect((await taktGET(new Request(url))).status).toBe(401);
+    expect(await runs()).toEqual([]);
+
+    const response = await taktGET(new Request(url, {headers: {Authorization: `Bearer ${cronSecret}`}}));
+    expect(response.status).toBe(503);
+    expect(await sql`SELECT status,fehlercode FROM public.takt_job_runs
+      WHERE tenant_id=${blockedTenant} AND job_schluessel='heute_neuaufbau'`)
+      .toEqual([{status:'fehler',fehlercode:'takt_heute_besetzt'}]);
+    expect(await runs()).toEqual([{job_schluessel:'heute_neuaufbau',status:'ok',versuch:1,abgeschlossen:true}]);
+    expect(await sql`SELECT source_id FROM private.today_source_v1
+      WHERE tenant_id=${testTenant} AND kind='orders' AND built_at IS NOT NULL`).toEqual([{source_id:'*'}]);
+  } finally {
+    if (previous === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previous;
+    await sql.begin(async tx => {
+      await tx`DELETE FROM public.app_users WHERE id=${actor}::uuid AND tenant_id=${testTenant}`;
+      await tx`DELETE FROM private.today_source_v1 WHERE tenant_id IN (${testTenant},${blockedTenant})`;
+      await tx`DELETE FROM private.today_tenant_v1 WHERE tenant_id IN (${testTenant},${blockedTenant})`;
+      await tx`DELETE FROM public.takt_job_runs WHERE tenant_id IN (${testTenant},${blockedTenant})`;
+    });
+  }
+}, 60_000);
+
+it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende Automatik', async () => {
+  const bediener = await createFixture(['wartung'],'developer');
+  const tag = readTodayCalendar(new Date()).today;
+  const zeit = new Date(tag+'T12:00:00Z');
+  const manuell = () => withSession(bediener, () => rebuildGET(new Request('http://127.0.0.1/api/heute/neuaufbau')));
+  const laeufe = () => sql<{faellig_fuer:string;status:string}[]>`SELECT faellig_fuer,status FROM public.takt_job_runs
+    WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau' ORDER BY gestartet_um,id`;
+  const modellStand = async () => {
+    const [row] = await sql<{seq:string}[]>`SELECT built_seq::text AS seq FROM private.today_source_v1
+      WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+    if(!row) throw Error('TEST_HEUTE_MODELL_FEHLT');
+    return BigInt(row.seq);
+  };
+  let erster:Promise<Response>|undefined;
+  try {
+    await fuehreTaktAus({tenantId:tenant,jetzt:zeit});
+    expect(await laeufe()).toEqual([{faellig_fuer:tag,status:'ok'}]);
+    const vorher = await modellStand();
+
+    await sql.begin(async tx => {
+      await tx`SELECT tenant_id FROM private.today_tenant_v1 WHERE tenant_id=${tenant} FOR UPDATE`;
+      erster = manuell();
+      const bis = Date.now()+5_000;
+      while (!(await laeufe()).some(lauf=>lauf.status==='läuft') && Date.now()<bis) {
+        await new Promise(resolve=>setTimeout(resolve,25));
+      }
+      expect(await laeufe()).toEqual([{faellig_fuer:tag,status:'ok'}, {faellig_fuer:expect.stringMatching(/^hand:/),status:'läuft'}]);
+      expect((await manuell()).status).toBe(409);
+      const naechsterTag = new Date(zeit.getTime()+86_400_000);
+      await fuehreTaktAus({tenantId:tenant,jetzt:naechsterTag});
+      expect(await laeufe()).toHaveLength(2);
+    });
+    expect((await erster)?.status).toBe(204);
+    expect(await modellStand()).toBeGreaterThan(vorher);
+
+    const gleicheMinute = (await laeufe())[1].faellig_fuer;
+    const resultat = await fuehreTaktAus({tenantId:tenant,nurJob:'heute_neuaufbau',jetzt:new Date(gleicheMinute.slice(5))});
+    expect(resultat).toMatchObject({laeufe:1,restOffen:false});
+    expect(await laeufe()).toEqual([
+      {faellig_fuer:tag,status:'ok'},
+      {faellig_fuer:gleicheMinute,status:'ok'},
+      {faellig_fuer:gleicheMinute,status:'ok'},
+    ]);
+  } finally {
+    await erster?.catch(()=>undefined);
+    await sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenant}`;
+  }
+},60_000);

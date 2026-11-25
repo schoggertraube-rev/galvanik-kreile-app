@@ -187,6 +187,30 @@ function liveArchiveFixture(): Record<string, string> {
 }
 
 describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
+  it('erlaubt nur der benannten Takt-Route den engen serverseitigen Modulzugriff', () => {
+    const taktFacade = ['@/modules','takt','server-public'].join('/');
+    const loggingFacade = ['@/modules','logging','server-public'].join('/');
+    const taktModule = {
+      'src/modules/takt/takt.manifest.json': manifest('takt', {
+        publicExports: ['@/modules/takt/server-public#fuehreTaktAus'],
+      }),
+      'src/modules/takt/public.ts': 'export type TaktWert = string;\n',
+      'src/modules/takt/server-public.ts': 'export {fuehreTaktAus} from "./server/runner";\n',
+      'src/modules/takt/server/runner.ts': 'export const fuehreTaktAus = async () => true;\n',
+    };
+    const valid = repo({...taktModule,
+      'src/app/api/takt/route.ts': `${IMP} {fuehreTaktAus} from "${taktFacade}";\nexport const GET = fuehreTaktAus;\n`,
+    });
+    expect(findingsOf(valid).filter(value=>value.includes("Fach 'takt' hat ein Modul"))).toEqual([]);
+    const otherFile = repo({...taktModule,
+      'src/app/api/takt/hilfe.ts': `${IMP} {fuehreTaktAus} from "${taktFacade}";\nexport const GET = fuehreTaktAus;\n`,
+    });
+    expect(findingsOf(otherFile)).toContainEqual(expect.stringContaining("[naht1] src/app/api/takt/hilfe.ts: Fach 'takt' hat ein Modul"));
+    const otherFacade = repo({...taktModule,
+      'src/app/api/takt/route.ts': `${IMP} {taktJobs} from "${loggingFacade}";\nexport const GET = taktJobs;\n`,
+    });
+    expect(findingsOf(otherFacade)).toContainEqual(expect.stringContaining("[naht1] src/app/api/takt/route.ts: Fach 'takt' hat ein Modul"));
+  });
   it("bindet den Authority-Vertrag fail-closed in ein echtes Repository", () => {
     const root = repo({ "package.json": "{}\n" });
     expect(findingsOf(root)).toContain("[authority] AUTHORITY_CONFIG_PATH_MISSING:quality/authoritative-sources.json");

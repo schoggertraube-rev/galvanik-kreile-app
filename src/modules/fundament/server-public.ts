@@ -1,6 +1,7 @@
 import "server-only";
 // Einstellungs-Leser fundament
 export {readPackageSwitches,setPackageSwitch} from './server/packageFeaturePort';
+export {readPackageSwitchValuesForTakt} from './server/packageFeaturePort';
 export type {PackageSwitchContext} from './server/packageFeaturePort';
 export {readPageReadSettings,readTodayReadSettings,readModelPageSettingsInTransaction,readCompanyLetterSettings} from './server/systemSettingsPort';
 export {

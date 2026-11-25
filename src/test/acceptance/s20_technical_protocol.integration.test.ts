@@ -11,17 +11,29 @@ import {confirmPaymentAction,setPaymentModeAction} from '@/app/actions/payments.
 import {issueInvoiceAction} from '@/app/actions/invoices.actions';
 import {getCustomerSummaryAction} from '@/app/actions/customers.actions';
 import {getProtocolLogAction} from '@/app/actions/logging.actions';
+import {saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import * as authorizationModule from '@/lib/server/authorization';
-import {logTechnical,observeAction} from '@/modules/logging/server-public';
+import {logTechnical,observeAction,taktJobs as loggingTaktJobs} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {fuehreTaktAus} from '@/modules/takt/server-public';
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import type {TechnicalEvent} from '@/modules/logging/public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('S20_DEDICATED_TEST_REPLAY_REQUIRED');
 beforeAll(async()=>{
- await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST S20 protocol')`;
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST S20 protocol',20,'TEST-R43')`;
 });
 async function auth(){const result=await withSession(full,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_REAL_AUTH_REQUIRED');return result.data;}
 async function reader(){return createFixture(['protokoll']);}
+async function saveRetentionDays(retentionDays:number|null){
+ const result=await withSession(full,()=>saveCompanySettingsAction({
+  companyName:'TEST S20 protocol',street:'TEST Weg 1',zip:'70176',city:'Stuttgart',country:'Deutschland',
+  taxId:'DE123456789',iban:'DE02120300000000202051',bic:'BYLADEM1001',bankName:'TEST Bank',
+  paymentTermDays:14,logoUrl:'/TEST-logo.png',protocol:{retentionDays,slowMs:1000,hangMs:3000},
+ }));
+ expect(result).toEqual({code:'OK'});
+ expect(await readLoggingSettings({tenantId:KREILE_TENANT_SLUG})).toMatchObject({retentionDays});
+}
 
 it('L1 actual denied payment creates one safe actor/source entry; no session creates no row and keeps UNAUTHENTICATED',async()=>{
  const customer=await customerFixture('S20 permission'),order=await intakeOrderFixture('S20 permission',customer);
@@ -129,7 +141,7 @@ it('L3/L4 real SQL response duration obeys the current configured threshold, wit
  }finally{await sql`UPDATE public.company_settings SET protokoll_langsam_ms=1000 WHERE tenant_id=${KREILE_TENANT_SLUG}`;}
 });
 
-it('L10 authorized read deletes only old protocol rows when configured; null retention keeps them and never touches business events',async()=>{
+it('L10 daily retention deletes only old protocol rows; reading and null retention preserve them',async()=>{
  const reference=randomUUID(),authorization=await auth();
  for(const days of [31,29])await sql`INSERT INTO public.technical_protocol(tenant_id,user_id,occurred_at,recorded_at,event_type,command,subject_type,subject_id,reason)
  VALUES(${KREILE_TENANT_SLUG},${authorization.userId}::uuid,statement_timestamp()-(${days}*interval '1 day'),statement_timestamp()-(${days}*interval '1 day'),'rejected','testS20Retention','order',${reference},'FORBIDDEN')`;
@@ -137,9 +149,54 @@ it('L10 authorized read deletes only old protocol rows when configured; null ret
  const before=await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const retained=await withSession(allowed,()=>getProtocolLogAction({subjectId:reference}));expect(retained).toMatchObject({code:'OK'});
  if(retained.code!=='OK')throw Error('TEST_READ_REQUIRED');expect(retained.technical).toHaveLength(2);
- await sql`UPDATE public.company_settings SET protokoll_aufbewahrung_tage=30 WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ await saveRetentionDays(30);
+ expect((await withSession(allowed,()=>getProtocolLogAction({subjectId:reference}))).code).toBe('OK');
+ expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND subject_id=${reference}`).toHaveLength(2);
+ await loggingTaktJobs[0].ausfuehren(KREILE_TENANT_SLUG,new AbortController().signal,{protokollAufbewahrungTage:async()=>{const setting=await readLoggingSettings({tenantId:KREILE_TENANT_SLUG});if(!setting)throw Error('TEST_LOG_SETTINGS_REQUIRED');return setting.retentionDays;}});
  const after=await withSession(allowed,()=>getProtocolLogAction({subjectId:reference}));expect(after).toMatchObject({code:'OK'});
  if(after.code!=='OK')throw Error('TEST_READ_REQUIRED');expect(after.technical).toHaveLength(1);
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(before);
- await sql`UPDATE public.company_settings SET protokoll_aufbewahrung_tage=NULL WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ await saveRetentionDays(null);
+ await sql`INSERT INTO public.technical_protocol(tenant_id,user_id,occurred_at,recorded_at,event_type,command,subject_type,subject_id,reason)
+ VALUES(${KREILE_TENANT_SLUG},${authorization.userId}::uuid,statement_timestamp()-interval '31 days',statement_timestamp()-interval '31 days','rejected','testS20NullRetention','order',${reference},'FORBIDDEN')`;
+ expect(await loggingTaktJobs[0].ausfuehren(KREILE_TENANT_SLUG,new AbortController().signal,{protokollAufbewahrungTage:async()=>{const setting=await readLoggingSettings({tenantId:KREILE_TENANT_SLUG});if(!setting)throw Error('TEST_LOG_SETTINGS_REQUIRED');return setting.retentionDays;}})).toBe('ok');
+ expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND command='testS20NullRetention' AND subject_id=${reference}`).toHaveLength(1);
+});
+
+
+it('R43 der nächste Takt liest die gespeicherte Aufbewahrung und bereinigt alle drei Quellen', async () => {
+ const referenz=randomUUID(), authorization=await auth();
+ const ersterTag=new Date(`${berlinCalendarDay()}T12:00:00Z`);
+ const naechsterTag=new Date(ersterTag.getTime()+86_400_000);
+ const schluessel='takt.test_alt';
+ const usageId=randomUUID();
+ await sql`INSERT INTO public.technical_protocol(tenant_id,user_id,occurred_at,recorded_at,event_type,command,subject_type,subject_id,reason)
+  VALUES(${KREILE_TENANT_SLUG},${authorization.userId}::uuid,statement_timestamp()-interval '31 days',
+  statement_timestamp()-interval '31 days','rejected','testS38bRetention','order',${referenz},'FORBIDDEN')`;
+ await sql`INSERT INTO public.app_usage_events(tenant_id,client_event_id,actor_pseudonym,actor_role,session_id,event_type,route,device_class,occurred_at,received_at)
+  VALUES(${KREILE_TENANT_SLUG},${usageId}::uuid,${'a'.repeat(64)},'buero',${randomUUID()}::uuid,'action','/','desktop',
+  statement_timestamp()-interval '31 days',statement_timestamp()-interval '31 days')`;
+ await sql`INSERT INTO public.takt_job_runs(tenant_id,job_schluessel,faellig_fuer,gestartet_um,beendet_um,status,versuch)
+  VALUES(${KREILE_TENANT_SLUG},${schluessel},'2026-01-01',statement_timestamp()-interval '31 days',
+  statement_timestamp()-interval '31 days','ok',1)`;
+ const alteZeilen = async () => {
+  const protokoll=await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND subject_id=${referenz}`;
+  const nutzung=await sql`SELECT id FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${usageId}::uuid`;
+  const takt=await sql`SELECT id FROM public.takt_job_runs WHERE tenant_id=${KREILE_TENANT_SLUG} AND job_schluessel=${schluessel}`;
+  return {protokoll:protokoll.length,nutzung:nutzung.length,takt:takt.length};
+ };
+ expect(await alteZeilen()).toEqual({protokoll:1,nutzung:1,takt:1});
+ try {
+  await saveRetentionDays(null);
+  await fuehreTaktAus({tenantId:KREILE_TENANT_SLUG,jetzt:ersterTag});
+  expect(await alteZeilen()).toEqual({protokoll:1,nutzung:1,takt:1});
+
+  await saveRetentionDays(30);
+  await fuehreTaktAus({tenantId:KREILE_TENANT_SLUG,jetzt:naechsterTag});
+  expect(await alteZeilen()).toEqual({protokoll:0,nutzung:0,takt:0});
+  expect(await sql`SELECT status FROM public.takt_job_runs WHERE tenant_id=${KREILE_TENANT_SLUG}
+   AND job_schluessel='protokoll_aufbewahrung' AND faellig_fuer=${berlinCalendarDay(naechsterTag)}`).toEqual([{status:'ok'}]);
+ } finally {
+  await saveRetentionDays(null);
+ }
 });
