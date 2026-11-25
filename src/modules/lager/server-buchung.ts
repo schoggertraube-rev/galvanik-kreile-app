@@ -291,7 +291,8 @@ export function bucheLagerEinzeln(
     const zielort = ziel ?? bad;
     if (zielort) zeilen.push({
       ...quellzeile, menge: auftrag.quantity, ort_id: zielort.id, bad_id: bad?.badId,
-      bestandsart: "werkstatt_prozess", im_preis_enthalten: null, mehrarbeit_beleg_id: null,
+      bestandsart: zielort.orttyp === "lager" ? "verfuegbar" : "werkstatt_prozess",
+      im_preis_enthalten: null, mehrarbeit_beleg_id: null,
     });
     if (regeln) {
       await tx.execute(sql`SELECT set_config('app.lager_kalkulationsregel', ${JSON.stringify({

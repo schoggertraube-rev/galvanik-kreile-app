@@ -198,6 +198,31 @@ describe("Lagerjournal und seine Befehle", () => {
     ]));
   });
 
+  test("Eine Umlagerung zwischen zwei Lagerorten erhält den verfügbaren Bestand", async () => {
+    const id = await artikel();
+    const quelle = await ort();
+    const ziel = await ort();
+    const zugang = buchung(id, quelle);
+    const bucht = (eingabe: unknown) => withSession(werkstatt, () => bucheLagerAction(eingabe));
+    const verfuegbar = () => sql.begin(async tx => {
+      await tx`SELECT set_config('app.tenant_id', ${mandant}, true)`;
+      return [...await tx<{ ort: string; menge: number }[]>`
+        SELECT ort_id::text AS ort, menge::float8
+        FROM private.material_stock
+        WHERE artikel_id = ${id} AND bestandsart = 'verfuegbar'
+      `];
+    });
+    expect(await bucht(zugang)).toMatchObject({ ok: true });
+    expect(await verfuegbar()).toEqual([{ ort: quelle, menge: 5 }]);
+    expect(await bucht({
+      ...zugang, befehlId: randomUUID(), movementType: "move", geschaeftsgrund: "umlagerung",
+      quantity: "2", zielOrtId: ziel,
+    })).toMatchObject({ ok: true });
+    const nachUmlagerung = await verfuegbar();
+    expect(nachUmlagerung).toHaveLength(2);
+    expect(nachUmlagerung).toEqual(expect.arrayContaining([{ ort: quelle, menge: 3 }, { ort: ziel, menge: 2 }]));
+  });
+
   test("I7: Zwei negative Buchungen klären genau einen Bestand, der Ausgleich schließt dieselbe Aufgabe", async () => {
     const id = await artikel();
     const basis = buchung(id, await ort());
