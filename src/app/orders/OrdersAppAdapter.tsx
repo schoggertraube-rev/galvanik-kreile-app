@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
+import {foldedIncludes,foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
 import {ORDER_STATION_COPY,PAGE_READ_COPY,SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import { getOrdersBaseDb, getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import {readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
@@ -48,10 +48,6 @@ type OrderListRow =
     | "cardReadErrorCode"
   >;
 
-function normalized(value: string): string {
-  return value.trim().toLocaleLowerCase("de-DE");
-}
-
 function toOrderListRow(order: OrderResponse): OrderListRow {
   return {
     id: order.id,
@@ -73,9 +69,9 @@ function toOrderListRow(order: OrderResponse): OrderListRow {
   };
 }
 
-function matchesQuery(order: OrderListRow, query: string,folded=false): boolean {
+function matchesQuery(order: OrderListRow, query: string): boolean {
   if (!query) return true;
-  return (folded?foldSearchText:normalized)([
+  return foldedIncludes([
     order.orderNumber,
     order.customerName ?? "",
     order.title,
@@ -87,7 +83,7 @@ function matchesQuery(order: OrderListRow, query: string,folded=false): boolean 
     order.surfaceRequested ?? "",
     order.cardReadErrorCode ?? "",
     ...order.parts.flatMap((part) => [part.name, part.material ?? "", part.surfaceRequested ?? ""]),
-  ].join(" ")).includes(query);
+  ].join(" "),query);
 }
 
 function matchesFilter(order: OrderListRow, filter: OrderFilter): boolean {
@@ -277,11 +273,10 @@ export function OrdersAppAdapter() {
 
   const orders = useMemo(() => {
     if (state.kind !== "data") return [];
-    const device=state.source==='device';
-    const needle = device?foldSearchText(query):normalized(query);
+    const needle = foldSearchText(query);
     return state.orders.filter(order=>matchesFilter(order,filter)).flatMap(order=>{
-      if(matchesQuery(order,needle,device))return [order];
-      const alternative=device?nameSearchAlternative(order.customerName??null,query):null;
+      if(matchesQuery(order,needle))return [order];
+      const alternative=nameSearchAlternative(order.customerName??null,query);
       return alternative?[{...order,offlineMatchReason:SEARCH_NAME_MATCH_COPY[alternative]}]:[];
     });
   }, [filter, query, state]);

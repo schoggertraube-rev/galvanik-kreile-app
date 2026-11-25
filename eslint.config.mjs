@@ -69,7 +69,6 @@ const h16PlaceholderTextBaselineFiles = [
   "src/components/buchhaltung/BelegUploadOverlay.tsx", // H16c Bestand: Demo-Text.
   "src/components/kommunikation/ContextAnalysisOverlay.tsx", // H16c Bestand: Mock-/Demo-Text.
   "src/components/warenausgang/WarenausgangQueue.tsx", // H16c Bestand: Demo-Text.
-  "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts", // H16c Bestand: Mock-Text.
   "src/lib/buchhaltung/stufe2/mocks.ts", // H16c Bestand: Mock-Text.
   "src/lib/demoDataGenerator.ts", // H16c Bestand: Demo-Text.
   "src/lib/server/orderIntakeRead.ts", // H16c Bestand: Demo-Datenquellenname.
