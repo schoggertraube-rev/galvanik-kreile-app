@@ -60,6 +60,8 @@ export type FlowCase = {
 };
 
 type FlowRunState = {
+  caseId: string;
+  loadFaults: Array<() => boolean>;
   before: Map<string, number>;
   beforeIds: Map<string, Set<string>>;
   rows: Map<string, Record<string, unknown>>;
@@ -261,6 +263,7 @@ async function upsertFixture(table: string, values: Record<string, unknown>) {
 function resolvedFixture(fixture: GeneratedFixture) {
   const loginId = fixtureLoginId;
   return resolveValue({ ...fixture, ...canonicalOrderIds.get(fixture.id) }, {
+    caseId: 'FIXTURE', loadFaults: [],
     before: new Map(), beforeIds: new Map(), rows: new Map(), createdRows: new Map(), restoreOnlineAfterWrite: false,
     loginId, loginName: "login_meister",
   }) as GeneratedFixture;
@@ -1134,6 +1137,26 @@ function interruptedActionId(controlId: string | undefined): string | undefined 
   return matches[0][0];
 }
 
+/** A read fault belongs to the declared case, never to the next incidental GET. */
+function loadActionId(caseId: string): string {
+  const actions: Record<string, {exportedName: string; filename: string}> = {
+    TA14: {exportedName: 'getOrderIntakeSuggestionsAction', filename: 'src/app/warendurchlauf/actions.ts'},
+    M09: {exportedName: 'getIntakeAssignmentAction', filename: 'src/app/actions/eingang.actions.ts'},
+    O06: {exportedName: 'openIntakeOriginalAction', filename: 'src/app/actions/eingang.actions.ts'},
+    N09: {exportedName: 'getIntakeMessagesAction', filename: 'src/app/actions/eingang.actions.ts'},
+  };
+  const target=actions[caseId];
+  if(!target)throw Error(`FLOW_LOAD_TARGET_MISSING:${caseId}`);
+  const manifest=JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')) as {
+    node: Record<string,{exportedName?:string;filename?:string;workers?:Record<string,{exportedName?:string;filename?:string}>}>;
+  };
+  const matches=Object.entries(manifest.node).filter(([,reference])=>[reference,...Object.values(reference.workers??{})].some(
+    value=>value.exportedName===target.exportedName&&value.filename===target.filename,
+  ));
+  if(matches.length!==1)throw Error(`FLOW_LOAD_ACTION_ID_AMBIGUOUS:${caseId}:${matches.length}`);
+  return matches[0][0];
+}
+
 async function interruptNextServerAction(page: Page, state: FlowRunState, controlId?: string) {
   const targetAction = interruptedActionId(controlId);
   const diagnostics=protocolDiagnosticActionIds(JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')));
@@ -1156,12 +1179,14 @@ async function interruptNextServerAction(page: Page, state: FlowRunState, contro
   await page.route(matcher,handler);
 }
 
-async function interruptNextLoad(page: Page, controlId?: string) {
+async function interruptNextLoad(page: Page, state: FlowRunState) {
   const manifest=JSON.parse(readFileSync(path.join(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8'));
   const diagnostics=protocolDiagnosticActionIds(manifest);
-  const targetAction=interruptedActionId(controlId);
+  const targetAction=loadActionId(state.caseId);
   const matcher = "**/*";
   let handled = false;
+  let aborted = false;
+  state.loadFaults.push(()=>aborted);
   let interruptedRequest: import('@playwright/test').Request | undefined;
   const metadata=(request:import('@playwright/test').Request)=>{
     const reference=manifest.node[request.headers()['next-action']??''] as {exportedName?:string;workers?:Record<string,{exportedName?:string}>}|undefined;
@@ -1179,15 +1204,13 @@ async function interruptNextLoad(page: Page, controlId?: string) {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
     // Keep App Router navigation/asset requests online; fail the actual data read.
-    // Only the independent generic GET refresh is outside the requested field fault.
-    const isLoad = !(request.method() === 'GET' && !targetAction
-      && new URL(request.url()).pathname === '/api/heute/modell')
-      && isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics,targetAction);
+    const isLoad = isApplicationDataLoad({method:request.method(),nextAction:request.headers()['next-action'],resourceType:request.resourceType(),rsc:request.headers().rsc},diagnostics,targetAction);
     if (!handled && isLoad) {
       handled = true;
       interruptedRequest=request;
       console.info('FLOW_LOAD_INTERRUPTED',JSON.stringify(metadata(request)));
       await route.abort("failed");
+      aborted = true;
       await page.unroute(matcher, handler);
       return;
     }
@@ -1289,7 +1312,7 @@ async function executeServerCommand(page: Page, step: FlowStep, state: FlowRunSt
   state.serverResult = readFlightActionResult(response.text);
 }
 
-async function executeStep(page: Page, step: FlowStep, state: FlowRunState, nextControlId?: string) {
+async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   if (!step.aktion && step.erwartung) {
     await assertExpectation(page, step, state);
     return;
@@ -1310,7 +1333,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState, next
     return;
   }
   if (step.aktion === "netz_laden") {
-    await interruptNextLoad(page,nextControlId?.startsWith('navigation.')?nextControlId:undefined);
+    await interruptNextLoad(page,state);
     return;
   }
   if (step.aktion === "db_setzen") {
@@ -1326,6 +1349,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState, next
   // The real message read finishes asynchronously after opening the route.
   // Wait for its declared loading state before locating the first action.
   if(locator&&step.id?.startsWith('nachrichten.')&&step.aktion!=='erwarten'){
+    await expect(page.locator('[data-spec-id="nachrichten"]')).toHaveCount(1);
     await expect(page.locator('[data-spec-id="nachrichten"]')).toHaveAttribute('aria-busy','false',{timeout:15_000});
     await locator.waitFor({state:'attached',timeout:15_000});
   }
@@ -1853,6 +1877,8 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   const sourceWasMaterialized = complaintDeliveryFixture ? await materializeDeliveredComplaintSource(page) : await materializeCanonicalOrderSource(page);
   const dbExpectations = flowCase.dann?.db ?? [];
   const state: FlowRunState = {
+    caseId: flowCase.id,
+    loadFaults: [],
     before: new Map<string, number>(),
     beforeIds: new Map<string, Set<string>>(),
     rows: new Map<string, Record<string, unknown>>(),
@@ -1902,7 +1928,8 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
     await expect(page.getByRole('button',{name:'Foto 1',exact:true})).toBeVisible();
     await expect(dataSpec(page,'reklamation.fotos')).toBeEnabled();
   }
-  for (const [index,step] of (flowCase.wenn ?? []).entries()) await executeStep(page, step, state,flowCase.wenn?.[index+1]?.id);
+  for (const step of flowCase.wenn ?? []) await executeStep(page, step, state);
+  for(const observed of state.loadFaults)expect(observed(),`FLOW_LOAD_TARGET_NOT_HIT:${flowCase.id}`).toBe(true);
   await captureDbResults(dbExpectations, state);
   await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
   await assertDb(dbExpectations, state);
