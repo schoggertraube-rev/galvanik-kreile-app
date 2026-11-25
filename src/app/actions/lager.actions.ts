@@ -48,7 +48,7 @@ export async function bucheAuftragsverbrauchAction(input: unknown) {
 
 export async function leseLagerBestandAction(artikelId?: string) {
   return observeAction("leseLagerBestandAction", subjectForAction("leseLagerBestandAction", { artikelId }),
-    () => leseLagerArtikelAltvertrag(artikelId), readLoggingSettings);
+    () => leseLagerArtikelAltvertrag(readLagerEinstellungen, artikelId), readLoggingSettings);
 }
 
 export async function leseLagerBewegungenAction(suche?: LagerBewegungssuche) {

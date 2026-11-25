@@ -13,7 +13,7 @@ import { synchronizeLagerBestandTask } from "@/modules/tasks/server-public";
 
 export async function getInventoryItemsAction(): Promise<ActionResult<InventoryItem[]>> {
   return observeAction("getInventoryItemsAction", subjectForAction("getInventoryItemsAction", undefined),
-    () => leseLagerArtikelAltvertrag(), readLoggingSettings);
+    () => leseLagerArtikelAltvertrag(readLagerEinstellungen), readLoggingSettings);
 }
 
 export async function getInventoryMovementsAction(): Promise<ActionResult<StockMovement[]>> {
@@ -23,7 +23,7 @@ export async function getInventoryMovementsAction(): Promise<ActionResult<StockM
 
 export async function getInventoryItemAction(artikelId: string): Promise<ActionResult<InventoryItem | null>> {
   return observeAction("getInventoryItemAction", subjectForAction("getInventoryItemAction", { artikelId }), async () => {
-    const ergebnis = await leseLagerArtikelAltvertrag(artikelId);
+    const ergebnis = await leseLagerArtikelAltvertrag(readLagerEinstellungen, artikelId);
     return ergebnis.ok ? { ok: true, data: ergebnis.data[0] ?? null } : ergebnis;
   }, readLoggingSettings);
 }

@@ -233,6 +233,8 @@ describe("Lagerjournal und seine Befehle", () => {
     ] as const) {
       await sql`UPDATE public.company_settings SET bilanzbewertung_methode = ${methode}
         WHERE tenant_id = ${mandant} AND id = ${firma}`;
+      expect(await withSession(admin, () => leseLagerBestandAction(id)))
+        .toMatchObject({ ok: true, data: [{ id, pricePerUnit: erwartet }] });
       const geschrieben = await withSession(werkstatt, () => bucheAuftragsverbrauchAction({
         ...verbrauch, befehlId: randomUUID(),
       }));

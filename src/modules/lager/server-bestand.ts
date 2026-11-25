@@ -9,6 +9,7 @@ import type { ActionResult } from "@/lib/server/authHelper";
 import type { InventoryCategory, InventoryItem, StockMovement, StockMovementType } from "@/lib/types/inventory";
 import { LAGER_BUCHUNG_COPY } from "@/ui/lagerBuchungCopy";
 import { istLagerFachzeit, lagerBefehlsUuid } from "./lagerBuchungsauftrag";
+import { leseBilanzbewertungMethode, type LagerEinstellungenLeser } from "./server-lagerregeln";
 
 const artikelKennung = /^[A-Za-z0-9_-]{1,128}$/;
 const bewegungsarten = new Set<string>([
@@ -66,12 +67,16 @@ async function imLagerLesen<T>(artikelId: string | undefined,
   }
 }
 
-export async function leseLagerArtikelAltvertrag(artikelId?: string): Promise<ActionResult<InventoryItem[]>> {
+export async function leseLagerArtikelAltvertrag(
+  liesEinstellungen: LagerEinstellungenLeser, artikelId?: string,
+): Promise<ActionResult<InventoryItem[]>> {
   return imLagerLesen(artikelId, async (tx, mandant, werte) => {
     const filter = artikelId === undefined ? sql`` : sql`AND artikel.id = ${artikelId}`;
-    const preis = werte ? sql`(
+    const methode = werte ? leseBilanzbewertungMethode(await liesEinstellungen(mandant, tx)) : null;
+    if (werte && !methode) throw Error("LAGER_BEWERTUNGSMETHODE_UNGUELTIG");
+    const preis = methode ? sql`(
       SELECT einzelpreis::text
-      FROM private.lager_kalkulationsbasis(artikel.id, statement_timestamp(), 'letzter_ek')
+      FROM private.lager_kalkulationsbasis(artikel.id, statement_timestamp(), ${methode})
     )` : sql`NULL::text`;
     const rows = await tx.execute<Artikel>(sql`
       SELECT artikel.id, artikel.name, artikel.category,
