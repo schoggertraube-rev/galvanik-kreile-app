@@ -7,7 +7,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {rebuildTodayModel} from '@/lib/server/todayProjection';
-import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {berlinCalendarDay,berlinUhrzeit} from '@/lib/domain/workingDays';
 import {fuehreTaktAus} from '@/modules/takt/server-public';
 import {GET as heuteModell} from '@/app/api/heute/modell/route';
 import {changeOrderPromisedDueDateAction,readOfficeHomeModelAction} from '@/app/actions/orders.actions';
@@ -23,7 +23,10 @@ it('reads the committed change live and refreshes only after the actual GET resp
  const order=await readyInvoiceOrder('TEST after real promised date');
  // Reserve a real daily completion, so the GET has to refresh only invalidated rows.
  const day=berlinCalendarDay(new Date());
- expect(await fuehreTaktAus({tenantId:tenant,nurJob:'heute_neuaufbau',jetzt:new Date(day+'T06:00:00Z')})).toEqual({mandanten:1,laeufe:1,restOffen:false});
+ const frueherTermin=new Date(day+'T00:30:00Z');
+ const laufzeit=berlinUhrzeit(frueherTermin)>='02:00'?frueherTermin:new Date(day+'T01:30:00Z');
+ const regulaer=await fuehreTaktAus({tenantId:tenant,jetzt:laufzeit});
+ expect(regulaer).toMatchObject({mandanten:1,laeufe:berlinUhrzeit(laufzeit)<'03:00'?1:2,restOffen:false});
  expect(await sql`SELECT status FROM public.takt_job_runs WHERE tenant_id=${tenant}
   AND job_schluessel='heute_neuaufbau' AND faellig_fuer=${day}`).toEqual([{status:'ok'}]);
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-19',reason:'TEST native after refresh',clientEventId:randomUUID()};
