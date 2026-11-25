@@ -36,6 +36,7 @@ import {reklamationAusfuehrenAction} from '@/app/actions/complaints.actions';
 import {storeOrderPhoto} from '../../../e2e/ablauf/photoFixture';
 import {APP_ROLES,ACCESS_AREAS,normalizeAccessAreasForRole,type AccessArea} from '@/lib/auth/authorizationContract';
 import {GET as getModelRoute} from '@/app/api/heute/modell/route';
+import {GET as taktGET} from '@/app/api/takt/route';
 
 
 // Public Action always resolves the actual request actor and its server clock.
@@ -444,3 +445,37 @@ it('retains the known Today dashboard when a TEST cached order cannot form a com
   expect(actual.dashboard.datenluecken).toContain('ORDERS_HOME_PROJECTION_SOURCE');
  });
 });
+
+it('führt den echten Takt-GET mit Cron-Anmeldung ohne Sitzung bis zum Projektionsbeleg aus', async () => {
+  const testTenant = `TEST-ablauf-00-cron-${randomUUID()}`;
+  const actor = randomUUID();
+  const cronSecret = randomUUID();
+  const previous = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = cronSecret;
+  const url = 'http://127.0.0.1/api/takt';
+  const runs = () => sql`SELECT job_schluessel,status,versuch,beendet_um IS NOT NULL AS abgeschlossen
+    FROM public.takt_job_runs WHERE tenant_id=${testTenant} AND job_schluessel='heute_neuaufbau'`;
+  try {
+    // Isolated TEST profile for the existing projection reader. No Auth session.
+    await sql`INSERT INTO public.app_users (id,tenant_id,email,full_name,role,active)
+      VALUES (${actor}::uuid,${testTenant},${`test-cron-${actor}@local.invalid`},'TEST Cron','developer',true)`;
+    await sql`INSERT INTO private.today_tenant_v1 (tenant_id) VALUES (${testTenant}) ON CONFLICT DO NOTHING`;
+    expect((await taktGET(new Request(url))).status).toBe(401);
+    expect(await runs()).toEqual([]);
+
+    const response = await taktGET(new Request(url, {headers: {Authorization: `Bearer ${cronSecret}`}}));
+    expect(response.status).toBe(200);
+    expect(await runs()).toEqual([{job_schluessel:'heute_neuaufbau',status:'ok',versuch:1,abgeschlossen:true}]);
+    expect(await sql`SELECT source_id FROM private.today_source_v1
+      WHERE tenant_id=${testTenant} AND kind='orders' AND built_at IS NOT NULL`).toEqual([{source_id:'*'}]);
+  } finally {
+    if (previous === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previous;
+    await sql.begin(async tx => {
+      await tx`DELETE FROM public.app_users WHERE id=${actor}::uuid AND tenant_id=${testTenant}`;
+      await tx`DELETE FROM private.today_source_v1 WHERE tenant_id=${testTenant}`;
+      await tx`DELETE FROM private.today_tenant_v1 WHERE tenant_id=${testTenant}`;
+      await tx`DELETE FROM public.takt_job_runs WHERE tenant_id=${testTenant}`;
+    });
+  }
+}, 60_000);
