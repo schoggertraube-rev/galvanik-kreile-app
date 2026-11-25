@@ -1,14 +1,21 @@
 // @vitest-environment node
 import {beforeEach, expect, it, vi} from 'vitest';
+import {hasPageReadBudget} from '@/db/readBudget';
 
 const transaction = vi.hoisted(() => vi.fn());
 const listeTodayMandanten = vi.hoisted(() => vi.fn());
 const hasAuthorizationArea = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/server/privilegedDb', () => ({withPrivilegedTenantTransaction: transaction}));
+vi.mock('@/lib/server/privilegedDb', async original => ({
+  ...await original<typeof import('@/lib/server/privilegedDb')>(),
+  withPrivilegedTenantTransaction: transaction,
+}));
 vi.mock('@/lib/server/todayProjectionSchedule', () => ({listeTodayMandanten}));
 vi.mock('@/lib/server/authorization', () => ({hasAuthorizationArea}));
 
-import {beendeLauf, liesLetztenOk, liesTaktLaeufe, liesTaktMandanten, loescheAlteLaeufe, reserviereLauf} from '../laeufe';
+import {beendeAbgelaufenenLauf, beendeLauf, liesLetztenOk, liesTaktLaeufe, liesTaktMandanten, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf} from '../laeufe';
+
+const sqlText = (query: {queryChunks: {value?: string[]}[]}) =>
+  query.queryChunks.map(part => part.value?.join('') ?? '').join('');
 
 beforeEach(() => { transaction.mockReset(); listeTodayMandanten.mockReset(); hasAuthorizationArea.mockReset(); });
 
@@ -35,16 +42,23 @@ it('übernimmt die Mandantenliste ausschließlich vom Today-Kern', async () => {
 
 it('löscht nur eigene alte Laufzeilen im Mandantenkontext', async () => {
   const execute = vi.fn().mockResolvedValue([]);
-  transaction.mockImplementation(async (_tenant, work) => work({execute}));
+  transaction.mockImplementation(async (_tenant, work) => {
+    expect(hasPageReadBudget()).toBe(true);
+    return work({execute});
+  });
   const eigeneLaufId = '11111111-1111-4111-8111-111111111111';
   await loescheAlteLaeufe('tenant-a', 0, eigeneLaufId);
   expect(transaction).toHaveBeenCalledWith({tenantId: 'tenant-a'}, expect.any(Function));
-  const commands = execute.mock.calls.map(([query]) => query.queryChunks.map((part: {value?: string[]}) => part.value?.join('') ?? '').join(''));
-  expect(commands.join('\n')).toContain('DELETE FROM public.takt_job_runs WHERE tenant_id=');
-  expect(commands.join('\n')).toContain('gestartet_um < statement_timestamp()');
-  expect(commands.join('\n')).toContain('AND id <>');
-  expect(commands.join('\n')).toContain('::uuid');
-  expect(JSON.stringify(execute.mock.calls[1][0])).toContain(eigeneLaufId);
+  expect(execute).toHaveBeenCalledOnce();
+  const query = execute.mock.calls[0][0];
+  const command = sqlText(query);
+  expect(command).toContain('DELETE FROM public.takt_job_runs WHERE tenant_id=');
+  expect(command).toContain('gestartet_um < statement_timestamp()');
+  expect(command).toContain('AND id <>');
+  expect(command).toContain('::uuid');
+  expect(command).toContain("AND status<>'läuft'");
+  expect(command).toContain("faellig_fuer=to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin'");
+  expect(JSON.stringify(query)).toContain(eigeneLaufId);
 });
 
 it('weist ungültige Fristen vor jeder Datenbankarbeit ab', async () => {
@@ -62,26 +76,39 @@ it('reserviert zuerst einmal und wiederholt nur dieselbe gescheiterte Zeile', as
   expect(await reserviereLauf('tenant-a', 'heute_neuaufbau', '2026-11-25', 25_000)).toEqual({id: 'first', versuch: 1});
   expect(await reserviereLauf('tenant-a', 'heute_neuaufbau', '2026-11-25', 25_000)).toEqual({id: 'first', versuch: 2});
   expect(execute).toHaveBeenCalledTimes(3);
-  const command = execute.mock.calls[2][0].queryChunks.map((part: {value?: string[]}) => part.value?.join('') ?? '').join('');
-  expect(command).toContain("(status IN ('fehler','abgebrochen') OR status='läuft')");
+  const command = sqlText(execute.mock.calls[2][0]);
+  expect(command).toContain("AND status IN ('fehler','abgebrochen')");
+  expect(command).toContain('AND reserviert_bis<=statement_timestamp()');
+  expect(command).not.toContain("OR status='läuft'");
   expect(command).toContain('versuch<4');
 });
 
-it('beansprucht eine abgelaufene laufende Reservierung erneut mit höherem Versuch', async () => {
-  const execute = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{id: 'orphan', versuch: 2}]);
+it('schließt einen abgelaufenen Versuch unter der Sperre ab und verwendet später dieselbe Zeile', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const execute = vi.fn()
+    .mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    .mockResolvedValueOnce([{claimed: true}])
+    .mockResolvedValueOnce([{id, versuch: 1, dauer: 25_000}]).mockResolvedValueOnce([{id}])
+    .mockResolvedValueOnce([]).mockResolvedValueOnce([{id, versuch: 2}]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
-  expect(await reserviereLauf('tenant-a', 'heute_neuaufbau', '2026-11-25', 25_000)).toEqual({id: 'orphan', versuch: 2});
-  const command = execute.mock.calls[1][0].queryChunks.map((part: {value?: string[]}) => part.value?.join('') ?? '').join('');
-  expect(command).toContain("status='läuft'");
-  expect(command).toContain('reserviert_bis<statement_timestamp()');
-  expect(command).toContain('versuch=versuch+1');
+  const tenant = 'tenant-a', job = 'heute_neuaufbau', due = '2026-11-25';
+  expect(await reserviereLauf(tenant, job, due, 25_000)).toBe(null);
+  await expect(mitTaktLaufsperre(tenant, job, () => beendeAbgelaufenenLauf(tenant, job, due))).resolves.toBe(true);
+  expect(await reserviereLauf(tenant, job, due, 25_000)).toEqual({id, versuch: 2});
+  const queries = execute.mock.calls.map(([query]) => query);
+  expect(sqlText(queries[2])).toContain('pg_try_advisory_xact_lock');
+  expect(sqlText(queries[3])).toContain("status='läuft' AND reserviert_bis<=statement_timestamp() FOR UPDATE");
+  expect(JSON.stringify(queries[4])).toContain('abgebrochen');
+  expect(JSON.stringify(queries[4])).toContain(id);
+  expect(sqlText(queries[6])).toContain('versuch=versuch+1');
 });
 
 it('gibt bei parallelem oder bereits beendetem Lauf keine zweite Reservierung aus', async () => {
   const execute = vi.fn().mockResolvedValue([]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
   expect(await reserviereLauf('tenant-a', 'takt.nachholen', '2026-11-25T06:00', 25_000)).toBe(null);
-  expect(execute).toHaveBeenCalledTimes(2);
+  expect(execute).toHaveBeenCalledOnce();
+  expect(sqlText(execute.mock.calls[0][0])).toContain('ON CONFLICT(tenant_id,job_schluessel,faellig_fuer) DO NOTHING');
 });
 
 it('schließt nur den eigenen Versuch ab und verliert keinen fehlenden Beleg', async () => {

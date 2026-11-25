@@ -15,13 +15,13 @@ describe('täglicher Neuaufbau', () => {
   it('nutzt den vorhandenen vollen Projektor für den Mandanten', async () => {
     rebuild.mockResolvedValue({code: 'OK', built: 4, stale: 0});
     expect(await job.ausfuehren('tenant-a', signal)).toBe('ok');
-    expect(rebuild).toHaveBeenCalledExactlyOnceWith('tenant-a', undefined, {bounded: true});
+    expect(rebuild).toHaveBeenCalledExactlyOnceWith('tenant-a', undefined, {bounded: true, signal});
   });
 
   it('meldet unbelegte und blockierte Neuaufbauten als Fehler', async () => {
     rebuild.mockResolvedValueOnce({code: 'OK', built: 0, stale: 1}).mockResolvedValueOnce({code: 'BUSY'});
     await expect(job.ausfuehren('tenant-a', signal)).rejects.toThrow('TAKT_HEUTE_NEUAUFBAU_INCOMPLETE');
-    await expect(job.ausfuehren('tenant-a', signal)).rejects.toThrow('TAKT_HEUTE_NEUAUFBAU_INCOMPLETE');
+    await expect(job.ausfuehren('tenant-a', signal)).rejects.toThrow('TAKT_HEUTE_BESETZT');
   });
 
   it('startet nach Abbruch keinen Projektor', async () => {
