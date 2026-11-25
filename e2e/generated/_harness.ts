@@ -1929,10 +1929,14 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
     await expect(dataSpec(page,'reklamation.fotos')).toBeEnabled();
   }
   for (const step of flowCase.wenn ?? []) await executeStep(page, step, state);
-  for(const observed of state.loadFaults)expect(await observed(),`FLOW_LOAD_TARGET_NOT_HIT:${flowCase.id}`).toBe(true);
-  await captureDbResults(dbExpectations, state);
-  await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
-  await assertDb(dbExpectations, state);
+  try {
+    await captureDbResults(dbExpectations, state);
+    await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
+    await assertDb(dbExpectations, state);
+  } finally {
+    // The UI checks wait for a read triggered by the last interaction to settle.
+    for(const observed of state.loadFaults)expect(await observed(),`FLOW_LOAD_TARGET_NOT_HIT:${flowCase.id}`).toBe(true);
+  }
   assertServer(flowCase.dann?.server, state);
 }
 
