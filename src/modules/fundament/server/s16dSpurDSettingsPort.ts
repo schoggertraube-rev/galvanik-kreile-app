@@ -104,6 +104,10 @@ type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellung
   nacharbeit_ursachen: unknown;
   betriebsruhe: unknown;
   versandpuffer_arbeitstage: number;
+  mehrarbeit_spielraum_basispunkte?: number;
+  mehrarbeit_stopp_basispunkte?: number;
+  mehrarbeit_schritt_minuten?: number;
+  mehrarbeit_max_minuten_je_taetigkeit?: number;
 };
 
 async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string): Promise<Stand> {
@@ -174,7 +178,11 @@ async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string)
         'ki_sicherheitsschwelle', firma.ki_sicherheitsschwelle,
         'annahme_zustaende', firma.annahme_zustaende,
         'suchalias_gruppen', firma.suchalias_gruppen,
-        'energie_pauschale_cent_je_verfahren', firma.energie_pauschale_cent_je_verfahren
+        'energie_pauschale_cent_je_verfahren', firma.energie_pauschale_cent_je_verfahren,
+        'mehrarbeit_spielraum_basispunkte', firma.mehrarbeit_spielraum_basispunkte,
+        'mehrarbeit_stopp_basispunkte', firma.mehrarbeit_stopp_basispunkte,
+        'mehrarbeit_schritt_minuten', firma.mehrarbeit_schritt_minuten,
+        'mehrarbeit_max_minuten_je_taetigkeit', firma.mehrarbeit_max_minuten_je_taetigkeit
       ) END AS stand
     FROM (VALUES (1)) AS start(zeile)
     LEFT JOIN public.company_settings AS firma ON firma.tenant_id = ${tenantId}
@@ -201,6 +209,31 @@ export async function readLagerEinstellungen(
 /** Im bestehenden Rechnungs- und Ausgangsbefehl innerhalb seiner Transaktion lesen. */
 export async function readAusschussBerechnenInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
   return (await readSpurDStand(tx, tenantId)).ausschuss_berechnen;
+}
+
+export async function readWerkstattMehrarbeitInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
+  const {
+    mehrarbeit_spielraum_basispunkte: spielraumBasispunkte,
+    mehrarbeit_stopp_basispunkte: stoppBasispunkte,
+    mehrarbeit_schritt_minuten: schrittMinuten,
+    mehrarbeit_max_minuten_je_taetigkeit: maxMinutenJeTaetigkeit,
+  } = await readSpurDStand(tx, tenantId);
+  if (spielraumBasispunkte === undefined || stoppBasispunkte === undefined ||
+      schrittMinuten === undefined || maxMinutenJeTaetigkeit === undefined) return null;
+  return { spielraumBasispunkte, stoppBasispunkte, schrittMinuten, maxMinutenJeTaetigkeit };
+}
+
+/** Exakter Satz aus dem App-User im Mandanten der Buchung. */
+export async function readWerkstattKostensatzInTransaction(
+  tx: PrivilegedTenantTransaction, tenantId: string, personId: string,
+): Promise<string | null> {
+  const [person] = await tx.execute<{ kostensatz: string | null }>(sql`
+    SELECT kostensatz_eur_pro_stunde::text AS kostensatz
+    FROM public.app_users
+    WHERE tenant_id = ${tenantId} AND id = ${personId}::uuid
+      AND current_setting('app.tenant_id', true) = ${tenantId}
+  `);
+  return person?.kostensatz ?? null;
 }
 
 /** Kalkulationsvorgaben für den autorisierten Buchhaltungsweg. */
