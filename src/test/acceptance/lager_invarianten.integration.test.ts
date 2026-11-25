@@ -191,7 +191,7 @@ describe("Lagerjournal und seine Befehle", () => {
       VALUES (${auftrag}, ${mandant}, ${kunde}, ${auftrag}, 'TEST Lagerbedarf', 'angenommen', 'angenommen', 'angenommen')`;
     await sql`INSERT INTO public.company_settings (id, tenant_id, company_name,
       material_aufschlag_prozent, lager_regelversion, entnahme_regel_je_rubrik)
-      VALUES (${firma}::uuid, ${mandant}, 'TEST Lager', 20, 'TEST-v1', ${sql.json(regeln)}::jsonb)`;
+      VALUES (${firma}, ${mandant}, 'TEST Lager', 20, 'TEST-v1', ${sql.json(regeln)}::jsonb)`;
     await sql`INSERT INTO public.material_prices (tenant_id, artikel_id, einzelpreis, waehrung, quelle, gueltig_ab, bestaetigt_am)
       VALUES (${mandant}, ${id}, 4.2, 'EUR', 'manuell', ${basis.fachzeit}::timestamptz - interval '2 days',
           ${basis.fachzeit}::timestamptz - interval '2 days'),
@@ -203,7 +203,8 @@ describe("Lagerjournal und seine Befehle", () => {
     for (const [methode, erwartet] of [
       ["letzter_ek", 3.4], ["gleitender_durchschnitt", 3.8], ["hoechster_ek", 4.2],
     ] as const) {
-      await sql`UPDATE public.company_settings SET bilanzbewertung_methode = ${methode} WHERE id = ${firma}::uuid`;
+      await sql`UPDATE public.company_settings SET bilanzbewertung_methode = ${methode}
+        WHERE tenant_id = ${mandant} AND id = ${firma}`;
       const geschrieben = await withSession(werkstatt, () => bucheAuftragsverbrauchAction({
         ...verbrauch, befehlId: randomUUID(),
       }));
@@ -235,7 +236,7 @@ describe("Lagerjournal und seine Befehle", () => {
       VALUES (${mehrarbeit}, ${mandant}, ${auftrag}, 'ORDER_ITEM_EXTRA_WORK_CHANGED_V1', 'success',
         'TEST Mehrarbeitsbeleg', '{}'::jsonb)`;
     await sql`UPDATE public.company_settings SET entnahme_regel_je_rubrik = ${sql.json({ [rubrik.id]: "umlagerung" })}::jsonb
-      WHERE id = ${firma}::uuid`;
+      WHERE tenant_id = ${mandant} AND id = ${firma}`;
     const mehrarbeitBuchung = await withSession(werkstatt, () => bucheAuftragsverbrauchAction({
       ...verbrauch, befehlId: randomUUID(), mehrarbeitBelegId: mehrarbeit,
     }));
@@ -245,7 +246,8 @@ describe("Lagerjournal und seine Befehle", () => {
       WHERE tenant_id = ${mandant} AND befehl_id = ${mehrarbeitBuchung.data.befehlId}::uuid`)
       .toEqual([{ movement_type: "consumption", mehrarbeit_beleg_id: mehrarbeit }]);
 
-    await sql`UPDATE public.company_settings SET material_aufschlag_prozent = NULL WHERE id = ${firma}::uuid`;
+    await sql`UPDATE public.company_settings SET material_aufschlag_prozent = NULL
+      WHERE tenant_id = ${mandant} AND id = ${firma}`;
     expect(await withSession(werkstatt, () => bucheAuftragsverbrauchAction({ ...verbrauch, befehlId: randomUUID() })))
       .toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
     const [anzahl] = await sql`SELECT count(*)::int FROM public.stock_movements

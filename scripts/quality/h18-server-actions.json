@@ -2,6 +2,9 @@
   "version": 1,
   "inventorySha256": "ff289a7d981992d7f72828fdac896b3b52cca6dfe88783460c683f51c683567b",
   "testedWriteActions": {
+    "src/app/actions/inventory.actions.ts#createInventoryMovementAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
     "src/app/actions/lager.actions.ts#bucheLagerAction": [
       "src/test/acceptance/lager_invarianten.integration.test.ts"
     ],
@@ -496,7 +499,6 @@
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#attachIntakeDraftAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#reserveDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/inventory.actions.ts#createInventoryMovementAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#createItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#deleteItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#updateItemDb": "H18.8 Bestand ohne Replay-Action-Test",
