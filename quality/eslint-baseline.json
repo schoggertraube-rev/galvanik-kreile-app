@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "eslintVersion": "9.39.4",
   "lintContractHash": "2d6f6e17f03df2bcafd4a1690a5f13070a44f7efa8a7ec2915e0bc960346ca2d",
-  "judgeContractHash": "423862ffbafbd0bbf4a09ce01e8fc1c900ff9196c2677c84c7855467a709cede",
+  "judgeContractHash": "b56fe32904f585f84642a9cb4b42935f2da43dc07bebf9b089a1ecfe70affcff",
   "totals": {
     "filesWithIssues": 0,
     "errors": 0,
