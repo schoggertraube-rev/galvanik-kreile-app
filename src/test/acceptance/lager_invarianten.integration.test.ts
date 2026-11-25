@@ -108,6 +108,37 @@ async function summe(inventoryItemId: string) {
 }
 
 describe("Lagerjournal und seine Befehle", () => {
+  test("B3-a: Der Datenbankvertrag verlangt exakte Dezimalwerte im Rechnungsoriginal", async () => {
+    const material = {
+      type: "MATERIAL", sourceOrderId: "TEST-Auftrag", articleId: "TEST-Material", name: "Material: TEST-Material",
+      quantity: "250.125", unit: "MLT", unitNetAmount: "0.0040", lineNetAmountCents: 100,
+      vat_rate_basis_points: 1900, taxCategory: "S", eventIds: [randomUUID()],
+    };
+    const original = {
+      schemaVersion: 3, seller: { vatId: "DE123456789", taxNumber: null }, lines: [material],
+      totals: {
+        netAmountCents: 100, vatRateBasisPoints: null, vatAmountCents: 19, grossAmountCents: 119,
+        vatBreakdown: [{ rateBp: 1900, netCents: 100, vatCents: 19, grossCents: 119 }],
+      },
+    };
+    const pruefe = async (zeile: Record<string, unknown>) => {
+      const [ergebnis] = await sql<{ gueltig: boolean }[]>`
+        SELECT private.invoice_original_vat_valid(
+          ${JSON.stringify({ ...original, lines: [zeile] })}::jsonb, 100, NULL, 19, 119
+        ) AS gueltig
+      `;
+      return ergebnis.gueltig;
+    };
+
+    expect(await pruefe(material)).toBe(true);
+    expect(await pruefe({ ...material, quantity: "250.1250" })).toBe(false);
+    expect(await pruefe({ ...material, quantity: 250.125 })).toBe(false);
+    expect(await pruefe({ ...material, unitNetAmount: "0.004" })).toBe(false);
+    expect(await pruefe({ ...material, lineNetAmountCents: 101 })).toBe(false);
+    expect(await pruefe({ ...material, unit: "HUR" })).toBe(false);
+    expect(await pruefe({ ...material, eventIds: [...material.eventIds, ...material.eventIds] })).toBe(false);
+  });
+
   test("I1, I2 und I6: Zugang, Entnahme, Umlagerung und Gegenbuchung verändern nur das Journal", async () => {
     const id = await artikel();
     const quelle = await ort();
@@ -315,6 +346,7 @@ describe("Lagerjournal und seine Befehle", () => {
       ohneMethode,
       async (tenantId, tx) => ({ ...await readLagerEinstellungen(tenantId, tx), bilanzbewertung_methode: null }),
       synchronizeLagerBestandTask,
+      async () => { throw Error("TEST_PREISAUFGABE_OHNE_BUCHUNG"); },
     ))).toEqual({ ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.einstellungFehlt("bilanzbewertung_methode") });
     expect(await sql`SELECT id FROM public.stock_movements WHERE tenant_id = ${mandant}
       AND befehl_id = ${ohneMethode.befehlId}::uuid`).toHaveLength(0);

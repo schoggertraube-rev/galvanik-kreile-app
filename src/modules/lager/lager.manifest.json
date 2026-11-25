@@ -44,7 +44,11 @@
     "@/modules/lager/server-public#leseLagerW1VorschlaegeInTransaction",
     "@/modules/lager/server-public#entscheideLagerW1Vorschlag",
     "@/modules/lager/server-public#speichereLagerBadanalyseInTransaction",
-    "@/modules/lager/server-public#leseLagerBadprozessbestandInTransaction"
+    "@/modules/lager/server-public#leseLagerBadprozessbestandInTransaction",
+    "@/modules/lager/server-public#leseLagerMaterialpositionenInTransaction",
+    "@/modules/lager/server-public#leseAuftragsmaterial",
+    "@/modules/lager/server-public#hinterlegeLagerPreis",
+    "@/modules/lager/server-public#LagerPreisAufgabe"
   ],
   "capabilities": [
     "lager.lesen",
@@ -80,7 +84,8 @@
     "20261124155740_s_lag_b1a_18_abschlussoriginale.sql",
     "20261124155741_s_lag_b1a_19_ladezeit.sql",
     "20261124155742_s_lag_b1a_20_ortplatz.sql",
-    "20261125124200_s_lag_b1a_auftragskosten_gegenbuchung.sql"
+    "20261125124200_s_lag_b1a_auftragskosten_gegenbuchung.sql",
+    "20261125220245_b3a_material_rechnung.sql"
   ],
   "viewsFunctions": [
     "private.lager_naechste_kurznummer",
@@ -128,7 +133,10 @@
     "private.lager_inventur_bereich_pruefen",
     "private.lager_inventur_bewegungsrevision",
     "private.lager_inventur_zaehlrevision_sichern",
-    "private.lager_ort_ist_platz"
+    "private.lager_ort_ist_platz",
+    "private.lager_material_rechnung",
+    "private.lager_material_rechnung_sperren",
+    "private.lager_preisbefehl_schuetzen"
   ],
   "ownsTables": [
     "public.inventory_items",
@@ -140,6 +148,7 @@
     "public.lager_artikel_kennungen",
     "public.lager_artikel_dateien",
     "public.material_prices",
+    "public.lager_material_nachbewertungen",
     "public.metallkurse",
     "public.stock_movements",
     "public.inventory_sessions",

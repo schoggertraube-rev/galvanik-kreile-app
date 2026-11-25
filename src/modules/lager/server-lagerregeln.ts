@@ -19,10 +19,14 @@ export type LagerEinstellungenLeser = (
   tx?: PrivilegedTenantTransaction,
 ) => Promise<Partial<LagerEinstellungen> | null | undefined>;
 
-export type LagerRegelFehler = Readonly<{
+type LagerBewertungsfehler = Readonly<{
   ok: false;
-  schluessel: "material_aufschlag_prozent" | "lager_regelversion" | "bilanzbewertung_methode"
-    | "entnahme_regel_je_rubrik" | "artikel_rubrik";
+  schluessel: "material_aufschlag_prozent" | "lager_regelversion" | "bilanzbewertung_methode";
+}>;
+
+export type LagerRegelFehler = LagerBewertungsfehler | Readonly<{
+  ok: false;
+  schluessel: "entnahme_regel_je_rubrik" | "artikel_rubrik";
 }>;
 
 export type LagerRegeln = Readonly<{
@@ -62,6 +66,13 @@ function istEntnahme(wert: unknown): wert is LagerEntnahmeRegel {
  * Liefert nur belegte Einstellungen. Der aufrufende Befehl übersetzt den fehlenden
  * Schlüssel in den verbindlichen Katalogtext und schreibt davor keine Bewegung.
  */
+export function bestimmeLagerRegeln(
+  einstellungen: Partial<LagerEinstellungen> | null | undefined,
+): LagerRegeln | LagerBewertungsfehler;
+export function bestimmeLagerRegeln(
+  einstellungen: Partial<LagerEinstellungen> | null | undefined,
+  rubrikId: string | null | undefined,
+): LagerRegelnErgebnis;
 export function bestimmeLagerRegeln(
   einstellungen: Partial<LagerEinstellungen> | null | undefined,
   rubrikId?: string | null,

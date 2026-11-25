@@ -81,6 +81,7 @@
     "licenses": { "category": "service_role_only", "policy_names": ["service_role_all_licenses"] },
     "locations": { "category": "rls_no_policy_deny_all", "policy_names": [] },
     "marketing_touchpoints": { "category": "other_policy", "policy_names": [], "note": "rls_disabled" },
+    "lager_material_nachbewertungen": {"category": "tenant_isolation_pre_existing", "policy_names": ["lager_mandant"]},
     "material_prices": {"category": "tenant_isolation_pre_existing", "policy_names": ["lager_mandant"]},
     "material_short_no_counter": {"category": "tenant_isolation_pre_existing", "policy_names": ["lager_mandant"]},
     "metallkurse": {"category": "tenant_isolation_pre_existing", "policy_names": ["lager_mandant"]},

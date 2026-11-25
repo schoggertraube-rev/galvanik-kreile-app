@@ -9,6 +9,7 @@ import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/a
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { StockMovement } from "@/lib/types/inventory";
 import { LAGER_BUCHUNG_COPY as copy } from "@/ui/lagerBuchungCopy";
+import { LAGER_MATERIAL_COPY } from "@/ui/lagerMaterialCopy";
 import {
   leseLagerBuchungsauftrag,
   leseLagerGegenbuchungsauftrag,
@@ -17,6 +18,7 @@ import {
 import type { LagerUnit } from "./quantity";
 import { readLagerBestandsqualifikationInTransaction } from "./server/stammdatenLesen";
 import { bestimmeLagerRegeln, type LagerEinstellungenLeser, type LagerRegelFehler } from "./server-lagerregeln";
+import { synchronisiereLagerPreisInTransaction, type LagerPreisAufgabe } from "./server-preis";
 
 type Tx = PrivilegedTenantTransaction;
 type Wirkung = (tx: Tx, auth: AuthorizationSnapshot, input: { key: string }) => Promise<void>;
@@ -38,7 +40,14 @@ export type LagerBuchungsbeleg = StockMovement & {
 type Antwort = ActionResult<LagerBuchungsbeleg>;
 type Fehler = Extract<Antwort, { ok: false }>;
 type Buchung = NonNullable<Awaited<ReturnType<typeof liesOriginal>>>;
-type Artikel = { name: string; version: number; basiseinheit: LagerUnit | null; rubrikId: string | null; rubrikName: string | null };
+type Artikel = {
+  name: string;
+  version: number;
+  basiseinheit: LagerUnit | null;
+  kursMetall: boolean | null;
+  rubrikId: string | null;
+  rubrikName: string | null;
+};
 type Zeile = {
   artikel_id: string;
   art: string;
@@ -99,7 +108,7 @@ function quittung(original: Buchung, hash: string, auth: AuthorizationSnapshot):
 
 async function ladeArtikel(tx: Tx, mandant: string, artikelId: string) {
   const [artikel] = await tx.execute<Artikel>(sql`
-    SELECT a.name, a.stamm_version AS version, a.basiseinheit,
+    SELECT a.name, a.stamm_version AS version, a.basiseinheit, a.kurs_metall AS "kursMetall",
       a.rubrik_id::text AS "rubrikId", r.name AS "rubrikName"
     FROM public.inventory_items a
     LEFT JOIN public.categories r ON r.tenant_id = a.tenant_id AND r.id = a.rubrik_id
@@ -168,6 +177,12 @@ async function mitBuchung<T extends { befehlId: string }>(
     });
   } catch (error) {
     const ursache = error instanceof Error ? error.cause ?? error : error;
+    if (ursache instanceof Error && "code" in ursache && ursache.code === "23514"
+      && (ursache.message === "LAGER_RECHNUNG_AUSGESTELLT" || ursache.message === "LAGER_AUFTRAG_BERECHNET")
+      && "detail" in ursache && typeof ursache.detail === "string") {
+      return { ok: false, error: "CONFLICT", message: LAGER_MATERIAL_COPY.rechnungAusgestellt(ursache.detail),
+        details: { code: ursache.message, rechnungsnummer: ursache.detail } };
+    }
     const code = ursache && typeof ursache === "object" && "code" in ursache ? ursache.code : null;
     const meldung = ursache instanceof Error ? ursache.message : null;
     if (meldung === "LAGER_BASISEINHEIT_KONFLIKT") return fehler("CONFLICT", copy.einheit);
@@ -215,6 +230,7 @@ type LiesBuchungsauftrag = (input: unknown) => LagerBuchungsauftrag | null;
 
 export function bucheLagerEinzeln(
   input: unknown, liesEinstellungen: LagerEinstellungenLeser, synchronisiere: LagerBestandsaufgabe,
+  synchronisierePreis: LagerPreisAufgabe,
   liesAuftrag: LiesBuchungsauftrag = leseLagerBuchungsauftrag,
 ): Promise<Antwort> {
   return mitBuchung(input, liesAuftrag, async (tx, auth, auftrag, hash) => {
@@ -299,7 +315,14 @@ export function bucheLagerEinzeln(
         aufschlag: regeln.aufschlag, version: regeln.version, vorlaeufig: false, methode: regeln.bilanzbewertung,
       })}, true)`);
     }
-    return schreibeJournal(tx, auth, auftrag.befehlId, hash, zeilen, synchronisiere);
+    const antwort = await schreibeJournal(tx, auth, auftrag.befehlId, hash, zeilen, synchronisiere);
+    if (antwort.ok && antwort.data.preisFehlt && antwort.data.imPreisEnthalten !== true
+      && artikel.kursMetall !== true && artikel.basiseinheit === auftrag.einheit && regeln?.ok) {
+      await synchronisiereLagerPreisInTransaction(
+        tx, auth, auftrag.inventoryItemId, auftrag.einheit, regeln.bilanzbewertung, synchronisierePreis,
+      );
+    }
+    return antwort;
   }, auftrag => auftrag.orderId !== null);
 }
 

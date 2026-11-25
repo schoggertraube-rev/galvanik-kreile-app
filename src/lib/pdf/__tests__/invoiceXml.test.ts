@@ -20,6 +20,38 @@ function refusal(snapshot:ImmutableInvoiceSnapshotV3){
  throw Error('SYNTHETIC_INVALID_SOURCE_ACCEPTED');
 }
 
+it('B3-a schreibt Materialmenge, vierstelligen VK und Positionscent aus dem TEST-Original', () => {
+ const snapshot = source();
+ const material = {
+  type: 'MATERIAL' as const, sourceOrderId: snapshot.order!.orderId, articleId: 'TEST-Material', name: 'Material: TEST-Material',
+  quantity: '250.125', unit: 'MLT' as const, unitNetAmount: '0.0040', lineNetAmountCents: 100,
+  vat_rate_basis_points: 1900 as const, taxCategory: 'S' as const, eventIds: ['22222222-2222-4222-8222-222222222222'],
+ };
+ snapshot.lines.push(material);
+ snapshot.totals = { netAmountCents: 10100, vatRateBasisPoints: null, vatAmountCents: 1919, grossAmountCents: 12019,
+  vatBreakdown: [{ rateBp: 1900, netCents: 10100, vatCents: 1919, grossCents: 12019 }] };
+
+ const input = { snapshot, invoiceNumber: 'R-2026-0001', dueDate: '2026-12-02' };
+ const xml = new TextDecoder().decode(createInvoiceXml(input));
+ expect(xml).toContain('<ram:ChargeAmount>0.0040</ram:ChargeAmount>');
+ expect(xml).toContain('<ram:BilledQuantity unitCode="MLT">250.125</ram:BilledQuantity>');
+ expect(xml).toContain('<ram:LineTotalAmount>1.00</ram:LineTotalAmount>');
+ const stornierteXml = new TextDecoder().decode(createInvoiceXml({ ...input,
+  cancellation: { number: 'R-2026-0002', at: '2026-11-19T12:00:00.000Z', reason: 'TEST Storno' },
+ }));
+ expect(stornierteXml).toContain('<ram:BilledQuantity unitCode="MLT">-250.125</ram:BilledQuantity>');
+ expect(stornierteXml).toContain('<ram:LineTotalAmount>-1.00</ram:LineTotalAmount>');
+
+ snapshot.lines.push(material);
+ expect(() => createInvoiceXml(input)).toThrow('INVOICE_MATERIAL_SOURCE_INVALID');
+ snapshot.lines.pop();
+ material.lineNetAmountCents = 101;
+ expect(refusal(snapshot).location.field).toBe('rounding');
+ material.lineNetAmountCents = 100;
+ material.unitNetAmount = '0.004';
+ expect(refusal(snapshot).location.field).toBe('rounding');
+});
+
 it('S38a A2b writes the frozen discount as structured BT-20 without changing invoice cents',()=>{
  const snapshot=source();snapshot.terms={quelle:'kunde',ziel_tage:14,skonto_prozent:2,skonto_tage:8};
  const before=structuredClone(snapshot);

@@ -30,7 +30,7 @@ export async function intakeOrderFixture(label:string,customerId:string,handover
 }
 
 /** Synthetic initial state for later boundaries, using the actual order writers. */
-export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'shipping'='pickup',existingCustomerId?:string,unitPriceCents=10000,quantity=1){
+export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'shipping'='pickup',existingCustomerId?:string,unitPriceCents=10000,quantity=1,beforeFinish?:(input:{orderId:string;itemId:string;version:number})=>Promise<number>){
  const customerId=existingCustomerId??await customerFixture(label);
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction,getExtraWorkMasterDataAction}=await import('@/app/actions/orders.actions');
  const created=await intakeOrderFixture(label,customerId,handoverMode,quantity,unitPriceCents);
@@ -39,7 +39,10 @@ export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'s
  if(moved.code!=='OK')throw Error('FIXTURE_HANDOFF:'+moved.code);
  const {storeItemPhoto}=await import('./photoFixture');
  for(const item of created.receipt.items)await storeItemPhoto(orderId,item.id);
- const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId:created.receipt.items[0].id,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));
+ const itemId=created.receipt.items[0].id;
+ let version=moved.receipt.aggregateVersion;
+ if(beforeFinish)version=await beforeFinish({orderId,itemId,version});
+ const finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:version,clientEventId:randomUUID(),finished:true}));
  if(finished.code!=='OK')throw Error('FIXTURE_PART:'+finished.code);
  const master=await withSession(full,()=>getExtraWorkMasterDataAction());
  if(master.code!=='OK')throw Error('FIXTURE_RATE_READ:'+master.code);

@@ -1,4 +1,5 @@
 import "server-only";
+import type { LagerRechnungsBuchung } from "./materialpreis";
 
 import { sql } from "drizzle-orm";
 import { hasLagerCapability } from "@/lib/auth/authorizationContract";
@@ -9,6 +10,7 @@ import { LAGER_BUCHUNG_COPY } from "@/ui/lagerBuchungCopy";
 import { bucheLagerEinzeln, type LagerBestandsaufgabe } from "./server-buchung";
 import { leseLagerBuchungsauftrag } from "./lagerBuchungsauftrag";
 import type { LagerEinstellungenLeser } from "./server-lagerregeln";
+import type { LagerPreisAufgabe } from "./server-preis";
 
 export type W1Vorschlag = {
   originalId: string;
@@ -84,7 +86,7 @@ export function entscheideLagerW1Vorschlag(input: W1Entscheidung) {
   });
 }
 
-export async function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenantTransaction, auftragId: string) {
+async function leseEinzelnesAuftragsmaterial(tx: PrivilegedTenantTransaction, auftragId: string) {
   return [...await tx.execute<{
     journalId: string; artikelId: string | null; menge: string; einheit: string | null;
     wertEur: string | null; imPreisEnthalten: boolean | null; mehrarbeitBelegId: string | null;
@@ -101,11 +103,41 @@ export async function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenan
     WHERE kosten.order_id = ${auftragId} ORDER BY kosten.journal_id`)];
 }
 
+export function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenantTransaction, auftragId: string): ReturnType<typeof leseEinzelnesAuftragsmaterial>;
+export function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenantTransaction, auftragIds: readonly string[]): Promise<LagerRechnungsBuchung[]>;
+export async function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenantTransaction, auftrag: string | readonly string[]) {
+  if (typeof auftrag === 'string') return leseEinzelnesAuftragsmaterial(tx, auftrag);
+  if (auftrag.length === 0) return [];
+
+  const ids = sql`ARRAY[${sql.join(auftrag.map(id => sql`${id}`), sql`, `)}]::text[]`;
+  return [...await tx.execute<LagerRechnungsBuchung>(sql`
+    WITH rechnungen AS MATERIALIZED (SELECT * FROM private.lager_material_rechnung(${ids}))
+    SELECT journal.id::text AS "eventId", kosten.order_id AS "auftragId", artikel.id AS "artikelId",
+      artikel.name AS artikel, kosten.menge::text, kosten.mengeneinheit AS einheit,
+      coalesce(journal.kalk_ek, nachbewertung.kalk_ek)::text AS "kalkEk",
+      CASE WHEN journal.kalk_ek IS NULL THEN nachbewertung.aufschlag_pct::text
+        ELSE journal.aufschlag_pct::text END AS aufschlag,
+      rechnung.rechnungsnummer
+    FROM private.lager_w1_auftragskosten kosten
+    JOIN public.stock_movements journal ON journal.id = kosten.journal_id
+      AND journal.tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '')
+    JOIN public.inventory_items artikel ON artikel.id = kosten.artikel_id AND artikel.tenant_id = journal.tenant_id
+    LEFT JOIN public.lager_material_nachbewertungen nachbewertung
+      ON nachbewertung.tenant_id = journal.tenant_id AND nachbewertung.event_id = journal.id
+    LEFT JOIN rechnungen rechnung ON rechnung.auftrag_id = kosten.order_id AND journal.id = ANY(rechnung.event_ids)
+    WHERE kosten.order_id = ANY(${ids}) AND journal.befehl_zeile = 1 AND journal.befehl_id IS NOT NULL
+      AND journal.lagerwirksam AND journal.quantity < 0
+      AND kosten.im_preis_enthalten IS NOT TRUE AND artikel.kurs_metall IS NOT TRUE
+    ORDER BY kosten.order_id, artikel.id, journal.id
+  `)];
+}
+
 
 export function bucheAuftragsverbrauch(
   input: unknown, liesEinstellungen: LagerEinstellungenLeser, synchronisiere: LagerBestandsaufgabe,
+  synchronisierePreis: LagerPreisAufgabe,
 ) {
-  return bucheLagerEinzeln(input, liesEinstellungen, synchronisiere, wert => {
+  return bucheLagerEinzeln(input, liesEinstellungen, synchronisiere, synchronisierePreis, wert => {
     const auftrag = leseLagerBuchungsauftrag(wert);
     return auftrag?.movementType === "consumption" && auftrag.orderId !== null
       && typeof auftrag.imPreisEnthalten === "boolean" ? auftrag : null;
