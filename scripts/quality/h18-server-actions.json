@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "dce894b854099b3da1b79661a767e2a8d036d40facc2edc14debf22ccdfafbef",
+  "inventorySha256": "5156fb149e8357e2b852ef6b127fac6d8c3e5ed5c7f23a156281c431d7e12ac9",
   "testedWriteActions": {
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": [
       "src/test/acceptance/lager_invarianten.integration.test.ts"
@@ -74,6 +74,9 @@
     ],
     "src/app/actions/eingang.actions.ts#clarifyIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#getOrderIntakeSuggestionsAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveIntakeDeviceRequestAction": [
       "src/test/h18_customer_actions.integration.test.ts"

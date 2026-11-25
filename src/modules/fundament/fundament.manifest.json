@@ -73,7 +73,12 @@
     "@/modules/fundament/public#pageReadSettingsFromCompany",
     "@/modules/fundament/public#parsePageReadSettings",
     "@/modules/fundament/server-public#LagerEinstellungen",
-    "@/modules/fundament/server-public#readLagerEinstellungen"
+    "@/modules/fundament/server-public#readLagerEinstellungen",
+    "@/modules/fundament/server-public#readAusschussBerechnenInTransaction",
+    "@/modules/fundament/server-public#readBetriebsruheInTransaction",
+    "@/modules/fundament/server-public#readWerkstattKostensatzInTransaction",
+    "@/modules/fundament/server-public#readWerkstattMehrarbeitInTransaction",
+    "@/modules/fundament/server-public#readWerkstattZeitstationInTransaction"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",

@@ -191,7 +191,7 @@ const cases = [
             "id": "{termine_einstellungen}"
           },
           "werte": {
-            "uebergabepuffer_tage": 1
+            "versandpuffer_arbeitstage": 1
           }
         }
       ]

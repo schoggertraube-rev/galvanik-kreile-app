@@ -480,6 +480,7 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/eingang.actions.ts",
       "exported_functions": [
+        "getOrderIntakeSuggestionsAction",
         "getIncomingInvoiceAction",
         "saveIncomingInvoiceAction",
         "changeIncomingInvoiceStatusAction",
@@ -1058,7 +1059,6 @@
         "getOrderStationCorrectionReceiptAction",
         "searchOrderIntakeCustomersAction",
         "recognizeOrderIntakeTextAction",
-        "getOrderIntakeSuggestionsAction",
         "getOrderIntakeReceiptAction",
         "getGalvanikHandoffAttachmentsAction",
         "getGalvanikEvidenceByTargetAction",
@@ -1085,7 +1085,6 @@
           "getOrderStationReceiptAction",
           "getOrderStationCorrectionReceiptAction",
           "recognizeOrderIntakeTextAction",
-          "getOrderIntakeSuggestionsAction",
           "getGalvanikHandoffAttachmentsAction",
           "getGalvanikEvidenceByTargetAction",
           "reserveGalvanikHandoffAttachmentAction",
