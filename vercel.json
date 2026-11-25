@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["fra1"],
-  "crons": [{"path":"/api/heute/neuaufbau","schedule":"0 2 * * *"}],
+  "crons": [{"path":"/api/takt","schedule":"0 2 * * *"}],
   "git": {
     "deploymentEnabled": {"codex/ablauf-*": false}
   }

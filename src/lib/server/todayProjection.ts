@@ -19,7 +19,7 @@ import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
 import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS} from './todayProjectionSchedule';
+import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS,todaySourceNeedsRebuild} from './todayProjectionSchedule';
 type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
@@ -171,13 +171,11 @@ async function release(tenantId:string,lease:Lease){
  await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=NULL
   WHERE tenant_id=${tenantId} AND refresh_lease_until=${lease.token}::timestamptz`));
 }
-async function pending(tenantId:string,lease:Lease,rebuild:boolean,limit?:number):Promise<Snapshot[]>{
+async function pending(tenantId:string,lease:Lease,limit?:number):Promise<Snapshot[]>{
  return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<Snapshot>(sql`SELECT source.kind,source.source_id AS "sourceId",source.source_seq::text AS "sourceSeq",tenant.tenant_seq::text AS "tenantSeq",${lease.day}::text AS day
   FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant ON tenant.tenant_id=source.tenant_id
   WHERE source.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
-   AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND (${rebuild} OR source.status<>'SOURCE_INCOMPLETE')
-   AND (source.source_seq<>source.built_seq OR source.built_tenant_seq<>tenant.tenant_seq OR source.built_day IS DISTINCT FROM ${lease.day}::date
-    OR source.projector_version<>${TODAY_PROJECTOR_VERSION} OR source.status='PENDING')
+   AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND ${todaySourceNeedsRebuild(lease.day)}
   ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
 }
 /** Same short write-phase lock order as the source invalidators. Source reads
@@ -247,11 +245,14 @@ async function projectGroup(auth:ProjectorAuthorization,lease:Lease,rows:readonl
  return publishGroup(auth.tenantId,lease,rows,results,Math.round(performance.now()-started),assertOwned);
 }
 
-async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean){
+async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean,signal?:AbortSignal){
+ signal?.throwIfAborted();
  const settings=await ports.readSettings({tenantId}),lease=await claim(tenantId,settings);
  if(!lease)return {code:'BUSY' as const,built:0,stale:0};
  const heartbeat=keepLeaseAlive(tenantId,lease,settings.todayRefreshLeaseSeconds);
+ const assertOwned=()=>{signal?.throwIfAborted();assertPageReadBudgetActive();heartbeat.assertOwned();};
  try{
+  assertOwned();
   const auth=await projectorAuthorization(tenantId);
   if(rebuild){
    const known=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{id:string;seq:string}>(sql`SELECT source_id AS id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenantId} AND kind='order' ORDER BY source_id`));
@@ -282,15 +283,15 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   }
   // Freeze this finite worklist. Writes that race this build remain stale for
   // the next bounded refresh; neither failures nor writers cause a rebuild loop.
-  const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit));
+  const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild?undefined:settings.todayRefreshBatchLimit));
   let built=0,stale=0;
   for(let offset=0;offset<rows.length;offset+=15){
-   heartbeat.assertOwned();
-   const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports,heartbeat.assertOwned);heartbeat.assertOwned();built+=result.built;stale+=result.stale;
+   assertOwned();
+   const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports,assertOwned);assertOwned();built+=result.built;stale+=result.stale;
   }
-  heartbeat.assertOwned();
+  assertOwned();
   if(rebuild){
-   const remaining=await withLeaseWrite(lease,()=>pending(tenantId,lease,true,1));
+   const remaining=await withLeaseWrite(lease,()=>pending(tenantId,lease,1));
    if(remaining.length)stale+=remaining.length;
    if(!remaining.length&&!stale){
     const completed=await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp() RETURNING tenant_id`)));
@@ -303,8 +304,8 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
  finally{await heartbeat.stop();await outsidePageReadBudget(()=>withPageReadBudget(()=>release(tenantId,lease),2000));}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
-export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
- const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false),projectionCounts);
+export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true;signal?:AbortSignal})=>{
+ const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false,options?.signal),projectionCounts);
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});
@@ -312,8 +313,8 @@ export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=produ
   return run({...ports,readSettings:async()=>settings});
  },5000);
 };
-export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
- const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
+export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true;signal?:AbortSignal})=>{
+ const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true,options?.signal),projectionCounts);
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});
