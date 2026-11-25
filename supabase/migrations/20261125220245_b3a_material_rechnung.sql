@@ -165,6 +165,9 @@ BEGIN
     'stock_movements', 'material_prices', 'inventory_sessions', 'inventory_counts',
     'inventory_lines', 'lager_material_nachbewertungen'
   ] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_insert_v1 ON public.%I', lager_tabelle);
+    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_update_v1 ON public.%I', lager_tabelle);
+    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_delete_v1 ON public.%I', lager_tabelle);
     EXECUTE format('CREATE TRIGGER today_mark_insert_v1 AFTER INSERT ON public.%I REFERENCING NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', lager_tabelle);
     EXECUTE format('CREATE TRIGGER today_mark_update_v1 AFTER UPDATE ON public.%I REFERENCING OLD TABLE AS today_old NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', lager_tabelle);
     EXECUTE format('CREATE TRIGGER today_mark_delete_v1 AFTER DELETE ON public.%I REFERENCING OLD TABLE AS today_old FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', lager_tabelle);

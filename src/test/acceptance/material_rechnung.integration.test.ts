@@ -6,7 +6,7 @@ const mandant = vi.hoisted(() => "TEST-ablauf-" + globalThis.crypto.randomUUID()
 vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: mandant }));
 
 import { createFixture, full, sql, withSession } from "../../../e2e/ablauf/replayHarness";
-import { cancelInvoiceAction, issueCollectionInvoiceAction, issueInvoiceAction } from "@/app/actions/invoices.actions";
+import { cancelInvoiceAction, getInvoiceReceiptAction, issueCollectionInvoiceAction, issueInvoiceAction } from "@/app/actions/invoices.actions";
 import { leseAuftragsmaterial } from "@/app/actions/lager-material.actions";
 import { hinterlegeLagerPreis } from "@/app/actions/lager-preis.actions";
 import { bucheAuftragsverbrauchAction, bucheLagerGegenbuchungAction, leseLagerBestandAction } from "@/app/actions/lager.actions";
@@ -16,6 +16,7 @@ import {
 } from "@/app/actions/orders.actions";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { leseLagerAuftragsmaterialInTransaction } from "@/modules/lager/server-public";
+import { E_INVOICE_COPY } from "@/ui/accountingCopy";
 import { FINANCIAL_ACCESS_COPY } from "@/ui/financialAccessCopy";
 import { LAGER_MATERIAL_COPY } from "@/ui/lagerMaterialCopy";
 import { historicalCollection } from "../../../e2e/ablauf/invoiceCollectionFixture";
@@ -186,6 +187,58 @@ describe("Material am Auftrags- und Rechnungsoriginal", () => {
     }
   });
 
+  test.each([1, 2] as const)("Rechnungsoriginal aus Schema %i bleibt lesbar, die Stornosperre bleibt wirksam", async (schemaVersion) => {
+    const anfrage = await bereiteAuftragVor("B3-a Altoriginal " + schemaVersion);
+    const ausgestellt = await withSession(full, () => issueInvoiceAction(anfrage));
+    if (ausgestellt.code !== "OK") throw Error("TEST_ALTRECHNUNG_FEHLT: " + ausgestellt.code);
+    const { invoiceId, invoiceNumber } = ausgestellt.receipt;
+    type JsonWert = Parameters<typeof sql.json>[0];
+    type JsonObjekt = Record<string, JsonWert>;
+    const [row] = await sql<{ snapshot: JsonObjekt & {
+      seller: JsonObjekt; customer: JsonObjekt; totals: JsonObjekt; lines: JsonObjekt[];
+    } }[]>`
+      SELECT snapshot FROM public.invoices WHERE tenant_id = ${mandant} AND id = ${invoiceId}::uuid
+    `;
+    const ohneFelder = (objekt: JsonObjekt, felder: readonly string[]) =>
+      Object.fromEntries(Object.entries(objekt).filter(([schluessel]) => !felder.includes(schluessel)));
+    const steuerId = row.snapshot.seller.taxNumber ?? row.snapshot.seller.vatId;
+    if (typeof steuerId !== "string") throw Error("TEST_ALTRECHNUNG_STEUER_ID_FEHLT");
+    const steuersatz = schemaVersion === 1 ? 1900 : null;
+    const altoriginal = {
+      ...row.snapshot,
+      schemaVersion,
+      seller: { ...ohneFelder(row.snapshot.seller, ["taxNumber", "vatId"]), taxId: steuerId },
+      customer: schemaVersion === 1 ? ohneFelder(row.snapshot.customer, ["vatId"]) : row.snapshot.customer,
+      totals: schemaVersion === 1
+        ? { ...ohneFelder(row.snapshot.totals, ["vatBreakdown"]), vatRateBasisPoints: steuersatz }
+        : row.snapshot.totals,
+      lines: row.snapshot.lines.map(zeile => ohneFelder(zeile, [
+        "unit", "taxCategory", "sourceOrderId", "unitSource", ...(schemaVersion === 1 ? ["vat_rate_basis_points"] : []),
+      ])),
+    };
+    await sql.begin(async tx => {
+      // Das TEST-Original stellt einen vorhandenen Altbestand nach. Die Prüf-Constraints bleiben aktiv.
+      await tx`ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard`;
+      await tx`UPDATE public.invoices SET snapshot = ${tx.json(altoriginal)}::jsonb, vat_rate_basis_points = ${steuersatz}
+        WHERE tenant_id = ${mandant} AND id = ${invoiceId}::uuid`;
+      await tx`ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard`;
+    });
+    expect(await withSession(full, () => getInvoiceReceiptAction({
+      orderId: anfrage.orderId, clientEventId: anfrage.clientEventId,
+    }))).toMatchObject({ code: "OK", data: { invoiceId, invoiceNumber } });
+    expect(await sql`
+      SELECT private.invoice_original_vat_valid(snapshot, net_amount_cents, vat_rate_basis_points,
+        vat_amount_cents, gross_amount_cents) AS gueltig
+      FROM public.invoices WHERE tenant_id = ${mandant} AND id = ${invoiceId}::uuid
+    `).toEqual([{ gueltig: true }]);
+    expect(await withSession(full, () => cancelInvoiceAction({
+      invoiceId, expectedVersion: 1, reason: "TEST Altoriginal stornieren", clientEventId: randomUUID(),
+    }))).toEqual({ code: "VALIDATION_ERROR", message: E_INVOICE_COPY.legacyCancellation });
+    expect(await sql`
+      SELECT status, snapshot FROM public.invoices WHERE tenant_id = ${mandant} AND id = ${invoiceId}::uuid
+    `).toEqual([{ status: "issued", snapshot: altoriginal }]);
+  });
+
   test("Ein Preisbeleg eines Preisberechtigten bewertet die offene Buchung genau einmal nach", async () => {
     const anfrage = await bereiteAuftragVor("B3-a Nachbewertung");
     const artikelId = await artikel("TEST Preis fehlt", "ml");
@@ -225,6 +278,18 @@ describe("Material am Auftrags- und Rechnungsoriginal", () => {
         EXISTS (SELECT 1 FROM public.lager_material_nachbewertungen WHERE tenant_id = ${mandant}
           AND artikel_id = ${artikelOhneEntnahme}) AS nachbewertung
     `).toEqual([{ aufgabe: false, preis: false, nachbewertung: false }]);
+    const eingepreist = await artikel("TEST Material im Preis enthalten", "ml");
+    const kursmetall = await artikel("TEST Kursmetall ohne Materialpreis", "g", undefined, true);
+    for (const [id, kaufEinheit, enthalten] of [[eingepreist, "ml", true], [kursmetall, "g", false]] as const) {
+      expect(await withSession(werkstatt, () => bucheAuftragsverbrauchAction(
+        verbrauch(anfrage.orderId, id, kaufEinheit, "1", enthalten),
+      ))).toMatchObject({ ok: true });
+      expect(await withSession(werkstatt, () => hinterlegeLagerPreis({
+        ...eingabe, artikelId: id, einheit: kaufEinheit, befehlId: randomUUID(),
+      }))).toEqual({ ok: false, error: "FORBIDDEN", message: FINANCIAL_ACCESS_COPY.pricesMissing });
+      expect(await sql`SELECT id FROM public.tasks
+        WHERE tenant_id = ${mandant} AND bezug_typ = 'lagerartikel' AND bezug_id = ${id}`).toEqual([]);
+    }
     expect(await withSession(werkstatt, () => hinterlegeLagerPreis(eingabe))).toMatchObject({
       ok: false, error: "FORBIDDEN", message: LAGER_MATERIAL_COPY.preisrechtFehlt("TEST Preis fehlt"),
     });

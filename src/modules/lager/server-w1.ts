@@ -1,7 +1,7 @@
 import "server-only";
 import type { LagerRechnungsBuchung } from "./materialpreis";
 
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { hasLagerCapability } from "@/lib/auth/authorizationContract";
 import type { ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -109,9 +109,11 @@ export async function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenan
   if (typeof auftrag === 'string') return leseEinzelnesAuftragsmaterial(tx, auftrag);
   if (auftrag.length === 0) return [];
 
-  const ids: SQL = sql`ARRAY[${sql.join(auftrag.map(id => sql`${id}`), sql`, `)}]::text[]`;
+  const idParameter = sql.join(auftrag.map(id => sql`${id}`), sql`, `);
   return [...await tx.execute<LagerRechnungsBuchung>(sql`
-    WITH rechnungen AS MATERIALIZED (SELECT * FROM private.lager_material_rechnung(${ids}))
+    WITH rechnungen AS MATERIALIZED (
+      SELECT * FROM private.lager_material_rechnung(ARRAY[${idParameter}]::text[])
+    )
     SELECT journal.id::text AS "eventId", kosten.order_id AS "auftragId", artikel.id AS "artikelId",
       artikel.name AS artikel, kosten.menge::text, kosten.mengeneinheit AS einheit,
       coalesce(journal.kalk_ek, nachbewertung.kalk_ek)::text AS "kalkEk",
@@ -125,7 +127,8 @@ export async function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenan
     LEFT JOIN public.lager_material_nachbewertungen nachbewertung
       ON nachbewertung.tenant_id = journal.tenant_id AND nachbewertung.event_id = journal.id
     LEFT JOIN rechnungen rechnung ON rechnung.auftrag_id = kosten.order_id AND journal.id = ANY(rechnung.event_ids)
-    WHERE kosten.order_id = ANY(${ids}) AND journal.befehl_zeile = 1 AND journal.befehl_id IS NOT NULL
+    WHERE kosten.order_id = ANY(ARRAY[${idParameter}]::text[])
+      AND journal.befehl_zeile = 1 AND journal.befehl_id IS NOT NULL
       AND journal.lagerwirksam AND journal.quantity < 0
       AND kosten.im_preis_enthalten IS NOT TRUE AND artikel.kurs_metall IS NOT TRUE
     ORDER BY kosten.order_id, artikel.id, journal.id

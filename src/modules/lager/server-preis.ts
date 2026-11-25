@@ -20,9 +20,11 @@ function preisloseAuftragsentnahmen(mandant: string, artikelId: string) {
     SELECT journal.id, kosten.order_id
     FROM private.lager_w1_auftragskosten kosten
     JOIN public.stock_movements journal ON journal.tenant_id = ${mandant} AND journal.id = kosten.journal_id
+    JOIN public.inventory_items artikel ON artikel.tenant_id = journal.tenant_id AND artikel.id = kosten.artikel_id
     WHERE kosten.artikel_id = ${artikelId}
       AND journal.befehl_id IS NOT NULL AND journal.befehl_zeile = 1 AND journal.lagerwirksam
       AND journal.quantity < 0 AND journal.kalk_ek IS NULL
+      AND kosten.im_preis_enthalten IS NOT TRUE AND artikel.kurs_metall IS NOT TRUE
       AND NOT EXISTS (
         SELECT 1 FROM public.lager_material_nachbewertungen bewertung
         WHERE bewertung.tenant_id = ${mandant} AND bewertung.event_id = journal.id
