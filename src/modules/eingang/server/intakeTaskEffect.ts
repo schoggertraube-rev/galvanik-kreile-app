@@ -6,11 +6,12 @@ import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
 
-type Effect={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:{type:string;id:string|null;customerId:string|null;customerType:string|null;orderId:string|null};itemId?:string;itemVersion?:number};
+type Effect={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:{type:string;id:string|null;customerId:string|null;customerType:string|null;orderId:string|null};itemId?:string;itemVersion?:number;priceTaskReceipt?:true};
 type CustomerReader=(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<CustomerStoredProfile|null>;
 
 /** Task and its visible history use the existing original/event writer in the same transaction. */
 export async function recordIntakeTaskEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:Effect,readCustomer:CustomerReader){
+ if(input.priceTaskReceipt&&(input.itemId||input.reference.type!=='lagerartikel'||!input.reference.id))throw Error('TASK_PRICE_RECEIPT_REFERENCE_INVALID');
  let targetItem=input.itemId;
  if(targetItem){
   const sources=await tx.execute<{id:string;kanal:string;erstellt_von:string;version:number;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;anliegen_offen:string[]}>(sql`SELECT id::text,kanal,erstellt_von::text,version,kunde_id,vorgang_art,vorgang_id,anliegen_offen
@@ -35,12 +36,13 @@ export async function recordIntakeTaskEffect(tx:PrivilegedTenantTransaction,auth
   return;
  }
  const text=input.action==='erledigt'?(input.note??'Aufgabe „'+input.title+'“ erledigt'):'Aufgabe „'+input.title+'“ '+input.action+(input.note?'\n'+input.note:'');
- const note={itemId:input.key,textstand:input.key,text,concerns:[],context:input.reference.orderId?{orderId:input.reference.orderId,customerId:input.reference.customerId??undefined}:input.reference.customerId?{customerId:input.reference.customerId}:undefined};
+ // Leave the general note and its original neutral; the existing immutable task receipt holds the protected wording.
+ const note={itemId:input.key,textstand:input.key,text:input.priceTaskReceipt?'':text,concerns:[],context:input.reference.orderId?{orderId:input.reference.orderId,customerId:input.reference.customerId??undefined}:input.reference.customerId?{customerId:input.reference.customerId}:undefined};
  const failure=await writeIntakeNoteInTransaction(tx,auth,note,readCustomer,input.reference.orderId?input.reference.customerId:null);
  if(failure)throw Error('TASK_HISTORY_'+failure.code);
  if(input.reference.type==='eingang')await tx.execute(sql`UPDATE public.intake_item SET verweis_item=${input.reference.id}::uuid WHERE tenant_id=${auth.tenantId} AND id=${input.key}::uuid`);
  targetItem=input.key;
  const history=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-  VALUES(${auth.tenantId},${targetItem}::uuid,'einsatz',${input.key}::uuid,${auth.userId},${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,bezugTyp:input.reference.type,bezugId:input.reference.id})}::jsonb) RETURNING id`);
+  VALUES(${auth.tenantId},${targetItem}::uuid,'einsatz',${input.key}::uuid,${auth.userId},${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,bezugTyp:input.reference.type,bezugId:input.reference.id,...(input.priceTaskReceipt?{fuerBereich:'preise',text}:{})})}::jsonb) RETURNING id`);
  if(history.length!==1)throw Error('TASK_HISTORY_MISSING');
 }

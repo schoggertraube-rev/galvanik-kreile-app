@@ -44,7 +44,7 @@ import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenan
 import {canReadTaskArea,canCompleteTaskArea,hasLagerCapability,type AccessArea} from '@/lib/auth/authorizationContract';
 import {invoiceMailRemainderAllowsCompletion,TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest,type TaskCalendarRead} from '../contract';
 
-export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number};
+export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number;priceTaskReceipt?:true};
 export type TaskEffects=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>Promise<void|TaskFailure>;
 type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:TaskRecord,input:TaskCompleteInput)=>Promise<void|TaskFailure>;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>};
 class Rejected extends Error{constructor(readonly result:TaskFailure){super(result.code);}}
@@ -52,6 +52,7 @@ function reject(code:TaskFailure['code'],message:string):never{throw new Rejecte
 const columns=sql`id::text,client_key::text,art,titel,faellig_am::text,to_char(uhrzeit,'HH24:MI') AS uhrzeit,vorlauf_tage,fuer_login::text,fuer_bereich,bezug_typ,bezug_id,item_id::text,notiz,status,erledigt_von::text,erledigt_am::text,erledigt_notiz,erstellt_von::text,erstellt_am::text,version`;
 const refAreas:Partial<Record<TaskReference['type'],AccessArea>>={kunde:'kunden',auftrag:'auftraege',kv:'auftraege',eingang:'eingang',eingangsrechnung:'buchhaltung',reklamation:'auftraege',lagerartikel:'lager.stamm',lagerbestand:'lager.stamm'};
 const allowed=(auth:AuthorizationSnapshot,task:TaskRecord)=>task.erstellt_von===auth.userId||task.fuer_login===auth.userId||task.fuer_bereich!==null&&hasAuthorizationArea(auth,task.fuer_bereich);
+const isLagerPreisTask=(task:TaskRecord)=>task.bezug_typ==='lagerartikel'&&task.fuer_bereich==='preise';
 async function reissueTaskSource(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,task:TaskRecord){
  const source=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
  if(!source)return null;
@@ -139,7 +140,7 @@ async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
   else await tx.execute(sql`INSERT INTO public.tasks(id,tenant_id,client_key,art,titel,faellig_am,uhrzeit,vorlauf_tage,fuer_login,fuer_bereich,bezug_typ,bezug_id,item_id,notiz,status,erstellt_von)
    VALUES(${id}::uuid,${auth.tenantId},${value.clientKey}::uuid,${value.kind},${value.title.trim()},${value.dueDate}::date,${value.time}::time,${value.kind==='frist'?5:0},${value.forLogin}::uuid,${value.forArea},${reference.type},${reference.id},${value.itemId??null}::uuid,${value.note?.trim()||null},'offen',${auth.userId}::uuid)`);
   const after=await find(tx,auth,id);if(!after||after.version!==value.version+1)throw Error('TASK_READBACK_FAILED');
-  const effect=await deps.effect(tx,auth,{key:eventKey(id,after.version,'save'),taskId:id,action:before?'geaendert':'angelegt',kind:after.art,title:after.titel,note:after.notiz,reference,...(!before&&value.itemId?{itemId:value.itemId,itemVersion:value.itemVersion}:{})});if(effect)throw new Rejected(effect);
+  const effect=await deps.effect(tx,auth,{key:eventKey(id,after.version,'save'),taskId:id,action:before?'geaendert':'angelegt',kind:after.art,title:after.titel,note:after.notiz,reference,...(isLagerPreisTask(after)?{priceTaskReceipt:true}:{}),...(!before&&value.itemId?{itemId:value.itemId,itemVersion:value.itemVersion}:{})});if(effect)throw new Rejected(effect);
   return {code:'OK',task:after,replayed:false};
 }
 /** ware.annehmen: fixed task, authorized by Eingang; no client-selected recipient or reference. */
@@ -208,7 +209,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
   const operationalInvoice=invoiceId!==undefined&&before.bezug_typ==='eingangsrechnung'&&before.bezug_id===invoiceId&&canCompleteTaskArea(auth,'buchhaltung')&&(before.art==='rechnung'||before.art==='aufgabe'&&before.fuer_bereich==='eingang');
   const operationalBestand=before.bezug_typ==='lagerbestand'&&lagerOperation?.type==='bestand'&&before.bezug_id===lagerOperation.artikelId&&hasLagerCapability(auth,'lager.buchen');
-  const preisaufgabe=before.bezug_typ==='lagerartikel'&&before.fuer_bereich==='preise';
+  const preisaufgabe=isLagerPreisTask(before);
   const operationalPreis=preisaufgabe&&lagerOperation?.type==='preis'&&before.bezug_id===lagerOperation.artikelId&&before.client_key===lagerOperation.clientKey;
   if(before.bezug_typ==='lagerbestand'&&!operationalBestand)reject('FORBIDDEN',LAGER_STAMM_COPY.bestandEndetMitBuchung);
   if((preisaufgabe&&!operationalPreis)||(!allowed(auth,before)&&!operationalBestand&&!operationalPreis&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
@@ -236,7 +237,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const reference=await context(tx,auth,{type:before.bezug_typ,id:before.bezug_id},true,false);
   await tx.execute(sql`UPDATE public.tasks SET status='erledigt',erledigt_von=${auth.userId}::uuid,erledigt_am=statement_timestamp(),erledigt_notiz=${note},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.id}::uuid AND version=${value.version}`);
   const after=await find(tx,auth,before.id);if(!after||after.version!==value.version+1||after.status!=='erledigt')throw Error('TASK_COMPLETION_READBACK_FAILED');
-  const effect=await deps.effect(tx,auth,{key:eventKey(after.id,after.version,'complete'),taskId:after.id,action:'erledigt',kind:after.art,title:after.titel,note,reference});if(effect)throw new Rejected(effect);
+  const effect=await deps.effect(tx,auth,{key:eventKey(after.id,after.version,'complete'),taskId:after.id,action:'erledigt',kind:after.art,title:after.titel,note,reference,...(preisaufgabe?{priceTaskReceipt:true}:{})});if(effect)throw new Rejected(effect);
   return {code:'OK',task:after,replayed:false};
 }
 export async function resolveInvoiceClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string},deps:Dependencies):Promise<void>{

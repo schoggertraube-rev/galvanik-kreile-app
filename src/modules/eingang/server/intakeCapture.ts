@@ -20,6 +20,7 @@ import {isIntakeOriginalTakeover} from '../captureContract';
 import type {IntakeOriginalTakeover} from '../captureContract';
 import {createHash} from 'node:crypto';
 import { mayUseContinuationSources } from "./intakeContinuationAccess";
+import { priceTaskReceipt } from "./intakePriceTaskReceipt";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function validIntakeOriginalTakeover(value:unknown):value is IntakeOriginalTakeover{return isIntakeOriginalTakeover(value)&&createHash('sha256').update(value.originalRecord).digest('hex')===value.sha256;}
@@ -41,8 +42,9 @@ export async function authorizedIntakeContext(ctx?: IntakeContext): Promise<Auth
 export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot|AuthorizedReadContext, itemId: string, ctx?: IntakeContext,invoiceOnly=false,pendingOriginalImport=false): Promise<IntakeCaptureResult> {
   const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
   return withPrivilegedTenantTransaction(auth, async tx => {
-    const rows = await tx.execute<Row>(sql`SELECT ${mailImportFailureProjection()} AS "importFailure",id::text,kanal, version, text, fortsetzung_von::text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
-      FROM public.intake_item source WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid`);
+    const rows = await tx.execute<Row>(sql`SELECT ${mailImportFailureProjection()} AS "importFailure",source.id::text,kanal, version, coalesce(preisbeleg.text,source.text) AS text, fortsetzung_von::text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
+      FROM public.intake_item source LEFT JOIN LATERAL (${priceTaskReceipt('source')}) preisbeleg ON true
+      WHERE source.tenant_id=${auth.tenantId} AND source.id=${itemId}::uuid AND (${readAuth.canReadArea('preise')} OR preisbeleg.id IS NULL)`);
     if (rows.length !== 1) return failure("NOT_FOUND", "Eingang wurde nicht gefunden.");
     const row = rows[0];
     if(invoiceOnly&&(!readAuth.canReadArea('buchhaltung')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');

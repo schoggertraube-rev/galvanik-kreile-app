@@ -30,7 +30,9 @@ it('Lagerbuchen und Preise & Rechnungen können mit getrennten Rechten dieselbe 
  const {hasAuthorizationArea,hasLagerCapability}=await import('@/lib/auth/authorizationContract');
  const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const {readCustomerProfile}=await import('@/modules/customers/server-public');
- const {recordIntakeTaskEffect}=await import('@/modules/eingang/server-public');
+ const {recordIntakeTaskEffect,readIntakeMessagesForAuthorization,projectIntakeMessageSources}=await import('@/modules/eingang/server-public');
+ const {getIntakeCaptureAction,getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');
+ const {authorizationReadContext}=await import('@/lib/server/authorizationReadContext');
  const {completeTask,synchronizeLagerPreisTask}=await import('@/modules/tasks/server-public');
 
  const route='/test-lagerpreis';
@@ -38,11 +40,11 @@ it('Lagerbuchen und Preise & Rechnungen können mit getrennten Rechten dieselbe 
   refreshTagsByCacheKind:new Map(),shouldTrackFetchMetrics:false,deploymentId:'test',buildId:'test',incrementalCache:{},
   cacheComponentsEnabled:false,runInCleanSnapshot:(fn:(...args:never[])=>unknown,...args:never[])=>fn(...args),
   reactServerErrorsByDigest:new Map(),} as unknown as import('next/dist/server/app-render/work-async-storage.external').WorkStore;
- const createLogin=async(role:'werkstatt'|'readonly',right:'eingang'|'preise')=>{
+ const createLogin=async(role:'werkstatt'|'readonly',rights:readonly ('eingang'|'preise'|'mails')[])=>{
   const userId=randomUUID();
   await sql`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active,updated_at)
    VALUES(${userId}::uuid,${mandant},${userId+'@local.invalid'},'TEST Lagerpreise',${role},true,statement_timestamp()-interval '1 second')`;
-  await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${mandant},${userId}::uuid,${right},${userId}::uuid)`;
+  for(const right of rights)await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${mandant},${userId}::uuid,${right},${userId}::uuid)`;
   return {userId,role};
  };
  type Actor=Parameters<typeof synchronizeLagerPreisTask>[1];
@@ -57,8 +59,8 @@ it('Lagerbuchen und Preise & Rechnungen können mit getrennten Rechten dieselbe 
    return work(session.data);
   }));
  };
- const lager=await createLogin('werkstatt','eingang');
- const preise=await createLogin('readonly','preise');
+ const lager=await createLogin('werkstatt',['eingang','mails']);
+ const preise=await createLogin('readonly',['preise','eingang','mails']);
  const artikelId='TEST-B3A-'+randomUUID();
  await sql`INSERT INTO public.inventory_items(id,tenant_id,name,basiseinheit,stamm_status)
   VALUES(${artikelId},${mandant},'TEST Schleifmittel','stk','aktiv')`;
@@ -92,6 +94,37 @@ it('Lagerbuchen und Preise & Rechnungen können mit getrennten Rechten dieselbe 
  const open=await taskRows();
  expect(open).toEqual([{id:first,version:1,titel:'Preis für TEST Schleifmittel je stk hinterlegen',status:'offen',fuer_bereich:'preise',
   erstellt_von:lager.userId,erledigt_von:null}]);
+ async function expectGeschuetztenBeleg(action:'aufgabe.angelegt'|'aufgabe.erledigt',actorId:string){
+  const [beleg]=await sql<{id:string;actorId:string;text:string;priceText:string;reference:string}[]>`
+   SELECT item.id::text,event.von::text AS "actorId",item.text,event.nachher->>'text' AS "priceText",event.nachher->>'bezugId' AS reference
+   FROM public.intake_item item JOIN public.intake_event event ON event.tenant_id=item.tenant_id AND event.item_id=item.id
+   WHERE item.tenant_id=${mandant} AND event.art='einsatz' AND event.nachher->>'taskId'=${first}
+    AND event.nachher->>'action'=${action} AND event.nachher->>'fuerBereich'='preise'`;
+  expect(beleg).toMatchObject({actorId,text:'',reference:artikelId});
+  expect(beleg.priceText).toContain(open[0].titel);
+  const commonSource=await withLogin(preise,async auth=>{
+   const list=await getIntakeMessagesAction('alle');
+   expect(list.code).toBe('OK');
+   if(list.code!=='OK')throw Error('TEST_INTAKE_MESSAGES_REQUIRED');
+   expect(list.messages.find(row=>row.id===beleg.id)?.text).toBe(beleg.priceText);
+   expect(await getIntakeCaptureAction(beleg.id)).toMatchObject({code:'OK',capture:{text:beleg.priceText}});
+   return readIntakeMessagesForAuthorization(authorizationReadContext(auth),'alle');
+  });
+  await withLogin(lager,async auth=>{
+   const list=await getIntakeMessagesAction('alle');
+   expect(list.code).toBe('OK');
+   if(list.code!=='OK')throw Error('TEST_INTAKE_MESSAGES_REQUIRED');
+   expect(list.messages.some(row=>row.id===beleg.id)).toBe(false);
+   expect(JSON.stringify(list)).not.toContain(artikelId);
+   expect(await getIntakeCaptureAction(beleg.id)).toMatchObject({code:'NOT_FOUND'});
+   const projected=projectIntakeMessageSources(auth,commonSource);
+   expect(projected.code).toBe('OK');
+   if(projected.code!=='OK')throw Error('TEST_INTAKE_MESSAGES_REQUIRED');
+   expect(projected.messages.some(row=>row.id===beleg.id)).toBe(false);
+   expect(JSON.stringify(projected)).not.toContain(beleg.priceText);
+  });
+ }
+ await expectGeschuetztenBeleg('aufgabe.angelegt',lager.userId);
  await withLogin(preise,async auth=>{
   expect(hasAuthorizationArea(auth,'preise')).toBe(true);
   expect(hasLagerCapability(auth,'lager.buchen')).toBe(false);
@@ -105,4 +138,5 @@ it('Lagerbuchen und Preise & Rechnungen können mit getrennten Rechten dieselbe 
   expect(await synchronize(auth)).toBeNull();
  });
  expect(await taskRows()).toEqual([{...open[0],version:2,status:'erledigt',erledigt_von:preise.userId}]);
+ await expectGeschuetztenBeleg('aufgabe.erledigt',preise.userId);
 },60_000);
