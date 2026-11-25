@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "ff289a7d981992d7f72828fdac896b3b52cca6dfe88783460c683f51c683567b",
+  "inventorySha256": "95a90880881aa7ed8ee6e938816d76c4cd2a8419d08889de1cc31429230dfddd",
   "testedWriteActions": {
     "src/app/actions/invoices.actions.ts#addOrderToCollectionAction": [
       "src/test/acceptance/s38a_collection.integration.test.ts"
@@ -53,6 +53,9 @@
     ],
     "src/app/actions/eingang.actions.ts#clarifyIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#getOrderIntakeSuggestionsAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#saveIntakeDeviceRequestAction": [
       "src/test/h18_customer_actions.integration.test.ts"
