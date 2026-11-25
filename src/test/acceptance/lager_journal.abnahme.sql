@@ -1,5 +1,7 @@
 BEGIN;
 GRANT UPDATE, DELETE, TRUNCATE ON public.stock_movements TO service_role;
+-- Nur in dieser zurückgerollten Abnahme: die Policy getrennt vom fehlenden Grant prüfen.
+GRANT SELECT, INSERT ON public.inventory_sessions TO authenticated;
 DO $abnahme$
 DECLARE
   mandant text := 'TEST-p2-' || gen_random_uuid()::text;
@@ -27,8 +29,8 @@ BEGIN
   INSERT INTO public.app_users (id, tenant_id, email, full_name, role)
   VALUES (akteur, mandant, akteur::text || '@test.invalid', 'TEST Lager', 'buero'),
          (fremder_akteur, fremd, fremder_akteur::text || '@test.invalid', 'TEST Fremd', 'buero');
-  INSERT INTO public.inventory_items (id, tenant_id, name, current_stock)
-    VALUES (artikel, mandant, 'TEST P2 Artikel', NULL);
+  INSERT INTO public.inventory_items (id, tenant_id, name, basiseinheit)
+    VALUES (artikel, mandant, 'TEST P2 Artikel', 'l');
   INSERT INTO public.stock_locations (tenant_id, stockwerk, bereich)
     VALUES (mandant, 'TEST EG', 'TEST A') RETURNING id INTO ort_a;
   INSERT INTO public.stock_locations (tenant_id, stockwerk, bereich)
@@ -68,6 +70,14 @@ BEGIN
   EXCEPTION WHEN foreign_key_violation THEN NULL;
   END;
 
+  BEGIN
+    PERFORM private.lager_journal_anhaengen(gen_random_uuid(), unveraendert, akteur,
+      jsonb_build_array(zeile || '{"einheit":"kg"}'::jsonb));
+    RAISE EXCEPTION 'TEST Journal akzeptiert eine abweichende Basiseinheit';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    IF SQLERRM <> 'LAGER_BASISEINHEIT_KONFLIKT' THEN RAISE; END IF;
+  END;
+
   zeile := zeile || '{"art":"move","geschaeftsgrund":"umlagerung"}'::jsonb;
   PERFORM private.lager_journal_anhaengen(umlagerung, unveraendert, akteur, jsonb_build_array(
     zeile || '{"menge":-2.125}'::jsonb, zeile || jsonb_build_object('ort_id', ort_b, 'menge', 2.125)));
@@ -98,6 +108,21 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.stock_movements WHERE id = quittung AND quantity IS NULL) THEN
     RAISE EXCEPTION 'TEST unbekannte Fundmenge als Nullmenge gespeichert';
   END IF;
+
+  INSERT INTO public.inventory_sessions (tenant_id, stichtag, art, erstellt_von)
+    VALUES (fremd, CURRENT_DATE - 2, 'stichtag', fremder_akteur);
+  SET LOCAL ROLE authenticated;
+  IF EXISTS (SELECT 1 FROM public.inventory_sessions WHERE tenant_id = fremd) THEN
+    RAISE EXCEPTION 'TEST fremde Inventursitzung ist sichtbar';
+  END IF;
+  BEGIN
+    INSERT INTO public.inventory_sessions (tenant_id, stichtag, art, erstellt_von)
+      VALUES (fremd, CURRENT_DATE - 1, 'stichtag', fremder_akteur);
+    RAISE EXCEPTION 'TEST fremde Inventursitzung wurde geschrieben';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM NOT LIKE '%row-level security policy%' THEN RAISE; END IF;
+  END;
+  RESET ROLE;
 
   -- Die Aufrufe im Schema private nutzen die Replay-Rolle. Die Schreibsperren gelten auch für service_role.
   SET LOCAL ROLE service_role;

@@ -1,7 +1,28 @@
 {
   "version": 1,
-  "inventorySha256": "95a90880881aa7ed8ee6e938816d76c4cd2a8419d08889de1cc31429230dfddd",
+  "inventorySha256": "5156fb149e8357e2b852ef6b127fac6d8c3e5ed5c7f23a156281c431d7e12ac9",
   "testedWriteActions": {
+    "src/app/actions/inventory.actions.ts#createInventoryMovementAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#bucheLagerAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#bucheLagerGegenbuchungAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#bucheAuftragsverbrauchAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#leseLagerBestandAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#leseLagerBewegungenAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#leseLagerBefehlsstandAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
     "src/app/actions/invoices.actions.ts#addOrderToCollectionAction": [
       "src/test/acceptance/s38a_collection.integration.test.ts"
     ],
@@ -481,7 +502,6 @@
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#attachIntakeDraftAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#reserveDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/inventory.actions.ts#createInventoryMovementAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#createItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#deleteItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#updateItemDb": "H18.8 Bestand ohne Replay-Action-Test",

@@ -1,4 +1,5 @@
 import {
+  createInventoryMovementAction,
   getInventoryItemAction,
   getInventoryItemsAction,
   getInventoryMovementsAction,
@@ -44,12 +45,11 @@ export const inventoryRepository = {
   },
 
   async createMovement(data: CreateStockMovementInput): Promise<StockMovement> {
-    void data;
-    throw new Error("NOT_AVAILABLE: Sicherer W3-Lagerbewegungs-Command-Vertrag fehlt.");
+    return unwrap(await createInventoryMovementAction(data));
   },
 
   async hasCriticalStock(): Promise<boolean> {
     const items = await this.getAllItems();
-    return items.some((item) => item.currentStock < item.minStock);
+    return items.some((item) => item.currentStock !== null && item.minStock !== null && item.currentStock < item.minStock);
   },
 };
