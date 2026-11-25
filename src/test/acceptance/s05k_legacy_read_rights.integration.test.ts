@@ -43,7 +43,7 @@ it('S05K A10 inventory hides money and filters tenant with the existing rights r
  const operator=await createFixture(['auftraege']),moneyOnly=await createFixture(['preise','zahlungen','buchhaltung']);
  const own='TEST-'+randomUUID(),foreign='TEST-'+randomUUID();
  // Explicit synthetic inventory master data; no inventory write-command claim.
- await sql`INSERT INTO public.inventory_items(id,tenant_id,name,category,current_stock,min_stock,unit,einkaufspreis_eur) VALUES(${own},${tenant},'TEST A10 stock','chemical',10,1,'kg',2.5),(${foreign},${tenant+'-foreign'},'TEST A10 foreign','chemical',20,1,'kg',999)`;
+ await sql`INSERT INTO public.inventory_items(id,tenant_id,name,category,min_stock,unit,einkaufspreis_eur) VALUES(${own},${tenant},'TEST A10 stock','chemical',1,'kg',2.5),(${foreign},${tenant+'-foreign'},'TEST A10 foreign','chemical',1,'kg',999)`;
  expect(await withSession(moneyOnly,()=>getInventoryItemsAction())).toMatchObject({ok:false,error:'FORBIDDEN'});
  const read=await withSession(operator,()=>getInventoryItemsAction());expect(read).toMatchObject({ok:true});if(!read.ok)throw Error('A10_INVENTORY');expect(read.data.map(row=>row.id)).toEqual([own]);expect(read.data[0].pricePerUnit).toBeUndefined();
  expect(await withSession(operator,()=>getInventoryItemAction(foreign))).toMatchObject({ok:true,data:null});
