@@ -32,8 +32,16 @@ it('liest gespeicherte Werkstatt-Einstellungen aus dem Firmenstand', async () =>
       schrittMinuten: 7,
       maxMinutenJeTaetigkeit: 84,
     });
-    expect(await readBetriebsruheInTransaction(tx, tenant)).toMatchObject({ versandpufferArbeitstage: 4 });
+    expect(await readBetriebsruheInTransaction(tx, tenant)).toMatchObject({
+      versandpufferArbeitstage: 4,
+      knappAbArbeitstagen: 2,
+    });
     expect(await readAusschussBerechnenInTransaction(tx, tenant)).toBe(false);
+  });
+
+  await sql`UPDATE public.company_settings SET termin_knapp_arbeitstage = 3 WHERE tenant_id = ${tenant}`;
+  await withPrivilegedTenantTransaction({ tenantId: tenant }, async tx => {
+    expect(await readBetriebsruheInTransaction(tx, tenant)).toMatchObject({ knappAbArbeitstagen: 3 });
   });
 
   const leererMandant = tenant + '-leer';

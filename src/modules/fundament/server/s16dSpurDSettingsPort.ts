@@ -104,6 +104,7 @@ type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellung
   nacharbeit_ursachen: unknown;
   betriebsruhe: unknown;
   versandpuffer_arbeitstage: number;
+  termin_knapp_arbeitstage?: number;
   mehrarbeit_spielraum_basispunkte?: number;
   mehrarbeit_stopp_basispunkte?: number;
   mehrarbeit_schritt_minuten?: number;
@@ -130,6 +131,7 @@ async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string)
         'nacharbeit_ursachen', firma.nacharbeit_ursachen,
         'betriebsruhe', firma.betriebsruhe,
         'versandpuffer_arbeitstage', firma.versandpuffer_arbeitstage,
+        'termin_knapp_arbeitstage', firma.termin_knapp_arbeitstage,
         'sicherung_hoechstalter_stunden', firma.sicherung_hoechstalter_stunden,
         'wiederherstellungstest_hoechstalter_tage', firma.wiederherstellungstest_hoechstalter_tage,
         'sicherung_min_prozent_vortag', firma.sicherung_min_prozent_vortag,
@@ -325,8 +327,12 @@ export async function readWerkstattZeitwahlInTransaction(
 
 /** S-KAL ergänzt Öffnungstage und die datierte Feiertagsquelle des Bundeslands. */
 export async function readBetriebsruheInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
-  const { betriebsruhe, versandpuffer_arbeitstage } = await readSpurDStand(tx, tenantId);
-  return { betriebsruhe, versandpufferArbeitstage: versandpuffer_arbeitstage };
+  const { betriebsruhe, versandpuffer_arbeitstage, termin_knapp_arbeitstage } = await readSpurDStand(tx, tenantId);
+  return {
+    betriebsruhe,
+    versandpufferArbeitstage: versandpuffer_arbeitstage,
+    knappAbArbeitstagen: termin_knapp_arbeitstage ?? null,
+  };
 }
 
 export async function readBetriebswaechterEinstellungenInTransaction(
