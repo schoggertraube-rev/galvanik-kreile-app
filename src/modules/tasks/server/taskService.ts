@@ -198,7 +198,7 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
  return (await persistTask(tx,auth,value,deps,true,true)).task.id;
 }
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
-async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string,lagerBestandArtikelId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string,lagerOperation?:{type:'bestand';artikelId:string}|{type:'preis';artikelId:string;clientKey:string}):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   const reissue=await reissueTaskSource(tx,auth,before);
   if(reissue&&!hasAuthorizationArea(auth,'zahlungen'))reject('FORBIDDEN',SHIPPING_FEE_COPY.reissueForbidden);
@@ -207,10 +207,13 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
   const operationalInvoice=invoiceId!==undefined&&before.bezug_typ==='eingangsrechnung'&&before.bezug_id===invoiceId&&canCompleteTaskArea(auth,'buchhaltung')&&(before.art==='rechnung'||before.art==='aufgabe'&&before.fuer_bereich==='eingang');
-  const operationalLager=before.bezug_typ==='lagerbestand'&&before.bezug_id===lagerBestandArtikelId&&hasLagerCapability(auth,'lager.buchen');
-  if(before.bezug_typ==='lagerbestand'&&!operationalLager)reject('FORBIDDEN',LAGER_STAMM_COPY.bestandEndetMitBuchung);
-  if(!allowed(auth,before)&&!operationalLager&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
-  if(before.bezug_typ==='lagerartikel'){
+  const operationalBestand=before.bezug_typ==='lagerbestand'&&lagerOperation?.type==='bestand'&&before.bezug_id===lagerOperation.artikelId&&hasLagerCapability(auth,'lager.buchen');
+  const preisaufgabe=before.bezug_typ==='lagerartikel'&&before.fuer_bereich==='preise';
+  const operationalPreis=preisaufgabe&&lagerOperation?.type==='preis'&&before.bezug_id===lagerOperation.artikelId&&before.client_key===lagerOperation.clientKey;
+  if(before.bezug_typ==='lagerbestand'&&!operationalBestand)reject('FORBIDDEN',LAGER_STAMM_COPY.bestandEndetMitBuchung);
+  if(preisaufgabe&&!operationalPreis)reject('FORBIDDEN',before.titel);
+  if(!allowed(auth,before)&&!operationalBestand&&!operationalPreis&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  if(before.bezug_typ==='lagerartikel'&&!preisaufgabe){
    if(!hasLagerCapability(auth,'lager.stamm'))reject('FORBIDDEN',LAGER_STAMM_COPY.rechtFehlt);
    const accepted=await tx.execute(sql`SELECT id FROM public.v_lager_artikel_status_v1
     WHERE tenant_id=${auth.tenantId} AND id=${before.bezug_id} AND stamm_status='aktiv'`);
@@ -784,6 +787,50 @@ export async function synchronizeLagerBestandTask(
   return (await persistTask(tx,auth,value,deps,false)).task.id;
  }
  if(!open)return null;
- await finishTask(tx,auth,{taskId:open.id,version:open.version,note:null},deps,undefined,undefined,undefined,undefined,artikelId);
+ await finishTask(tx,auth,{taskId:open.id,version:open.version,note:null},deps,undefined,undefined,undefined,undefined,{type:'bestand',artikelId});
  return open.id;
+}
+
+/** Der Fachleser ermittelt den Preisstand unter der Artikelsperre des Lagerbefehls. */
+export async function synchronizeLagerPreisTask(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,artikelId:string,einheit:string,
+ deps:Pick<Dependencies,'effect'>&{
+  lesePreisstand:(tx:PrivilegedTenantTransaction,artikelId:string,einheit:string)=>Promise<{artikelName:string;preisVorhanden:boolean}|null>;
+ },
+):Promise<string|null>{
+ if(!hasLagerCapability(auth,'lager.buchen')&&!hasLagerCapability(auth,'lager.werte'))throw Error('LAGER_PREISAUFGABE_RECHT_FEHLT');
+ if(!einheit||einheit!==einheit.trim())throw Error('LAGER_PREISAUFGABE_EINHEIT_FEHLT');
+ const stand=await deps.lesePreisstand(tx,artikelId,einheit);
+ if(!stand)throw Error('LAGER_PREISAUFGABE_ARTIKEL_FEHLT');
+
+ const articleUnit=JSON.stringify([artikelId,einheit]);
+ await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('lager-preis-aufgabe:'||${auth.tenantId}||':'||${articleUnit},0))`);
+ const tasks=await tx.execute<Pick<TaskRecord,'id'|'client_key'|'version'|'status'|'art'>>(sql`
+  SELECT id::text,client_key::text,version,status,art FROM public.tasks
+  WHERE tenant_id=${auth.tenantId} AND bezug_typ='lagerartikel' AND bezug_id=${artikelId} AND fuer_bereich='preise'
+ `);
+ const byKey=new Map(tasks.map(task=>[task.client_key,task]));
+ let generation=0;
+ let clientKey=eventKey(articleUnit,generation,'lager-preis');
+ let existing=byKey.get(clientKey);
+ while(existing?.status==='erledigt'){
+  if(existing.art!=='aufgabe')throw Error('LAGER_PREISAUFGABE_VERAENDERT');
+  clientKey=eventKey(articleUnit,++generation,'lager-preis');
+  existing=byKey.get(clientKey);
+ }
+ if(existing&&(existing.art!=='aufgabe'||existing.status!=='offen'))throw Error('LAGER_PREISAUFGABE_VERAENDERT');
+ if(stand.preisVorhanden){
+  if(!existing)return null;
+  const operation={type:'preis' as const,artikelId,clientKey};
+  await finishTask(tx,auth,{taskId:existing.id,version:existing.version,note:null},deps,undefined,undefined,undefined,undefined,operation);
+  return existing.id;
+ }
+ if(existing)return existing.id;
+
+ const maxName=120-Array.from(LAGER_STAMM_COPY.preisFehlt('',einheit)).length;
+ if(maxName<1)throw Error('LAGER_PREISAUFGABE_EINHEIT_ZU_LANG');
+ const name=Array.from(stand.artikelName).slice(0,maxName).join('');
+ const value:TaskSaveInput={clientKey,version:0,kind:'aufgabe',title:LAGER_STAMM_COPY.preisFehlt(name,einheit),
+  dueDate:berlinCalendarDay(),time:null,forLogin:null,forArea:'preise',reference:{type:'lagerartikel',id:artikelId},note:null};
+ return (await persistTask(tx,auth,value,deps,false)).task.id;
 }
