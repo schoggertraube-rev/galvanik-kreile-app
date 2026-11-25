@@ -15,7 +15,7 @@ const ports = vi.hoisted(() => ({
 }));
 vi.mock('../laeufe', () => ports);
 const modelStale = vi.hoisted(() => vi.fn(async () => false));
-vi.mock('@/lib/server/todayProjectionSchedule', () => ({liesTodayModellVeraltet: modelStale}));
+vi.mock('@/lib/server/todayProjectionSchedule', () => ({liesTodayModellVeraltet: modelStale, liesTodayModellBesetzt: async () => false}));
 const refresh = vi.hoisted(() => vi.fn(async () => 'ok' as const));
 vi.mock('@/lib/today/taktJobs', () => ({fuehreHeuteAuffrischung: refresh}));
 const testJobs = vi.hoisted(() => ({

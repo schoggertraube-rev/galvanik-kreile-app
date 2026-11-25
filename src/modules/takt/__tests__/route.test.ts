@@ -54,3 +54,9 @@ it.each([
   lauf.mockResolvedValue(result);
   expect((await handGET(new Request('https://example.test/api/heute/neuaufbau'))).status).toBe(503);
 });
+
+it('meldet einen belegten Heute-Aufbau als belegt', async () => {
+  handzugriff.mockResolvedValue({code: 'LOGIN', tenantId: 'tenant-a'});
+  lauf.mockResolvedValue({mandanten: 1, laeufe: 0, restOffen: false, erfolglos: true, besetzt: true});
+  expect((await handGET(new Request('https://example.test/api/heute/neuaufbau'))).status).toBe(409);
+});

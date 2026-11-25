@@ -22,6 +22,9 @@ import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {GET as rebuildRoute} from '@/app/api/heute/neuaufbau/route';
+import {GET as taktRoute} from '@/app/api/takt/route';
+import {pruefeTaktZugriff} from '@/modules/takt/server-public';
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
 
 
@@ -170,20 +173,30 @@ it('requires the exact runtime bearer proof even for a diagnostic session and ne
  const operator=await createFixture(['wartung'],'developer');
  const rejectedHeaders:Record<string,string>[]=[{},{authorization:'Bearer TEST-wrong-boundary'}];
  for(const headers of rejectedHeaders){
-  const denied=await withSession(operator,()=>rebuildRoute(request(headers)));
+  const denied=await withSession(operator,()=>taktRoute(new Request('http://127.0.0.1/api/takt',{headers})));
   expect(denied.status).toBe(401);expect(await denied.text()).toBe('');
  }
- const accepted=await withRequest('',()=>rebuildRoute(request({authorization:'Bearer TEST-today-cron-provider-boundary'})));
- expect(accepted.status).toBe(204);expect(accepted.headers.get('Cache-Control')).toBe('private, no-store');
- expect(await accepted.text()).toBe('');
- expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'order'`).toEqual([{count:8}]);
+ const headers={authorization:'Bearer TEST-today-cron-provider-boundary'};
+ const authorized=new Request('http://127.0.0.1/api/takt',{headers});
+ // Qualify the real credential without invoking the Cron's all-tenant workload.
+ expect(await pruefeTaktZugriff(authorized)).toEqual({code:'CRON'});
+ const hand=await withRequest('',()=>rebuildRoute(request(headers)));
+ expect(hand.status).toBe(401);expect(await hand.text()).toBe('');
 });
 
 it('uses only the real existing diagnostic permission when no Cron credential is configured',async()=>{
  vi.stubEnv('CRON_SECRET','');
  const operator=await createFixture(['wartung'],'developer');
- const accepted=await withSession(operator,()=>rebuildRoute(request()));
- expect(accepted.status).toBe(204);expect(await accepted.text()).toBe('');
+ await readyInvoiceOrder('TEST eigener Diagnoseaufbau');
+ const now=Date.now(),nachZweiUhr=Date.parse(berlinCalendarDay(new Date(now))+'T06:00:00Z');
+ vi.useFakeTimers({toFake:['Date']});
+ try{
+  vi.setSystemTime(Math.max(now,nachZweiUhr));
+  const accepted=await withSession(operator,()=>rebuildRoute(request()));
+  expect(accepted.status).toBe(204);expect(await accepted.text()).toBe('');
+  expect(accepted.headers.get('Cache-Control')).toBe('private, no-store');
+ }finally{vi.useRealTimers();}
+ expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'order'`).toEqual([{count:8}]);
  expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
 });
 

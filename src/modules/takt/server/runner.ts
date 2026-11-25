@@ -4,7 +4,7 @@ import {TAKT_JOBS, bauePaketAktiv, baueTaktLeser} from '../jobs';
 import type {PackageSwitchId} from '@/modules/fundament/public';
 import {PageReadTimeout} from '@/db/readBudget';
 import {withTaktStatementTimeout} from '@/lib/server/privilegedDb';
-import {liesTodayModellVeraltet} from '@/lib/server/todayProjectionSchedule';
+import {liesTodayModellBesetzt, liesTodayModellVeraltet} from '@/lib/server/todayProjectionSchedule';
 import {fuehreHeuteAuffrischung} from '@/lib/today/taktJobs';
 import {beendeLauf, liesLetztenOk, liesOffeneWiederholungen, liesTaktMandanten, reserviereLauf, TAKT_NACHHOLEN} from './laeufe';
 import {fuehreFaelligenJobAus, liesFaelligeJobs, nachholMinuteBerlin, type FaelligerJob} from './lauf';
@@ -51,7 +51,7 @@ export async function fuehreTaktAus(options: Readonly<{
   nurJob?: 'heute_neuaufbau';
   signal?: AbortSignal;
   paketAktiv?: (tenantId: string, paket: PackageSwitchId) => Promise<boolean>;
-}> = {}): Promise<Readonly<{mandanten: number; laeufe: number; restOffen: boolean; erfolglos?: true}>> {
+}> = {}): Promise<Readonly<{mandanten: number; laeufe: number; restOffen: boolean; erfolglos?: true; besetzt?: true}>> {
   const budgetMs = options.budgetMs ?? TAKT_BUDGET_MS;
   if (!Number.isSafeInteger(budgetMs) || budgetMs < 1 || budgetMs > TAKT_BUDGET_MS) throw Error('TAKT_BUDGET_INVALID');
   const started = performance.now();
@@ -67,9 +67,13 @@ export async function fuehreTaktAus(options: Readonly<{
   let mandanten: string[] = [];
   let laeufe = 0;
   let erfolglos = false;
+  let besetzt = false;
   try {
     mandanten = options.tenantId ? [options.tenantId] : await lies(liesTaktMandanten);
     for (const tenantId of mandanten) {
+      if (options.nurJob === 'heute_neuaufbau' && await lies(() => liesTodayModellBesetzt(tenantId))) {
+        return {mandanten: mandanten.length, laeufe, restOffen: false, erfolglos: true, besetzt: true};
+      }
       const leser = baueTaktLeser(tenantId);
       const paketAktiv = options.paketAktiv ? (paket: PackageSwitchId) => options.paketAktiv!(tenantId, paket) : bauePaketAktiv(tenantId);
       const faellige = await lies(() => liesAnstehendeJobs(tenantId, jobs, jetzt));
@@ -78,7 +82,8 @@ export async function fuehreTaktAus(options: Readonly<{
         if (signal.aborted || budget < 1) throw new PageReadTimeout();
         const result = await fuehreFaelligenJobAus(tenantId, eintrag, leser, paketAktiv, budget, signal);
         if (result !== 'nicht_reserviert') laeufe++;
-        if (result === 'fehler' || result === 'abgebrochen') erfolglos = true;
+        if (result === 'besetzt') besetzt = true;
+        if (result === 'fehler' || result === 'abgebrochen' || result === 'besetzt') erfolglos = true;
       }
     }
   } catch (error) {
@@ -86,7 +91,7 @@ export async function fuehreTaktAus(options: Readonly<{
     throw error;
   }
   const restOffen = signal.aborted || rest() < 1;
-  return {mandanten: mandanten.length, laeufe, restOffen, ...(erfolglos || restOffen ? {erfolglos: true as const} : {})};
+  return {mandanten: mandanten.length, laeufe, restOffen, ...(erfolglos || restOffen ? {erfolglos: true as const} : {}), ...(besetzt ? {besetzt: true as const} : {})};
 }
 
 /** A repeated home read in the same Berlin minute never starts a second follow-up. */

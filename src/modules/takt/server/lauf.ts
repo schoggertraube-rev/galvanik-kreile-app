@@ -7,7 +7,7 @@ import type {PackageSwitchId} from '@/modules/fundament/public';
 import {beendeAbgelaufenenLauf, beendeLauf, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf, type LaufAbschluss} from './laeufe';
 
 export type FaelligerJob = Readonly<{job: TaktJob; faelligFuer: string}>;
-export type JobErgebnis = 'nicht_reserviert' | 'ok' | 'ohne_arbeit' | 'übersprungen' | 'fehler' | 'abgebrochen';
+export type JobErgebnis = 'nicht_reserviert' | 'ok' | 'ohne_arbeit' | 'übersprungen' | 'fehler' | 'abgebrochen' | 'besetzt';
 
 /** Preserve registration order while qualifying each job against its own success. */
 export async function liesFaelligeJobs(
@@ -80,7 +80,9 @@ export async function fuehreFaelligenJobAus(
       }, signal);
     } catch (error) {
       status = signal.aborted || error instanceof PageReadTimeout ? 'abgebrochen' : 'fehler';
-      ergebnis = status;
+      const besetzt = status === 'fehler' && error instanceof Error && error.message === 'TAKT_HEUTE_BESETZT';
+      ergebnis = besetzt ? 'besetzt' : status;
+      if (besetzt) fehlercode = 'takt_heute_besetzt';
       fehlercode = status === 'fehler' ? fehlercode ?? 'takt_ausfuehrung' : null;
     }
     await beendeLauf(tenantId, reservierung, status, Math.max(0, Math.floor(performance.now() - start)), fehlercode);

@@ -27,3 +27,13 @@ export async function liesTodayModellVeraltet(tenantId:string,jetzt:Date):Promis
    &&(row.status==='PENDING'||row.sourceSeq!==row.builtSeq));
  }),5000);
 }
+
+/** The manual refresh reports an occupied lease without altering the model. */
+export async function liesTodayModellBesetzt(tenantId:string):Promise<boolean>{
+ return withPrivilegedTenantTransaction({tenantId},async tx=>{
+  const [row]=await tx.execute<{besetzt:boolean}>(sql`SELECT EXISTS(
+   SELECT 1 FROM private.today_tenant_v1 WHERE tenant_id=${tenantId} AND refresh_lease_until>statement_timestamp()
+  ) AS besetzt`);
+  return row.besetzt;
+ });
+}

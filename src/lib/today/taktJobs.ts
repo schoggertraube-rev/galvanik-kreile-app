@@ -7,6 +7,7 @@ export async function fuehreHeuteAuffrischung(tenantId: string, signal: AbortSig
   signal.throwIfAborted();
   const result = await refreshTodayModel(tenantId, undefined, {bounded: true, signal});
   signal.throwIfAborted();
+  if (result.code === 'BUSY') throw Error('TAKT_HEUTE_BESETZT');
   if (result.code !== 'OK' || result.stale > 0) throw Error('TAKT_HEUTE_AUFFRISCHUNG_INCOMPLETE');
   return result.built > 0 ? 'ok' : 'ohne_arbeit';
 }
@@ -21,6 +22,7 @@ export const HEUTE_TAKT_JOBS = [{
     signal.throwIfAborted();
     const result = await rebuildTodayModel(tenantId, undefined, {bounded: true, signal});
     signal.throwIfAborted();
+    if (result.code === 'BUSY') throw Error('TAKT_HEUTE_BESETZT');
     if (result.code !== 'OK' || result.stale > 0) throw Error('TAKT_HEUTE_NEUAUFBAU_INCOMPLETE');
     return result.built > 0 ? 'ok' as const : 'ohne_arbeit' as const;
   },
