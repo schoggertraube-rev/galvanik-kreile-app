@@ -23,6 +23,9 @@ const abnahmen = [
   "lager_badanker.abnahme.sql",
   "lager_badanalyse.abnahme.sql",
   "lager_orte.abnahme.sql",
+  "lager_inventurzaehlung.abnahme.sql",
+  "lager_inventurabschluss.schutz.sql",
+  "lager_inventur_badbewertung.abnahme.sql",
 ] as const;
 
 for (const datei of abnahmen) {

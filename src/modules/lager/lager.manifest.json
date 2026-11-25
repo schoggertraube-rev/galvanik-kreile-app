@@ -48,7 +48,17 @@
     "20261124155729_s_lag_b1a_07_auftragskalkulation.sql",
     "20261124155730_s_lag_b1a_08_w1_altverbrauch.sql",
     "20261124155731_s_lag_b1a_09_badanker.sql",
-    "20261124155732_s_lag_b1a_10_badanalyse.sql"
+    "20261124155732_s_lag_b1a_10_badanalyse.sql",
+    "20261124155733_s_lag_b1a_11_inventurzaehlung.sql",
+    "20261124155734_s_lag_b1a_12_inventurprojektion.sql",
+    "20261124155735_s_lag_b1a_13_inventurabschluss.sql",
+    "20261124155736_s_lag_b1a_14_inventurvergleich.sql",
+    "20261124155737_s_lag_b1a_15_mehrarbeit.sql",
+    "20261124155738_s_lag_b1a_16_inventurbereich.sql",
+    "20261124155739_s_lag_b1a_17_zaehlrevision.sql",
+    "20261124155740_s_lag_b1a_18_abschlussoriginale.sql",
+    "20261124155741_s_lag_b1a_19_ladezeit.sql",
+    "20261124155742_s_lag_b1a_20_ortplatz.sql"
   ],
   "viewsFunctions": [
     "private.lager_naechste_kurznummer",
@@ -77,7 +87,24 @@
     "private.lager_w1_entscheiden",
     "private.lager_w1_uebernahmeprotokoll",
     "private.lager_badanalyse_speichern",
-    "private.lager_badprozessbestand_am"
+    "private.lager_badprozessbestand_am",
+    "private.lager_inventur_zaehlzeile_schuetzen",
+    "private.lager_inventur_starten",
+    "private.lager_inventur_zaehlzeilen",
+    "private.lager_inventur_zaehlung_sichern",
+    "private.lager_inventur_zeilen",
+    "private.lager_inventur_abschluss_schuetzen",
+    "private.lager_inventur_abschluss_vollstaendig",
+    "private.lager_inventur_snapshot_schuetzen",
+    "private.lager_inventur_abschluss_vorbereiten",
+    "private.lager_inventur_abschluss_bestaetigen",
+    "private.lager_inventur_nachtrag_starten",
+    "private.lager_inventur_vergleich",
+    "private.lager_mehrarbeit_pruefen",
+    "private.lager_inventur_bereich_pruefen",
+    "private.lager_inventur_bewegungsrevision",
+    "private.lager_inventur_zaehlrevision_sichern",
+    "private.lager_ort_ist_platz"
   ],
   "ownsTables": [
     "public.inventory_items",
@@ -94,7 +121,10 @@
     "public.inventory_sessions",
     "public.consumable_uses",
     "public.baths",
-    "public.bath_measurements"
+    "public.bath_measurements",
+    "public.inventory_counts",
+    "public.inventory_lines",
+    "public.inventory_count_reasons"
   ],
   "events": {
     "emits": [

@@ -1,0 +1,311 @@
+{
+  "zeilen": [
+    {
+      "nr": 1,
+      "soll": 6.0,
+      "rohIst": 0.0,
+      "ist": 0.0,
+      "differenz": -6.0,
+      "wertEur": 0.0,
+      "differenzEur": -12.75,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 2,
+      "soll": 7.0,
+      "rohIst": 8.125,
+      "ist": 8.125,
+      "differenz": 1.125,
+      "wertEur": 17.27,
+      "differenzEur": 2.39,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 3,
+      "soll": 8.0,
+      "rohIst": 10.125,
+      "ist": 10.125,
+      "differenz": 2.125,
+      "wertEur": 144.69,
+      "differenzEur": 30.37,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 4,
+      "soll": 9.0,
+      "rohIst": 8.125,
+      "ist": 8.125,
+      "differenz": -0.875,
+      "wertEur": 17.27,
+      "differenzEur": -1.86,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 5,
+      "soll": 10.0,
+      "rohIst": 12.125,
+      "ist": 10.125,
+      "differenz": 0.125,
+      "wertEur": 21.52,
+      "differenzEur": 0.27,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 6,
+      "soll": 11.0,
+      "rohIst": 12.125,
+      "ist": 12.125,
+      "differenz": 1.125,
+      "wertEur": 173.27,
+      "differenzEur": 16.08,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 7,
+      "soll": 12.0,
+      "rohIst": null,
+      "ist": null,
+      "differenz": null,
+      "wertEur": null,
+      "differenzEur": null,
+      "klaerstatus": "nicht_gezaehlt"
+    },
+    {
+      "nr": 8,
+      "soll": 13.0,
+      "rohIst": 12.125,
+      "ist": 12.125,
+      "differenz": -0.875,
+      "wertEur": 25.77,
+      "differenzEur": -1.86,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 9,
+      "soll": 14.0,
+      "rohIst": 14.125,
+      "ist": 14.125,
+      "differenz": 0.125,
+      "wertEur": 201.85,
+      "differenzEur": 1.79,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 10,
+      "soll": 15.0,
+      "rohIst": 18.125,
+      "ist": 16.125,
+      "differenz": 1.125,
+      "wertEur": 34.27,
+      "differenzEur": 2.39,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 11,
+      "soll": 16.0,
+      "rohIst": 18.125,
+      "ist": 18.125,
+      "differenz": 2.125,
+      "wertEur": 38.52,
+      "differenzEur": 4.52,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 12,
+      "soll": 17.0,
+      "rohIst": 16.125,
+      "ist": 16.125,
+      "differenz": -0.875,
+      "wertEur": 230.43,
+      "differenzEur": -12.5,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 13,
+      "soll": 18.0,
+      "rohIst": 18.125,
+      "ist": 18.125,
+      "differenz": 0.125,
+      "wertEur": 38.52,
+      "differenzEur": 0.27,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 14,
+      "soll": 19.0,
+      "rohIst": null,
+      "ist": null,
+      "differenz": null,
+      "wertEur": null,
+      "differenzEur": null,
+      "klaerstatus": "nicht_gezaehlt"
+    },
+    {
+      "nr": 15,
+      "soll": 20.0,
+      "rohIst": 24.125,
+      "ist": 22.125,
+      "differenz": 2.125,
+      "wertEur": 316.17,
+      "differenzEur": 30.37,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 16,
+      "soll": 21.0,
+      "rohIst": 20.125,
+      "ist": 20.125,
+      "differenz": -0.875,
+      "wertEur": 42.77,
+      "differenzEur": -1.86,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 17,
+      "soll": 22.0,
+      "rohIst": 22.125,
+      "ist": 22.125,
+      "differenz": 0.125,
+      "wertEur": 47.02,
+      "differenzEur": 0.27,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 18,
+      "soll": 23.0,
+      "rohIst": 24.125,
+      "ist": 24.125,
+      "differenz": 1.125,
+      "wertEur": 344.75,
+      "differenzEur": 16.08,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 19,
+      "soll": 24.0,
+      "rohIst": 26.125,
+      "ist": 26.125,
+      "differenz": 2.125,
+      "wertEur": 55.52,
+      "differenzEur": 4.52,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 20,
+      "soll": 25.0,
+      "rohIst": 26.125,
+      "ist": 24.125,
+      "differenz": -0.875,
+      "wertEur": 51.27,
+      "differenzEur": -1.86,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 21,
+      "soll": 26.0,
+      "rohIst": null,
+      "ist": null,
+      "differenz": null,
+      "wertEur": null,
+      "differenzEur": null,
+      "klaerstatus": "nicht_gezaehlt"
+    },
+    {
+      "nr": 22,
+      "soll": 27.0,
+      "rohIst": 28.125,
+      "ist": 28.125,
+      "differenz": 1.125,
+      "wertEur": 59.77,
+      "differenzEur": 2.39,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 23,
+      "soll": 28.0,
+      "rohIst": 30.125,
+      "ist": 30.125,
+      "differenz": 2.125,
+      "wertEur": 64.02,
+      "differenzEur": 4.52,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 24,
+      "soll": 29.0,
+      "rohIst": 28.125,
+      "ist": 28.125,
+      "differenz": -0.875,
+      "wertEur": 401.91,
+      "differenzEur": -12.5,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 25,
+      "soll": 30.0,
+      "rohIst": 32.125,
+      "ist": 30.125,
+      "differenz": 0.125,
+      "wertEur": 64.02,
+      "differenzEur": 0.27,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 26,
+      "soll": 31.0,
+      "rohIst": 32.125,
+      "ist": 32.125,
+      "differenz": 1.125,
+      "wertEur": 68.27,
+      "differenzEur": 2.39,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 27,
+      "soll": 32.0,
+      "rohIst": 34.125,
+      "ist": 34.125,
+      "differenz": 2.125,
+      "wertEur": 487.65,
+      "differenzEur": 30.37,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 28,
+      "soll": 33.0,
+      "rohIst": null,
+      "ist": null,
+      "differenz": null,
+      "wertEur": null,
+      "differenzEur": null,
+      "klaerstatus": "nicht_gezaehlt"
+    },
+    {
+      "nr": 29,
+      "soll": 34.0,
+      "rohIst": 34.125,
+      "ist": 34.125,
+      "differenz": 0.125,
+      "wertEur": 72.52,
+      "differenzEur": 0.27,
+      "klaerstatus": "abweichung"
+    },
+    {
+      "nr": 30,
+      "soll": 35.0,
+      "rohIst": 38.125,
+      "ist": 36.125,
+      "differenz": 1.125,
+      "wertEur": 516.23,
+      "differenzEur": 16.08,
+      "klaerstatus": "abweichung"
+    }
+  ],
+  "gesamtwertEur": "3535.27",
+  "nichtGezaehlt": [
+    7,
+    14,
+    21,
+    28
+  ]
+}
