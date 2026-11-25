@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 8,
-    "server_action_groups": 48,
+    "server_action_groups": 50,
     "kpi_definitions": 7,
     "provider_connections": 15,
     "nav_links_without_page": 3,
-    "total": 96
+    "total": 98
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1510,6 +1510,26 @@
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Approved Lager P1 command composition through existing module and TaskWriter. Local native integration is in progress; no independent full-step acceptance claimed.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.lager-material",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/lager-material.actions.ts",
+      "exported_functions": ["leseAuftragsmaterial"],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "B3-a liest gebuchtes Material und zeigt Beträge nur mit dem Lager-Werterecht. Die Abnahme steht aus.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.lager-preis",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/lager-preis.actions.ts",
+      "exported_functions": ["hinterlegeLagerPreis"],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "B3-a hinterlegt Preise mit dem Recht Preise & Rechnungen und bewertet offene Entnahmen nach. Die Abnahme steht aus.",
       "visible": false,
       "reachable": true
     }

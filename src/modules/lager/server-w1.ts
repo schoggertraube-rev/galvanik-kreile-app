@@ -1,7 +1,7 @@
 import "server-only";
 import type { LagerRechnungsBuchung } from "./materialpreis";
 
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { hasLagerCapability } from "@/lib/auth/authorizationContract";
 import type { ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -109,7 +109,7 @@ export async function leseLagerAuftragsmaterialInTransaction(tx: PrivilegedTenan
   if (typeof auftrag === 'string') return leseEinzelnesAuftragsmaterial(tx, auftrag);
   if (auftrag.length === 0) return [];
 
-  const ids = sql`ARRAY[${sql.join(auftrag.map(id => sql`${id}`), sql`, `)}]::text[]`;
+  const ids: SQL = sql`ARRAY[${sql.join(auftrag.map(id => sql`${id}`), sql`, `)}]::text[]`;
   return [...await tx.execute<LagerRechnungsBuchung>(sql`
     WITH rechnungen AS MATERIALIZED (SELECT * FROM private.lager_material_rechnung(${ids}))
     SELECT journal.id::text AS "eventId", kosten.order_id AS "auftragId", artikel.id AS "artikelId",
