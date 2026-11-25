@@ -504,6 +504,23 @@ export function allowedServerFacadeConsumer(file, source) {
   ]);
   if (file === taktJobsFile || taktRoutes.has(file)) {
     const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    let dynamicFacadeReference = false;
+    const visit = node => {
+      if (ts.isCallExpression(node) &&
+          (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+           ts.isIdentifier(node.expression) && node.expression.text === 'require')) {
+        // The Takt entrypoints must use only statically named facade imports.
+        // A computed specifier cannot prove the name set and is rejected too.
+        const argument = node.arguments[0];
+        if (!argument || !ts.isStringLiteral(argument) && !ts.isNoSubstitutionTemplateLiteral(argument) ||
+            /^src\/modules\/[^/]+\/server-public$/.test(resolveSpec(file, argument.text) ?? '')) {
+          dynamicFacadeReference = true;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+    if (dynamicFacadeReference) return false;
     const fundamentReaders = new Set([
       'readBetriebswaechterEinstellungenInTransaction', 'readLoggingSettings',
       'isFeatureEnabled', 'readTenantFeatures', 'readPackageSwitches',

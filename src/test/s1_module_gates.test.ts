@@ -91,6 +91,23 @@ describe('S38b-0 Takt-Fassaden', () => {
       .toBe(true);
   });
 
+  it('weist dynamische Fundament-Fassaden in der Sammelstelle ab', () => {
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      'const facade = await import("@/modules' + '/fundament/server-public");')).toBe(false);
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      'const facade = await import(`@/modules' + '/fundament/server-public`);')).toBe(false);
+  });
+
+  it('weist require der Takt-Fassade in der Route ab', () => {
+    expect(allowedServerFacadeConsumer('src/app/api/takt/route.ts',
+      'const facade = require("@/modules' + '/takt/server-public");')).toBe(false);
+  });
+
+  it('behält den statisch benannten Takt-Job als erlaubten Import', () => {
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      `${IMP} { taktJobs } from "@/modules/logging/server-public";`)).toBe(true);
+  });
+
   it('weist einen fachfremden Logging-Leser in der Sammelstelle ab', () => {
     expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
       `${IMP} { readLog } from "@/modules/logging/server-public";`))
