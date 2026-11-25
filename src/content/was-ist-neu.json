@@ -1,6 +1,16 @@
 [
   {
     "datum": "2026-11-24",
+    "pr": 279,
+    "seite": "kunden",
+    "ziel": "/customers",
+    "punkte": [
+      "Du findest „Müller“ jetzt auch, wenn du „Mueller“ suchst.",
+      "Kunden- und Auftragsliste zeigen dir jetzt auch ähnlich klingende Namen."
+    ]
+  },
+  {
+    "datum": "2026-11-24",
     "pr": 269,
     "seite": "auftraege",
     "ziel": "/orders",

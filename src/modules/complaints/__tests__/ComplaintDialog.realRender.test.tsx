@@ -73,6 +73,19 @@ it('L09 closes both actual layers after discard, and reopening starts a clean re
  expect(ports.write).not.toHaveBeenCalled();
 });
 
+it('finds a delivered order Größe by the customer spelling Groesse',async()=>{
+ const ports:ComplaintPorts={areas:['auftraege'],read:vi.fn(async()=>({code:'OK' as const,data:base})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:vi.fn(),listDeliveredOrders:vi.fn(async()=>({code:'OK' as const,orders:[{id:'TEST-order',number:'A-2026-0042',title:'TEST Größe'}]}))};
+ render(<ComplaintDialogs ports={ports} onRefresh={vi.fn()}/>);
+ window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'TEST-customer#kundenwahl'},cancelable:true}));
+ await screen.findByText('TEST Größe');
+ const dialog=screen.getByRole('dialog',{name:'Vorgang wählen'});
+ const input=within(dialog).getByRole('textbox');
+ fireEvent.change(input,{target:{value:'Groesse'}});
+ expect(within(dialog).getByText('TEST Größe')).toBeInTheDocument();
+ fireEvent.change(input,{target:{value:'Xyzq'}});
+ expect(within(dialog).queryByText('TEST Größe')).not.toBeInTheDocument();
+});
+
 it('L09 an old closing animation cannot close a newly opened complaint',async()=>{
  vi.stubGlobal('matchMedia',()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()}));
  const ports:ComplaintPorts={areas:['auftraege'],read:vi.fn(async()=>({code:'OK' as const,data:base})),write:vi.fn(),rework:vi.fn(),openOrder:vi.fn(),openPhoto:vi.fn(),addPhoto:vi.fn(),sendResult:vi.fn()};

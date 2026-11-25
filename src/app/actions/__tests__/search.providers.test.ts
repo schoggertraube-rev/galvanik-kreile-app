@@ -66,6 +66,19 @@ const invoice: ImmutableInvoiceSummary = {
 };
 
 describe("P2 module search providers", () => {
+  it('folds customer spelling in each existing provider without treating placeholders as patterns',async()=>{
+    const providers=buildSearchProviders(authorization,{
+      readQuotes:vi.fn().mockResolvedValue({code:'OK',quotes:[{...quote,customerDisplayName:'TEST Müller'}]}),
+      readInvoices:vi.fn().mockResolvedValue({code:'OK',data:[{...invoice,customerName:'TEST Müller'}]}),
+      readAuxiliary:vi.fn().mockResolvedValue({exhaustive:true,documents:[{id:'TEST-doc',customerId:'customer-1',customerName:'TEST Müller',orderNumber:'A-1',content:'Straße',mimeType:'application/pdf',recordedAt:'2026-11-24T10:00:00Z',status:'ready'}],mails:[{id:'TEST-mail',customerId:'customer-1',customerName:'TEST Müller',orderNumber:'A-1',subject:'Straße',body:'TEST',direction:'incoming',recordedAt:'2026-11-24T10:00:00Z',status:'ready'}],appointments:[{id:'TEST-appointment',customerId:'customer-1',customerName:'TEST Müller',orderNumber:'A-1',title:'Straße',startsAt:'2026-11-24T10:00:00Z',eventType:'visit',status:'ready'}]}),
+    });
+    for(const provider of providers){
+      expect((await provider.search('Mueller')).hits,provider.id).toHaveLength(1);
+      expect((await provider.search('MUELLER')).hits,provider.id).toHaveLength(1);
+      expect((await provider.search('%')).hits,provider.id).toHaveLength(0);
+    }
+    for(const provider of providers.slice(2))expect((await provider.search('Strasse')).hits,provider.id).toHaveLength(1);
+  });
   it("registers and maps real quote and invoice reads", async () => {
     const providers = buildSearchProviders(authorization, {
       readQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [quote] }),

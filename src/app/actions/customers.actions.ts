@@ -7,7 +7,8 @@ import {openIntakePredicate} from '@/modules/eingang/server-public';
 
 import { db } from "@/db";
 import { customers } from "@/db/schema";
-import { eq, ilike, or, and, sql } from "drizzle-orm";
+import { eq, or, and, sql } from "drizzle-orm";
+import {foldedSqlContains} from '@/lib/server/searchTextSql';
 import type { InferSelectModel } from "drizzle-orm";
 import type { ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
@@ -271,14 +272,13 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
   }
 
   try {
-    const searchPattern = `%${query.trim()}%`;
     const dbCustomers = await db.select().from(customers).where(
       and(
         eq(customers.tenantId, tenantId),
         or(
-          ilike(customers.name, searchPattern),
-          ilike(customers.phone, searchPattern),
-          ilike(customers.email, searchPattern)
+          foldedSqlContains(customers.name, query),
+          foldedSqlContains(customers.phone, query),
+          foldedSqlContains(customers.email, query)
         ),
         sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`

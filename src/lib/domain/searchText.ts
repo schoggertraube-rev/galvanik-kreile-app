@@ -3,6 +3,9 @@ export const GERMAN_SEARCH_REPLACEMENTS=[['ä','ae'],['ö','oe'],['ü','ue'],['�
 export function foldSearchText(value:string):string{
  return GERMAN_SEARCH_REPLACEMENTS.reduce<string>((text,[from,to])=>text.replaceAll(from,to),value.trim().toLocaleLowerCase('de-DE'));
 }
+export function foldedIncludes(value:string|null|undefined,query:string):boolean{
+ return value!=null&&foldSearchText(value).includes(foldSearchText(query));
+}
 
 /** Kölner Phonetik, published letter rules (not a customer alias list).
  * Reference: https://commons.apache.org/proper/commons-codec/apidocs/org/apache/commons/codec/language/ColognePhonetic.html

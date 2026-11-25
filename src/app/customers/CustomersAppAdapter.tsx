@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {captureDeviceReadFence,retainDevicePortResponse,readDevicePortResponse} from '@/lib/offline/devicePortRead';
-import {foldSearchText,nameSearchAlternative} from '@/lib/domain/searchText';
+import {foldedIncludes,nameSearchAlternative} from '@/lib/domain/searchText';
 import {SEARCH_NAME_MATCH_COPY} from '@/ui/situationCatalog';
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import {readServerReachability,readWithDeviceFallback,subscribeServerReachability} from '@/lib/offline/serverReachability';
@@ -12,12 +12,8 @@ import { useOverlayStore } from "@/lib/overlayStore";
 import type { CustomerListItem, CustomersViewState } from "@/modules/customers/public";
 import { Button, Kundenzeile, SeitenKopf, SuchFeld, Zustand,Hinweis } from "@/ui/kr";
 
-function normalize(value: string) {
-  return value.trim().toLocaleLowerCase("de-DE");
-}
-
-function matchesFilter(customer: CustomerListItem, query: string,folded=false) {
-  return (folded?foldSearchText:normalize)([customer.customerNumber, customer.name, customer.type, customer.city ?? "",customer.contactPerson??'',customer.email??'',...(customer.hints?.map(hint=>hint.text)??[])].join(" ")).includes((folded?foldSearchText:normalize)(query));
+function matchesFilter(customer: CustomerListItem, query: string) {
+  return foldedIncludes([customer.customerNumber, customer.name, customer.type, customer.city ?? "",customer.contactPerson??'',customer.email??'',...(customer.hints?.map(hint=>hint.text)??[])].join(" "),query);
 }
 
 function customerNumberLabel(customerNumber: string) {
@@ -35,7 +31,6 @@ export function CustomersAppAdapter() {
   const { canAction, loading: permissionsLoading,offlineScope,offline24h } = usePermissions();
   const [state, setState] = useState<CustomersViewState>({ kind: "loading" });
   const [query, setQuery] = useState("");
-  const [fromDevice,setFromDevice]=useState(false);
 
   useEffect(() => {
     let active = true;
@@ -60,7 +55,6 @@ export function CustomersAppAdapter() {
           if(!device&&offline24h&&offlineScope&&result.serverReadAt&&result.cacheLoginScope&&(result.ok||result.error==='FORBIDDEN'||result.error==='UNAUTHORIZED'))await retainDevicePortResponse(offlineScope,true,{port:'customers.list',portVersion:1,objectId:'customers',serverReadAt:result.serverReadAt,sourceLoginScope:result.cacheLoginScope,response:{result:result.ok?{ok:true,data:result.data}:{ok:false,error:result.error,message:result.message},datenluecken:[]}},fence);
         }
         if(!active||revision!==loadRevision)return;
-        setFromDevice(device);
         if (!result.ok) {
           setState(
             result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN"
@@ -100,8 +94,8 @@ export function CustomersAppAdapter() {
 
   const canCreate = !permissionsLoading && canAction("createCustomer");
   const customers = useMemo(() => state.kind === "data"
-    ? state.customers.filter((customer) => matchesFilter(customer, query,fromDevice)||fromDevice&&nameSearchAlternative(customer.name,query)!==null)
-    : [], [query, state,fromDevice]);
+    ? state.customers.filter((customer) => matchesFilter(customer, query)||nameSearchAlternative(customer.name,query)!==null)
+    : [], [query, state]);
   const createAction = canCreate ? { text: "Kunde anlegen", icon: "plus" as const, onClick: () => requestGlobalCreate("CUSTOMER") } : undefined;
 
   if (state.kind === "loading") return <section data-testid="customers-v11">
@@ -127,7 +121,7 @@ export function CustomersAppAdapter() {
         {customers.map((customer) => <div key={customer.id} className="kr-stapel" style={{gap:4}} data-customer-id={customer.id}><Kundenzeile
           kuerzel={initials(customer.name)}
           name={customer.name}
-          meta={[customerNumberLabel(customer.customerNumber),customer.contactPerson,customer.city, fromDevice&&!matchesFilter(customer,query,true)?SEARCH_NAME_MATCH_COPY[nameSearchAlternative(customer.name,query)!]:null, `${customer.activeOrderCount} ${customer.activeOrderCount === 1 ? "aktiver Auftrag" : "aktive Aufträge"}`,customer.activeQuoteCount!==undefined?`${customer.activeQuoteCount} KV`:null].filter(Boolean).join(" · ")}
+          meta={[customerNumberLabel(customer.customerNumber),customer.contactPerson,customer.city, !matchesFilter(customer,query)?SEARCH_NAME_MATCH_COPY[nameSearchAlternative(customer.name,query)!]:null, `${customer.activeOrderCount} ${customer.activeOrderCount === 1 ? "aktiver Auftrag" : "aktive Aufträge"}`,customer.activeQuoteCount!==undefined?`${customer.activeQuoteCount} KV`:null].filter(Boolean).join(" · ")}
           hinweis={Boolean(customer.hints?.length)}
           karte
           onOeffnen={() => openCustomer(customer.id)}

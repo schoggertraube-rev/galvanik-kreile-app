@@ -1,5 +1,6 @@
 import "server-only";
-import {foldSearchText,GERMAN_SEARCH_REPLACEMENTS,alternativeNameInitialPattern,alternativeNameQuery,nameSearchAlternative} from '@/lib/domain/searchText';
+import {foldSearchText,alternativeNameInitialPattern,alternativeNameQuery,nameSearchAlternative} from '@/lib/domain/searchText';
+import {foldedSqlText} from '@/lib/server/searchTextSql';
 
 import { sql } from "drizzle-orm";
 import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
@@ -278,7 +279,7 @@ export async function searchOrderIntakeCustomers(
   const alternative=options.nameAlternatives&&!input.candidate?alternativeNameQuery(input.query):null;
   const initialPattern=alternative?alternativeNameInitialPattern(alternative):null;
   return withPrivilegedTenantTransaction(authorization,async tx=>{
-    const searchable=GERMAN_SEARCH_REPLACEMENTS.reduce<ReturnType<typeof sql>>((text,[from,to])=>sql`replace(${text},${from},${to})`,sql`customer.search_text`);
+    const searchable=foldedSqlText(sql`customer.search_text`);
     const textSearch=tokens.length?sql.join(tokens.map(token=>sql`strpos(${searchable},${token})>0`),sql` OR `):sql`false`;
     const nameText=sql`lower(concat_ws(' ',customer.name,customer.company_name,customer.first_name,customer.last_name))`;
     // pg_trgm already exists in the baseline. This only fetches candidates;

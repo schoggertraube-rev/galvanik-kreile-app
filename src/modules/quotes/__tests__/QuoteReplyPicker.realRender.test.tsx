@@ -16,3 +16,11 @@ it('does not fall back to a different quote when the actual message names an una
  fireEvent.change(screen.getByLabelText('KV-Nummer oder Teil eingrenzen'),{target:{value:'0001'}});
  expect(screen.queryAllByRole('button',{name:/KV-2026-/})).toHaveLength(0);expect(onQuote).not.toHaveBeenCalled();
 });
+it('finds a real part Größe with Groesse without selecting another quote',async()=>{
+ const read:QuoteReplyPickerPorts['read']=async()=>({code:'OK',source:{id:'TEST-source',text:'TEST Antwort ohne KV-Nummer',customer:'TEST Kunde'},targets:[{id:'TEST-groesse',number:'KV-2026-0010',customer:'TEST Kunde',parts:'Größe'}],limited:false});
+ const onQuote=vi.fn();render(<QuoteReplyPicker ports={{read}} onQuote={onQuote} onClose={vi.fn()} onAssign={vi.fn()}/>);
+ await screen.findByRole('button',{name:/KV-2026-0010/});
+ fireEvent.change(screen.getByLabelText('KV-Nummer oder Teil eingrenzen'),{target:{value:'Groesse'}});
+ expect(screen.getByRole('button',{name:/KV-2026-0010/})).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:/KV-2026-0010/}));expect(onQuote).toHaveBeenCalledWith('TEST-groesse');
+});
