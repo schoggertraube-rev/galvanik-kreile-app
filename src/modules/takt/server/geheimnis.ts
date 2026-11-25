@@ -1,6 +1,6 @@
 import 'server-only';
-import {createHash, timingSafeEqual} from 'node:crypto';
 import {resolveAuthorization} from '@/lib/server/authorization';
+import {hasValidCronCredential} from '@/lib/server/cronCredential';
 
 export type TaktZugriff =
   | Readonly<{code: 'CRON'}>
@@ -11,11 +11,9 @@ export type TaktZugriff =
 export async function pruefeTaktZugriff(request: Request): Promise<TaktZugriff> {
   const configured = process.env.CRON_SECRET;
   if (configured) {
-    const supplied = request.headers.get('authorization');
-    if (!supplied || !timingSafeEqual(
-      createHash('sha256').update(supplied).digest(),
-      createHash('sha256').update(`Bearer ${configured}`).digest(),
-    )) return {code: 'DENIED', status: 401};
+    if (!hasValidCronCredential(request.headers.get('authorization'), configured)) {
+      return {code: 'DENIED', status: 401};
+    }
     return {code: 'CRON'};
   }
   try {
