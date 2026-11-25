@@ -4,6 +4,7 @@ import {openIntakePredicate} from './openIntakePredicate';
 import {readIntakeActorTraces} from './actorRead';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readMessageNextAction} from './messageNextAction';
+import {priceTaskReceipt} from './intakePriceTaskReceipt';
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
@@ -35,6 +36,7 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
  try{
   if(!readAuth.canReadArea('mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
+  const canReadPrices=readAuth.canReadArea('preise');
   return await withPrivilegedTenantTransaction(auth,async tx=>{
    const deviceMatches=(alias:'source'|'candidate')=>{const row=sql.identifier(alias);return sql`(${openIntakePredicate(alias)} OR EXISTS(SELECT 1 FROM public.intake_event changed WHERE changed.tenant_id=${row}.tenant_id AND changed.item_id=${row}.id AND changed.zeit>=${changedSince}::timestamptz))`;};
    const matches=changedSince!==undefined?deviceMatches('candidate'):filter==='offen'?openIntakePredicate('candidate')
@@ -42,9 +44,9 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
     :filter==='erledigt'?sql`candidate.aussortiert IS NULL AND candidate.einsatz IN ('erledigt','info')`
     :filter==='aussortiert'?sql`candidate.aussortiert IS NOT NULL`
     :sql`candidate.einsatz='offen' OR candidate.erstellt_am>=statement_timestamp()-interval '90 days'`;
-   const messages=await tx.execute<IntakeMessage>(sql`SELECT ${mailImportFailureProjection()} AS "importFailure",source.id::text,source.graph_message_id AS "graphMessageId",source.version,(SELECT max(changed.zeit)::text FROM public.intake_event changed WHERE changed.tenant_id=source.tenant_id AND changed.item_id=source.id) AS "serverChangedAt",source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
+   const messages=await tx.execute<IntakeMessage&{priceTaskReceipt:boolean}>(sql`SELECT preisbeleg.id IS NOT NULL AS "priceTaskReceipt",${mailImportFailureProjection()} AS "importFailure",source.id::text,source.graph_message_id AS "graphMessageId",source.version,(SELECT max(changed.zeit)::text FROM public.intake_event changed WHERE changed.tenant_id=source.tenant_id AND changed.item_id=source.id) AS "serverChangedAt",source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
     source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,
-    coalesce(source.text,(SELECT original.nachher->>'text' FROM public.intake_event created JOIN public.intake_event original
+    coalesce(preisbeleg.text,source.text,(SELECT original.nachher->>'text' FROM public.intake_event created JOIN public.intake_event original
       ON original.tenant_id=created.tenant_id AND original.item_id::text=created.nachher->>'textSourceId' AND original.id::text=created.nachher->>'originalTextEventId'
       WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id AND created.item_id=source.id AND created.art='angelegt' ORDER BY created.zeit,created.id LIMIT 1)) AS text,
     coalesce(source.empfangen_am,source.erstellt_am)::text AS at,source.kunde_id AS "customerId",context.customer_name AS "customerName",context.customer_type AS "customerType",
@@ -57,9 +59,12 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
       SELECT 1 FROM public.intake_event created WHERE source.fortsetzung_von IS NOT NULL AND created.tenant_id=source.tenant_id
         AND created.item_id=source.id AND created.art='angelegt' AND jsonb_exists(created.nachher->'originalFileIds',file.id::text)))) AS files
     FROM public.intake_item source LEFT JOIN private.v_intake_message_contexts_v1 context ON context.tenant_id=source.tenant_id AND context.item_id=source.id
+    LEFT JOIN LATERAL (${priceTaskReceipt('source')}) preisbeleg ON true
     WHERE source.tenant_id=${auth.tenantId} AND ${sourceItemId?sql`source.id=${sourceItemId}::uuid`:sql`true`} AND ${changedSince!==undefined?sql`true`:filter==='aussortiert'?sql`source.aussortiert IS NOT NULL`:sql`source.aussortiert IS NULL`}
+    AND (${canReadPrices} OR preisbeleg.id IS NULL)
     AND ${changedSince!==undefined?deviceMatches('source'):sql`(source.einsatz='offen' OR source.erstellt_am>=statement_timestamp()-interval '90 days')`}
     AND EXISTS(SELECT 1 FROM public.intake_item candidate WHERE candidate.tenant_id=source.tenant_id AND ${matches}
+     AND (${canReadPrices} OR NOT EXISTS (${priceTaskReceipt('candidate')}))
      AND (source.kunde_id IS NOT NULL AND candidate.kunde_id=source.kunde_id OR source.kunde_id IS NULL AND candidate.kunde_id IS NULL
       AND (source.gruppe_adresse IS NOT NULL AND candidate.gruppe_adresse=source.gruppe_adresse OR candidate.id=source.id)))
     ORDER BY coalesce(source.empfangen_am,source.erstellt_am),source.id`);
@@ -74,9 +79,11 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
 export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:IntakeMessageSourcesResult):IntakeMessagesResult{
  if(!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
  if(source.code!=='OK')return source;
- return {code:'OK',messages:source.messages.map(row=>{
+ const canReadPrices=hasAuthorizationArea(auth,'preise');
+ return {code:'OK',messages:source.messages.flatMap(({priceTaskReceipt,...row})=>{
+  if(priceTaskReceipt&&!canReadPrices)return [];
   const priority=row.fallbackPriority??readFallbackMessagePriority(row);
   const capture=source.captures.find(value=>value.itemId===row.id)?.value;
-  return {...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture)};
+  return [{...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture)}];
  }),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
 }

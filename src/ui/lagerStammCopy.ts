@@ -6,5 +6,6 @@ export const LAGER_STAMM_COPY = {
   vorAbschluss: "Übernimm den Artikelentwurf zuerst.",
   pruefaufgabe: (name: string) => `Artikel ${name} prüfen und übernehmen`,
   bestandKlaeren: (name: string) => `Bestand von ${name} klären`,
+  preisFehlt: (artikel: string, einheit: string) => `Preis für ${artikel} je ${einheit} hinterlegen`,
   bestandEndetMitBuchung: "Bestandsklärung endet mit der Lagerbuchung.",
 } as const;
