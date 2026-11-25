@@ -10,9 +10,16 @@ import { getOrderIntakeSuggestionsAction } from '@/app/warendurchlauf/actions';
 import { workingDaysBetween } from '@/lib/domain/workingDays';
 
 it('berücksichtigt den gespeicherten Versandpuffer im Terminvorschlag', async () => {
+  const alteSpalte = await sql`
+    SELECT attnum
+    FROM pg_attribute WHERE attrelid = 'public.company_settings'::regclass
+      AND attname = 'uebergabepuffer_tage' AND NOT attisdropped
+  `;
+  expect(alteSpalte).toHaveLength(0);
   await sql`
-    INSERT INTO public.company_settings (id, tenant_id, company_name, versandpuffer_arbeitstage)
-    VALUES (${randomUUID()}, ${tenant}, 'TEST Werkstatt Versandpuffer', 4)
+    INSERT INTO public.company_settings (id, tenant_id, company_name, versandpuffer_arbeitstage,
+      material_aufschlag_prozent, lager_regelversion)
+    VALUES (${randomUUID()}, ${tenant}, 'TEST Werkstatt Versandpuffer', 1, 20, 'TEST-HW')
   `;
   const leseTermin = async () => {
     const result = await withSession(full, () => getOrderIntakeSuggestionsAction({
@@ -35,9 +42,12 @@ it('berücksichtigt den gespeicherten Versandpuffer im Terminvorschlag', async (
     return result.data.term.achievableDate;
   };
 
-  const mitPuffer = await leseTermin();
+  const mitEinemArbeitstag = await leseTermin();
+  await sql`UPDATE public.company_settings SET versandpuffer_arbeitstage = 4 WHERE tenant_id = ${tenant}`;
+  const mitVierArbeitstagen = await leseTermin();
   await sql`UPDATE public.company_settings SET versandpuffer_arbeitstage = 0 WHERE tenant_id = ${tenant}`;
   const ohnePuffer = await leseTermin();
 
-  expect(workingDaysBetween(ohnePuffer, mitPuffer)).toBe(4);
+  expect(workingDaysBetween(ohnePuffer, mitEinemArbeitstag)).toBe(1);
+  expect(workingDaysBetween(ohnePuffer, mitVierArbeitstagen)).toBe(4);
 });

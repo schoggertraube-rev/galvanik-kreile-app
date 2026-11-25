@@ -199,8 +199,10 @@ export async function getOrderIntakeSuggestionsAction(
     return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
   }
   try {
-    const { readIntakeSuggestions } = await import("@/lib/server/intakeSuggestions");
-    return { ok: true, data: await readIntakeSuggestions(authorization.data, input) };
+    const [{ readIntakeSuggestions }, { readBetriebsruheInTransaction }] = await Promise.all([
+      import("@/lib/server/intakeSuggestions"), import("@/modules/fundament/server-public"),
+    ]);
+    return { ok: true, data: await readIntakeSuggestions(authorization.data, input, readBetriebsruheInTransaction) };
   } catch (error) {
     console.error("getOrderIntakeSuggestionsAction failed", error);
     return { ok: false, error: "QUERY_ERROR", message: "Vorschläge sind derzeit nicht verfügbar." };

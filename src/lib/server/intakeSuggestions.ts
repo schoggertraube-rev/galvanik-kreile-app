@@ -3,7 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { isWorkingDay, berlinCalendarDay, plusWorkingDays, previousWorkingDay, workingDaysBetween } from "@/lib/domain/workingDays";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError } from "@/lib/orderPositionContract";
 import type {
@@ -259,19 +259,17 @@ function validInput(input: IntakeSuggestionsInput): boolean {
 export async function readIntakeSuggestions(
   authorization: AuthorizationSnapshot,
   input: IntakeSuggestionsInput,
+  readBetriebsruhe: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
+    versandpufferArbeitstage: number;
+    terminKapazitaet: { tagesleistungEur: number | string; passtProzent: number; knappProzent: number; vorrangProzent: number } | null;
+  }>,
 ): Promise<IntakeSuggestions> {
   if (!validInput(input)) throw new Error("INTAKE_SUGGESTION_INPUT_INVALID");
   const canReadMoney = hasAuthorizationArea(authorization,"preise");
 
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
     const [settings, catalogRows, historyRows, capacityRows,customerRows] = await Promise.all([
-      tx.execute<{ tagesleistung_eur: number | string;versandpuffer_arbeitstage:number;auslastung_passt_pct:number;auslastung_knapp_pct:number;auslastung_vorrang_pct:number }>(sql`
-        SELECT tagesleistung_eur,versandpuffer_arbeitstage,auslastung_passt_pct,auslastung_knapp_pct,auslastung_vorrang_pct
-        FROM public.company_settings
-        WHERE tenant_id = ${authorization.tenantId}
-        ORDER BY updated_at DESC, id
-        LIMIT 2
-      `),
+      readBetriebsruhe(tx, authorization.tenantId),
       tx.execute<CatalogRow>(sql`
         SELECT id::text, name, surface, unit, net_price_cents, standard_lead_time_working_days
         FROM public.catalog_services
@@ -312,8 +310,9 @@ export async function readIntakeSuggestions(
       input.customerId?tx.execute<{vorrang:boolean}>(sql`SELECT vorrang FROM public.customers WHERE tenant_id=${authorization.tenantId} AND id=${input.customerId}`):Promise.resolve([]),
     ]);
 
-    if (settings.length !== 1) throw new Error("INTAKE_DAILY_OUTPUT_MISSING_OR_AMBIGUOUS");
-    const dailyOutputEur = integer(settings[0].tagesleistung_eur, "INTAKE_DAILY_OUTPUT_INVALID");
+    const capacity = settings.terminKapazitaet;
+    if (!capacity) throw new Error("INTAKE_DAILY_OUTPUT_MISSING_OR_AMBIGUOUS");
+    const dailyOutputEur = integer(capacity.tagesleistungEur, "INTAKE_DAILY_OUTPUT_INVALID");
     if (dailyOutputEur < 1 || dailyOutputEur > 99_999) throw new Error("INTAKE_DAILY_OUTPUT_INVALID");
     const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
     const history: PriceCandidate[] = historyRows.map((row) => ({
@@ -335,7 +334,7 @@ export async function readIntakeSuggestions(
         positions: input.positions.map(position=>!canReadMoney&&position.catalogServiceId?{...position,unitPriceCents:catalogById.has(position.catalogServiceId)?Number(catalogById.get(position.catalogServiceId)!.net_price_cents):null}:position),
         catalogById,
         dailyOutputEur,
-        settings:{handoverBufferDays:settings[0].versandpuffer_arbeitstage,fitsPercent:settings[0].auslastung_passt_pct,tightPercent:settings[0].auslastung_knapp_pct,priorityPercent:settings[0].auslastung_vorrang_pct},
+        settings:{handoverBufferDays:settings.versandpufferArbeitstage,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent},
         openOrders:capacityRows.map(row=>({...row,valueCents:Number(row.valueCents)})),priority:customerRows[0]?.vorrang===true,processingWeeks:input.processingWeeks,kind:input.kind,
       }),
       prices: canReadMoney

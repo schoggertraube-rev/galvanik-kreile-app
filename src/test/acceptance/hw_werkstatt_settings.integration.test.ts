@@ -20,9 +20,11 @@ it('liest gespeicherte Werkstatt-Einstellungen aus dem Firmenstand', async () =>
     INSERT INTO public.company_settings (
       id, tenant_id, company_name, versandpuffer_arbeitstage, ausschuss_berechnen,
       mehrarbeit_spielraum_basispunkte, mehrarbeit_stopp_basispunkte,
-      mehrarbeit_schritt_minuten, mehrarbeit_max_minuten_je_taetigkeit
+      mehrarbeit_schritt_minuten, mehrarbeit_max_minuten_je_taetigkeit,
+      tagesleistung_eur, auslastung_passt_pct, auslastung_knapp_pct, auslastung_vorrang_pct,
+      material_aufschlag_prozent, lager_regelversion
     )
-    VALUES (${randomUUID()}, ${tenant}, 'TEST Werkstatt', 4, false, 925, 2175, 7, 84)
+    VALUES (${randomUUID()}, ${tenant}, 'TEST Werkstatt', 4, false, 925, 2175, 7, 84, 1200, 80, 100, 130, 20, 'TEST-HW')
   `;
 
   await withPrivilegedTenantTransaction({ tenantId: tenant }, async tx => {
@@ -35,6 +37,7 @@ it('liest gespeicherte Werkstatt-Einstellungen aus dem Firmenstand', async () =>
     expect(await readBetriebsruheInTransaction(tx, tenant)).toMatchObject({
       versandpufferArbeitstage: 4,
       knappAbArbeitstagen: 2,
+      terminKapazitaet: { tagesleistungEur: 1200, passtProzent: 80, knappProzent: 100, vorrangProzent: 130 },
     });
     expect(await readAusschussBerechnenInTransaction(tx, tenant)).toBe(false);
   });

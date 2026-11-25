@@ -105,6 +105,12 @@ type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellung
   betriebsruhe: unknown;
   versandpuffer_arbeitstage: number;
   termin_knapp_arbeitstage?: number;
+  termin_kapazitaet?: {
+    tagesleistungEur: number | string;
+    passtProzent: number;
+    knappProzent: number;
+    vorrangProzent: number;
+  };
   mehrarbeit_spielraum_basispunkte?: number;
   mehrarbeit_stopp_basispunkte?: number;
   mehrarbeit_schritt_minuten?: number;
@@ -132,6 +138,12 @@ async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string)
         'betriebsruhe', firma.betriebsruhe,
         'versandpuffer_arbeitstage', firma.versandpuffer_arbeitstage,
         'termin_knapp_arbeitstage', firma.termin_knapp_arbeitstage,
+        'termin_kapazitaet', jsonb_build_object(
+          'tagesleistungEur', firma.tagesleistung_eur,
+          'passtProzent', firma.auslastung_passt_pct,
+          'knappProzent', firma.auslastung_knapp_pct,
+          'vorrangProzent', firma.auslastung_vorrang_pct
+        ),
         'sicherung_hoechstalter_stunden', firma.sicherung_hoechstalter_stunden,
         'wiederherstellungstest_hoechstalter_tage', firma.wiederherstellungstest_hoechstalter_tage,
         'sicherung_min_prozent_vortag', firma.sicherung_min_prozent_vortag,
@@ -327,11 +339,12 @@ export async function readWerkstattZeitwahlInTransaction(
 
 /** S-KAL ergänzt Öffnungstage und die datierte Feiertagsquelle des Bundeslands. */
 export async function readBetriebsruheInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
-  const { betriebsruhe, versandpuffer_arbeitstage, termin_knapp_arbeitstage } = await readSpurDStand(tx, tenantId);
+  const { betriebsruhe, versandpuffer_arbeitstage, termin_knapp_arbeitstage, termin_kapazitaet } = await readSpurDStand(tx, tenantId);
   return {
     betriebsruhe,
     versandpufferArbeitstage: versandpuffer_arbeitstage,
     knappAbArbeitstagen: termin_knapp_arbeitstage ?? null,
+    terminKapazitaet: termin_kapazitaet ?? null,
   };
 }
 
