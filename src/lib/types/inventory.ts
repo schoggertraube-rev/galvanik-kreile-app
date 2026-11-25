@@ -11,7 +11,8 @@ export interface InventoryItem {
   name: string;
   category: InventoryCategory;
   unit: string;
-  currentStock: number;
+  currentStock: number | null;
+  availableStock?: number | null;
   minStock: number;
   storageLocation?: string;
   isConsumable: boolean;
@@ -24,24 +25,48 @@ export type StockMovementType =
   | "stock_out"
   | "consumption"
   | "correction"
-  | "waste";
+  | "waste"
+  | "opening"
+  | "move"
+  | "count_correction"
+  | "reversal"
+  | "observation";
 
 export interface StockMovement {
   id: string;
   inventoryItemId: string;
   movementType: StockMovementType;
-  quantity: number;
+  quantity: number | null;
   unit: string;
   orderId?: string;
   reason?: string;
   createdBy: string;
   createdAt: string;
+  fachzeit?: string;
+  kalk_ek?: number | null;
+  aufschlag_pct?: number | null;
+  snapshot_einkaufspreis_eur?: number | null;
 }
 
 export type CreateStockMovementInput = {
+  befehlId: string;
   inventoryItemId: string;
-  movementType: StockMovementType;
-  quantity: number;
+  movementType: "stock_in" | "stock_out" | "consumption" | "waste" | "move";
+  quantity: number | string;
+  einheit: string;
+  ortId: string;
+  fachzeit: string;
+  revision: number;
+  mengenqualitaet: "exakt" | "geschaetzt";
+  geschaeftsgrund: string;
   orderId?: string;
   reason?: string;
+  belegId?: string;
+  originalDateiId?: string;
+  kostenstelle?: string;
+  werkstattOrtId?: string;
+  zielOrtId?: string;
+  imPreisEnthalten?: boolean;
+  badProzessOrtId?: string;
+  mehrarbeitBelegId?: string;
 };

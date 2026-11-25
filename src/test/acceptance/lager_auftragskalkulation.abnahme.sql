@@ -126,6 +126,17 @@ BEGIN
     AND kalk_ek = 8.25 AND snapshot_einkaufspreis_eur = 8.25 AND aufschlag_pct = 12.5 AND regel_version = 'TEST-v1' AND NOT kalk_vorlaeufig) THEN
     RAISE EXCEPTION 'TEST L8: eingefrorene Preisquelle oder Kalkulationsregel falsch';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM private.lager_w1_auftragskosten WHERE journal_id = buchung
+      AND order_id = auftrag AND menge = 2 AND wert_eur = 18.56) THEN
+    RAISE EXCEPTION 'TEST L8: Verbrauch fehlt in den Auftragskosten';
+  END IF;
+  PERFORM private.lager_journal_anhaengen(gen_random_uuid(), repeat('d',64), akteur,
+    jsonb_build_array(zeile || jsonb_build_object('art','reversal','menge',2,
+      'geschaeftsgrund','gegenbuchung','gegenbuchung_id',buchung)));
+  IF (SELECT coalesce(sum(wert_eur), 0) FROM private.lager_w1_auftragskosten
+      WHERE order_id = auftrag) <> 0 THEN
+    RAISE EXCEPTION 'TEST L8: gegengebuchter Verbrauch bleibt in den Auftragskosten';
+  END IF;
   SELECT bewegung_id INTO unbewertet FROM private.lager_journal_anhaengen(
     gen_random_uuid(), repeat('8',64), akteur, jsonb_build_array(zeile || jsonb_build_object('artikel_id',leer)));
   IF NOT EXISTS (SELECT 1 FROM public.stock_movements WHERE id = unbewertet

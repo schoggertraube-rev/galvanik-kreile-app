@@ -2,6 +2,24 @@
   "version": 1,
   "inventorySha256": "ff289a7d981992d7f72828fdac896b3b52cca6dfe88783460c683f51c683567b",
   "testedWriteActions": {
+    "src/app/actions/lager.actions.ts#bucheLagerAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#bucheLagerGegenbuchungAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#bucheAuftragsverbrauchAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#leseLagerBestandAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#leseLagerBewegungenAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
+    "src/app/actions/lager.actions.ts#leseLagerBefehlsstandAction": [
+      "src/test/acceptance/lager_invarianten.integration.test.ts"
+    ],
     "src/app/actions/invoices.actions.ts#addOrderToCollectionAction": [
       "src/test/acceptance/s38a_collection.integration.test.ts"
     ],
