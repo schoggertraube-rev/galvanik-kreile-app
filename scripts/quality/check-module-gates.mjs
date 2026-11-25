@@ -984,9 +984,41 @@ function tableRefs(source) {
   return refs;
 }
 
+function sqlDdlText(source) {
+  // Einzig SQL außerhalb von Kommentaren und Literalen kann eine Sicht anlegen.
+  const ignored = /--[^\r\n]*|\/\*|[Ee]'(?:\\[\s\S]|''|[^'\\])*'|'(?:''|[^'])*'|"(?:[^"]|"")*"|(\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$)[\s\S]*?\1/g;
+  const blockMarkers = /\/\*|\*\//g;
+  let result = "";
+  let start = 0;
+  for (let token = ignored.exec(source); token; token = ignored.exec(source)) {
+    if (token[0] === "/*") {
+      let depth = 1;
+      blockMarkers.lastIndex = ignored.lastIndex;
+      while (depth > 0) {
+        const marker = blockMarkers.exec(source);
+        if (!marker) break;
+        depth += marker[0] === "/*" ? 1 : -1;
+      }
+      ignored.lastIndex = depth === 0 ? blockMarkers.lastIndex : source.length;
+    }
+    result += source.slice(start, token.index) + " ";
+    start = ignored.lastIndex;
+  }
+  return result + source.slice(start);
+}
+
 function gateData(root, findings, manifests) {
   const declaredPublicViews = new Set();
   const privateRelationOwners = new Map();
+  // Der Name einer privaten Sicht muss nicht mit v_ beginnen. Ihr DDL-Beleg
+  // verhindert zugleich, dass eine Basistabelle über viewsFunctions getarnt wird.
+  const privateSqlViews = new Set();
+  for (const file of listFiles(root, "supabase/migrations", new Set([".sql"]))) {
+    const sql = readFileSync(path.join(root, file), "utf8");
+    for (const match of sqlDdlText(sql).matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(private\.[a-z][a-z0-9_]*)\b/gi)) {
+      privateSqlViews.add(match[1].toLowerCase());
+    }
+  }
   for (const [fach, manifest] of manifests) {
     for (const value of asStringArray(manifest.viewsFunctions)) {
       const ref = value.toLowerCase();
@@ -1014,7 +1046,8 @@ function gateData(root, findings, manifests) {
           if (!declaredPublicViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
           continue;
         }
-        const isPrivateView = /^private\.v_/.test(ref) && !m.functionCall;
+        const isPrivateView = /^private\.v_/.test(ref) && !m.functionCall ||
+          privateSqlViews.has(ref) && !m.functionCall;
         const isPrivateFunction = /^private\./.test(ref) && m.functionCall;
         if (isPrivateView || isPrivateFunction) {
           const owners = privateRelationOwners.get(ref);
