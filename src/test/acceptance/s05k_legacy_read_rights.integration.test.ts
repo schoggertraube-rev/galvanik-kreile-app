@@ -38,17 +38,32 @@ it('S05K A10 maintenance statistics reject business-only rights and count only r
  expect(await withSession(maintenance,()=>getSystemStats())).toMatchObject({reachable:true,orders:expected.orders,customers:expected.customers,users:expected.users});
 });
 
-it('S05K A10 inventory hides money and filters tenant with the existing rights resolver',async()=>{
+it('S05K A10 Inventory-Altvertrag nutzt Lagerrechte und Mandantentrennung',async()=>{
  const {getInventoryItemsAction,getInventoryItemAction}=await import('@/app/actions/inventory.actions');
- const operator=await createFixture(['auftraege']),moneyOnly=await createFixture(['preise','zahlungen','buchhaltung']);
+ const operator=await createFixture(['auftraege'],'readonly');
+ const developer=await createFixture(['wartung'],'developer');
+ const admin=await createFixture(['auftraege'],'admin');
  const own='TEST-'+randomUUID(),foreign='TEST-'+randomUUID();
- // Explicit synthetic inventory master data; no inventory write-command claim.
- await sql`INSERT INTO public.inventory_items(id,tenant_id,name,category,min_stock,unit,einkaufspreis_eur) VALUES(${own},${tenant},'TEST A10 stock','chemical',1,'kg',2.5),(${foreign},${tenant+'-foreign'},'TEST A10 foreign','chemical',1,'kg',999)`;
- expect(await withSession(moneyOnly,()=>getInventoryItemsAction())).toMatchObject({ok:false,error:'FORBIDDEN'});
- const read=await withSession(operator,()=>getInventoryItemsAction());expect(read).toMatchObject({ok:true});if(!read.ok)throw Error('A10_INVENTORY');expect(read.data.map(row=>row.id)).toEqual([own]);expect(read.data[0].pricePerUnit).toBeUndefined();
- expect(await withSession(operator,()=>getInventoryItemAction(foreign))).toMatchObject({ok:true,data:null});
- expect(await withSession(full,()=>getInventoryItemAction(own))).toMatchObject({ok:true,data:{id:own,pricePerUnit:2.5}});
- expect(await withSession(operator,()=>getInventoryItemAction(own))).toMatchObject({ok:true,data:{id:own}});
+ const [schalter]=await sql<{enabled:boolean}[]>`SELECT enabled FROM public.feature_flags WHERE id='p4_lager'`;
+ if(!schalter)throw Error('TEST_LAGER_SCHALTER_FEHLT');
+ try {
+  await sql`UPDATE public.feature_flags SET enabled=true WHERE id='p4_lager'`;
+  await sql`INSERT INTO public.inventory_items(id,tenant_id,name,category,min_stock,basiseinheit)
+    VALUES(${own},${tenant},'TEST A10 stock','chemical',1,'kg'),(${foreign},${tenant+'-foreign'},'TEST A10 foreign','chemical',1,'kg')`;
+  await sql`INSERT INTO public.material_prices(tenant_id,artikel_id,einzelpreis,waehrung,quelle,gueltig_ab,bestaetigt_am)
+    VALUES(${tenant},${own},2.5,'EUR','manuell',statement_timestamp(),statement_timestamp())`;
+  expect(await withSession(developer,()=>getInventoryItemsAction())).toMatchObject({ok:false,error:'FORBIDDEN'});
+  const read=await withSession(operator,()=>getInventoryItemsAction());
+  expect(read).toMatchObject({ok:true});
+  if(!read.ok)throw Error('A10_INVENTORY');
+  expect(read.data.map(row=>row.id)).toEqual([own]);
+  expect(read.data[0]).toMatchObject({currentStock:null});
+  expect(read.data[0].pricePerUnit).toBeUndefined();
+  expect(await withSession(operator,()=>getInventoryItemAction(foreign))).toEqual({ok:true,data:null});
+  expect(await withSession(admin,()=>getInventoryItemAction(own))).toMatchObject({ok:true,data:{id:own,pricePerUnit:2.5}});
+ } finally {
+  await sql`UPDATE public.feature_flags SET enabled=${schalter.enabled} WHERE id='p4_lager'`;
+ }
 });
 
 it('S05K A10 timeline readers keep tenant boundaries and customer rights',async()=>{
