@@ -471,7 +471,9 @@ jobs:
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/quality/f0_negative_tests.sql
 
       - name: BF-007 storage HTTP negative matrix (S1-S12, real Storage API)
-        run: node scripts/quality/f0-storage-http-tests.mjs
+        run: |
+          bash scripts/quality/wait-local-supabase-storage.sh
+          node scripts/quality/f0-storage-http-tests.mjs
 
       - name: DB integration tests against replay DB
         # NUR scan_order.integration.test.ts: es mockt @/lib/server/authorization vollstaendig.
@@ -843,7 +845,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           S54O_EVIDENCE_DIR: test-results/s54o-originals
-        run: npx vitest run --config e2e/fixtures/e-rechnung/vitest.config.mts
+        run: |
+          bash scripts/quality/wait-local-supabase-storage.sh
+          npx vitest run --config e2e/fixtures/e-rechnung/vitest.config.mts
 
       - name: Upload S54o actual hybrid pairs
         uses: actions/upload-artifact@v4
