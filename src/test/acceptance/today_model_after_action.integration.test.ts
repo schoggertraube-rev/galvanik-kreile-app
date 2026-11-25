@@ -87,7 +87,7 @@ it('PL11:36 schedules nothing for a real read transaction or a rolled-back sourc
  }finally{output.mockRestore();}
 });
 
-it('coalesces concurrent GET reads after nested Action and retry into one post-response projector',async()=>{
+it('coalesces concurrent pending conditional GET reads into one native post-response projector',async()=>{
  const order=await readyInvoiceOrder('TEST after nested actual commands');
  const output=vi.spyOn(console,'info');
  const warten=()=>sql`SELECT source_seq>built_seq AS pending FROM private.today_source_v1
@@ -109,8 +109,19 @@ it('coalesces concurrent GET reads after nested Action and retry into one post-r
   vi.useFakeTimers({toFake:['Date']});
   try{
    vi.setSystemTime(freieMinute);
-   const responses=await Promise.all([withSession(full,()=>heuteModell(modellAnfrage()),true),withSession(full,()=>heuteModell(modellAnfrage()),true)]);
-   expect(responses.map(response=>response.status)).toEqual([200,200]);
+   await withSession(full,async()=>{
+    const initial=await readOfficeHomeModelAction({deferLive:true});
+    if(!('dashboard'in initial)||!initial.modelRead?.revision||!initial.cacheLoginScope)throw Error('TEST_PENDING_HOME_REVISION_REQUIRED');
+    expect(initial.modelRead.pending).toBe(true);
+    const etag='"'+initial.modelRead.revision+'"';
+    const headers={'If-None-Match':etag,'X-Kreile-Login-Scope':initial.cacheLoginScope};
+    const anfrage=()=>new Request(modellAnfrage(),{headers});
+    const responses=await Promise.all([heuteModell(anfrage()),heuteModell(anfrage())]);
+    expect(responses.map(response=>response.status)).toEqual([304,304]);
+    expect(responses.map(response=>response.headers.get('etag'))).toEqual([etag,etag]);
+    expect(await warten()).toEqual([{pending:true}]);
+    expect(phases(output.mock.calls)).toHaveLength(0);
+   },true);
   }finally{vi.useRealTimers();}
   expect(phases(output.mock.calls)).toHaveLength(1);
   expect(await sql`SELECT count(*)::int AS n FROM public.takt_job_runs WHERE tenant_id=${tenant} AND job_schluessel='takt.nachholen'`).toEqual([{n:vorher[0].n+1}]);
