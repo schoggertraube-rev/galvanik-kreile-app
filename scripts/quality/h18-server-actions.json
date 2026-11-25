@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "a993136fa81cff81f1b770b05b60eea24bf03a016f1e9a912c8ca4b0ce977dfc",
+  "inventorySha256": "5156fb149e8357e2b852ef6b127fac6d8c3e5ed5c7f23a156281c431d7e12ac9",
   "testedWriteActions": {
     "src/app/actions/lager-material.actions.ts#leseAuftragsmaterial": [
       "src/test/acceptance/material_rechnung.integration.test.ts"
