@@ -2,6 +2,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import { hasLagerCapability } from "@/lib/auth/authorizationContract";
+import { recordObservedFailure } from "@/lib/server/actionObservation";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { ActionResult } from "@/lib/server/authHelper";
@@ -56,7 +57,11 @@ async function imLagerLesen<T>(artikelId: string | undefined,
     const data = await withPrivilegedTenantTransaction(auth.data, (tx) =>
       lies(tx, auth.data.tenantId, hasLagerCapability(auth.data, "lager.werte")));
     return { ok: true, data };
-  } catch {
+  } catch (error) {
+    const ursache = error instanceof Error ? error.cause ?? error : error;
+    const sqlState = ursache && typeof ursache === "object" && "code" in ursache ? ursache.code : null;
+    recordObservedFailure(typeof sqlState === "string" && /^[A-Z0-9]{5}$/u.test(sqlState)
+      ? `LAGER_LESEN_DB_ERROR_${sqlState}` : "LAGER_LESEN_DB_ERROR");
     return { ok: false, error: "DB_ERROR", message: LAGER_BUCHUNG_COPY.laden };
   }
 }
@@ -71,7 +76,7 @@ export async function leseLagerArtikelAltvertrag(artikelId?: string): Promise<Ac
     const rows = await tx.execute<Artikel>(sql`
       SELECT artikel.id, artikel.name, artikel.category,
         coalesce(artikel.basiseinheit, artikel.unit, artikel.einheit_normiert) AS unit,
-        artikel.min_stock AS "minStock", bestand.menge::text AS "currentStock",
+        nullif(artikel.min_stock, 0) AS "minStock", bestand.menge::text AS "currentStock",
         bestand.verfuegbar::text AS "availableStock", ${preis} AS "pricePerUnit"
       FROM public.inventory_items artikel
       LEFT JOIN (
@@ -92,20 +97,20 @@ export async function leseLagerArtikelAltvertrag(artikelId?: string): Promise<Ac
     return rows.map((zeile) => {
       const category = kategorie(zeile.category);
       return {
-        id: zeile.id, name: zeile.name, category, unit: zeile.unit ?? "",
+        id: zeile.id, name: zeile.name, category, unit: zeile.unit,
         currentStock: zeile.currentStock === null ? null : Number(zeile.currentStock),
         availableStock: zeile.availableStock === null ? null : Number(zeile.availableStock),
-        minStock: zeile.minStock ?? 0, isConsumable: category !== "tooling",
+        minStock: zeile.minStock, isConsumable: category !== "tooling",
         ...(werte && zeile.pricePerUnit !== null ? { pricePerUnit: Number(zeile.pricePerUnit) } : {}),
       };
     });
   });
 }
 
-export type LagerBewegungssuche = { artikelId?: string; nach?: { fachzeit: string; id: string } };
+export type LagerBewegungssuche = { artikelId?: string; nach?: { fachzeit: string | null; id: string } };
 
-function istCursorzeit(zeit: unknown): zeit is string {
-  return zeit === "" || istLagerFachzeit(zeit) || (
+function istCursorzeit(zeit: unknown): zeit is string | null {
+  return zeit === null || zeit === "" || istLagerFachzeit(zeit) || (
     typeof zeit === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/u.test(zeit)
     && istLagerFachzeit(zeit.slice(0, 23) + "Z")
   );
@@ -143,11 +148,11 @@ export async function leseLagerBewegungenAltvertrag(suche?: LagerBewegungssuche)
       return {
         id: zeile.id, inventoryItemId: zeile.inventoryItemId,
         movementType: art as StockMovementType,
-        quantity: zeile.quantity === null ? null : Number(zeile.quantity), unit: zeile.unit ?? "",
+        quantity: zeile.quantity === null ? null : Number(zeile.quantity), unit: zeile.unit,
         orderId: zeile.orderId ?? undefined, reason: zeile.reason ?? undefined,
         createdBy: zeile.createdBy ?? LAGER_BUCHUNG_COPY.system,
-        createdAt: zeile.createdAt === null ? "" : new Date(zeile.createdAt).toISOString(),
-        fachzeit: zeile.fachzeit ?? "",
+        createdAt: zeile.createdAt === null ? null : new Date(zeile.createdAt).toISOString(),
+        fachzeit: zeile.fachzeit,
         ...(werte ? {
           kalk_ek: zeile.kalk_ek == null ? null : Number(zeile.kalk_ek),
           aufschlag_pct: zeile.aufschlag_pct == null ? null : Number(zeile.aufschlag_pct),

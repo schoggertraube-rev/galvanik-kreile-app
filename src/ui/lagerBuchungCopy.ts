@@ -1,3 +1,9 @@
+const einstellungsNamen = {
+  material_aufschlag_prozent: "Der Materialaufschlag",
+  lager_regelversion: "Die Lager-Regelversion",
+  bilanzbewertung_methode: "Die Bewertungsmethode",
+} as const;
+
 export const LAGER_BUCHUNG_COPY = {
   sitzung: "Melde dich an und öffne das Lager.",
   recht: "Du brauchst das Recht zum Buchen.",
@@ -30,8 +36,8 @@ export const LAGER_BUCHUNG_COPY = {
   badFehlt: "Wähle ein vorhandenes Bad.",
   badErneut: "Öffne die Bäder erneut und versuch es nochmals.",
   badMessungPruefen: "Korrigiere Zeitpunkt, Messwerte und Notiz.",
-  einstellungFehlt: (einstellung: string) =>
-    `${einstellung} fehlt in den Lager-Einstellungen. Bitte dort eintragen.`,
+  einstellungFehlt: (einstellung: keyof typeof einstellungsNamen) =>
+    `${einstellungsNamen[einstellung]} fehlt in den Lager-Einstellungen. Bitte dort eintragen.`,
   entnahmeregelFehlt: (rubrik: string) =>
     `Für ${rubrik} ist keine Entnahmeregel eingestellt – trag sie unter Einstellungen → Lager ein, dann bucht die App.`,
   artikelRubrikFehlt: (artikel: string) =>

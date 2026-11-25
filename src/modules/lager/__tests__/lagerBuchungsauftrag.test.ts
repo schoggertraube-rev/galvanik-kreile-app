@@ -45,4 +45,17 @@ describe("Lager-Buchungsauftrag für B1a-3", () => {
       badProzessOrtId: ids.zielort,
     })).toMatchObject({ badProzessOrtId: ids.zielort });
   });
+
+  it.each([
+    ["consumption", "verbrauch"],
+    ["stock_out", "entnahme"],
+    ["waste", "ausschuss"],
+  ])("verlangt eine Preisentscheidung für %s am Auftrag", (movementType, geschaeftsgrund) => {
+    const mitAuftrag = {
+      ...auftrag, movementType, geschaeftsgrund, zielOrtId: undefined, orderId: "TEST-AUFTRAG",
+    };
+    expect(leseLagerBuchungsauftrag(mitAuftrag)).toBeNull();
+    expect(leseLagerBuchungsauftrag({ ...mitAuftrag, imPreisEnthalten: false }))
+      .toMatchObject({ orderId: "TEST-AUFTRAG", imPreisEnthalten: false });
+  });
 });

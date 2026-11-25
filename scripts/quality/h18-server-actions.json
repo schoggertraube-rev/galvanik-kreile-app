@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "ff289a7d981992d7f72828fdac896b3b52cca6dfe88783460c683f51c683567b",
+  "inventorySha256": "dce894b854099b3da1b79661a767e2a8d036d40facc2edc14debf22ccdfafbef",
   "testedWriteActions": {
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": [
       "src/test/acceptance/lager_invarianten.integration.test.ts"

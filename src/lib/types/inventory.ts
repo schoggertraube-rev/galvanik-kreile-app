@@ -10,10 +10,10 @@ export interface InventoryItem {
   sku?: string;
   name: string;
   category: InventoryCategory;
-  unit: string;
+  unit: string | null;
   currentStock: number | null;
   availableStock?: number | null;
-  minStock: number;
+  minStock: number | null;
   storageLocation?: string;
   isConsumable: boolean;
   isHazardous?: boolean;
@@ -37,12 +37,12 @@ export interface StockMovement {
   inventoryItemId: string;
   movementType: StockMovementType;
   quantity: number | null;
-  unit: string;
+  unit: string | null;
   orderId?: string;
   reason?: string;
   createdBy: string;
-  createdAt: string;
-  fachzeit?: string;
+  createdAt: string | null;
+  fachzeit?: string | null;
   kalk_ek?: number | null;
   aufschlag_pct?: number | null;
   snapshot_einkaufspreis_eur?: number | null;

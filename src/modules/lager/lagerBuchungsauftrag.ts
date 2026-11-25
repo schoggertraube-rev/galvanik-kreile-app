@@ -48,9 +48,9 @@ export function leseLagerBuchungsauftrag(input: unknown) {
 
   const werkstattEntnahme = orderId != null
     && (art === "consumption" || (art === "stock_out" && geschaeftsgrund === "entnahme"));
+  const preisentscheidungNoetig = orderId != null && (werkstattEntnahme || art === "waste");
   if (werkstattOrtId != null && (!werkstattEntnahme || !passtText(werkstattOrtId, lagerBefehlsUuid) || werkstattOrtId === ortId)
-    || imPreisEnthalten != null && (typeof imPreisEnthalten !== "boolean" || orderId == null
-      || !(werkstattEntnahme || art === "consumption" || art === "waste"))) return null;
+    || (preisentscheidungNoetig ? typeof imPreisEnthalten !== "boolean" : imPreisEnthalten != null)) return null;
   if (mehrarbeitBelegId != null && (!passtText(mehrarbeitBelegId, kennung)
     || !werkstattEntnahme || typeof imPreisEnthalten !== "boolean")) return null;
 

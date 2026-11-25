@@ -50,6 +50,6 @@ export const inventoryRepository = {
 
   async hasCriticalStock(): Promise<boolean> {
     const items = await this.getAllItems();
-    return items.some((item) => item.currentStock !== null && item.currentStock < item.minStock);
+    return items.some((item) => item.currentStock !== null && item.minStock !== null && item.currentStock < item.minStock);
   },
 };

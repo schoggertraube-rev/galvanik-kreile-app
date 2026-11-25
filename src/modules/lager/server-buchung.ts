@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, hasLagerCapability } from "@/lib/auth/authorizationContract";
+import { recordObservedFailure } from "@/lib/server/actionObservation";
 import type { ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -89,6 +90,7 @@ async function liesOriginal(tx: Tx, mandant: string, befehlId: string) {
 function quittung(original: Buchung, hash: string, auth: AuthorizationSnapshot): Antwort {
   const { hash: alterHash, akteur, orderId, reason, quantity, createdAt, ...beleg } = original;
   if (alterHash !== hash || akteur !== auth.userId) return fehler("CONFLICT", copy.befehlKonflikt);
+  if (orderId !== null && !hasAuthorizationArea(auth, "auftraege")) return fehler("FORBIDDEN", copy.auftragsrecht);
   return { ok: true, data: {
     ...beleg, eventId: beleg.id, quantity: Number(quantity), orderId: orderId ?? undefined,
     reason: reason ?? undefined, createdAt: new Date(createdAt).toISOString(), createdBy: auth.displayName,
@@ -167,12 +169,21 @@ async function mitBuchung<T extends { befehlId: string }>(
   } catch (error) {
     const ursache = error instanceof Error ? error.cause ?? error : error;
     const code = ursache && typeof ursache === "object" && "code" in ursache ? ursache.code : null;
+    const meldung = ursache instanceof Error ? ursache.message : null;
+    if (meldung === "LAGER_BASISEINHEIT_KONFLIKT") return fehler("CONFLICT", copy.einheit);
+    if (meldung === "LAGER_JOURNAL_GEGENBUCHUNG_UNGUELTIG"
+      || meldung === "LAGER_JOURNAL_GEGENBUCHUNGSPAAR_UNGUELTIG"
+      || meldung === "LAGER_JOURNAL_ORIGINAL_NICHT_BELEGT") {
+      return fehler("VALIDATION_ERROR", copy.gegenbuchungNichtMoeglich);
+    }
     if (code === "23505") {
       const gegenbuchung = ursache && typeof ursache === "object" && "constraint_name" in ursache
         && ursache.constraint_name === "stock_movements_lager_gegenbuchung_key";
       return fehler("CONFLICT", gegenbuchung ? copy.gegenbuchungVorhanden : copy.befehlKonflikt);
     }
     if (code === "23503" || code === "22023") return fehler("VALIDATION_ERROR", copy.eingabeUngueltig);
+    recordObservedFailure(typeof code === "string" && /^[A-Z0-9]{5}$/u.test(code)
+      ? `LAGER_BUCHUNG_DB_ERROR_${code}` : "LAGER_BUCHUNG_DB_ERROR");
     return fehler("DB_ERROR", copy.speichern);
   }
 }
@@ -320,7 +331,10 @@ export function bucheLagerGegenbuchung(
       ORDER BY j.befehl_zeile
     `);
     const [erste] = ursprung;
-    if (!erste) return fehler("NOT_FOUND", copy.eingabeUngueltig);
+    if (!erste) return fehler("NOT_FOUND", copy.gegenbuchungNichtMoeglich);
+    if (erste.orderId !== null && !hasAuthorizationArea(auth, "auftraege")) {
+      return fehler("FORBIDDEN", copy.auftragsrecht);
+    }
     const artikel = await ladeArtikel(tx, mandant, erste.artikelId);
     if (!artikel) return fehler("NOT_FOUND", copy.artikelFehlt);
 

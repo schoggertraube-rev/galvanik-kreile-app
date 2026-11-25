@@ -27,6 +27,7 @@ if (!replay || replay !== process.env.H18_EXPECTED_DATABASE_URL
   throw Error("LAGER_B1A3_DEDICATED_REPLAY_REQUIRED");
 }
 const fremd = mandant + "-fremd";
+const firma = randomUUID();
 let schalter: boolean | undefined;
 let werkstatt: Anmeldung;
 let admin: Anmeldung;
@@ -42,6 +43,8 @@ beforeAll(async () => {
   werkstatt = await createFixture(["auftraege"], "werkstatt");
   admin = await createFixture(["auftraege", "lager.stamm"], "admin");
   readonly = await createFixture([], "readonly");
+  await sql`INSERT INTO public.company_settings (id, tenant_id, company_name)
+    VALUES (${firma}, ${mandant}, 'TEST Lager')`;
 });
 
 afterAll(async () => {
@@ -71,6 +74,16 @@ function buchung(inventoryItemId: string, ortId: string) {
     fachzeit: new Date(Date.now() - 5_000).toISOString(), mengenqualitaet: "exakt",
     movementType: "stock_in", quantity: "5", geschaeftsgrund: "wareneingang",
   } as const;
+}
+
+async function auftragAnlegen(tenantId: string) {
+  const kunde = "TEST-" + randomUUID();
+  const auftrag = "TEST-" + randomUUID();
+  await sql`INSERT INTO public.customers (id, tenant_id, name, type)
+    VALUES (${kunde}, ${tenantId}, 'TEST Kunde', 'business')`;
+  await sql`INSERT INTO public.orders (id, tenant_id, customer_id, order_number, title, station, current_station_id, status)
+    VALUES (${auftrag}, ${tenantId}, ${kunde}, ${auftrag}, 'TEST Lagerbedarf', 'angenommen', 'angenommen', 'angenommen')`;
+  return auftrag;
 }
 
 async function summe(inventoryItemId: string) {
@@ -107,12 +120,13 @@ describe("Lagerjournal und seine Befehle", () => {
     const gegenbucht = (ursprungId: string, befehlId = randomUUID()) => withSession(werkstatt, () =>
       bucheLagerGegenbuchungAction({ ursprungId, befehlId, fachzeit: zugang.fachzeit }));
 
-    const ersterZugang = await bucht(zugang);
+    const [ersterZugang, gleichzeitigerZugang] = await Promise.all([bucht(zugang), bucht({ ...zugang, quantity: 5 })]);
     expect(ersterZugang).toMatchObject({ ok: true, data: { quantity: 5 } });
     if (!ersterZugang.ok) throw Error("TEST_ZUGANG_FEHLT");
-    expect(await bucht({ ...zugang, quantity: 5 })).toEqual(ersterZugang);
+    expect(gleichzeitigerZugang).toEqual(ersterZugang);
     expect(await bucht({ ...zugang, quantity: "5.000" })).toEqual(ersterZugang);
-    expect(await bucht({ ...zugang, quantity: "6" })).toMatchObject({ ok: false, error: "CONFLICT" });
+    expect(await bucht({ ...zugang, quantity: "6" }))
+      .toEqual({ ok: false, error: "CONFLICT", message: LAGER_BUCHUNG_COPY.befehlKonflikt });
 
     const entnahme = await bucht({ ...zugang, befehlId: randomUUID(), movementType: "stock_out",
       quantity: "2", geschaeftsgrund: "entnahme" });
@@ -127,12 +141,19 @@ describe("Lagerjournal und seine Befehle", () => {
     expect(await summe(id)).toEqual(expect.arrayContaining([{ ort: null, menge: 10 },
       { ort: quelle, menge: 0 }, { ort: ziel, menge: 3 }]));
 
-    const stornoId = randomUUID();
-    const storno = await gegenbucht(entnahme.data.id, stornoId);
+    const stornoIds = [randomUUID(), randomUUID()];
+    const stornoVersuche = await Promise.all(stornoIds.map(id => gegenbucht(entnahme.data.id, id)));
+    const sieger = stornoVersuche.findIndex(antwort => antwort.ok);
+    if (sieger < 0) throw Error("TEST_GEGENBUCHUNG_FEHLT");
+    const stornoId = stornoIds[sieger];
+    const storno = stornoVersuche[sieger];
+    expect(stornoVersuche[1 - sieger])
+      .toEqual({ ok: false, error: "CONFLICT", message: LAGER_BUCHUNG_COPY.gegenbuchungVorhanden });
     expect(storno).toMatchObject({ ok: true, data: { quantity: 2, movementType: "reversal" } });
     if (!storno.ok) throw Error("TEST_GEGENBUCHUNG_FEHLT");
     expect(await gegenbucht(entnahme.data.id, stornoId)).toEqual(storno);
-    expect(await gegenbucht(entnahme.data.id)).toMatchObject({ ok: false, error: "CONFLICT" });
+    expect(await gegenbucht(entnahme.data.id))
+      .toEqual({ ok: false, error: "CONFLICT", message: LAGER_BUCHUNG_COPY.gegenbuchungVorhanden });
     expect(await gegenbucht(storno.data.id)).toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
     expect(await gegenbucht(original.id)).toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
     expect(await summe(id)).toEqual(expect.arrayContaining([{ ort: null, menge: 10 },
@@ -151,6 +172,20 @@ describe("Lagerjournal und seine Befehle", () => {
         { befehlId: stornoId, gebucht: true, eventId: storno.data.eventId },
         { befehlId: unbekannteKennung, gebucht: false, eventId: null },
       ] });
+
+    if (!umgelagert.ok) throw Error("TEST_UMLAGERUNG_FEHLT");
+    const paarId = randomUUID();
+    expect(await gegenbucht(umgelagert.data.id, paarId)).toMatchObject({ ok: true });
+    expect(await sql`
+      SELECT gegenbuchung_id::text, quantity::float8 AS menge FROM public.stock_movements
+      WHERE tenant_id = ${mandant} AND befehl_id = ${paarId}::uuid ORDER BY befehl_zeile
+    `).toEqual([
+      { gegenbuchung_id: umgelagert.data.id, menge: 3 },
+      { gegenbuchung_id: expect.any(String), menge: -3 },
+    ]);
+    expect(await summe(id)).toEqual(expect.arrayContaining([
+      { ort: null, menge: 10 }, { ort: quelle, menge: 5 }, { ort: ziel, menge: 0 },
+    ]));
   });
 
   test("I7: Zwei negative Buchungen klären genau einen Bestand, der Ausgleich schließt dieselbe Aufgabe", async () => {
@@ -181,17 +216,10 @@ describe("Lagerjournal und seine Befehle", () => {
     const ohnePreis = await artikel(mandant, rubrik.id);
     const ortId = await ort();
     const basis = buchung(id, ortId);
-    const kunde = "TEST-" + randomUUID();
-    const auftrag = "TEST-" + randomUUID();
-    const firma = randomUUID();
+    const auftrag = await auftragAnlegen(mandant);
     const regeln = { [rubrik.id]: "verbrauch" };
-    await sql`INSERT INTO public.customers (id, tenant_id, name, type)
-      VALUES (${kunde}, ${mandant}, 'TEST Kunde', 'business')`;
-    await sql`INSERT INTO public.orders (id, tenant_id, customer_id, order_number, title, station, current_station_id, status)
-      VALUES (${auftrag}, ${mandant}, ${kunde}, ${auftrag}, 'TEST Lagerbedarf', 'angenommen', 'angenommen', 'angenommen')`;
-    await sql`INSERT INTO public.company_settings (id, tenant_id, company_name,
-      material_aufschlag_prozent, lager_regelversion, entnahme_regel_je_rubrik)
-      VALUES (${firma}, ${mandant}, 'TEST Lager', 20, 'TEST-v1', ${sql.json(regeln)}::jsonb)`;
+    await sql`UPDATE public.company_settings SET material_aufschlag_prozent = 20, lager_regelversion = 'TEST-v1',
+      entnahme_regel_je_rubrik = ${sql.json(regeln)}::jsonb WHERE tenant_id = ${mandant} AND id = ${firma}`;
     await sql`INSERT INTO public.material_prices (tenant_id, artikel_id, einzelpreis, waehrung, quelle, gueltig_ab, bestaetigt_am)
       VALUES (${mandant}, ${id}, 4.2, 'EUR', 'manuell', ${basis.fachzeit}::timestamptz - interval '2 days',
           ${basis.fachzeit}::timestamptz - interval '2 days'),
@@ -219,6 +247,14 @@ describe("Lagerjournal und seine Befehle", () => {
       ...verbrauch, inventoryItemId: ohnePreis, befehlId: randomUUID(),
     }));
     expect(unbewertet).toMatchObject({ ok: true, data: { preisFehlt: true } });
+    if (!unbewertet.ok) throw Error("TEST_AUFTRAGSVERBRAUCH_FEHLT");
+    const ohneAuftragsrecht = await createFixture([], "werkstatt");
+    const fremderStornoId = randomUUID();
+    expect(await withSession(ohneAuftragsrecht, () => bucheLagerGegenbuchungAction({
+      befehlId: fremderStornoId, ursprungId: unbewertet.data.id, fachzeit: basis.fachzeit,
+    }))).toEqual({ ok: false, error: "FORBIDDEN", message: LAGER_BUCHUNG_COPY.auftragsrecht });
+    expect(await sql`SELECT id FROM public.stock_movements
+      WHERE tenant_id = ${mandant} AND befehl_id = ${fremderStornoId}::uuid`).toHaveLength(0);
     const material = await withPrivilegedTenantTransaction({ tenantId: mandant }, tx =>
       leseLagerAuftragsmaterialInTransaction(tx, auftrag));
     expect(material).toEqual(expect.arrayContaining([expect.objectContaining({
@@ -231,41 +267,57 @@ describe("Lagerjournal und seine Befehle", () => {
     expect(await withPrivilegedTenantTransaction({ tenantId: mandant }, tx =>
       leseLagerAuftragsmaterialInTransaction(tx, auftrag))).toEqual(material);
 
-    const mehrarbeit = randomUUID();
-    await sql`INSERT INTO public.events (id, tenant_id, order_id, event_type, status, description, payload)
-      VALUES (${mehrarbeit}, ${mandant}, ${auftrag}, 'ORDER_ITEM_EXTRA_WORK_CHANGED_V1', 'success',
-        'TEST Mehrarbeitsbeleg', '{}'::jsonb)`;
-    await sql`UPDATE public.company_settings SET entnahme_regel_je_rubrik = ${sql.json({ [rubrik.id]: "umlagerung" })}::jsonb
-      WHERE tenant_id = ${mandant} AND id = ${firma}`;
-    const mehrarbeitBuchung = await withSession(werkstatt, () => bucheAuftragsverbrauchAction({
-      ...verbrauch, befehlId: randomUUID(), mehrarbeitBelegId: mehrarbeit,
-    }));
-    expect(mehrarbeitBuchung).toMatchObject({ ok: true, data: { movementType: "consumption", mehrarbeitBelegId: mehrarbeit } });
-    if (!mehrarbeitBuchung.ok) throw Error("TEST_MEHRARBEITSVERBRAUCH_FEHLT");
-    expect(await sql`SELECT movement_type, mehrarbeit_beleg_id FROM public.stock_movements
-      WHERE tenant_id = ${mandant} AND befehl_id = ${mehrarbeitBuchung.data.befehlId}::uuid`)
-      .toEqual([{ movement_type: "consumption", mehrarbeit_beleg_id: mehrarbeit }]);
-
     await sql`UPDATE public.company_settings SET material_aufschlag_prozent = NULL
       WHERE tenant_id = ${mandant} AND id = ${firma}`;
     expect(await withSession(werkstatt, () => bucheAuftragsverbrauchAction({ ...verbrauch, befehlId: randomUUID() })))
       .toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
     const [anzahl] = await sql`SELECT count(*)::int FROM public.stock_movements
       WHERE tenant_id = ${mandant} AND order_id = ${auftrag}`;
-    expect(anzahl.count).toBe(5);
+    expect(anzahl.count).toBe(4);
 
     const wenigRechte = await withSession(readonly, () => leseLagerBewegungenAction({ artikelId: id }));
     const volleRechte = await withSession(admin, () => leseLagerBewegungenAction({ artikelId: id }));
     expect(wenigRechte).toMatchObject({ ok: true });
     expect(volleRechte).toMatchObject({ ok: true });
     if (!wenigRechte.ok || !volleRechte.ok) throw Error("TEST_LAGER_BEWEGUNGEN_FEHLEN");
-    expect(wenigRechte.data).toHaveLength(4);
+    expect(wenigRechte.data).toHaveLength(3);
     for (const zeile of wenigRechte.data) {
       expect(zeile).not.toHaveProperty("kalk_ek");
       expect(zeile).not.toHaveProperty("aufschlag_pct");
       expect(zeile).not.toHaveProperty("snapshot_einkaufspreis_eur");
     }
-    expect(volleRechte.data.map(zeile => zeile.kalk_ek).sort()).toEqual([3.4, 3.8, 4.2, 7]);
+    expect(volleRechte.data.map(zeile => zeile.kalk_ek).sort()).toEqual([3.4, 3.8, 4.2]);
+  });
+
+  test("Mehrarbeit bei Rubrik Umlagerung ergibt eine Verbrauchszeile und bindet den eigenen Auftrag", async () => {
+    const [rubrik] = await sql<{ id: string }[]>`
+      INSERT INTO public.categories (tenant_id, name) VALUES (${mandant}, 'TEST Umlagerungsrubrik') RETURNING id::text
+    `;
+    const artikelId = await artikel(mandant, rubrik.id);
+    const auftrag = await auftragAnlegen(mandant);
+    const fremderAuftrag = await auftragAnlegen(fremd);
+    const mehrarbeit = randomUUID();
+    const fremdeMehrarbeit = randomUUID();
+    await sql`INSERT INTO public.events (id, tenant_id, order_id, event_type, status, description, payload)
+      VALUES (${mehrarbeit}, ${mandant}, ${auftrag}, 'ORDER_ITEM_EXTRA_WORK_CHANGED_V1', 'success', 'TEST Mehrarbeit', '{}'::jsonb),
+        (${fremdeMehrarbeit}, ${fremd}, ${fremderAuftrag}, 'ORDER_ITEM_EXTRA_WORK_CHANGED_V1', 'success', 'TEST Fremdbeleg', '{}'::jsonb)`;
+    await sql`UPDATE public.company_settings SET entnahme_regel_je_rubrik = ${sql.json({ [rubrik.id]: "umlagerung" })}::jsonb,
+      material_aufschlag_prozent = 20, lager_regelversion = 'TEST-v1', bilanzbewertung_methode = 'letzter_ek'
+      WHERE tenant_id = ${mandant} AND id = ${firma}`;
+    const verbrauch = {
+      ...buchung(artikelId, await ort()), movementType: "consumption", geschaeftsgrund: "verbrauch",
+      quantity: "1", orderId: auftrag, imPreisEnthalten: false, mehrarbeitBelegId: mehrarbeit,
+    };
+    const bucht = (input: typeof verbrauch) => withSession(werkstatt, () => bucheAuftragsverbrauchAction(input));
+    expect(await bucht({ ...verbrauch, befehlId: randomUUID(), orderId: fremderAuftrag }))
+      .toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
+    expect(await bucht({ ...verbrauch, befehlId: randomUUID(), mehrarbeitBelegId: fremdeMehrarbeit }))
+      .toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
+    expect(await bucht(verbrauch))
+      .toMatchObject({ ok: true, data: { movementType: "consumption", mehrarbeitBelegId: mehrarbeit } });
+    expect(await sql`SELECT movement_type, mehrarbeit_beleg_id FROM public.stock_movements
+      WHERE tenant_id = ${mandant} AND inventory_item_id = ${artikelId}`)
+      .toEqual([{ movement_type: "consumption", mehrarbeit_beleg_id: mehrarbeit }]);
   });
 
   test("Lagerleser und Schreiber wahren Mandant und Rollenrecht", async () => {
