@@ -26,7 +26,7 @@ if (!replay || replay !== process.env.H18_EXPECTED_DATABASE_URL
   || new URL(replay).hostname !== "127.0.0.1" || new URL(replay).port !== replayPort) {
   throw Error("LAGER_B1A3_DEDICATED_REPLAY_REQUIRED");
 }
-const fremd = mandant + "-fremd";
+const fremd = "TEST-fremd-" + randomUUID();
 const firma = randomUUID();
 let schalter: boolean | undefined;
 let werkstatt: Anmeldung;
