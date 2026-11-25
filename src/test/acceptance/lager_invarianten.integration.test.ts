@@ -15,7 +15,16 @@ import {
 } from "@/app/actions/lager.actions";
 import { createInventoryMovementAction } from "@/app/actions/inventory.actions";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { leseLagerAuftragsmaterialInTransaction } from "@/modules/lager/server-public";
+import { readLagerEinstellungen } from "@/modules/fundament/server-public";
+import {
+  bucheAuftragsverbrauch,
+  entscheideLagerW1Vorschlag,
+  leseLagerAuftragsmaterialInTransaction,
+  leseLagerBadprozessbestandInTransaction,
+  leseLagerW1Vorschlaege,
+  speichereLagerBadanalyseInTransaction,
+} from "@/modules/lager/server-public";
+import { synchronizeLagerBestandTask } from "@/modules/tasks/server-public";
 import { LAGER_BUCHUNG_COPY } from "@/ui/lagerBuchungCopy";
 import { createFixture, sql, withSession } from "../../../e2e/ablauf/replayHarness";
 
@@ -272,7 +281,17 @@ describe("Lagerjournal und seine Befehle", () => {
     await sql`UPDATE public.company_settings SET material_aufschlag_prozent = NULL
       WHERE tenant_id = ${mandant} AND id = ${firma}`;
     expect(await withSession(werkstatt, () => bucheAuftragsverbrauchAction({ ...verbrauch, befehlId: randomUUID() })))
-      .toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
+      .toEqual({ ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.einstellungFehlt("material_aufschlag_prozent") });
+    await sql`UPDATE public.company_settings SET material_aufschlag_prozent = 20
+      WHERE tenant_id = ${mandant} AND id = ${firma}`;
+    const ohneMethode = { ...verbrauch, befehlId: randomUUID() };
+    expect(await withSession(werkstatt, () => bucheAuftragsverbrauch(
+      ohneMethode,
+      async (tenantId, tx) => ({ ...await readLagerEinstellungen(tenantId, tx), bilanzbewertung_methode: null }),
+      synchronizeLagerBestandTask,
+    ))).toEqual({ ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.einstellungFehlt("bilanzbewertung_methode") });
+    expect(await sql`SELECT id FROM public.stock_movements WHERE tenant_id = ${mandant}
+      AND befehl_id = ${ohneMethode.befehlId}::uuid`).toHaveLength(0);
     const [anzahl] = await sql`SELECT count(*)::int FROM public.stock_movements
       WHERE tenant_id = ${mandant} AND order_id = ${auftrag}`;
     expect(anzahl.count).toBe(4);
@@ -289,6 +308,42 @@ describe("Lagerjournal und seine Befehle", () => {
       expect(zeile).not.toHaveProperty("snapshot_einkaufspreis_eur");
     }
     expect(volleRechte.data.map(zeile => zeile.kalk_ek).sort()).toEqual([3.4, 3.8, 4.2]);
+  });
+
+  test("Die Rubrikregel lagert regulären Auftragsverbrauch um und fehlende Zuordnungen buchen nichts", async () => {
+    const [rubrik, ohneRegel] = await sql<{ id: string; name: string }[]>`
+      INSERT INTO public.categories (tenant_id, name)
+      VALUES (${mandant}, 'TEST Umlagerung'), (${mandant}, 'TEST Ohne Regel') RETURNING id::text, name
+    `;
+    await sql`UPDATE public.company_settings SET entnahme_regel_je_rubrik = ${sql.json({ [rubrik.id]: "umlagerung" })}::jsonb,
+      material_aufschlag_prozent = 20, lager_regelversion = 'TEST-v1', bilanzbewertung_methode = 'letzter_ek'
+      WHERE tenant_id = ${mandant} AND id = ${firma}`;
+    const id = await artikel(mandant, rubrik.id);
+    const quelle = await ort();
+    const ziel = await ort(mandant, "werkstatt");
+    const auftrag = await auftragAnlegen(mandant);
+    const eingang = buchung(id, quelle);
+    expect(await withSession(werkstatt, () => bucheLagerAction(eingang))).toMatchObject({ ok: true });
+    const entnahme = { ...eingang, movementType: "consumption", geschaeftsgrund: "verbrauch", quantity: "2",
+      orderId: auftrag, werkstattOrtId: ziel, imPreisEnthalten: false, befehlId: randomUUID() };
+    expect(await withSession(werkstatt, () => bucheAuftragsverbrauchAction(entnahme))).toMatchObject({ ok: true });
+    expect(await sql`SELECT ort_id::text, order_id, movement_type, geschaeftsgrund, quantity::float8 AS menge, bestandsart
+      FROM public.stock_movements WHERE tenant_id = ${mandant} AND befehl_id = ${entnahme.befehlId}::uuid
+      ORDER BY befehl_zeile`).toEqual([
+      { ort_id: quelle, order_id: auftrag, movement_type: "move", geschaeftsgrund: "umlagerung", menge: -2, bestandsart: "verfuegbar" },
+      { ort_id: ziel, order_id: auftrag, movement_type: "move", geschaeftsgrund: "umlagerung", menge: 2, bestandsart: "werkstatt_prozess" },
+    ]);
+
+    for (const [artikelId, message] of [
+      [await artikel(), LAGER_BUCHUNG_COPY.artikelRubrikFehlt("TEST Buchungsmaterial")],
+      [await artikel(mandant, ohneRegel.id), LAGER_BUCHUNG_COPY.entnahmeregelFehlt(ohneRegel.name)],
+    ]) {
+      const befehlId = randomUUID();
+      expect(await withSession(werkstatt, () => bucheAuftragsverbrauchAction({ ...entnahme, inventoryItemId: artikelId, befehlId })))
+        .toEqual({ ok: false, error: "VALIDATION_ERROR", message });
+      expect(await sql`SELECT id FROM public.stock_movements WHERE tenant_id = ${mandant}
+        AND befehl_id = ${befehlId}::uuid`).toHaveLength(0);
+    }
   });
 
   test("Mehrarbeit bei Rubrik Umlagerung ergibt eine Verbrauchszeile und bindet den eigenen Auftrag", async () => {
@@ -331,6 +386,80 @@ describe("Lagerjournal und seine Befehle", () => {
     expect(await sql`SELECT movement_type, mehrarbeit_beleg_id FROM public.stock_movements
       WHERE tenant_id = ${mandant} AND inventory_item_id = ${artikelId}`)
       .toEqual([{ movement_type: "consumption", mehrarbeit_beleg_id: mehrarbeit }]);
+  });
+
+  test("Der W1-Port entscheidet eine historische Doppelung genau einmal und erhält beide Quellen", async () => {
+    const artikelId = await artikel();
+    const auftragId = await auftragAnlegen(mandant);
+    const originalId = randomUUID();
+    const [journal] = await sql<{ id: string }[]>`
+      INSERT INTO public.stock_movements (tenant_id, inventory_item_id, order_id, movement_type, quantity,
+        snapshot_einkaufspreis_eur, created_at)
+      VALUES (${mandant}, ${artikelId}, ${auftragId}, 'consumption', -2, 3.4, '2026-11-01T10:00:00Z')
+      RETURNING id::text
+    `;
+    const payload = {
+      originalId, journalId: null, stand: "vorschlag", kandidaten: [journal.id], titel: "TEST: Doppelung",
+      original: { id: originalId, tenant_id: mandant, order_id: auftragId, inventory_item_id: artikelId,
+        quantity: 2, unit: "kg", unit_cost_eur: 3.4, created_at: "2026-11-02T10:00:00Z" },
+    };
+    await sql`INSERT INTO public.events (id, tenant_id, event_type, description, payload, status,
+      client_event_id, event_schema_version, aggregate_version, correlation_id)
+      VALUES (${randomUUID()}, ${mandant}, 'LAGER_W1_ALTZUORDNUNG_V1', 'TEST historischer W1-Vorschlag',
+        ${sql.json(payload)}::jsonb, 'success', ${randomUUID()}::uuid, 1, 1, ${originalId}::uuid)`;
+
+    const eingabe = { originalId, journalId: journal.id, befehlId: randomUUID(), wahl: "zusammengefuehrt" } as const;
+    expect(await withSession(werkstatt, () => entscheideLagerW1Vorschlag(eingabe)))
+      .toEqual({ ok: false, error: "FORBIDDEN", message: LAGER_BUCHUNG_COPY.w1Recht });
+    expect(await withSession(admin, () => leseLagerW1Vorschlaege())).toMatchObject({
+      ok: true, data: [{ originalId, kandidaten: [{ id: journal.id }] }],
+    });
+    expect(await withSession(admin, () => entscheideLagerW1Vorschlag({ ...eingabe, journalId: randomUUID() })))
+      .toEqual({ ok: false, error: "CONFLICT", message: LAGER_BUCHUNG_COPY.w1Pruefen });
+    const entschieden = await withSession(admin, () => entscheideLagerW1Vorschlag(eingabe));
+    expect(entschieden).toEqual({ ok: true, data: journal.id });
+    expect(await withSession(admin, () => entscheideLagerW1Vorschlag(eingabe))).toEqual(entschieden);
+    expect(await withSession(admin, () => leseLagerW1Vorschlaege())).toEqual({ ok: true, data: [] });
+    expect(await sql`SELECT payload->>'journalId' AS id FROM public.events
+      WHERE tenant_id = ${mandant} AND event_type = 'LAGER_W1_ALTENTSCHEIDUNG_V1'
+        AND payload->>'originalId' = ${originalId}`).toEqual([{ id: journal.id }]);
+    expect(await withPrivilegedTenantTransaction({ tenantId: mandant }, tx =>
+      leseLagerAuftragsmaterialInTransaction(tx, auftragId))).toMatchObject([
+      { journalId: journal.id, vorlaeufig: false, weitereOriginalIds: [originalId] },
+    ]);
+  });
+
+  test("Die Badanalyse-Ports verbinden das gesicherte Original mit dem Bestand am Stichtag", async () => {
+    const badId = "TEST-" + randomUUID();
+    await sql`INSERT INTO public.baths (id, tenant_id, name) VALUES (${badId}, ${mandant}, 'TEST Analysebad')`;
+    const [beleg] = await sql<{ id: string }[]>`
+      INSERT INTO public.intake_item (tenant_id, client_key, kanal, quelle, erstellt_von)
+      VALUES (${mandant}, ${"TEST-Labor-" + randomUUID()}, 'datei', 'app', ${admin.actorId}::uuid) RETURNING id::text
+    `;
+    const originalDateiId = randomUUID();
+    await sql`INSERT INTO public.intake_file (id, tenant_id, item_id, client_key, art, dateiname, mime, bytes,
+      sha256, speicherpfad, aufgenommen_am, aufgenommen_von, reihenfolge, lesbar, erkennung_status, geoeffnet)
+      VALUES (${originalDateiId}::uuid, ${mandant}, ${beleg.id}::uuid, ${"TEST-Datei-" + randomUUID()}, 'pdf', 'TEST.pdf',
+        'application/pdf', 10, repeat('a',64), ${mandant} || '/' || repeat('a',64), statement_timestamp(),
+        ${admin.actorId}::uuid, 1, true, 'fertig', true)`;
+    await sql`INSERT INTO public.intake_event (tenant_id, item_id, art, befehl_id, von, nachher)
+      VALUES (${mandant}, ${beleg.id}::uuid, 'original_gespeichert', ${randomUUID()}::uuid,
+        ${admin.actorId}, jsonb_build_object('fileId', ${originalDateiId}::text))`;
+
+    const analyse = { badId, metall: "TEST Metall", analyseAm: "2026-11-01T10:00:00Z", grammProLiter: "2.50",
+      volumenLiter: "40.00", belegId: beleg.id, originalDateiId };
+    const messung = await withPrivilegedTenantTransaction({ tenantId: mandant }, tx =>
+      speichereLagerBadanalyseInTransaction(tx, analyse));
+    expect(await withPrivilegedTenantTransaction({ tenantId: mandant }, tx =>
+      speichereLagerBadanalyseInTransaction(tx, analyse))).toBe(messung);
+    expect(await withPrivilegedTenantTransaction({ tenantId: mandant }, tx =>
+      leseLagerBadprozessbestandInTransaction(tx, "2026-11-01T09:59:59Z"))).toEqual([]);
+    const bestand = await withPrivilegedTenantTransaction({ tenantId: mandant }, tx =>
+      leseLagerBadprozessbestandInTransaction(tx, analyse.analyseAm));
+    expect(bestand).toMatchObject([{ badId, metall: analyse.metall, belegId: beleg.id, originalDateiId }]);
+    expect(Number(bestand[0].feinGramm)).toBe(100);
+    expect(await withPrivilegedTenantTransaction({ tenantId: fremd }, tx =>
+      leseLagerBadprozessbestandInTransaction(tx, analyse.analyseAm))).toEqual([]);
   });
 
   test("Lagerleser und Schreiber wahren Mandant und Rollenrecht", async () => {

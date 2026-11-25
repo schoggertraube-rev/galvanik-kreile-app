@@ -45,12 +45,18 @@ describe("Lageranschluss der bisherigen Inventory-Actions", () => {
       id: "TEST-Artikel", name: "TEST Artikel", category: "chemical",
       currentStock: null, availableStock: null, unit: "kg", minStock: 2, pricePerUnit: null,
     }]);
-    await expect(getInventoryItemAction("TEST-Artikel")).resolves.toMatchObject({
+    const artikel = await getInventoryItemAction("TEST-Artikel");
+    expect(artikel).toMatchObject({
       ok: true, data: { id: "TEST-Artikel", currentStock: null, availableStock: null },
     });
+    if (!artikel.ok) throw Error("TEST_ARTIKEL_FEHLT");
+    expect(artikel.data).not.toHaveProperty("sku");
+    expect(artikel.data).not.toHaveProperty("storageLocation");
     const liste = await getInventoryItemsAction();
     if (!liste.ok) throw Error("TEST_ARTIKEL_FEHLT");
     expect(liste.data[0]).not.toHaveProperty("pricePerUnit");
+    expect(liste.data[0]).not.toHaveProperty("sku");
+    expect(liste.data[0]).not.toHaveProperty("storageLocation");
     expect(ports.transaktion).toHaveBeenCalledWith(leser, expect.any(Function));
   });
 
