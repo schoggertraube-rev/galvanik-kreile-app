@@ -298,11 +298,22 @@ describe("Lagerjournal und seine Befehle", () => {
     const artikelId = await artikel(mandant, rubrik.id);
     const auftrag = await auftragAnlegen(mandant);
     const fremderAuftrag = await auftragAnlegen(fremd);
-    const mehrarbeit = randomUUID();
-    const fremdeMehrarbeit = randomUUID();
-    await sql`INSERT INTO public.events (id, tenant_id, order_id, event_type, status, description, payload)
-      VALUES (${mehrarbeit}, ${mandant}, ${auftrag}, 'ORDER_ITEM_EXTRA_WORK_CHANGED_V1', 'success', 'TEST Mehrarbeit', '{}'::jsonb),
-        (${fremdeMehrarbeit}, ${fremd}, ${fremderAuftrag}, 'ORDER_ITEM_EXTRA_WORK_CHANGED_V1', 'success', 'TEST Fremdbeleg', '{}'::jsonb)`;
+    const fremderAkteur = randomUUID();
+    await sql`INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active)
+      VALUES (${fremderAkteur}::uuid, ${fremd}, ${`TEST-${fremderAkteur}@local.invalid`},
+        'TEST Mehrarbeit Fremdmandant', 'werkstatt', true)`;
+    async function schreibeTestMehrarbeit(tenantId: string, orderId: string, actorId: string) {
+      const id = randomUUID();
+      const payload = { lineId: randomUUID(), catalogPositionId: randomUUID(), minutes: 15, active: true, lineVersion: 1 };
+      await sql`INSERT INTO public.events (id, tenant_id, order_id, item_id, event_type, status, description,
+        user_id, from_station, station, client_event_id, event_schema_version, correlation_id, aggregate_version, payload)
+        VALUES (${id}, ${tenantId}, ${orderId}, ${`TEST-${randomUUID()}`}, 'ORDER_ITEM_EXTRA_WORK_CHANGED_V1',
+          'success', 'TEST Mehrarbeit', ${actorId}::uuid, 'galvanik', 'galvanik', ${randomUUID()}::uuid,
+          1, ${randomUUID()}::uuid, 1, ${sql.json(payload)}::jsonb)`;
+      return id;
+    }
+    const mehrarbeit = await schreibeTestMehrarbeit(mandant, auftrag, werkstatt.actorId);
+    const fremdeMehrarbeit = await schreibeTestMehrarbeit(fremd, fremderAuftrag, fremderAkteur);
     await sql`UPDATE public.company_settings SET entnahme_regel_je_rubrik = ${sql.json({ [rubrik.id]: "umlagerung" })}::jsonb,
       material_aufschlag_prozent = 20, lager_regelversion = 'TEST-v1', bilanzbewertung_methode = 'letzter_ek'
       WHERE tenant_id = ${mandant} AND id = ${firma}`;
