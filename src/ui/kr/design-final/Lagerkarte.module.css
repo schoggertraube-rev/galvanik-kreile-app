@@ -1,0 +1,60 @@
+.lager { container: kr-lagerkarten / inline-size; min-inline-size: var(--kr-arbeit-null); }
+.liste { display: grid; gap: var(--kr-arbeit-lager-gap); margin: var(--kr-arbeit-null); padding: var(--kr-arbeit-null); list-style: none; }
+.karte {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)) auto;
+  grid-template-areas: 'id tools' 'stock stock' 'actions actions' 'receipt receipt';
+  gap: var(--kr-arbeit-lager-gap) var(--kr-arbeit-innen);
+  align-items: center;
+  min-inline-size: var(--kr-arbeit-null);
+  padding: var(--kr-arbeit-lager-polster);
+  border: var(--kr-arbeit-linie) solid var(--kr-arbeit-lager-kante);
+  border-radius: var(--kr-arbeit-lager-rund);
+  background: var(--kr-arbeit-lager-glas);
+  box-shadow: var(--kr-arbeit-lager-schatten);
+  color: var(--kr-arbeit-lager-tinte);
+  transition: background-color var(--kr-arbeit-lager-zeit), border-color var(--kr-arbeit-lager-zeit), box-shadow var(--kr-arbeit-lager-zeit);
+}
+.karte[data-knapp="true"]:not([data-aktiv="true"]) { border-inline-start: var(--kr-arbeit-lager-streifen) solid var(--kr-arbeit-lager-gold); }
+.karte[data-aktiv="true"] { border-color: var(--kr-arbeit-lager-aktivkante); background: var(--kr-arbeit-lager-aktivglas); box-shadow: var(--kr-arbeit-lager-aktivschatten); }
+.bezeichnung { grid-area: id; display: flex; align-items: center; gap: var(--kr-arbeit-abstand); min-inline-size: var(--kr-arbeit-null); }
+.bild { inline-size: var(--kr-arbeit-lager-bild); aspect-ratio: var(--kr-arbeit-quadrat); object-fit: cover; border-radius: var(--kr-arbeit-rund-bild); }
+.titelblock { min-inline-size: var(--kr-arbeit-null); overflow-wrap: anywhere; }
+.titel { margin: var(--kr-arbeit-null); font-size: var(--kr-arbeit-lager-titel); line-height: var(--kr-arbeit-lager-titelzeile); font-weight: var(--kr-arbeit-fett); }
+.wahl { appearance: none; padding: var(--kr-arbeit-null); min-block-size: var(--kr-arbeit-touch); border: none; color: inherit; background: none; font: inherit; text-align: start; cursor: pointer; }
+.ort, .masse { margin: var(--kr-arbeit-null); color: var(--kr-arbeit-lager-neben); font-size: var(--kr-arbeit-lager-nebenschrift); line-height: var(--kr-arbeit-zeilenhoehe); }
+.ort { margin-block-start: var(--kr-arbeit-lager-ortabstand); }
+.bestand { grid-area: stock; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--kr-arbeit-lager-stockgap); min-inline-size: var(--kr-arbeit-null); padding: var(--kr-arbeit-lager-stockpolster); border-radius: var(--kr-arbeit-rund-bild); background: var(--kr-arbeit-lager-vorrat); }
+.karte[data-knapp="true"] .bestand { background: var(--kr-arbeit-lager-knapp); color: var(--kr-arbeit-lager-knapptinte); }
+.vorrat { font-size: var(--kr-arbeit-lager-nebenschrift); font-variant-numeric: tabular-nums; }
+.vorrat strong { font-size: var(--kr-arbeit-lager-menge); line-height: var(--kr-arbeit-lager-titelzeile); }
+.zustand { display: inline-flex; gap: var(--kr-arbeit-eng); align-items: center; font-size: var(--kr-arbeit-lager-statusschrift); line-height: var(--kr-arbeit-zeilenhoehe); }
+.zustand svg { display: block; inline-size: var(--kr-arbeit-lager-stocksymbol); block-size: var(--kr-arbeit-lager-stocksymbol); }
+.mengen { grid-area: actions; display: grid; gap: var(--kr-arbeit-lager-aktionsgap); grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-lager-hauptspalte)) minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)); min-inline-size: var(--kr-arbeit-null); }
+.entnahme:only-child, .andereMenge:only-child { grid-column: var(--kr-arbeit-ganze-reihe); }
+.entnahme, .andereMenge, .werkzeug { appearance: none; box-sizing: border-box; min-inline-size: var(--kr-arbeit-null); min-block-size: var(--kr-arbeit-touch); font: inherit; cursor: pointer; }
+.entnahme { display: grid; place-content: center; gap: var(--kr-arbeit-lager-unterabstand); min-block-size: var(--kr-arbeit-lager-aktionshoehe); padding: var(--kr-arbeit-lager-aktionspolster); border: var(--kr-arbeit-linie) solid var(--kr-arbeit-lager-nebenkante); border-radius: var(--kr-arbeit-rund-bild); color: var(--kr-arbeit-lager-nebentinte); background: var(--kr-arbeit-lager-nebenglas); box-shadow: var(--kr-arbeit-lager-nebenschatten); text-align: center; transition: transform var(--kr-arbeit-druckzeit); }
+.entnahme > strong { font-size: var(--kr-arbeit-schrift); line-height: var(--kr-arbeit-zeilenhoehe); }
+.entnahme > span { font-size: var(--kr-arbeit-lager-statusschrift); line-height: var(--kr-arbeit-zeilenhoehe); }
+.karte[data-aktiv="true"] .entnahme { border-color: var(--kr-arbeit-lager-hauptkante); color: var(--kr-arbeit-lichtkante); background: var(--kr-arbeit-lager-hauptglas); box-shadow: var(--kr-arbeit-lager-hauptschatten); }
+.andereMenge { padding: var(--kr-arbeit-lager-aktionspolster); border: var(--kr-arbeit-linie) solid var(--kr-arbeit-lager-anderekante); border-radius: var(--kr-arbeit-lager-andere-radius); color: var(--kr-arbeit-lager-neben); background: var(--kr-arbeit-lager-andereglas); font-size: var(--kr-arbeit-lager-nebenschrift); }
+.werkzeuge { grid-area: tools; display: flex; justify-content: end; gap: var(--kr-arbeit-lager-werkzeugabstand); }
+.werkzeug { display: grid; flex: none; place-items: center; min-inline-size: var(--kr-arbeit-touch); inline-size: var(--kr-arbeit-touch); block-size: var(--kr-arbeit-touch); aspect-ratio: var(--kr-arbeit-quadrat); padding: var(--kr-arbeit-null); border: var(--kr-arbeit-linie) solid var(--kr-arbeit-lager-werkzeugkante); border-radius: var(--kr-arbeit-rund-bild); color: var(--kr-arbeit-lager-neben); background: var(--kr-arbeit-lager-werkzeugglas); box-shadow: var(--kr-arbeit-lager-werkzeugschatten); }
+.werkzeug svg { display: block; inline-size: var(--kr-arbeit-symbol); block-size: var(--kr-arbeit-symbol); }
+.rueckmeldung { grid-area: receipt; margin: var(--kr-arbeit-null); }
+.rueckmeldung[role="alert"] { color: var(--kr-arbeit-rottinte); }
+.karte button:focus-visible { outline: var(--kr-arbeit-fokusring); outline-offset: var(--kr-arbeit-fokusabstand); }
+.karte button:disabled { opacity: var(--kr-arbeit-inaktiv); cursor: default; }
+.entnahme:active:not(:disabled) { transform: translateY(var(--kr-arbeit-gedrueckt)); }
+
+@container kr-lagerkarten (min-width: 610px) {
+  .karte { grid-template-columns: minmax(var(--kr-arbeit-lager-idmin), var(--kr-arbeit-spalte)) minmax(var(--kr-arbeit-lager-stockmin), var(--kr-arbeit-lager-stockspalte)) minmax(var(--kr-arbeit-lager-aktionsmin), var(--kr-arbeit-lager-mittelaktionsspalte)) auto; grid-template-areas: 'id stock actions tools' 'receipt receipt receipt receipt'; }
+  .mengen { grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)); gap: var(--kr-arbeit-lager-unterabstand); }
+  .andereMenge { border-color: transparent; background: none; }
+}
+@container kr-lagerkarten (min-width: 900px) {
+  .karte { grid-template-columns: minmax(var(--kr-arbeit-lager-idminweit), var(--kr-arbeit-spalte)) minmax(var(--kr-arbeit-lager-stockminweit), var(--kr-arbeit-lager-stockspalte)) minmax(var(--kr-arbeit-lager-aktionsminweit), var(--kr-arbeit-lager-weitaktionsspalte)) auto; }
+  .mengen { grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-lager-weithauptspalte)) minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)); }
+}
+@media (prefers-reduced-motion: reduce) { .karte, .entnahme { transition: none; } }

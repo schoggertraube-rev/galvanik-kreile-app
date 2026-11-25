@@ -1,2 +1,16 @@
-/* The optional PL16:32 status occupies a real row; a null slot leaves V45 unchanged. */
-.withStatus:has(>[data-spec-id="offline.zeile"]){grid-template-rows:var(--kopf) auto minmax(0,1fr)}
+.rahmen {
+  background: var(--surface) url('/design/css-app-background-6c07b6b40cb0.svg') center / cover no-repeat;
+  font-family: var(--kr-app-schrift);
+}
+.rahmen.mitLeiste {
+  margin-inline-start: calc(var(--gb-leiste-breite) + 2 * var(--gb-leiste-aussen));
+}
+.rahmen.mitLeiste:has(.leiste[data-kompakt]) {
+  margin-inline-start: calc(var(--gb-leiste-klein-breite) + 2 * var(--gb-leiste-klein-x));
+}
+.rahmen.mitDock :global(.kr-inhalt) {
+  padding-block-end: calc(var(--gb-dock-hoehe) + 2 * var(--gb-dock-unten) + env(safe-area-inset-bottom));
+}
+.rahmen.mitLeiste:has(>[data-spec-id="offline.zeile"]) { grid-template-rows: var(--kopf) auto minmax(0,1fr); }
+.handyKopf { justify-content: flex-end; padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)); }
+.handyKopf > :global(.kr-marke) { display: none; }

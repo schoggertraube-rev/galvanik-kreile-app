@@ -42,7 +42,7 @@ export function weiterMitEnter(event: ReactKeyboardEvent<HTMLDivElement>) {
   const index = fields.indexOf(target);
   if (index < 0) return;
   const lastRequired = fields.findLast(field => field.required || field.dataset.enterSubmit === 'true');
-  const primary = boundary.querySelector<HTMLButtonElement>('.kr-dialog-fuss button.kr-btn--erledigen,.kr-dialog-fuss button.kr-btn--primaer,.kr-dialog-fuss button.act');
+  const primary = boundary.querySelector<HTMLButtonElement>('[data-dialog-actions] button[data-ton="haupt"],.kr-dialog-fuss button.kr-btn--erledigen,.kr-dialog-fuss button.kr-btn--primaer,.kr-dialog-fuss button.act');
   if (target === lastRequired || index === fields.length - 1) {
     if (primary && !primary.disabled) { event.preventDefault(); primary.click(); }
     return;

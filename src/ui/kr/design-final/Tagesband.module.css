@@ -1,0 +1,46 @@
+.band {
+  display: grid;
+  gap: var(--kr-tag-innen-luecke);
+  min-inline-size: 0;
+  padding: var(--kr-tag-band-padding);
+  border: var(--kr-tag-linie) solid var(--kr-tag-band-rand);
+  border-block-end-color: var(--kr-tag-band-kante);
+  border-radius: var(--kr-tag-kartenradius);
+  background: var(--kr-tag-band-grund);
+  box-shadow: var(--kr-tag-kenn-schatten);
+  color: var(--kr-tag-ink);
+}
+.header, .tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--kr-tag-innen-luecke); }
+.header { justify-content: space-between; }
+.header h2, .header p { margin: 0; }
+.header h2 { color: var(--kr-tag-blau); font-size: var(--kr-tag-band-titel); line-height: var(--kr-tag-titel-zeile); }
+.period, .agenda { display: flex; flex-wrap: wrap; gap: var(--kr-tag-notizabstand); }
+.period button, .agenda button, .markerButton {
+  min-block-size: var(--kr-tag-tippziel);
+  padding: var(--kr-tag-frist-padding);
+  border: var(--kr-tag-linie) solid var(--kr-tag-band-kante);
+  border-radius: var(--kr-tag-foto-radius);
+  background: var(--kr-tag-frist-grund);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.period button[aria-pressed=true] { background: var(--kr-tag-band-aktiv); color: var(--kr-tag-band-aktivtext); }
+.track { background: var(--kr-tag-band-schiene); box-shadow: var(--kr-tag-band-schiene-schatten); border-radius: var(--kr-tag-platte-radius); padding-inline: var(--kr-tag-band-randpuffer); }
+.ruler { position: relative; min-block-size: var(--kr-tag-band-hoehe); isolation: isolate; }
+.elapsed { position: absolute; inset-block: 0; inset-inline: 0 auto; inline-size: var(--position); background: var(--kr-tag-band-fortschritt); border-radius: var(--kr-tag-platte-radius) 0 0 var(--kr-tag-platte-radius); z-index: -1; }
+.tick, .now, .marker { position: absolute; inset-inline-start: var(--position); translate: var(--kr-tag-band-mitte) 0; white-space: nowrap; }
+.tick { inset-block-end: var(--kr-tag-band-skala); font-size: var(--kr-tag-band-klein); color: var(--kr-tag-aux); }
+.now { inset-block-end: var(--kr-tag-band-jetzt); background: var(--kr-tag-band-aktiv); color: var(--kr-tag-band-aktivtext); padding: var(--kr-tag-frist-padding); border-radius: var(--kr-tag-foto-radius); font-size: var(--kr-tag-band-klein); }
+.marker { inset-block-start: var(--kr-tag-band-marke); color: var(--kr-tag-band-punkt); }
+.marker[data-pigment=zusage] { color: var(--kr-tag-band-termin); }
+.marker::before { content: ''; display: block; inline-size: var(--kr-tag-band-punktmass); aspect-ratio: 1; margin: auto; border-radius: 50%; background: currentColor; box-shadow: var(--kr-tag-band-punktschatten); }
+.markerButton { display: none; }
+.agenda > button { flex: 1 1 auto; text-align: start; }
+.agenda > button[data-pigment=zusage] strong { color: var(--kr-tag-risiko-ink); }
+.band button:focus-visible { outline: var(--kr-tag-fokus-breite) solid var(--kr-tag-blau); outline-offset: var(--kr-tag-fokus-versatz); }
+@media (min-width: 760px) {
+  .track[data-markers] .marker::before { display: none; }
+  .markerButton { display: block; }
+  .agenda[data-compact-only] { display: none; }
+}

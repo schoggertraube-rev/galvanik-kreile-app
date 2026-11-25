@@ -11,10 +11,10 @@ describe('S19 source-bound Hauptaktion',()=>{
     const props={elementId:'order.collect',text:'TEST Auftrag zur Sammelrechnung vormerken',laden:false,gesperrt:false,onAusloesen:command};
     const view=render(<Hauptaktion {...props}/>);
     const button=screen.getByRole('button',{name:props.text});
-    expect(button).toHaveClass('act');
-    expect(button.querySelector('.lbl')).toHaveTextContent(props.text);
-    expect(button.querySelector('.nub .ic')).not.toBeNull();
-    expect(button.querySelector('.okmark')).not.toBeNull();
+    expect(button).toHaveAttribute('data-ton','haupt');
+    expect(button).toHaveAttribute('data-form','text');
+    expect(button).toHaveAttribute('data-spec-id', props.elementId);
+    expect(button).toHaveTextContent(props.text);
     fireEvent.click(button);
     expect(command).toHaveBeenCalledTimes(1);
     view.rerender(<Hauptaktion {...props} laden/>);

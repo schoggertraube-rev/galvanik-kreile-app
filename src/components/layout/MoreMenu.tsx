@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { Inbox, LogOut, Mail, PackageCheck, Settings, X } from "lucide-react";
-import { useEffect,useRef,useState } from "react";
+import { Inbox, LogOut, Mail, PackageCheck, Settings } from "lucide-react";
+import { useEffect,useRef,useState,type ReactNode } from "react";
 import { usePathname,useRouter } from "next/navigation";
 import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { requestGlobalCreate } from "./GlobalCreateFlow";
+import { Dialog, Icon } from '@/ui/kr';
+import type { NavigationsEintrag } from '@/ui/navigation/register';
 import styles from "./TargetShell.module.css";
 
-export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function MoreMenu({ open, onClose, ziele, werkzeuge }: { open: boolean; onClose: () => void; ziele?: readonly NavigationsEintrag[]; werkzeuge?: ReactNode }) {
   const router = useRouter();
   const pathname=usePathname();
   const openedAtPath=useRef(pathname);
@@ -39,12 +41,7 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
   };
 
   return (
-    <div className={styles.moreBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={styles.moreSheet} role="dialog" aria-modal="true" aria-labelledby="more-title">
-        <header className={styles.moreHeader}>
-          <h2 id="more-title">Mehr</h2>
-          <button type="button" className={styles.moreClose} onClick={onClose} aria-label="Schließen"><X aria-hidden="true" /></button>
-        </header>
+    <Dialog titel="Mehr" icon="grid" onSchliessen={onClose} beschaeftigt={busy}>
         <div className={styles.moreGrid}>
           {hasArea("mails") ? <a className={styles.moreTile} data-spec-id="navigation.nachrichten" href="/nachrichten" onClick={event=>{if(pathname==='/nachrichten'){event.preventDefault();onClose();}}}>
             <Mail aria-hidden="true" /><strong>Nachrichten</strong>
@@ -55,6 +52,10 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
           {hasPermission("perm_view_leitstand") ? <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={()=>closeIfCurrentRoute('/warendurchlauf')}>
             <PackageCheck aria-hidden="true" /><strong>Werkstatt</strong>
           </Link> : null}
+          {ziele?.map(ziel => <Link key={ziel.id} className={styles.moreTile} data-spec-id={`navigation.${ziel.id}`}
+            href={ziel.route} prefetch={false} onNavigate={() => closeIfCurrentRoute(ziel.route)}>
+            <Icon name={ziel.icon}/><strong>{ziel.text}</strong>
+          </Link>)}
           {settingsVisible ? (
             <a className={styles.moreTile} href="/settings" onClick={event=>{if(pathname==='/settings'){event.preventDefault();onClose();}}}>
               <Settings aria-hidden="true" /><strong>Einstellungen</strong>
@@ -63,8 +64,8 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
           <button type="button" className={styles.moreTile} onClick={() => void signOut()} disabled={busy}>
             <LogOut aria-hidden="true" /><strong>Abmelden</strong>
           </button>
+          {werkzeuge}
         </div>
-      </section>
-    </div>
+    </Dialog>
   );
 }

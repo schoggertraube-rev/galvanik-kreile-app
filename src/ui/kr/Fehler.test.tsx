@@ -21,7 +21,8 @@ it.each(cases)('%s keeps object, catalog wording and exactly one exit through lo
   expect(screen.getByRole('status')).toHaveTextContent(text(values));
   expect(screen.getAllByRole('button')).toHaveLength(1);
   const button=screen.getByRole('button',{name:props.aktion.text});
-  expect(button).toHaveClass('btn2');
+  expect(button).toHaveAttribute('data-ton','sekundaer');
+  expect(button).toHaveAttribute('data-form','text');
   view.rerender(<Fehler {...props} laden/>);
   fireEvent.click(button);
   expect(exit).not.toHaveBeenCalled();
@@ -32,12 +33,11 @@ it.each(cases)('%s keeps object, catalog wording and exactly one exit through lo
   expect(exit).toHaveBeenCalledTimes(1);
 });
 
-it('keeps the existing legacy button while the shared style switch is off',()=>{
+it('uses the same shared action regardless of the surrounding page presentation',()=>{
   render(<Fehler situation="save" gegenstand="TEST Original" ausweg="TEST Lade neu."
     objektId="TEST-original" laden={false} deaktiviert={false}
     aktion={{id:'ui.reload',text:'TEST Neu laden',onAusloesen:vi.fn()}}/>);
   const button=screen.getByRole('button');
-  expect(button).toHaveClass('kr-btn');
-  expect(button).not.toHaveClass('btn2');
-  expect(button).not.toHaveAttribute('data-glass');
+  expect(button).toHaveAttribute('data-ton','sekundaer');
+  expect(button).toHaveAttribute('data-form','text');
 });

@@ -1,0 +1,85 @@
+.tag, .monatswechsel {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: normal;
+  line-height: var(--r53-form-zeit-tasten-line-height);
+  min-width: var(--r53-form-zeit-tasten-min-width);
+  display: grid;
+  place-items: center;
+  margin: var(--r53-form-zeit-tasten-margin);
+  color: inherit;
+  touch-action: manipulation;
+  transition: var(--r53-form-zeit-tasten-transition);
+}
+.tag:active:not(:disabled), .monatswechsel:active:not(:disabled) {
+  transform: var(--r53-form-zeit-druck-transform);
+}
+.tag:focus-visible, .monatswechsel:focus-visible {
+  outline: var(--r53-form-zeit-fokus-outline);
+  outline-offset: var(--r53-form-zeit-fokus-outline-offset);
+}
+.tag:disabled, .monatswechsel:disabled {
+  opacity: var(--r53-form-zeit-gesperrt-opacity);
+  cursor: default;
+}
+.monat {
+  display: grid;
+  grid-template-columns: var(--r53-form-zeit-monat-grid-template-columns);
+  align-items: center;
+  gap: var(--r53-form-zeit-monat-gap);
+  margin: var(--r53-form-zeit-monat-margin);
+}
+.kalender {
+  display: grid;
+  grid-template-columns: var(--r53-form-zeit-kalender-grid-template-columns);
+  align-items: center;
+  justify-items: stretch;
+}
+.wochentag {
+  padding: var(--r53-form-zeit-wochentag-padding);
+  font-size: var(--r53-form-zeit-wochentag-font-size);
+  text-align: center;
+  color: var(--r53-form-zeit-wochentag-color);
+  text-decoration: none;
+}
+.tag {
+  background: var(--r53-form-zeit-tag-background);
+  min-height: var(--r53-form-zeit-tag-min-height);
+  border: var(--r53-form-zeit-tag-border);
+  padding: var(--r53-form-zeit-tag-padding);
+  border-radius: var(--r53-form-zeit-tag-border-radius);
+  box-shadow: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--r53-form-zeit-tag-font-weight);
+}
+.monatswechsel {
+  border: var(--r53-form-zeit-monatswechsel-border);
+  border-radius: var(--r53-form-zeit-monatswechsel-border-radius);
+  min-height: var(--r53-form-zeit-monatswechsel-min-height);
+  padding: var(--r53-form-zeit-monatswechsel-padding);
+  background: var(--r53-form-zeit-monatswechsel-background);
+  box-shadow: var(--r53-form-zeit-monatswechsel-box-shadow);
+  font-size: var(--r53-form-zeit-monatswechsel-font-size);
+  line-height: var(--r53-form-zeit-monatswechsel-line-height);
+}
+.fehler {
+  margin: var(--r53-form-zeit-fehler-margin);
+  color: var(--r53-form-zeit-fehler-color);
+  font-size: var(--r53-form-zeit-fehler-font-size);
+}
+.monat > strong {
+  font: var(--r53-form-zeit-monatkopf-font);
+  text-align: center;
+}
+.tag[aria-current="date"] {
+  text-decoration: underline;
+  text-underline-offset: var(--r53-form-zeit-heute-text-underline-offset);
+}
+.tag[aria-pressed="true"] {
+  background: var(--r53-form-zeit-tagaktiv-background);
+  color: var(--r53-form-zeit-tagaktiv-color);
+  border: var(--r53-form-zeit-tagaktiv-border);
+  box-shadow: var(--r53-form-zeit-tagaktiv-box-shadow);
+}
+@media (prefers-reduced-motion: reduce) { .tag, .monatswechsel { transition:none; } }

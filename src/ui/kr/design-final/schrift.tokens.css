@@ -1,0 +1,28 @@
+@font-face {
+  font-family: 'Kreile Plex';
+  src: url('/design/kreile-plex-3b031aa4.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 700;
+  font-stretch: 75% 100%;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Kreile Barlow';
+  src: url('/design/kreile-barlow-4998b693.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: MaterialInter;
+  src: url('/design/materialinter-2c295d99.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  --kr-app-schrift: 'Kreile Plex', system-ui, sans-serif;
+  --kr-app-zahlen: 'Kreile Plex', system-ui, sans-serif;
+  --kr-app-akzent: 'Kreile Barlow', system-ui, sans-serif;
+  --kr-app-lager-schrift: MaterialInter, system-ui, sans-serif;
+}

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Suspense, type CSSProperties } from "react";
 import { fraunces, geistMono, inter } from "./fonts/localFonts";
 import "./globals.css";
+import "@/ui/kr/design-final/tokens.css";
 import {readRootStyle} from '@/ui/vorfinalStyle';
 
 export const viewport: Viewport = {
