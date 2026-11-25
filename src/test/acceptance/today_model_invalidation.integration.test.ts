@@ -18,8 +18,16 @@ it('creates only private tenant-keyed derived sources with no public read or del
  expect(tables).toEqual([{relname:'today_source_v1',relrowsecurity:true},{relname:'today_tenant_v1',relrowsecurity:true}]);
  expect(await sql`SELECT has_table_privilege('anon','private.today_source_v1','SELECT') AS anon_read,has_table_privilege('authenticated','private.today_source_v1','SELECT') AS authenticated_read,has_table_privilege('service_role','private.today_source_v1','DELETE') AS can_delete,has_table_privilege('service_role','private.today_source_v1','UPDATE') AS can_refresh`).toEqual([{anon_read:false,authenticated_read:false,can_delete:false,can_refresh:true}]);
  const triggers=await sql`SELECT n.nspname AS schema,c.relname AS name,count(*)::integer AS operations FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE NOT t.tgisinternal AND t.tgname IN ('today_mark_insert_v1','today_mark_update_v1','today_mark_delete_v1') GROUP BY n.nspname,c.relname ORDER BY n.nspname,c.relname`;
- expect(triggers).toHaveLength(45);expect(triggers.every(row=>row.operations===3)).toBe(true);
+ expect(triggers).toHaveLength(51);expect(triggers.every(row=>row.operations===3)).toBe(true);
  expect(triggers).toEqual(expect.arrayContaining([{schema:'public',name:'events',operations:3},{schema:'public',name:'orders',operations:3},{schema:'public',name:'intake_item',operations:3},{schema:'private',name:'evidence_domain_links',operations:3}]));
+ expect(triggers).toEqual(expect.arrayContaining([
+  {schema:'public',name:'stock_movements',operations:3},
+  {schema:'public',name:'material_prices',operations:3},
+  {schema:'public',name:'inventory_sessions',operations:3},
+  {schema:'public',name:'inventory_counts',operations:3},
+  {schema:'public',name:'inventory_lines',operations:3},
+  {schema:'public',name:'lager_material_nachbewertungen',operations:3},
+ ]));
 });
 
 it('marks actual intake, completion, freeze, invoice and settings writes in the same tenant without caching invented payloads',async()=>{

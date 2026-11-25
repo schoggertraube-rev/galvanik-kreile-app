@@ -463,12 +463,15 @@ describe("Lagerjournal und seine Befehle", () => {
     const artikelId = await artikel();
     const auftragId = await auftragAnlegen(mandant);
     const originalId = randomUUID();
-    const [journal] = await sql<{ id: string }[]>`
-      INSERT INTO public.stock_movements (tenant_id, inventory_item_id, order_id, movement_type, quantity,
-        snapshot_einkaufspreis_eur, created_at)
-      VALUES (${mandant}, ${artikelId}, ${auftragId}, 'consumption', -2, 3.4, '2026-11-01T10:00:00Z')
-      RETURNING id::text
-    `;
+    const [journal] = await sql.begin(async tx => {
+      await tx`SELECT set_config('app.tenant_id', ${mandant}, true)`;
+      return [...await tx<{ id: string }[]>`
+        INSERT INTO public.stock_movements (tenant_id, inventory_item_id, order_id, movement_type, quantity,
+          snapshot_einkaufspreis_eur, created_at)
+        VALUES (${mandant}, ${artikelId}, ${auftragId}, 'consumption', -2, 3.4, '2026-11-01T10:00:00Z')
+        RETURNING id::text
+      `];
+    });
     const payload = {
       originalId, journalId: null, stand: "vorschlag", kandidaten: [journal.id], titel: "TEST: Doppelung",
       original: { id: originalId, tenant_id: mandant, order_id: auftragId, inventory_item_id: artikelId,
