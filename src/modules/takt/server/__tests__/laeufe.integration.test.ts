@@ -56,6 +56,41 @@ it('reserviert denselben Mandanten und dieselbe Minute parallel genau einmal', a
     .toEqual([{id: reservierung.id, status: 'läuft', versuch: 2}]);
 });
 
+it('wiederholt denselben fehlgeschlagenen Lauf erst nach einer Minute', async () => {
+  const job: TaktJob = {
+    schluessel: 'takt.test_wiederholung', paket: null, fristMs: 5_000,
+    faellig: () => minute,
+    ausfuehren: vi.fn<TaktJob['ausfuehren']>()
+      .mockRejectedValueOnce(Error('TEST_TAKT_ERSTER_VERSUCH'))
+      .mockResolvedValueOnce('ok'),
+  };
+  const ausfuehren = () => fuehreFaelligenJobAus(
+    tenant, {job, faelligFuer: minute}, {protokollAufbewahrungTage: async () => null}, async () => true,
+  );
+  const davor = Date.now();
+  await expect(ausfuehren()).resolves.toBe('fehler');
+  const danach = Date.now();
+  const [fehlgeschlagen] = await sql<{id: string; status: string; versuch: number; erneutMs: number}[]>`
+    SELECT id::text,status,versuch,(extract(epoch FROM reserviert_bis)*1000)::double precision AS "erneutMs"
+    FROM public.takt_job_runs WHERE tenant_id=${tenant} AND job_schluessel=${job.schluessel}`;
+  expect(fehlgeschlagen).toMatchObject({status: 'fehler', versuch: 1});
+  expect(fehlgeschlagen.erneutMs).toBeGreaterThanOrEqual(davor + 60_000);
+  expect(fehlgeschlagen.erneutMs).toBeLessThanOrEqual(danach + 60_000);
+  await expect(ausfuehren()).resolves.toBe('nicht_reserviert');
+  expect(job.ausfuehren).toHaveBeenCalledOnce();
+
+  // Age the isolated fixture past the recorded retry deadline without changing the database clock.
+  await sql`UPDATE public.takt_job_runs
+    SET gestartet_um=gestartet_um-interval '61 seconds', beendet_um=beendet_um-interval '61 seconds',
+      reserviert_bis=reserviert_bis-interval '61 seconds'
+    WHERE tenant_id=${tenant} AND id=${fehlgeschlagen.id}::uuid`;
+  await expect(ausfuehren()).resolves.toBe('ok');
+  expect(job.ausfuehren).toHaveBeenCalledTimes(2);
+  expect(await sql`SELECT id::text,status,versuch,fehlercode FROM public.takt_job_runs
+    WHERE tenant_id=${tenant} AND job_schluessel=${job.schluessel}`)
+    .toEqual([{id: fehlgeschlagen.id, status: 'ok', versuch: 2, fehlercode: null}]);
+});
+
 it('führt ein abgeschaltetes Paket und ein Paket mit Lesefehler nie aus', async () => {
   const ausfuehren = vi.fn(async () => 'ok' as const);
   const job = {schluessel: 'takt.test_paket', paket: 'p4_lager', fristMs: 5_000,
