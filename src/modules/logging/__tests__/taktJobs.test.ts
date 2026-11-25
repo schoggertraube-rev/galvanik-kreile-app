@@ -3,6 +3,8 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {hasPageReadBudget} from '@/db/readBudget';
 
 const transaction = vi.hoisted(() => vi.fn());
+// The real deadline has no database configuration. Native SQL is covered separately.
+vi.mock('@/db', () => ({db: {transaction: () => { throw Error('TEST_USE_TRANSACTION_FIXTURE'); }}}));
 vi.mock('@/lib/server/privilegedDb', async original => ({
   ...await original<typeof import('@/lib/server/privilegedDb')>(),
   withPrivilegedTenantTransaction: transaction,

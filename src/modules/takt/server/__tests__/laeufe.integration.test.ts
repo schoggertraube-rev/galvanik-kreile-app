@@ -10,6 +10,7 @@ import {fuehreFaelligenJobAus} from '../lauf';
 import {configurePageReadBudget} from '@/db/readBudget';
 import {sql as statement} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction, withTaktStatementTimeout} from '@/lib/server/privilegedDb';
+import {GET as taktGET} from '@/app/api/takt/route';
 
 const database = process.env.DATABASE_URL;
 const port = process.env.GITHUB_ACTIONS === 'true' ? '54322' : '54342';
@@ -29,6 +30,40 @@ afterAll(async () => {
     await sql.end({timeout: 5});
   }
 });
+
+it('führt den echten Takt-GET mit Cron-Anmeldung ohne Sitzung bis zum Projektionsbeleg aus', async () => {
+  const testTenant = `TEST-ablauf-00-cron-${randomUUID()}`;
+  const actor = randomUUID();
+  const cronSecret = randomUUID();
+  const previous = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = cronSecret;
+  const url = 'http://127.0.0.1/api/takt';
+  const runs = () => sql`SELECT job_schluessel,status,versuch,beendet_um IS NOT NULL AS abgeschlossen
+    FROM public.takt_job_runs WHERE tenant_id=${testTenant} AND job_schluessel='heute_neuaufbau'`;
+  try {
+    // Isolated TEST profile for the existing projection reader. No Auth session.
+    await sql`INSERT INTO public.app_users (id,tenant_id,email,full_name,role,active)
+      VALUES (${actor}::uuid,${testTenant},${`test-cron-${actor}@local.invalid`},'TEST Cron','developer',true)`;
+    await sql`INSERT INTO private.today_tenant_v1 (tenant_id) VALUES (${testTenant}) ON CONFLICT DO NOTHING`;
+    expect((await taktGET(new Request(url))).status).toBe(401);
+    expect(await runs()).toEqual([]);
+
+    const response = await taktGET(new Request(url, {headers: {Authorization: `Bearer ${cronSecret}`}}));
+    expect(response.status).toBe(200);
+    expect(await runs()).toEqual([{job_schluessel:'heute_neuaufbau',status:'ok',versuch:1,abgeschlossen:true}]);
+    expect(await sql`SELECT source_id FROM private.today_source_v1
+      WHERE tenant_id=${testTenant} AND kind='orders' AND built_at IS NOT NULL`).toEqual([{source_id:'*'}]);
+  } finally {
+    if (previous === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previous;
+    await sql.begin(async tx => {
+      await tx`DELETE FROM public.app_users WHERE id=${actor}::uuid AND tenant_id=${testTenant}`;
+      await tx`DELETE FROM private.today_source_v1 WHERE tenant_id=${testTenant}`;
+      await tx`DELETE FROM private.today_tenant_v1 WHERE tenant_id=${testTenant}`;
+      await tx`DELETE FROM public.takt_job_runs WHERE tenant_id=${testTenant}`;
+    });
+  }
+}, 60_000);
 
 it('reserviert denselben Mandanten und dieselbe Minute parallel genau einmal', async () => {
   const [rechte] = await sql`

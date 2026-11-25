@@ -696,8 +696,10 @@ export async function readTodayModelInTransaction(tx:PrivilegedTenantTransaction
    source.built_tenant_seq IS DISTINCT FROM tenant.tenant_seq AS "tenantChanged",
    source.source_version AS "sourceVersion",orders.version AS "currentVersion",${current} AS current,(${current} AND source.status='OK') AS fresh,
    CASE WHEN ${notHeadersOnly} AND ${current} AND source.status IN ('OK','SOURCE_INCOMPLETE') THEN source.payload ELSE NULL END AS payload,source.error_code AS "errorCode",source.built_at::text AS "builtAt",
-   source.built_tenant_seq<>tenant.tenant_seq OR source.built_day IS DISTINCT FROM ${today}::date
-    OR source.projector_version<>${TODAY_PROJECTOR_VERSION} AS "needsRebuild"
+   (source.built_tenant_seq<>tenant.tenant_seq OR source.built_day IS DISTINCT FROM ${today}::date
+    OR source.projector_version<>${TODAY_PROJECTOR_VERSION}
+    OR (source.kind='order' AND source.listed AND source.status<>'SOURCE_INCOMPLETE'
+     AND (source.status='PENDING' OR source.source_seq<>source.built_seq))) AS "needsRebuild"
    FROM private.today_tenant_v1 tenant JOIN private.today_source_v1 source ON source.tenant_id=tenant.tenant_id
    LEFT JOIN public.orders orders ON source.kind='order' AND orders.tenant_id=source.tenant_id AND orders.id=source.source_id
    WHERE tenant.tenant_id=${context.tenantId} AND (source.source_id='*' OR source.kind='order' AND source.listed)

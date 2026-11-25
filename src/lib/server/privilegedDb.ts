@@ -4,12 +4,13 @@ import { withPageReadHardDeadline } from "@/db/readBudget";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import { TAKT_BUDGET_MS } from "@/modules/takt/public";
 
 type TenantAuthorization = Pick<AuthorizationSnapshot, "tenantId">;
 
 /** Limits every tenant transaction entered while one reserved Takt job runs. */
 export function withTaktStatementTimeout<T>(milliseconds: number, work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > 50_000) throw Error('TAKT_STATEMENT_TIMEOUT_INVALID');
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > TAKT_BUDGET_MS) throw Error('TAKT_STATEMENT_TIMEOUT_INVALID');
   return withPageReadHardDeadline(work, milliseconds, signal);
 }
 

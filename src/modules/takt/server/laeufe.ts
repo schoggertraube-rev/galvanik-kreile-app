@@ -4,6 +4,7 @@ import {outsidePageReadBudget} from '@/db/readBudget';
 import {listeTodayMandanten} from '@/lib/server/todayProjectionSchedule';
 import {withPrivilegedTenantTransaction, withTaktStatementTimeout, type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {hasAuthorizationArea, type AuthorizationSnapshot} from '@/lib/server/authorization';
+import {TAKT_BUDGET_MS} from '../public';
 import {naechsteReservierung} from './wiederholung';
 
 export type LaufReservierung = Readonly<{id: string; versuch: number}>;
@@ -110,7 +111,7 @@ export async function liesTaktLaeufe(auth: AuthorizationSnapshot, filter: Readon
 export async function reserviereLauf(tenantId: string, schluessel: string, faelligFuer: string, fristMs: number): Promise<LaufReservierung | null> {
   if (!tenantId || !/^[a-z][a-z0-9_.]{1,79}$/.test(schluessel) ||
       !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/.test(faelligFuer) ||
-      !Number.isSafeInteger(fristMs) || fristMs < 1 || fristMs > 50_000) throw Error('TAKT_RESERVIERUNG_INVALID');
+      !Number.isSafeInteger(fristMs) || fristMs < 1 || fristMs > TAKT_BUDGET_MS) throw Error('TAKT_RESERVIERUNG_INVALID');
   return withPrivilegedTenantTransaction({tenantId}, async tx => {
     const inserted = await tx.execute<LaufReservierung>(sql`
       INSERT INTO public.takt_job_runs(tenant_id,job_schluessel,faellig_fuer,gestartet_um,status,versuch,reserviert_bis)

@@ -5,6 +5,7 @@ import {hasPageReadBudget} from '@/db/readBudget';
 const transaction = vi.hoisted(() => vi.fn());
 const listeTodayMandanten = vi.hoisted(() => vi.fn());
 const hasAuthorizationArea = vi.hoisted(() => vi.fn());
+vi.mock('@/db', () => ({db: {transaction: () => { throw Error('TEST_USE_TRANSACTION_FIXTURE'); }}}));
 vi.mock('@/lib/server/privilegedDb', async original => ({
   ...await original<typeof import('@/lib/server/privilegedDb')>(),
   withPrivilegedTenantTransaction: transaction,
