@@ -208,7 +208,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
   const operationalInvoice=invoiceId!==undefined&&before.bezug_typ==='eingangsrechnung'&&before.bezug_id===invoiceId&&canCompleteTaskArea(auth,'buchhaltung')&&(before.art==='rechnung'||before.art==='aufgabe'&&before.fuer_bereich==='eingang');
   const operationalLager=before.bezug_typ==='lagerbestand'&&before.bezug_id===lagerBestandArtikelId&&hasLagerCapability(auth,'lager.buchen');
-  if(before.bezug_typ==='lagerbestand'&&!operationalLager)reject('FORBIDDEN','Bestandsklärung endet mit der Lagerbuchung.');
+  if(before.bezug_typ==='lagerbestand'&&!operationalLager)reject('FORBIDDEN',LAGER_STAMM_COPY.bestandEndetMitBuchung);
   if(!allowed(auth,before)&&!operationalLager&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.bezug_typ==='lagerartikel'){
    if(!hasLagerCapability(auth,'lager.stamm'))reject('FORBIDDEN',LAGER_STAMM_COPY.rechtFehlt);
@@ -779,7 +779,7 @@ export async function synchronizeLagerBestandTask(
  if(stand.negativ){
   if(open)return open.id;
   const name=Array.from(stand.artikelName).slice(0,100).join('');
-  const value:TaskSaveInput={clientKey:randomUUID(),version:0,kind:'aufgabe',title:`Bestand von ${name} klären`,
+  const value:TaskSaveInput={clientKey:randomUUID(),version:0,kind:'aufgabe',title:LAGER_STAMM_COPY.bestandKlaeren(name),
    dueDate:stand.heute,time:null,forLogin:null,forArea:'lager.stamm',reference:{type:'lagerbestand',id:artikelId},note:null};
   return (await persistTask(tx,auth,value,deps,false)).task.id;
  }
