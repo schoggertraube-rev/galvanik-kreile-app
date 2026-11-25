@@ -5,6 +5,7 @@
   "publicExports": [
     "@/modules/tasks/server-public#synchronizeLagerEntwurfTask",
     "@/modules/tasks/server-public#synchronizeLagerBestandTask",
+    "@/modules/tasks/server-public#synchronizeLagerPreisTask",
     "@/modules/tasks/server-public#synchronizeInvoiceMailRemainderTask",
     "@/modules/tasks/server-public#synchronizeCollectionFollowupTask",
     "@/modules/tasks/server-public#synchronizeCancellationCreditRetryTask",
