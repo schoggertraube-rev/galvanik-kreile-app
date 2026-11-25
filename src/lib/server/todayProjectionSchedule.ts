@@ -23,6 +23,7 @@ export async function liesTodayModellVeraltet(tenantId:string,jetzt:Date):Promis
  const {readTodayModelInTransaction}=await import('./todayDashboard');
  return withPageReadBudget(()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
   const result=await readTodayModelInTransaction(tx,{tenantId},berlinCalendarDay(jetzt),true);
-  return result.needsRebuild;
+  return result.needsRebuild||result.rows.some(row=>row.kind==='order'&&row.listed&&row.status!=='SOURCE_INCOMPLETE'
+   &&(row.status==='PENDING'||row.sourceSeq!==row.builtSeq));
  }),5000);
 }

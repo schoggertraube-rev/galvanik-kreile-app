@@ -1,9 +1,10 @@
 import 'server-only';
 import {berlinCalendarDay, berlinUhrzeit} from '@/lib/domain/workingDays';
 import {withTaktStatementTimeout} from '@/lib/server/privilegedDb';
+import {PageReadTimeout} from '@/db/readBudget';
 import {type TaktJob, type TaktLeser} from '../public';
 import type {PackageSwitchId} from '@/modules/fundament/public';
-import {beendeLauf, loescheAlteLaeufe, reserviereLauf, type LaufAbschluss} from './laeufe';
+import {beendeAbgelaufenenLauf, beendeLauf, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf, type LaufAbschluss} from './laeufe';
 
 export type FaelligerJob = Readonly<{job: TaktJob; faelligFuer: string}>;
 export type JobErgebnis = 'nicht_reserviert' | 'ok' | 'ohne_arbeit' | 'übersprungen' | 'fehler' | 'abgebrochen';
@@ -31,43 +32,59 @@ export function nachholMinuteBerlin(jetzt: Date): string {
 export async function fuehreFaelligenJobAus(
   tenantId: string, faellig: FaelligerJob, leser: TaktLeser,
   paketAktiv: (paket: PackageSwitchId) => Promise<boolean>,
+  restbudgetMs = faellig.job.fristMs, abbruch?: AbortSignal,
 ): Promise<JobErgebnis> {
   const {job, faelligFuer} = faellig;
-  const reservierung = await reserviereLauf(tenantId, job.schluessel, faelligFuer, job.fristMs);
-  if (!reservierung) return 'nicht_reserviert';
-
+  if (abbruch?.aborted || restbudgetMs < 1) return 'nicht_reserviert';
   const start = performance.now();
-  let status: LaufAbschluss = 'ok';
-  let ergebnis: JobErgebnis = 'ok';
-  let fehlercode: string | null = null;
-  const signal = AbortSignal.timeout(job.fristMs);
-  try {
-    await withTaktStatementTimeout(job.fristMs, async () => {
-    let aktiv = true;
-    if (job.paket !== null) {
-      try { aktiv = await paketAktiv(job.paket); }
-      catch { fehlercode = 'takt_paket_lesen'; throw Error(fehlercode); }
-    }
-    if (!aktiv) {
-      status = 'übersprungen';
-      ergebnis = 'übersprungen';
-    } else {
-      ergebnis = await job.ausfuehren(tenantId, signal, leser);
+  const innerhalb = await mitTaktLaufsperre(tenantId, job.schluessel, async (): Promise<JobErgebnis> => {
+    const budget = Math.min(job.fristMs, Math.floor(restbudgetMs - (performance.now() - start)));
+    if (budget < 1 || abbruch?.aborted) return 'nicht_reserviert';
+    const reservierungStart = performance.now();
+    const deadline = AbortSignal.timeout(budget);
+    const signal = abbruch ? AbortSignal.any([deadline, abbruch]) : deadline;
+    const vorbereitung = await withTaktStatementTimeout(budget, async () => {
+      if (await beendeAbgelaufenenLauf(tenantId, job.schluessel, faelligFuer)) return 'abgebrochen' as const;
+      return reserviereLauf(tenantId, job.schluessel, faelligFuer, budget);
+    }, signal);
+    if (vorbereitung === 'abgebrochen') return vorbereitung;
+    const reservierung = vorbereitung;
+    if (!reservierung) return 'nicht_reserviert';
+
+    let status: LaufAbschluss = 'ok';
+    let ergebnis: JobErgebnis = 'ok';
+    let fehlercode: string | null = null;
+    try {
       signal.throwIfAborted();
-      if (job.schluessel === 'protokoll_aufbewahrung' && ergebnis === 'ok') {
-        const tage = await leser.protokollAufbewahrungTage();
-        if (tage !== null) {
-          try { await loescheAlteLaeufe(tenantId, tage, reservierung.id); }
-          catch { fehlercode = 'takt_aufbewahrung'; throw Error(fehlercode); }
+      const uebrig = Math.max(1, budget - Math.floor(performance.now() - reservierungStart));
+      await withTaktStatementTimeout(uebrig, async () => {
+        let aktiv = true;
+        if (job.paket !== null) {
+          try { aktiv = await paketAktiv(job.paket); }
+          catch { fehlercode = 'takt_paket_lesen'; throw Error(fehlercode); }
         }
-      }
+        if (!aktiv) {
+          status = 'übersprungen';
+          ergebnis = 'übersprungen';
+        } else {
+          ergebnis = await job.ausfuehren(tenantId, signal, leser);
+          signal.throwIfAborted();
+          if (job.schluessel === 'protokoll_aufbewahrung' && ergebnis === 'ok') {
+            const tage = await leser.protokollAufbewahrungTage();
+            if (tage !== null) {
+              try { await loescheAlteLaeufe(tenantId, tage, reservierung.id, signal); }
+              catch { fehlercode = 'takt_aufbewahrung'; throw Error(fehlercode); }
+            }
+          }
+        }
+      }, signal);
+    } catch (error) {
+      status = signal.aborted || error instanceof PageReadTimeout ? 'abgebrochen' : 'fehler';
+      ergebnis = status;
+      fehlercode = status === 'fehler' ? fehlercode ?? 'takt_ausfuehrung' : null;
     }
-    });
-  } catch {
-    status = signal.aborted ? 'abgebrochen' : 'fehler';
-    ergebnis = status;
-    if (status === 'fehler') fehlercode ??= 'takt_ausfuehrung';
-  }
-  await beendeLauf(tenantId, reservierung, status, Math.max(0, Math.floor(performance.now() - start)), fehlercode);
-  return ergebnis;
+    await beendeLauf(tenantId, reservierung, status, Math.max(0, Math.floor(performance.now() - start)), fehlercode);
+    return ergebnis;
+  }, {budgetMs: Math.min(job.fristMs, Math.floor(restbudgetMs)), signal: abbruch});
+  return innerhalb ?? 'nicht_reserviert';
 }

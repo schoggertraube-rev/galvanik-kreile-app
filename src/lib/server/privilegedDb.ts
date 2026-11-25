@@ -1,17 +1,16 @@
 import "server-only";
 
-import { AsyncLocalStorage } from "node:async_hooks";
+import { withPageReadHardDeadline } from "@/db/readBudget";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 
 type TenantAuthorization = Pick<AuthorizationSnapshot, "tenantId">;
-const taktStatementTimeout = new AsyncLocalStorage<number>();
 
 /** Limits every tenant transaction entered while one reserved Takt job runs. */
-export function withTaktStatementTimeout<T>(milliseconds: number, work: () => Promise<T>): Promise<T> {
+export function withTaktStatementTimeout<T>(milliseconds: number, work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > 50_000) throw Error('TAKT_STATEMENT_TIMEOUT_INVALID');
-  return taktStatementTimeout.run(milliseconds, work);
+  return withPageReadHardDeadline(work, milliseconds, signal);
 }
 
 export type PrivilegedTenantTransaction = Pick<typeof db, "execute" | "select" | "update">;
@@ -27,8 +26,6 @@ export async function withPrivilegedTenantTransaction<T>(
 ): Promise<T> {
   return db.transaction(async (transaction) => {
     await transaction.execute(sql`SELECT set_config('app.tenant_id', ${authorization.tenantId}, true)`);
-    const timeout = taktStatementTimeout.getStore();
-    if (timeout !== undefined) await transaction.execute(sql`SELECT set_config('statement_timeout', ${String(timeout) + 'ms'}, true)`);
     return work(transaction as PrivilegedTenantTransaction);
   });
 }

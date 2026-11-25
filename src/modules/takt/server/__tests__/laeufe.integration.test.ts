@@ -5,8 +5,11 @@ import {afterAll, expect, it, vi} from 'vitest';
 import {taeglichFaelligAb} from '@/lib/domain/workingDays';
 import {bauePaketAktiv, TAKT_JOBS} from '../../jobs';
 import type {TaktJob} from '../../public';
-import {beendeLauf, liesLetztenOk, reserviereLauf} from '../laeufe';
+import {beendeAbgelaufenenLauf, beendeLauf, liesLetztenOk, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf, TAKT_NACHHOLEN} from '../laeufe';
 import {fuehreFaelligenJobAus} from '../lauf';
+import {configurePageReadBudget} from '@/db/readBudget';
+import {sql as statement} from 'drizzle-orm';
+import {withPrivilegedTenantTransaction, withTaktStatementTimeout} from '@/lib/server/privilegedDb';
 
 const database = process.env.DATABASE_URL;
 const port = process.env.GITHUB_ACTIONS === 'true' ? '54322' : '54342';
@@ -16,11 +19,12 @@ if (!database || database !== process.env.H18_EXPECTED_DATABASE_URL ||
 
 const sql = postgres(database, {max: 2, prepare: false});
 const tenant = `TEST-ablauf-takt-${randomUUID()}`;
+const catchupTenant = `${tenant}-nachholen`;
 const minute = '2026-11-25T10:00';
 
 afterAll(async () => {
   try {
-    await sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenant}`;
+    await sql`DELETE FROM public.takt_job_runs WHERE tenant_id IN (${tenant},${catchupTenant})`;
   } finally {
     await sql.end({timeout: 5});
   }
@@ -49,11 +53,45 @@ it('reserviert denselben Mandanten und dieselbe Minute parallel genau einmal', a
 
   await sql`UPDATE public.takt_job_runs SET reserviert_bis=statement_timestamp()-interval '1 second'
     WHERE id=${reservierung.id}::uuid AND tenant_id=${tenant}`;
-  await expect(reserviereLauf(tenant, schluessel, minute, 25_000))
-    .resolves.toEqual({id: reservierung.id, versuch: 2});
-  expect(await sql`SELECT id::text,status,versuch FROM public.takt_job_runs
+  await expect(reserviereLauf(tenant, schluessel, minute, 25_000)).resolves.toBeNull();
+  await expect(mitTaktLaufsperre(tenant, schluessel, () => beendeAbgelaufenenLauf(tenant, schluessel, minute))).resolves.toBe(true);
+  expect(await sql`SELECT id::text,status,versuch,fehlercode FROM public.takt_job_runs
     WHERE tenant_id=${tenant} AND job_schluessel=${schluessel} AND faellig_fuer=${minute}`)
-    .toEqual([{id: reservierung.id, status: 'läuft', versuch: 2}]);
+    .toEqual([{id: reservierung.id, status: 'abgebrochen', versuch: 1, fehlercode: null}]);
+  await expect(reserviereLauf(tenant, schluessel, minute, 25_000)).resolves.toBeNull();
+});
+
+it('hält das Nachholen in der Berliner Minute auch nach der Aufbewahrung einmalig', async () => {
+  const [{due}] = await sql<{due:string}[]>`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD"T"HH24:MI') AS due`;
+  const reservierungen = await Promise.all([
+    reserviereLauf(catchupTenant, TAKT_NACHHOLEN, due, 25_000),
+    reserviereLauf(catchupTenant, TAKT_NACHHOLEN, due, 25_000),
+  ]);
+  expect(reservierungen.filter(Boolean)).toHaveLength(1);
+  const nachholen = reservierungen.find(r => r !== null);
+  const aufbewahrung = await reserviereLauf(catchupTenant, 'protokoll_aufbewahrung', due.slice(0,10), 25_000);
+  if (!nachholen || !aufbewahrung) throw Error('TEST_TAKT_RESERVIERUNG_FEHLT');
+  await beendeLauf(catchupTenant, nachholen, 'abgebrochen', 1);
+  await loescheAlteLaeufe(catchupTenant, 0, aufbewahrung.id);
+  await expect(reserviereLauf(catchupTenant, TAKT_NACHHOLEN, due, 25_000)).resolves.toBeNull();
+  expect(await sql`SELECT id::text,status,versuch FROM public.takt_job_runs
+    WHERE tenant_id=${catchupTenant} AND job_schluessel=${TAKT_NACHHOLEN}`)
+    .toEqual([{id:nachholen.id,status:'abgebrochen',versuch:1}]);
+});
+
+it('begrenzt native SQL auch wenn der Projektor mehr Zeit einstellt', async () => {
+  const lesen = () => withPrivilegedTenantTransaction({tenantId:tenant}, async tx => {
+    const [row] = await tx.execute<{ms:number}>(statement`SELECT setting::int AS ms FROM pg_settings WHERE name='statement_timeout'`);
+    return row.ms;
+  });
+  const vorher = await lesen();
+  const begrenzt = await withTaktStatementTimeout(1500, () => {
+    configurePageReadBudget(25_000);
+    return lesen();
+  });
+  expect(begrenzt).toBeGreaterThan(0);
+  expect(begrenzt).toBeLessThanOrEqual(1500);
+  expect(await lesen()).toBe(vorher);
 });
 
 it('wiederholt denselben fehlgeschlagenen Lauf erst nach einer Minute', async () => {

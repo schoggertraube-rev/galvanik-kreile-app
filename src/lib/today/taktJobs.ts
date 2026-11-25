@@ -5,7 +5,7 @@ import {rebuildTodayModel, refreshTodayModel} from '@/lib/server/todayProjection
 /** The stale path uses the existing bounded projector, with the same receipt key. */
 export async function fuehreHeuteAuffrischung(tenantId: string, signal: AbortSignal): Promise<'ok' | 'ohne_arbeit'> {
   signal.throwIfAborted();
-  const result = await refreshTodayModel(tenantId, undefined, {bounded: true});
+  const result = await refreshTodayModel(tenantId, undefined, {bounded: true, signal});
   signal.throwIfAborted();
   if (result.code !== 'OK' || result.stale > 0) throw Error('TAKT_HEUTE_AUFFRISCHUNG_INCOMPLETE');
   return result.built > 0 ? 'ok' : 'ohne_arbeit';
@@ -19,7 +19,7 @@ export const HEUTE_TAKT_JOBS = [{
   fristMs: 25_000,
   ausfuehren: async (tenantId: string, signal: AbortSignal) => {
     signal.throwIfAborted();
-    const result = await rebuildTodayModel(tenantId, undefined, {bounded: true});
+    const result = await rebuildTodayModel(tenantId, undefined, {bounded: true, signal});
     signal.throwIfAborted();
     if (result.code !== 'OK' || result.stale > 0) throw Error('TAKT_HEUTE_NEUAUFBAU_INCOMPLETE');
     return result.built > 0 ? 'ok' as const : 'ohne_arbeit' as const;

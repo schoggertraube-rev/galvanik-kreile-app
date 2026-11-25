@@ -1,12 +1,14 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
+import {outsidePageReadBudget} from '@/db/readBudget';
 import {listeTodayMandanten} from '@/lib/server/todayProjectionSchedule';
-import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction, withTaktStatementTimeout, type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {hasAuthorizationArea, type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {naechsteReservierung} from './wiederholung';
 
 export type LaufReservierung = Readonly<{id: string; versuch: number}>;
 export type LaufAbschluss = 'ok' | 'fehler' | 'abgebrochen' | 'übersprungen';
+export const TAKT_NACHHOLEN = 'takt.nachholen';
 export type TaktLaufZeile = Readonly<{
   id: string; jobSchluessel: string; faelligFuer: string; gestartetUm: string;
   beendetUm: string | null; status: string; versuch: number; fehlercode: string | null; dauerMs: number | null;
@@ -15,6 +17,45 @@ export type TaktLaufZeile = Readonly<{
 /** The existing Today tenant register is the sole source for cron fan-out. */
 export async function liesTaktMandanten(): Promise<string[]> {
   return listeTodayMandanten();
+}
+
+/** Keep the same tenant/job exclusive until the native work has settled. */
+export async function mitTaktLaufsperre<T>(
+  tenantId: string, schluessel: string, work: () => Promise<T>,
+  grenzen?: Readonly<{budgetMs:number;signal?:AbortSignal}>,
+): Promise<T | null> {
+  const halten = () => withPrivilegedTenantTransaction({tenantId}, async tx => {
+    const [lock] = await tx.execute<{claimed: boolean}>(sql`
+      SELECT pg_try_advisory_xact_lock(hashtextextended('takt:'||${tenantId}||':'||${schluessel},0)) AS claimed`);
+    // Work uses the remaining budget independently. Keep this lock until its
+    // transaction and durable completion have finished, including on abort.
+    return lock?.claimed ? await outsidePageReadBudget(work) : null;
+  });
+  return grenzen ? withTaktStatementTimeout(grenzen.budgetMs, halten, grenzen.signal) : halten();
+}
+
+/** Close a timed-out attempt only after obtaining its tenant/job lock. */
+export async function beendeAbgelaufenenLauf(tenantId: string, schluessel: string, faelligFuer: string): Promise<boolean> {
+  return withPrivilegedTenantTransaction({tenantId}, async tx => {
+    const [abgelaufen] = await tx.execute<LaufReservierung & {dauer: number}>(sql`
+      SELECT id::text,versuch,LEAST(2147483647,GREATEST(0,FLOOR(EXTRACT(epoch FROM statement_timestamp()-gestartet_um)*1000)))::integer AS dauer
+      FROM public.takt_job_runs WHERE tenant_id=${tenantId} AND job_schluessel=${schluessel} AND faellig_fuer=${faelligFuer}
+        AND status='läuft' AND reserviert_bis<=statement_timestamp() FOR UPDATE`);
+    if (!abgelaufen) return false;
+    await schreibeLaufabschluss(tx, tenantId, abgelaufen, 'abgebrochen', abgelaufen.dauer, null);
+    return true;
+  });
+}
+
+/** Keep the original due key when retrying, including after the next day starts. */
+export async function liesOffeneWiederholungen(tenantId: string, schluessel: readonly string[]) {
+  if (!schluessel.length) return [];
+  return withPrivilegedTenantTransaction({tenantId}, async tx => [...await tx.execute<{schluessel: string; faelligFuer: string; bereit: boolean}>(sql`
+    SELECT job_schluessel AS schluessel,faellig_fuer AS "faelligFuer",reserviert_bis<=statement_timestamp() AS bereit
+    FROM public.takt_job_runs
+    WHERE tenant_id=${tenantId} AND job_schluessel IN (${sql.join(schluessel.map(key=>sql`${key}`),sql`, `)})
+      AND reserviert_bis IS NOT NULL AND (status='läuft' OR (status IN ('fehler','abgebrochen') AND versuch<4))
+    ORDER BY faellig_fuer,job_schluessel`)]);
 }
 
 /** The scheduler reads the last qualified success from its own run source. */
@@ -77,12 +118,13 @@ export async function reserviereLauf(tenantId: string, schluessel: string, faell
       ON CONFLICT(tenant_id,job_schluessel,faellig_fuer) DO NOTHING
       RETURNING id::text,versuch`);
     if (inserted.length === 1) return inserted[0];
+    if (schluessel === TAKT_NACHHOLEN) return null;
     const retried = await tx.execute<LaufReservierung>(sql`
       UPDATE public.takt_job_runs SET status='läuft',versuch=versuch+1,gestartet_um=statement_timestamp(),
         beendet_um=NULL,fehlercode=NULL,dauer_ms=NULL,reserviert_bis=statement_timestamp()+(${fristMs}*interval '1 millisecond')
       WHERE tenant_id=${tenantId} AND job_schluessel=${schluessel} AND faellig_fuer=${faelligFuer}
-        AND (status IN ('fehler','abgebrochen') OR status='läuft')
-        AND reserviert_bis<statement_timestamp() AND versuch<4
+        AND status IN ('fehler','abgebrochen')
+        AND reserviert_bis<=statement_timestamp() AND versuch<4
       RETURNING id::text,versuch`);
     return retried.length === 1 ? retried[0] : null;
   });
@@ -95,23 +137,27 @@ export async function beendeLauf(tenantId: string, reservierung: LaufReservierun
       !['ok', 'fehler', 'abgebrochen', 'übersprungen'].includes(status) ||
       (status === 'fehler' && (!fehlercode || !/^[a-z_]{1,60}$/.test(fehlercode))) ||
       (status !== 'fehler' && fehlercode !== null)) throw Error('TAKT_ABSCHLUSS_INVALID');
+  await withPrivilegedTenantTransaction({tenantId}, tx => schreibeLaufabschluss(tx, tenantId, reservierung, status, dauerMs, fehlercode));
+}
+
+async function schreibeLaufabschluss(tx: PrivilegedTenantTransaction, tenantId: string, reservierung: LaufReservierung, status: LaufAbschluss, dauerMs: number, fehlercode: string | null) {
   const next = status === 'fehler' || status === 'abgebrochen'
     ? naechsteReservierung(reservierung.versuch, new Date()) : null;
-  await withPrivilegedTenantTransaction({tenantId}, async tx => {
-    const updated = await tx.execute<{id: string}>(sql`
-      UPDATE public.takt_job_runs SET status=${status},beendet_um=statement_timestamp(),dauer_ms=${dauerMs},
-        fehlercode=${fehlercode},reserviert_bis=${next?.toISOString() ?? null}::timestamptz
-      WHERE tenant_id=${tenantId} AND id=${reservierung.id}::uuid AND status='läuft' AND versuch=${reservierung.versuch}
-      RETURNING id::text`);
-    if (updated.length !== 1) throw Error('TAKT_RESERVIERUNG_VERLOREN');
-  });
+  const updated = await tx.execute<{id: string}>(sql`
+    UPDATE public.takt_job_runs SET status=${status},beendet_um=statement_timestamp(),dauer_ms=${dauerMs},
+      fehlercode=${fehlercode},reserviert_bis=${next?.toISOString() ?? null}::timestamptz
+    WHERE tenant_id=${tenantId} AND id=${reservierung.id}::uuid AND status='läuft' AND versuch=${reservierung.versuch}
+    RETURNING id::text`);
+  if (updated.length !== 1) throw Error('TAKT_RESERVIERUNG_VERLOREN');
 }
 
 /** Retention of Takt's own run rows; called only after the Logging job succeeded. */
-export async function loescheAlteLaeufe(tenantId: string, tage: number, eigeneLaufId: string): Promise<void> {
+export async function loescheAlteLaeufe(tenantId: string, tage: number, eigeneLaufId: string, signal?: AbortSignal): Promise<void> {
   if (!tenantId || !Number.isSafeInteger(tage) || tage < 0 || !/^[0-9a-f-]{36}$/i.test(eigeneLaufId)) throw Error('TAKT_RETENTION_SETTING_INVALID');
-  await withPrivilegedTenantTransaction({tenantId}, async tx => {
-    await tx.execute(sql`SET LOCAL statement_timeout='15000ms'`);
-    await tx.execute(sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenantId} AND gestartet_um < statement_timestamp()-(${tage}*interval '1 day') AND id <> ${eigeneLaufId}::uuid`);
-  });
+  await withTaktStatementTimeout(15_000, () => withPrivilegedTenantTransaction({tenantId}, async tx => {
+    await tx.execute(sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenantId} AND gestartet_um < statement_timestamp()-(${tage}*interval '1 day')
+      AND id <> ${eigeneLaufId}::uuid AND status<>'läuft'
+      AND NOT (job_schluessel<>${TAKT_NACHHOLEN} AND status IN ('fehler','abgebrochen') AND reserviert_bis IS NOT NULL AND versuch<4)
+      AND NOT (job_schluessel=${TAKT_NACHHOLEN} AND faellig_fuer=to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD"T"HH24:MI'))`);
+  }), signal);
 }

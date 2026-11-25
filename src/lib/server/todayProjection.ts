@@ -247,11 +247,14 @@ async function projectGroup(auth:ProjectorAuthorization,lease:Lease,rows:readonl
  return publishGroup(auth.tenantId,lease,rows,results,Math.round(performance.now()-started),assertOwned);
 }
 
-async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean){
+async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean,signal?:AbortSignal){
+ signal?.throwIfAborted();
  const settings=await ports.readSettings({tenantId}),lease=await claim(tenantId,settings);
  if(!lease)return {code:'BUSY' as const,built:0,stale:0};
  const heartbeat=keepLeaseAlive(tenantId,lease,settings.todayRefreshLeaseSeconds);
+ const assertOwned=()=>{signal?.throwIfAborted();assertPageReadBudgetActive();heartbeat.assertOwned();};
  try{
+  assertOwned();
   const auth=await projectorAuthorization(tenantId);
   if(rebuild){
    const known=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{id:string;seq:string}>(sql`SELECT source_id AS id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenantId} AND kind='order' ORDER BY source_id`));
@@ -285,10 +288,10 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit));
   let built=0,stale=0;
   for(let offset=0;offset<rows.length;offset+=15){
-   heartbeat.assertOwned();
-   const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports,heartbeat.assertOwned);heartbeat.assertOwned();built+=result.built;stale+=result.stale;
+   assertOwned();
+   const result=await projectGroup(auth,lease,rows.slice(offset,offset+15),ports,assertOwned);assertOwned();built+=result.built;stale+=result.stale;
   }
-  heartbeat.assertOwned();
+  assertOwned();
   if(rebuild){
    const remaining=await withLeaseWrite(lease,()=>pending(tenantId,lease,true,1));
    if(remaining.length)stale+=remaining.length;
@@ -303,8 +306,8 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
  finally{await heartbeat.stop();await outsidePageReadBudget(()=>withPageReadBudget(()=>release(tenantId,lease),2000));}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
-export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
- const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false),projectionCounts);
+export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true;signal?:AbortSignal})=>{
+ const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false,options?.signal),projectionCounts);
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});
@@ -312,8 +315,8 @@ export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=produ
   return run({...ports,readSettings:async()=>settings});
  },5000);
 };
-export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true})=>{
- const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true),projectionCounts);
+export const rebuildTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true;signal?:AbortSignal})=>{
+ const run=()=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,ports,true,options?.signal),projectionCounts);
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});

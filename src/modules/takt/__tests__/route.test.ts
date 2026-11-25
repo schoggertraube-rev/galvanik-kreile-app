@@ -41,6 +41,16 @@ it('startet am alten Endpunkt nur den Heute-Job für einen berechtigten Mandante
   expect((await handGET(new Request('https://example.test/api/heute/neuaufbau'))).status).toBe(403);
   expect(lauf).not.toHaveBeenCalled();
   lauf.mockResolvedValue({mandanten: 1, laeufe: 1, restOffen: false});
-  expect((await handGET(new Request('https://example.test/api/heute/neuaufbau'))).status).toBe(204);
-  expect(lauf).toHaveBeenCalledWith({tenantId: 'tenant-a', nurJob: 'heute_neuaufbau'});
+  const request = new Request('https://example.test/api/heute/neuaufbau');
+  expect((await handGET(request)).status).toBe(204);
+  expect(lauf).toHaveBeenCalledWith({tenantId: 'tenant-a', nurJob: 'heute_neuaufbau', signal: request.signal});
+});
+
+it.each([
+  {mandanten: 1, laeufe: 1, restOffen: false, erfolglos: true},
+  {mandanten: 1, laeufe: 0, restOffen: true, erfolglos: true},
+])('meldet Fehler und Abbruch beim manuellen Heute-Aufbau', async result => {
+  handzugriff.mockResolvedValue({code: 'LOGIN', tenantId: 'tenant-a'});
+  lauf.mockResolvedValue(result);
+  expect((await handGET(new Request('https://example.test/api/heute/neuaufbau'))).status).toBe(503);
 });

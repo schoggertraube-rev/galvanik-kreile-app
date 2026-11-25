@@ -9,6 +9,9 @@ vi.mock('@/lib/server/privilegedDb', () => ({withTaktStatementTimeout:timeoutSco
 const ports = vi.hoisted(() => ({
   reserviereLauf: vi.fn(), beendeLauf: vi.fn(), loescheAlteLaeufe: vi.fn(),
   liesTaktMandanten: vi.fn(), liesLetztenOk: vi.fn(),
+  beendeAbgelaufenenLauf: vi.fn(), liesOffeneWiederholungen: vi.fn(),
+  mitTaktLaufsperre: vi.fn(async (_tenantId: string, _key: string, work: () => Promise<unknown>) => work()),
+  TAKT_NACHHOLEN: 'takt.nachholen',
 }));
 vi.mock('../laeufe', () => ports);
 const modelStale = vi.hoisted(() => vi.fn(async () => false));
@@ -41,6 +44,8 @@ beforeEach(() => {
   ports.loescheAlteLaeufe.mockResolvedValue(undefined);
   ports.liesTaktMandanten.mockResolvedValue(['tenant-a', 'tenant-b']);
   ports.liesLetztenOk.mockResolvedValue(null);
+  ports.beendeAbgelaufenenLauf.mockResolvedValue(false);
+  ports.liesOffeneWiederholungen.mockResolvedValue([]);
 });
 
 it('frischt ein veraltetes Modell nur einmal je Berliner Fünfminutenfenster auf', async () => {
@@ -63,12 +68,26 @@ it('läuft ohne Login über alle Mandanten der einzigen Today-Liste', async () =
   expect(testJobs.ausfuehren.mock.calls.map(call => call[0])).toEqual(['tenant-a', 'tenant-b']);
 });
 
+it('behält den älteren offenen Termin bis zu seiner Wiederholung und reserviert keinen neuen', async () => {
+  const faelligFuer = '2026-11-24T14:05';
+  const jetzt = new Date('2026-11-25T05:07:00Z');
+  ports.liesOffeneWiederholungen.mockResolvedValueOnce([{schluessel:'heute_neuaufbau',faelligFuer,bereit:false}]);
+  modelStale.mockResolvedValue(true);
+  expect(await fuehreTaktAus({tenantId:'tenant-a',jetzt})).toEqual({mandanten:1,laeufe:0,restOffen:false});
+  expect(ports.reserviereLauf).not.toHaveBeenCalled();
+  ports.liesOffeneWiederholungen.mockResolvedValueOnce([{schluessel:'heute_neuaufbau',faelligFuer,bereit:true}]);
+  await fuehreTaktAus({tenantId:'tenant-a',jetzt});
+  expect(ports.reserviereLauf.mock.calls.map(call=>call.slice(0,3))).toEqual([['tenant-a','heute_neuaufbau',faelligFuer]]);
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(testJobs.ausfuehren).not.toHaveBeenCalled();
+});
+
 it('stoppt nach dem Zeitbudget vor dem nächsten Mandanten, ohne dessen Lauf zu reservieren', async () => {
   let elapsed = 0;
   const clock = vi.spyOn(performance, 'now').mockImplementation(() => elapsed);
   testJobs.ausfuehren.mockImplementationOnce(async () => { elapsed = 60_000; return 'ok'; });
   try {
-    expect(await fuehreTaktAus({budgetMs: 50_000})).toEqual({mandanten: 2, laeufe: 1, restOffen: true});
+    expect(await fuehreTaktAus({budgetMs: 50_000})).toEqual({mandanten: 2, laeufe: 1, restOffen: true, erfolglos: true});
     expect(ports.reserviereLauf.mock.calls.map(call => call[0])).toEqual(['tenant-a']);
   } finally { clock.mockRestore(); }
 });
@@ -77,7 +96,7 @@ it('reserviert das Nachholen vor jeder Arbeit und startet dieselbe Minute nur ei
   expect(await holeTaktNach('tenant-a')).toBe(true);
   expect(ports.reserviereLauf.mock.calls[0][1]).toBe('takt.nachholen');
   expect(ports.reserviereLauf.mock.calls[0][3]).toBe(25_000);
-  expect(ports.beendeLauf).toHaveBeenCalledWith('tenant-a', {id, versuch: 1}, 'ok', expect.any(Number));
+  expect(ports.beendeLauf).toHaveBeenCalledWith('tenant-a', {id, versuch: 1}, 'ok', expect.any(Number), null);
   testJobs.ausfuehren.mockClear();
   ports.reserviereLauf.mockResolvedValueOnce(null);
   expect(await holeTaktNach('tenant-a')).toBe(false);
@@ -87,10 +106,10 @@ it('reserviert das Nachholen vor jeder Arbeit und startet dieselbe Minute nur ei
 it('hält den aktuellen Lauf bei null Tagen bis zum belegten Abschluss fest', async () => {
   const ausfuehren = vi.fn(async () => 'ok' as const);
   expect(await fuehreFaelligenJobAus('tenant-a', {job: job('protokoll_aufbewahrung', ausfuehren), faelligFuer: '2026-11-25'}, leser, async () => true)).toBe('ok');
-  expect(ports.loescheAlteLaeufe).toHaveBeenCalledWith('tenant-a', 0, id);
+  expect(ports.loescheAlteLaeufe).toHaveBeenCalledWith('tenant-a', 0, id, expect.any(AbortSignal));
   expect(ports.beendeLauf).toHaveBeenCalledWith('tenant-a', {id, versuch: 1}, 'ok', expect.any(Number), null);
   expect(ports.loescheAlteLaeufe.mock.invocationCallOrder[0]).toBeLessThan(ports.beendeLauf.mock.invocationCallOrder[0]);
-  expect(timeoutScope).toHaveBeenCalledWith(25_000, expect.any(Function));
+  expect(timeoutScope.mock.calls.every(([budget]) => budget > 0 && budget <= 25_000)).toBe(true);
 });
 
 it('belegt den Löschfehler am selben Lauf, ohne einen Erfolg zu behaupten', async () => {
@@ -113,7 +132,8 @@ it('legt nur einen technischen Fehlercode ab und kann denselben Fälligkeitsbele
   const faellig = {job: job('heute_neuaufbau', async () => { throw Error('TEST_SECRET_DETAILS'); }), faelligFuer: '2026-11-25'};
   expect(await fuehreFaelligenJobAus('tenant-a', faellig, leser, async () => true)).toBe('fehler');
   expect(ports.beendeLauf).toHaveBeenCalledWith('tenant-a', {id, versuch: 1}, 'fehler', expect.any(Number), 'takt_ausfuehrung');
-  expect(ports.reserviereLauf).toHaveBeenCalledWith('tenant-a', 'heute_neuaufbau', '2026-11-25', 25_000);
+  expect(ports.reserviereLauf).toHaveBeenCalledWith('tenant-a', 'heute_neuaufbau', '2026-11-25', expect.any(Number));
+  expect(ports.reserviereLauf.mock.calls[0][3]).toBeLessThanOrEqual(25_000);
 });
 
 it('belegt eine überschrittene Jobfrist als abgebrochen', async () => {
@@ -123,7 +143,7 @@ it('belegt eine überschrittene Jobfrist als abgebrochen', async () => {
   }), fristMs: 5};
   expect(await fuehreFaelligenJobAus('tenant-a', {job: langsam, faelligFuer: '2026-11-25'}, leser, async () => true)).toBe('abgebrochen');
   expect(ports.beendeLauf).toHaveBeenCalledWith('tenant-a', {id, versuch: 1}, 'abgebrochen', expect.any(Number), null);
-  expect(timeoutScope).toHaveBeenCalledWith(5, expect.any(Function));
+  expect(timeoutScope.mock.calls.every(([budget]) => budget > 0 && budget <= 5)).toBe(true);
 });
 
 it('führt einen abgeschalteten Paketjob nicht aus und legt keinen zweiten Lauf an', async () => {
