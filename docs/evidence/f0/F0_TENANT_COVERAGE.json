@@ -103,6 +103,7 @@
     "stock_locations": {"category": "tenant_isolation_pre_existing", "policy_names": ["lager_mandant"]},
     "stock_movements": { "category": "rls_no_policy_deny_all", "policy_names": [] },
     "supplier_invoice": {"category": "tenant_isolation_pre_existing", "policy_names": ["supplier_invoice_tenant_isolation"]},
+    "takt_job_runs": { "category": "rls_no_policy_deny_all", "policy_names": [] },
     "tasks": {"category": "tenant_isolation_pre_existing", "policy_names": ["tasks_tenant_isolation"]},
     "technical_protocol": {"category": "rls_no_policy_deny_all", "policy_names": []},
     "teile_klassifikator": { "category": "other_policy", "policy_names": [], "note": "rls_disabled" },
