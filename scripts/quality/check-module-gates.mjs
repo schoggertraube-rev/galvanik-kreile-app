@@ -496,6 +496,51 @@ export function validTodayProjectorComposition(source) {
 }
 export function allowedServerFacadeConsumer(file, source) {
   if(file===TODAY_PROJECTOR_FILE)return validTodayProjectorComposition(source);
+  const taktJobsFile = 'src/modules/takt/jobs.ts';
+  const taktRoutes = new Set([
+    'src/app/api/takt/route.ts',
+    'src/app/api/heute/neuaufbau/route.ts',
+    'src/app/api/heute/modell/route.ts',
+  ]);
+  if (file === taktJobsFile || taktRoutes.has(file)) {
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    let dynamicFacadeReference = false;
+    const visit = node => {
+      if (ts.isCallExpression(node) &&
+          (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+           ts.isIdentifier(node.expression) && node.expression.text === 'require')) {
+        // The Takt entrypoints must use only statically named facade imports.
+        // A computed specifier cannot prove the name set and is rejected too.
+        const argument = node.arguments[0];
+        if (!argument || !ts.isStringLiteral(argument) && !ts.isNoSubstitutionTemplateLiteral(argument) ||
+            /^src\/modules\/[^/]+\/server-public$/.test(resolveSpec(file, argument.text) ?? '')) {
+          dynamicFacadeReference = true;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(tree);
+    if (dynamicFacadeReference) return false;
+    const fundamentReaders = new Set([
+      'readBetriebswaechterEinstellungenInTransaction', 'readLoggingSettings',
+      'isFeatureEnabled', 'readTenantFeatures', 'readPackageSwitches',
+      'readErkennungsEinstellungenInTransaction',
+    ]);
+    for (const statement of tree.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const facade = (resolveSpec(file, statement.moduleSpecifier.text) ?? '').match(/^src\/modules\/([^/]+)\/server-public$/);
+      if (!facade) continue;
+      const clause = statement.importClause;
+      if (!clause || clause.name || !clause.namedBindings || !ts.isNamedImports(clause.namedBindings)) return false;
+      if (taktRoutes.has(file) && facade[1] !== 'takt') return false;
+      for (const binding of clause.namedBindings.elements) {
+        const importedName = (binding.propertyName ?? binding.name).text;
+        if (file === taktJobsFile && importedName !== 'taktJobs' &&
+            !(facade[1] === 'fundament' && fundamentReaders.has(importedName))) return false;
+      }
+    }
+    return true;
+  }
   if (REAL_DB_TEST_FILE.test(file)) return true;
   return SERVER_ACTION_FILE.test(file) && hasDirectiveInPrologue(source, "use server");
 }

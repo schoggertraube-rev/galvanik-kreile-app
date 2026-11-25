@@ -84,6 +84,46 @@ afterEach(() => {
   for (const t of temps.splice(0)) rmSync(t, { recursive: true, force: true });
 });
 
+describe('S38b-0 Takt-Fassaden', () => {
+  it('erlaubt den benannten Logging-Job in der Sammelstelle', () => {
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      `${IMP} { taktJobs as loggingTaktJobs } from "@/modules/logging/server-public";`))
+      .toBe(true);
+  });
+
+  it('weist dynamische Fundament-Fassaden in der Sammelstelle ab', () => {
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      'const facade = await import("@/modules' + '/fundament/server-public");')).toBe(false);
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      'const facade = await import(`@/modules' + '/fundament/server-public`);')).toBe(false);
+  });
+
+  it('weist require der Takt-Fassade in der Route ab', () => {
+    expect(allowedServerFacadeConsumer('src/app/api/takt/route.ts',
+      'const facade = require("@/modules' + '/takt/server-public");')).toBe(false);
+  });
+
+  it('behält den statisch benannten Takt-Job als erlaubten Import', () => {
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      `${IMP} { taktJobs } from "@/modules/logging/server-public";`)).toBe(true);
+  });
+
+  it('weist einen fachfremden Logging-Leser in der Sammelstelle ab', () => {
+    expect(allowedServerFacadeConsumer('src/modules/takt/jobs.ts',
+      `${IMP} { readLog } from "@/modules/logging/server-public";`))
+      .toBe(false);
+  });
+
+  it('erlaubt der Takt-Route nur die Takt-Fassade', () => {
+    expect(allowedServerFacadeConsumer('src/app/api/takt/route.ts',
+      `${IMP} { fuehreTaktAus } from "@/modules/takt/server-public";`))
+      .toBe(true);
+    expect(allowedServerFacadeConsumer('src/app/api/takt/route.ts',
+      `${IMP} { readLog } from "@/modules/logging/server-public";`))
+      .toBe(false);
+  });
+});
+
 function findingsOf(root: string, opts?: { baseBaselinePath?: string }): string[] {
   return runModuleGates(root, opts).findings;
 }
