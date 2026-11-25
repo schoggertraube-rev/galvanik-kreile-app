@@ -66,7 +66,7 @@ async function bereiteAuftragVor(name: string, uebergabe: "pickup" | "shipping" 
 
 async function setzeLagerregeln() {
   await sql`UPDATE public.company_settings SET material_aufschlag_prozent = 20, lager_regelversion = 'TEST-Material',
-    entnahme_regel_je_rubrik = ${JSON.stringify({ [rubrik]: "verbrauch" })}::jsonb,
+    entnahme_regel_je_rubrik = ${sql.json({ [rubrik]: "verbrauch" })}::jsonb,
     bilanzbewertung_methode = 'letzter_ek' WHERE tenant_id = ${mandant}`;
 }
 

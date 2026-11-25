@@ -121,10 +121,10 @@ describe("Lagerjournal und seine Befehle", () => {
         vatBreakdown: [{ rateBp: 1900, netCents: 100, vatCents: 19, grossCents: 119 }],
       },
     };
-    const pruefe = async (zeile: Record<string, unknown>) => {
+    const pruefe = async (zeile: Parameters<typeof sql.json>[0]) => {
       const [ergebnis] = await sql<{ gueltig: boolean }[]>`
         SELECT private.invoice_original_vat_valid(
-          ${JSON.stringify({ ...original, lines: [zeile] })}::jsonb, 100, NULL, 19, 119
+          ${sql.json({ ...original, lines: [zeile] })}::jsonb, 100, NULL, 19, 119
         ) AS gueltig
       `;
       return ergebnis.gueltig;
@@ -137,6 +137,19 @@ describe("Lagerjournal und seine Befehle", () => {
     expect(await pruefe({ ...material, lineNetAmountCents: 101 })).toBe(false);
     expect(await pruefe({ ...material, unit: "HUR" })).toBe(false);
     expect(await pruefe({ ...material, eventIds: [...material.eventIds, ...material.eventIds] })).toBe(false);
+  });
+
+  test("Material zum Auftrag geht über die Gegenbuchung der Entnahme zurück", async () => {
+    const artikelId = await artikel();
+    const ortId = await ort();
+    const orderId = await auftragAnlegen(mandant);
+    const eingabe = { ...buchung(artikelId, ortId), geschaeftsgrund: "rueckgabe", orderId };
+    expect(await withSession(werkstatt, () => bucheLagerAction(eingabe))).toEqual({
+      ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.rueckgabeZumAuftrag,
+    });
+    expect(await sql`SELECT id FROM public.stock_movements
+      WHERE tenant_id = ${mandant} AND befehl_id = ${eingabe.befehlId}::uuid`).toHaveLength(0);
+    expect(await withSession(werkstatt, () => bucheLagerAction({ ...eingabe, orderId: null }))).toMatchObject({ ok: true });
   });
 
   test("I1, I2 und I6: Zugang, Entnahme, Umlagerung und Gegenbuchung verändern nur das Journal", async () => {

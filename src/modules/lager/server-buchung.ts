@@ -11,6 +11,7 @@ import type { StockMovement } from "@/lib/types/inventory";
 import { LAGER_BUCHUNG_COPY as copy } from "@/ui/lagerBuchungCopy";
 import { LAGER_MATERIAL_COPY } from "@/ui/lagerMaterialCopy";
 import {
+  istLagerRueckgabeZumAuftrag,
   leseLagerBuchungsauftrag,
   leseLagerGegenbuchungsauftrag,
   type LagerBuchungsauftrag,
@@ -153,6 +154,7 @@ async function mitBuchung<T extends { befehlId: string }>(
   input: unknown, liesAuftrag: (input: unknown) => T | null,
   buchen: (tx: Tx, auth: AuthorizationSnapshot, auftrag: T, hash: string) => Promise<Antwort>,
   brauchtAuftragsrecht: (auftrag: T) => boolean = () => false,
+  eingabefehler: string = copy.eingabeUngueltig,
 ): Promise<Antwort> {
   const login = await resolveAuthorization();
   if (!login.ok) return fehler("UNAUTHORIZED", copy.sitzung);
@@ -160,7 +162,7 @@ async function mitBuchung<T extends { befehlId: string }>(
   if (!hasLagerCapability(auth, "lager.buchen")) return fehler("FORBIDDEN", copy.recht);
   if (auth.packageSwitches?.p4_lager !== true) return fehler("FORBIDDEN", copy.ausgeschaltet);
   const auftrag = liesAuftrag(input);
-  if (!auftrag) return fehler("VALIDATION_ERROR", copy.eingabeUngueltig);
+  if (!auftrag) return fehler("VALIDATION_ERROR", eingabefehler);
   if (brauchtAuftragsrecht(auftrag) && !hasAuthorizationArea(auth, "auftraege")) {
     return fehler("FORBIDDEN", copy.auftragsrecht);
   }
@@ -233,6 +235,7 @@ export function bucheLagerEinzeln(
   synchronisierePreis: LagerPreisAufgabe,
   liesAuftrag: LiesBuchungsauftrag = leseLagerBuchungsauftrag,
 ): Promise<Antwort> {
+  const eingabefehler = istLagerRueckgabeZumAuftrag(input) ? copy.rueckgabeZumAuftrag : copy.eingabeUngueltig;
   return mitBuchung(input, liesAuftrag, async (tx, auth, auftrag, hash) => {
     const mandant = auth.tenantId;
     const artikel = await ladeArtikel(tx, mandant, auftrag.inventoryItemId);
@@ -323,7 +326,7 @@ export function bucheLagerEinzeln(
       );
     }
     return antwort;
-  }, auftrag => auftrag.orderId !== null);
+  }, auftrag => auftrag.orderId !== null, eingabefehler);
 }
 
 type Ursprung = {
