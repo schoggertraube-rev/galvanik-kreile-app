@@ -5,4 +5,6 @@ export const LAGER_STAMM_COPY = {
   rechtFehlt: "Du brauchst das Recht für Lagerstammdaten.",
   vorAbschluss: "Übernimm den Artikelentwurf zuerst.",
   pruefaufgabe: (name: string) => `Artikel ${name} prüfen und übernehmen`,
+  bestandKlaeren: (name: string) => `Bestand von ${name} klären`,
+  bestandEndetMitBuchung: "Bestandsklärung endet mit der Lagerbuchung.",
 } as const;

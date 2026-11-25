@@ -1,4 +1,5 @@
 import {LAGER_STAMM_COPY} from "@/ui/lagerStammCopy";
+import type {LagerBestandFuerAufgabe} from '../public';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
@@ -49,7 +50,7 @@ type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransa
 class Rejected extends Error{constructor(readonly result:TaskFailure){super(result.code);}}
 function reject(code:TaskFailure['code'],message:string):never{throw new Rejected({code,message});}
 const columns=sql`id::text,client_key::text,art,titel,faellig_am::text,to_char(uhrzeit,'HH24:MI') AS uhrzeit,vorlauf_tage,fuer_login::text,fuer_bereich,bezug_typ,bezug_id,item_id::text,notiz,status,erledigt_von::text,erledigt_am::text,erledigt_notiz,erstellt_von::text,erstellt_am::text,version`;
-const refAreas:Partial<Record<TaskReference['type'],AccessArea>>={kunde:'kunden',auftrag:'auftraege',kv:'auftraege',eingang:'eingang',eingangsrechnung:'buchhaltung',reklamation:'auftraege',lagerartikel:'lager.stamm'};
+const refAreas:Partial<Record<TaskReference['type'],AccessArea>>={kunde:'kunden',auftrag:'auftraege',kv:'auftraege',eingang:'eingang',eingangsrechnung:'buchhaltung',reklamation:'auftraege',lagerartikel:'lager.stamm',lagerbestand:'lager.stamm'};
 const allowed=(auth:AuthorizationSnapshot,task:TaskRecord)=>task.erstellt_von===auth.userId||task.fuer_login===auth.userId||task.fuer_bereich!==null&&hasAuthorizationArea(auth,task.fuer_bereich);
 async function reissueTaskSource(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,task:TaskRecord){
  const source=await readInvoiceReissueSource(tx,auth.tenantId,task.client_key);
@@ -71,7 +72,7 @@ async function context(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot
  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
  if(reference.type==='allgemein')return hiddenReference(reference);
  const rows=await tx.execute<Omit<TaskReferenceRead,'type'>>(sql`SELECT id,label,customer_id AS "customerId",customer_type AS "customerType",order_id AS "orderId",channel,phone,source_version AS "sourceVersion" FROM private.v_task_contexts_v1
-  WHERE tenant_id=${auth.tenantId} AND kind=${reference.type} AND id=${reference.id}`);
+  WHERE tenant_id=${auth.tenantId} AND kind=${reference.type==='lagerbestand'?'lagerartikel':reference.type} AND id=${reference.id}`);
  if(rows.length!==1){if(required)reject('NOT_FOUND','Bezug nicht verfügbar · Fehlercode: TASK_REFERENCE_NOT_FOUND.');return hiddenReference(reference);}
  const visible=taskReferenceVisible(readAuth,{...rows[0],type:reference.type});
  if(enforceVisibility&&(!visible)){if(required)reject('FORBIDDEN','Der Bezug ist für diesen Login nicht freigegeben.');return hiddenReference(reference);}
@@ -97,7 +98,7 @@ function resultError(error:unknown):TaskFailure{
 export async function saveTask(input:unknown,deps:Dependencies):Promise<TaskResult>{
  const fields=taskValidation(input);if(Object.keys(fields).length)return {code:'VALIDATION_ERROR',message:'Aufgabe ist noch unvollständig.',fields};
  const value=input as TaskSaveInput;
- if(value.reference.type==='lagerartikel'||value.forArea==='lager.stamm')return {code:'FORBIDDEN',message:LAGER_STAMM_COPY.aufgabenweg};
+ if(value.reference.type==='lagerartikel'||value.reference.type==='lagerbestand'||value.forArea==='lager.stamm')return {code:'FORBIDDEN',message:LAGER_STAMM_COPY.aufgabenweg};
  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  try{return await withPrivilegedTenantTransaction(auth,tx=>persistTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }
@@ -197,7 +198,7 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
  return (await persistTask(tx,auth,value,deps,true,true)).task.id;
 }
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
-async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string,lagerBestandArtikelId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
   const reissue=await reissueTaskSource(tx,auth,before);
   if(reissue&&!hasAuthorizationArea(auth,'zahlungen'))reject('FORBIDDEN',SHIPPING_FEE_COPY.reissueForbidden);
@@ -206,7 +207,9 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const operationalStorage=storageOperation&&hasAuthorizationArea(auth,'auftraege')&&before.art==='aufgabe'&&before.bezug_typ==='auftrag'&&before.bezug_id===storageOperation.orderId&&before.client_key===storageOperation.clientKey;
   const operationalReply=replyEventId&&hasAuthorizationArea(auth,'auftraege')&&['aufgabe','rueckruf'].includes(before.art)&&before.bezug_typ==='auftrag'&&await collectionTaskHasReplySource(tx,auth,before.id,replyEventId);
   const operationalInvoice=invoiceId!==undefined&&before.bezug_typ==='eingangsrechnung'&&before.bezug_id===invoiceId&&canCompleteTaskArea(auth,'buchhaltung')&&(before.art==='rechnung'||before.art==='aufgabe'&&before.fuer_bereich==='eingang');
-  if(!allowed(auth,before)&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  const operationalLager=before.bezug_typ==='lagerbestand'&&before.bezug_id===lagerBestandArtikelId&&hasLagerCapability(auth,'lager.buchen');
+  if(before.bezug_typ==='lagerbestand'&&!operationalLager)reject('FORBIDDEN',LAGER_STAMM_COPY.bestandEndetMitBuchung);
+  if(!allowed(auth,before)&&!operationalLager&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.bezug_typ==='lagerartikel'){
    if(!hasLagerCapability(auth,'lager.stamm'))reject('FORBIDDEN',LAGER_STAMM_COPY.rechtFehlt);
    const accepted=await tx.execute(sql`SELECT id FROM public.v_lager_artikel_status_v1
@@ -423,7 +426,7 @@ function presentTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead):Ext
  const {task,reference,canceledCustomer,pricing,pricingSource,collection,collectionSource,credit,creditSource,reissue,reissueSource,mailRemainder,recollection,invoiceFollowupSource}=source;
  const mayEdit=task?task.status==='offen'&&allowed(auth,task):true;
  if(task&&mayEdit&&source.canceledForEdit.code==='SOURCE_INCOMPLETE')throw Error('TASK_CANCELLATION_READ_INCOMPLETE');
- const canEdit=mayEdit&&(!task||task.bezug_typ!=='lagerartikel')&&(!task||source.canceledForEdit.code==='KNOWN'&&!source.canceledForEdit.value);
+ const canEdit=mayEdit&&(!task||task.bezug_typ!=='lagerartikel'&&task.bezug_typ!=='lagerbestand')&&(!task||source.canceledForEdit.code==='KNOWN'&&!source.canceledForEdit.value);
   return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,invoiceFollowupSource,...(collection||collectionSource==='SOURCE_INCOMPLETE'?{collectionSource}:{}),...(reissue||reissueSource==="SOURCE_INCOMPLETE"?{reissueSource}:{}),canEdit:canEdit&&collectionSource==='KNOWN'&&!collection&&reissueSource==='KNOWN'&&!reissue&&invoiceFollowupSource==='KNOWN'&&!mailRemainder&&!recollection,canComplete:!!task&&task.status==='offen'&&invoiceMailRemainderAllowsCompletion(invoiceFollowupSource,mailRemainder)&&collectionSource==='KNOWN'&&reissueSource==='KNOWN'&&(reissue?hasAuthorizationArea(auth,'zahlungen'):(canEdit||canceledCustomer!==null))&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'zahlungen')),...(recollection?{completeLabel:E_INVOICE_COPY.collectionRoutingRetry}:collection?{completeLabel:COLLECTION_FOLLOWUP_COPY.retry}:reissue||credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
 }
 
@@ -755,4 +758,32 @@ export async function synchronizeLagerEntwurfTask(
   return (await finishTask(tx,auth,{taskId:auftrag.id,version:auftrag.version,note:null},deps)).task.id;
  }
  throw Error('LAGER_ENTWURF_SOURCE_UNGUELTIG');
+}
+
+/** Der Lagerbefehl hält die Artikelzeile bis nach Aufgabenbeleg und Buchung gesperrt. */
+export async function synchronizeLagerBestandTask(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,artikelId:string,
+ deps:Dependencies&{leseBestand:(tx:PrivilegedTenantTransaction)=>Promise<LagerBestandFuerAufgabe>},
+):Promise<string|null>{
+ if(!hasLagerCapability(auth,'lager.buchen'))throw Error('LAGER_BESTAND_RECHT_FEHLT');
+ const stand=await deps.leseBestand(tx);
+ if(stand.artikelId!==artikelId)throw Error('LAGER_BESTAND_ARTIKEL_ABWEICHUNG');
+ const tasks=await tx.execute<{id:string;version:number;art:string;fuer_bereich:string|null}>(sql`
+  SELECT id::text,version,art,fuer_bereich FROM public.tasks
+  WHERE tenant_id=${auth.tenantId} AND bezug_typ='lagerbestand' AND bezug_id=${artikelId} AND status='offen'
+  FOR UPDATE
+ `);
+ if(tasks.length>1)throw Error('LAGER_BESTAND_AUFGABEN_MEHRDEUTIG');
+ const open=tasks[0];
+ if(open&&(open.art!=='aufgabe'||open.fuer_bereich!=='lager.stamm'))throw Error('LAGER_BESTAND_AUFGABE_VERAENDERT');
+ if(stand.negativ){
+  if(open)return open.id;
+  const name=Array.from(stand.artikelName).slice(0,100).join('');
+  const value:TaskSaveInput={clientKey:randomUUID(),version:0,kind:'aufgabe',title:LAGER_STAMM_COPY.bestandKlaeren(name),
+   dueDate:stand.heute,time:null,forLogin:null,forArea:'lager.stamm',reference:{type:'lagerbestand',id:artikelId},note:null};
+  return (await persistTask(tx,auth,value,deps,false)).task.id;
+ }
+ if(!open)return null;
+ await finishTask(tx,auth,{taskId:open.id,version:open.version,note:null},deps,undefined,undefined,undefined,undefined,artikelId);
+ return open.id;
 }

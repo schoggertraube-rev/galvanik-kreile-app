@@ -5,6 +5,9 @@ DECLARE
   stockwerk_id uuid;
   raum_a uuid;
   raum_b uuid;
+  artikel text := 'TEST-lager-orte-artikel';
+  akteur uuid := gen_random_uuid();
+  sitzung uuid := gen_random_uuid();
 BEGIN
   PERFORM set_config('app.tenant_id', mandant, true);
   INSERT INTO public.stock_locations (tenant_id, stockwerk)
@@ -43,6 +46,29 @@ BEGIN
     RAISE EXCEPTION 'TEST Stockwerk hat einen Elternort';
   EXCEPTION WHEN check_violation THEN
     NULL;
+  END;
+
+  INSERT INTO public.app_users (id, tenant_id, email, full_name, role)
+    VALUES (akteur, mandant, akteur::text || '@test.invalid', 'TEST Lager', 'admin');
+  INSERT INTO public.inventory_items (id, tenant_id, name, basiseinheit)
+    VALUES (artikel, mandant, 'TEST Lagerartikel', 'l');
+  INSERT INTO public.inventory_sessions (id, tenant_id, stichtag, art, erstellt_von)
+    VALUES (sitzung, mandant, DATE '2026-11-19', 'stichtag', akteur);
+  BEGIN
+    PERFORM private.lager_journal_anhaengen(gen_random_uuid(), repeat('f',64), akteur, jsonb_build_array(
+      jsonb_build_object('artikel_id', artikel, 'art', 'stock_in', 'menge', 1,
+        'ort_id', stockwerk_id, 'einheit', 'l', 'fachzeit', statement_timestamp(), 'revision', 1,
+        'mengenqualitaet', 'exakt', 'geschaeftsgrund', 'wareneingang')));
+    RAISE EXCEPTION 'TEST Bewegung auf Stockwerk zugelassen';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'LAGER_ORT_IST_STOCKWERK' THEN RAISE; END IF;
+  END;
+  BEGIN
+    INSERT INTO public.inventory_counts (tenant_id, session_id, artikel_id, ort_id, einheit)
+      VALUES (mandant, sitzung, artikel, stockwerk_id, 'l');
+    RAISE EXCEPTION 'TEST Zählzeile auf Stockwerk zugelassen';
+  EXCEPTION WHEN check_violation THEN
+    IF SQLERRM <> 'LAGER_ORT_IST_STOCKWERK' THEN RAISE; END IF;
   END;
 END;
 $abnahme$;

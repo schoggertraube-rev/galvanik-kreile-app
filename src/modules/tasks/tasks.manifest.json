@@ -4,6 +4,7 @@
   "owner": "AP-EIN Teil 4 – Aufgabe",
   "publicExports": [
     "@/modules/tasks/server-public#synchronizeLagerEntwurfTask",
+    "@/modules/tasks/server-public#synchronizeLagerBestandTask",
     "@/modules/tasks/server-public#synchronizeInvoiceMailRemainderTask",
     "@/modules/tasks/server-public#synchronizeCollectionFollowupTask",
     "@/modules/tasks/server-public#synchronizeCancellationCreditRetryTask",
@@ -30,6 +31,7 @@
     "@/modules/tasks/public#TaskResult",
     "@/modules/tasks/public#TaskReadResult",
     "@/modules/tasks/public#TaskOpenRequest",
+    "@/modules/tasks/public#LagerBestandFuerAufgabe",
     "@/modules/tasks/server-public#saveTask",
     "@/modules/tasks/server-public#completeTask",
     "@/modules/tasks/server-public#readTask",
