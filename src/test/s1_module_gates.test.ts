@@ -823,6 +823,29 @@ describe("S1 Naht 4 — Cross-Modul-Fakten nur ueber v_*-Views", () => {
     });
     expect(findingsOf(root)).toEqual([]);
   });
+  it("erlaubt eine eindeutig registrierte private Sicht ohne v_-Präfix im eigenen Modul", () => {
+    const root = repo({
+      ...goodModule,
+      "supabase/migrations/20261125130000_lager_sicht.sql": "CREATE VIEW private.lager_w1_vorschlaege WITH (security_invoker = true) AS SELECT 1 AS id;\n",
+      "src/modules/lager/lager.manifest.json": manifest("lager", { viewsFunctions: ["private.lager_w1_vorschlaege"] }),
+      "src/modules/lager/public.ts": "export {};\n",
+      "src/modules/lager/server/read.ts": "export const q = sql`SELECT * FROM private.lager_w1_vorschlaege`;\n",
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("verwehrt dieselbe private Sicht einem fremden Modul", () => {
+    const root = repo({
+      ...goodModule,
+      "supabase/migrations/20261125130000_lager_sicht.sql": "CREATE VIEW private.lager_w1_vorschlaege WITH (security_invoker = true) AS SELECT 1 AS id;\n",
+      "src/modules/lager/lager.manifest.json": manifest("lager", { viewsFunctions: ["private.lager_w1_vorschlaege"] }),
+      "src/modules/lager/public.ts": "export {};\n",
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.invoices"] }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/read.ts": "export const q = sql`SELECT * FROM private.lager_w1_vorschlaege`;\n",
+    });
+    expect(findingsOf(root)).toContainEqual(expect.stringContaining("private View 'private.lager_w1_vorschlaege' gehoert lager"));
+  });
 
   it("erlaubt public Views moduluebergreifend, private Views/Funktionen aber nur ihrem deklarierenden Modul", () => {
     const root = repo({

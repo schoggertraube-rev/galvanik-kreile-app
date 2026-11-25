@@ -987,6 +987,15 @@ function tableRefs(source) {
 function gateData(root, findings, manifests) {
   const declaredPublicViews = new Set();
   const privateRelationOwners = new Map();
+  // Der Name einer privaten Sicht muss nicht mit v_ beginnen. Ihr DDL-Beleg
+  // verhindert zugleich, dass eine Basistabelle über viewsFunctions tarnt wird.
+  const privateSqlViews = new Set();
+  for (const file of listFiles(root, "supabase/migrations", new Set([".sql"]))) {
+    const sql = readFileSync(path.join(root, file), "utf8");
+    for (const match of sql.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(private\.[a-z][a-z0-9_]*)\b/gi)) {
+      privateSqlViews.add(match[1].toLowerCase());
+    }
+  }
   for (const [fach, manifest] of manifests) {
     for (const value of asStringArray(manifest.viewsFunctions)) {
       const ref = value.toLowerCase();
@@ -1014,7 +1023,8 @@ function gateData(root, findings, manifests) {
           if (!declaredPublicViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
           continue;
         }
-        const isPrivateView = /^private\.v_/.test(ref) && !m.functionCall;
+        const isPrivateView = /^private\.v_/.test(ref) && !m.functionCall ||
+          privateSqlViews.has(ref) && !m.functionCall;
         const isPrivateFunction = /^private\./.test(ref) && m.functionCall;
         if (isPrivateView || isPrivateFunction) {
           const owners = privateRelationOwners.get(ref);
