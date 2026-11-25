@@ -3,7 +3,7 @@ import {isAccessArea,type AccessArea} from '@/lib/auth/authorizationContract';
 export const TASK_KINDS=['rueckruf','frist','aufgabe','rechnung'] as const;
 export type TaskKind=typeof TASK_KINDS[number];
 export const TASK_KIND_LABELS:Record<TaskKind,string>={rueckruf:'Rückruf',frist:'Frist',aufgabe:'Aufgabe',rechnung:'Rechnung klären'};
-export type TaskReferenceType='kunde'|'auftrag'|'kv'|'eingang'|'eingangsrechnung'|'reklamation'|'lagerartikel'|'allgemein';
+export type TaskReferenceType='kunde'|'auftrag'|'kv'|'eingang'|'eingangsrechnung'|'reklamation'|'lagerartikel'|'lagerbestand'|'allgemein';
 export type TaskReference={type:TaskReferenceType;id:string|null};
 export type TaskSaveInput={clientKey:string;taskId?:string;version:number;kind:TaskKind;title:string;dueDate:string;time:string|null;forLogin:string|null;forArea:AccessArea|null;reference:TaskReference;note:string|null;itemId?:string;itemVersion?:number};
 export type TaskCompleteInput={taskId:string;version:number;note:string|null;callResult?:'reached'|'notReached';postalResult?:{kind:'posted';postedOn:string;documentSha256:string}|{kind:'discarded';reason:string;documentSha256:string}};
@@ -18,7 +18,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 export const taskUuid=(value:unknown):value is string=>typeof value==='string'&&UUID.test(value);
 const record=(v:unknown):v is Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 export function validTaskReference(value:unknown):value is TaskReference{
- if(!record(value)||Object.keys(value).sort().join(',')!=='id,type'||!['kunde','auftrag','kv','eingang','eingangsrechnung','reklamation','lagerartikel','allgemein'].includes(String(value.type)))return false;
+ if(!record(value)||Object.keys(value).sort().join(',')!=='id,type'||!['kunde','auftrag','kv','eingang','eingangsrechnung','reklamation','lagerartikel','lagerbestand','allgemein'].includes(String(value.type)))return false;
  return value.type==='allgemein'?value.id===null:typeof value.id==='string'&&value.id===value.id.trim()&&value.id.length>0&&value.id.length<=128;
 }
 function date(value:unknown):value is string{
