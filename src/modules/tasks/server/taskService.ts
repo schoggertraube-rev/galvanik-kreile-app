@@ -211,8 +211,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const preisaufgabe=before.bezug_typ==='lagerartikel'&&before.fuer_bereich==='preise';
   const operationalPreis=preisaufgabe&&lagerOperation?.type==='preis'&&before.bezug_id===lagerOperation.artikelId&&before.client_key===lagerOperation.clientKey;
   if(before.bezug_typ==='lagerbestand'&&!operationalBestand)reject('FORBIDDEN',LAGER_STAMM_COPY.bestandEndetMitBuchung);
-  if(preisaufgabe&&!operationalPreis)reject('FORBIDDEN',before.titel);
-  if(!allowed(auth,before)&&!operationalBestand&&!operationalPreis&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue)reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
+  if((preisaufgabe&&!operationalPreis)||(!allowed(auth,before)&&!operationalBestand&&!operationalPreis&&!operationalQuote&&!operationalStorage&&!operationalReply&&!operationalInvoice&&!reissue))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht freigegeben.');
   if(before.bezug_typ==='lagerartikel'&&!preisaufgabe){
    if(!hasLagerCapability(auth,'lager.stamm'))reject('FORBIDDEN',LAGER_STAMM_COPY.rechtFehlt);
    const accepted=await tx.execute(sql`SELECT id FROM public.v_lager_artikel_status_v1

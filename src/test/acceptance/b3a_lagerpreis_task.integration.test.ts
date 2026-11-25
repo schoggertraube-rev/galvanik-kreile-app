@@ -96,7 +96,7 @@ it('Lagerbuchen und Preise & Rechnungen können mit getrennten Rechten dieselbe 
   expect(hasAuthorizationArea(auth,'preise')).toBe(true);
   expect(hasLagerCapability(auth,'lager.buchen')).toBe(false);
   const unchanged=await completeTask({taskId:first,version:1,note:null},{effect:deps.effect});
-  expect(unchanged.code).toBe('FORBIDDEN');
+  expect(unchanged).toEqual({code:'FORBIDDEN',message:'Aufgabe ist für diesen Login nicht freigegeben.'});
   expect(await withPrivilegedTenantTransaction(auth,async tx=>{
    await tx.execute(query`INSERT INTO public.material_prices(tenant_id,artikel_id,einzelpreis,waehrung,quelle,gueltig_ab,bestaetigt_am)
     VALUES(${mandant},${artikelId},3.4,'EUR','import',statement_timestamp(),statement_timestamp())`);
