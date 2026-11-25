@@ -7,12 +7,12 @@
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
     "page_routes": 15,
-    "api_routes": 8,
+    "api_routes": 9,
     "server_action_groups": 48,
     "kpi_definitions": 7,
     "provider_connections": 15,
     "nav_links_without_page": 3,
-    "total": 96
+    "total": 97
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -41,6 +41,16 @@
       "open_reason": "E-C2 authenticated read-only Home draft transport through existing action and rights, isolated from App Router Server Action queue; exact-head native browser acceptance pending."
     },
     {
+      "stable_id": "api.takt",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/takt/route.ts",
+      "route": "/api/takt",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "S38b-1a central Takt job runner with an authenticated diagnostic path. Exact-head database and preview acceptance pending. Production Cron requires the configured secret."
+    },
+    {
       "stable_id": "api.today.rebuild",
       "kind": "API_ROUTE",
       "entry_point": "src/app/api/heute/neuaufbau/route.ts",
@@ -48,7 +58,7 @@
       "visible": false,
       "reachable": true,
       "classification": "PENDING_CONTRACT",
-      "open_reason": "A-25 E-B2 protected background rebuild through the existing projector; real TEST request/session/DB cases verified, independent exact-head acceptance pending. Cron activation requires Owner configuration."
+      "open_reason": "A-25 S38b tenant-bound diagnostic run of the Today job through the central Takt runner. Exact-head database and preview acceptance pending."
     },
     {
       "stable_id": "api.today.model",
@@ -58,7 +68,7 @@
       "visible": false,
       "reachable": true,
       "classification": "PENDING_CONTRACT",
-      "open_reason": "A-25 E-C authenticated Home read with current session, canonical any-area gate and existing derived single-flight refresh; no new business writer. Exact native route/role tests required before independent acceptance."
+      "open_reason": "A-25 S38b authenticated Home read with unchanged response and a throttled Takt catch-up after a successful full read. Exact native route and role acceptance pending."
     },
     {
       "stable_id": "page.root",

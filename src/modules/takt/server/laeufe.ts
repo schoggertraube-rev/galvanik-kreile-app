@@ -21,12 +21,17 @@ export async function liesTaktMandanten(): Promise<string[]> {
 export async function liesLetztenOk(tenantId: string, schluessel: string, nurTageslauf = false): Promise<Date | null> {
   if (!tenantId || !/^[a-z][a-z0-9_.]{1,79}$/.test(schluessel)) throw Error('TAKT_LETZTER_OK_INVALID');
   return withPrivilegedTenantTransaction({tenantId}, async tx => {
-    const rows = await tx.execute<{beendet_um: Date}>(sql`
-      SELECT beendet_um FROM public.takt_job_runs
+    const rows = await tx.execute<{beendet_ms: number}>(sql`
+      SELECT (extract(epoch FROM beendet_um)*1000)::double precision AS beendet_ms
+      FROM public.takt_job_runs
       WHERE tenant_id=${tenantId} AND job_schluessel=${schluessel} AND status='ok' AND beendet_um IS NOT NULL
         ${nurTageslauf ? sql`AND faellig_fuer NOT LIKE '%T%'` : sql``}
       ORDER BY beendet_um DESC LIMIT 1`);
-    return rows[0]?.beendet_um ?? null;
+    const row = rows[0];
+    if (!row) return null;
+    const beendet = new Date(row.beendet_ms);
+    if (!Number.isFinite(beendet.getTime())) throw Error('TAKT_LETZTER_OK_ZEIT_INVALID');
+    return beendet;
   });
 }
 

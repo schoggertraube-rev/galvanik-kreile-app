@@ -11,7 +11,8 @@ import {recordProtocolClicksAction,getProtocolLogAction} from '@/app/actions/log
 import {setPaymentModeAction} from '@/app/actions/payments.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
 import {resolveAuthorization} from '@/lib/server/authorization';
-import {logTechnical} from '@/modules/logging/server-public';
+import {logTechnical,taktJobs as loggingTaktJobs} from '@/modules/logging/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import type {ClickFact,ClientMissedFact} from '@/modules/logging/public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('S20_DEDICATED_TEST_REPLAY_REQUIRED');
 beforeAll(async()=>{await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST S20 corrections')`;});
@@ -61,6 +62,8 @@ it('K3 retention removes old S20 actions only; K5 equal-threshold is not a hang,
   const reader=await createFixture(['protokoll']),read=await withSession(reader,()=>getProtocolLogAction({userId:full.actorId}));
   if(read.code!=='OK'||!read.clicks)throw Error('TEST_ACTUAL_PROTOCOL_READ_REQUIRED');
   expect(read.clicks.find(row=>row.id===equal.id)?.hang).toBe(false);expect(read.clicks.find(row=>row.id===greater.id)?.hang).toBe(true);
+  expect(await sql`SELECT client_event_id::text FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${oldAction}::uuid`).toHaveLength(1);
+  await loggingTaktJobs[0].ausfuehren(KREILE_TENANT_SLUG,new AbortController().signal,{protokollAufbewahrungTage:async()=>{const setting=await readLoggingSettings({tenantId:KREILE_TENANT_SLUG});if(!setting)throw Error('TEST_LOG_SETTINGS_REQUIRED');return setting.retentionDays;}});
   expect(await sql`SELECT client_event_id::text FROM public.app_usage_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id IN (${oldAction}::uuid,${oldView}::uuid)`).toEqual([{client_event_id:oldView}]);
  }finally{await sql`UPDATE public.company_settings SET protokoll_aufbewahrung_tage=NULL WHERE tenant_id=${KREILE_TENANT_SLUG}`;}
 });

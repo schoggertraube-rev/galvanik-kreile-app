@@ -1,34 +1,18 @@
-import {createHash,timingSafeEqual} from 'node:crypto';
-import {outsidePageReadBudget} from '@/db/readBudget';
-import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {resolveAuthorization} from '@/lib/server/authorization';
-import {rebuildTodayModel} from '@/lib/server/todayProjection';
+import {fuehreTaktAus, pruefeTaktHandzugriff} from '@/modules/takt/server-public';
 
-export const runtime='nodejs';
-export const dynamic='force-dynamic';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-/** PL22.11.01:47: runtime proof, never a claimed Cron header/user agent.
- * No credential is read from a file, logged, returned or persisted. */
-export async function GET(request:Request){
- const configured=process.env.CRON_SECRET;
- let tenantId:string;
- if(configured){
-  const supplied=request.headers.get('authorization');
-  if(!supplied||!timingSafeEqual(createHash('sha256').update(supplied).digest(),createHash('sha256').update('Bearer '+configured).digest()))return new Response(null,{status:401});
-  tenantId=KREILE_TENANT_SLUG;
- }else{
-  try{
-   const result=await resolveAuthorization();
-   if(!result.ok)return new Response(null,{status:401});
-   if(!result.data.permissions.includes('perm_sys_diag'))return new Response(null,{status:403});
-   tenantId=result.data.tenantId;
-  }catch{return new Response(null,{status:401});}
- }
- try{
-  const result=await outsidePageReadBudget(()=>rebuildTodayModel(tenantId,undefined,{bounded:true}));
-  return new Response(null,{status:result.code==='BUSY'?409:result.code==='INCOMPLETE'||result.stale>0?503:204,headers:{'Cache-Control':'private, no-store'}});
- }catch{
-  console.error('[TODAY_PROJECTOR_REBUILD_FAILED]',{code:'SOURCE_INCOMPLETE'});
-  return new Response(null,{status:503,headers:{'Cache-Control':'private, no-store'}});
- }
+/** The former Cron endpoint now starts only the Today job for an authorized tenant. */
+export async function GET(_request: Request): Promise<Response> {
+  void _request;
+  const zugriff = await pruefeTaktHandzugriff();
+  if (zugriff.code === 'DENIED') return new Response(null, {status: zugriff.status});
+  try {
+    await fuehreTaktAus({tenantId: zugriff.tenantId, nurJob: 'heute_neuaufbau'});
+    return new Response(null, {status: 204, headers: {'Cache-Control': 'private, no-store'}});
+  } catch {
+    console.error('[TODAY_TAKT_HANDRUN_FAILED]', {code: 'SOURCE_INCOMPLETE'});
+    return new Response(null, {status: 503, headers: {'Cache-Control': 'private, no-store'}});
+  }
 }

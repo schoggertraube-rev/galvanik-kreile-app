@@ -15,6 +15,7 @@ import {getOperationalOrders} from '@/lib/server/operationalOrders';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {refreshTodayModel,rebuildTodayModel,type ProjectorAuthorization} from '@/lib/server/todayProjection';
+import {listeTodayMandanten} from '@/lib/server/todayProjectionSchedule';
 import {APP_ROLES,canReadQuoteFollowups,canTransportInvoiceDocument,normalizeAccessAreasForRole} from '@/lib/auth/authorizationContract';
 import {authorizationReadContext,canReadQuoteFollowupsForRead,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch} from '@/lib/server/commands/immutableInvoiceCommand';
@@ -50,6 +51,13 @@ const ports:TodayProjectionPorts={
  },
 };
 beforeAll(async()=>{orderId=(await readyInvoiceOrder('TEST Today worker source')).orderId;});
+
+it('liest den TEST-Mandanten aus der einen geordneten Today-Tenant-Quelle',async()=>{
+ const mandanten=await listeTodayMandanten();
+ expect(mandanten).toContain(tenant);
+ const rows=await sql`SELECT tenant_id FROM private.today_tenant_v1 ORDER BY tenant_id`;
+ expect(mandanten).toEqual(rows.map(row=>row.tenant_id));
+});
 
 it('cancels a stalled native projector source before the platform runtime limit without publishing a false result',async()=>{
  const actor=await auth();

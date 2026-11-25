@@ -97,7 +97,7 @@ it('schließt nur den eigenen Versuch ab und verliert keinen fehlenden Beleg', a
 
 it('liest ausschließlich den letzten belegten Erfolg desselben Jobs und Mandanten', async () => {
   const beendetUm = new Date('2026-11-25T04:00:00Z');
-  const execute = vi.fn().mockResolvedValueOnce([{beendet_um: beendetUm}]).mockResolvedValueOnce([]);
+  const execute = vi.fn().mockResolvedValueOnce([{beendet_ms: beendetUm.getTime()}]).mockResolvedValueOnce([]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
   expect(await liesLetztenOk('tenant-a', 'heute_neuaufbau')).toEqual(beendetUm);
   expect(await liesLetztenOk('tenant-a', 'heute_neuaufbau')).toBe(null);
@@ -108,7 +108,7 @@ it('liest ausschließlich den letzten belegten Erfolg desselben Jobs und Mandant
 });
 
 it('wertet eine fünfminütige Auffrischung nicht als täglichen Vollaufbau', async () => {
-  const execute = vi.fn().mockResolvedValue([{beendet_um: new Date('2026-11-25T04:00:00Z')}]);
+  const execute = vi.fn().mockResolvedValue([{beendet_ms: Date.parse('2026-11-25T04:00:00Z')}]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
   await liesLetztenOk('tenant-a', 'heute_neuaufbau', true);
   expect(JSON.stringify(execute.mock.calls[0][0])).toContain("faellig_fuer NOT LIKE '%T%'");
