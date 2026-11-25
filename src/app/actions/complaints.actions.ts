@@ -1,6 +1,6 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {recordComplaintMailRetry,readComplaintMailClosure} from '@/lib/server/communicationComplaintPort';
 import {unstable_noStore as noStore} from "next/cache";
 import {readComplaints,executeComplaint,readComplaintOrderSource,readComplaintOrderChoices} from "@/modules/complaints/server-public";
@@ -86,7 +86,7 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
   }
   let suggestedDate:string|null=null;
   if(source.items.length&&source.handoverMode){
-   try{const suggestions=await readIntakeSuggestions(authorization.data,{customerId:source.customerId,kind:'ORDER',wishDate:null,handoverMode:source.handoverMode,positions:source.items.map(item=>({key:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,surfaceRequested:item.surfaceRequested,unit:item.unit,unitPriceCents:null}))});suggestedDate=suggestions.term?.achievableDate??null;}
+   try{const suggestions=await readIntakeSuggestions(authorization.data,{customerId:source.customerId,kind:'ORDER',wishDate:null,handoverMode:source.handoverMode,positions:source.items.map(item=>({key:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,surfaceRequested:item.surfaceRequested,unit:item.unit,unitPriceCents:null}))},readBetriebsruheInTransaction);suggestedDate=suggestions.term?.achievableDate??null;}
    catch(error){console.error('[COMPLAINT_TERM_SUGGESTION_FAILED]',error instanceof Error?error.message:error);}
   }
   let resultMail:ComplaintDialogData['resultMail']=null;

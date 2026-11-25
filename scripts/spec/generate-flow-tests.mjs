@@ -318,8 +318,21 @@ function projectLegacyInvoiceCopy(value) {
   return row;
 }
 
+function projectLegacyHandoverBuffer(value) {
+  if (Array.isArray(value)) return value.map(projectLegacyHandoverBuffer);
+  if (!value || typeof value !== "object") return value;
+  if (Object.hasOwn(value, "uebergabepuffer_tage") && Object.hasOwn(value, "versandpuffer_arbeitstage")) {
+    throw new Error("FLOW_GENERATOR_HANDOVER_BUFFER_DUPLICATE");
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+    key === "uebergabepuffer_tage" ? "versandpuffer_arbeitstage" : key,
+    projectLegacyHandoverBuffer(entry),
+  ]));
+}
+
 function buildOutputs(raw, document) {
   document = projectLegacyInvoiceTaskRecipients(document);
+  document.testmodell = projectLegacyHandoverBuffer(document.testmodell);
   if (document.testmodell?.seiten?.rechnungein) document.testmodell.seiten.rechnungein = projectLegacyInvoiceCopy(document.testmodell.seiten.rechnungein);
   if (!document.testmodell?.seiten) throw new Error("FLOW_GENERATOR_TESTMODELL_MISSING");
   const sha = createHash("sha256").update(raw).digest("hex").toUpperCase();
