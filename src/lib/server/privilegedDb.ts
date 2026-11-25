@@ -1,11 +1,19 @@
 import "server-only";
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {actionObservationActive,observeTenantTransaction} from './actionObservation';
 
 type TenantAuthorization = Pick<AuthorizationSnapshot, "tenantId">;
+const taktStatementTimeout = new AsyncLocalStorage<number>();
+
+/** Limits every tenant transaction entered while one reserved Takt job runs. */
+export function withTaktStatementTimeout<T>(milliseconds: number, work: () => Promise<T>): Promise<T> {
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 1 || milliseconds > 50_000) throw Error('TAKT_STATEMENT_TIMEOUT_INVALID');
+  return taktStatementTimeout.run(milliseconds, work);
+}
 
 export type PrivilegedTenantTransaction = Pick<typeof db, "execute" | "select" | "update">;
 
@@ -25,6 +33,8 @@ export async function withPrivilegedTenantTransaction<T>(
         ? sql`SELECT set_config('app.tenant_id', ${authorization.tenantId}, true),set_config('app.today_source_changed','',true)`
         : sql`SELECT set_config('app.tenant_id', ${authorization.tenantId}, true)`,
     );
+    const timeout = taktStatementTimeout.getStore();
+    if (timeout !== undefined) await transaction.execute(sql`SELECT set_config('statement_timeout', ${String(timeout) + 'ms'}, true)`);
     const value=await work(transaction as PrivilegedTenantTransaction);
     if(!observed)return {value,sourceChanged:false};
     const flags=await transaction.execute<{changed:boolean}>(sql`SELECT current_setting('app.today_source_changed',true)='1' AS changed`);

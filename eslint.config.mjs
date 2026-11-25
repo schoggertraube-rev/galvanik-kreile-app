@@ -200,7 +200,8 @@ const eslintConfig = defineConfig([
   // strenger/public-only und blockiert jeden server-public-Verbraucher weiterhin.
   // Client/AppAdapter und alle sonstigen src-Dateien behalten ebenfalls public-only.
   {
-    files: ["src/app/actions/*.actions.ts", "src/test/**/*.integration.test.ts"],
+    files: ["src/app/actions/*.actions.ts", "src/test/**/*.integration.test.ts", "src/modules/takt/jobs.ts",
+      "src/app/api/takt/route.ts", "src/app/api/heute/neuaufbau/route.ts", "src/app/api/heute/modell/route.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

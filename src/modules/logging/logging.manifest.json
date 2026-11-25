@@ -24,6 +24,7 @@
     "@/modules/logging/public#DiagnosticFact",
     "@/modules/logging/public#reportProtocolClientError",
     "@/modules/logging/server-public#logClientDiagnostics",
+    "@/modules/logging/server-public#taktJobs",
     "@/modules/logging/public#ClientMissedFact",
     "@/modules/logging/public#ProtocolRejection",
     "@/modules/logging/public#ProtocolReply"

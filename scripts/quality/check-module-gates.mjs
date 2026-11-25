@@ -524,6 +524,7 @@ export function allowedServerFacadeConsumer(file, source) {
     const fundamentReaders = new Set([
       'readBetriebswaechterEinstellungenInTransaction', 'readLoggingSettings',
       'isFeatureEnabled', 'readTenantFeatures', 'readPackageSwitches',
+      'readPackageSwitchValuesForTakt',
       'readErkennungsEinstellungenInTransaction',
     ]);
     for (const statement of tree.statements) {
@@ -879,6 +880,7 @@ function gateManifests(root, findings, schemaPath) {
     if (findings.length === manifestFindingStart) validModules.add(fach);
     // Ablage (Red-Team P2): jedes Pfadsegment == fach (case-insensitive) unter den
     // Legacy-Eltern, plus Datei <fach>.ts(x) direkt darunter.
+    const taktRouteException = 'src/app/api/takt/route.ts';
     for (const parent of LEGACY_DOMAIN_PARENTS) {
       for (const rel of walk(root, parent, [])) {
         const segments = rel.split("/").slice(parent.split("/").length);
@@ -886,7 +888,9 @@ function gateManifests(root, findings, schemaPath) {
         const file = segments.at(-1) ?? "";
         const dirHit = dirs.find((d) => d.replace(/^[([]|[)\]]$/g, "").toLowerCase() === fach);
         const fileHit = dirs.length === 0 && file.replace(/\.[cm]?[jt]sx?$/, "").toLowerCase() === fach;
-        if ((dirHit || fileHit) && !(parent === "src/app" && gateAppCompositionFile(root, rel, fach, findings))) {
+        const allowedTaktRoute = fach === 'takt' && rel === taktRouteException &&
+          allowedServerFacadeConsumer(rel, readFileSync(path.join(root, rel), 'utf8'));
+        if ((dirHit || fileHit) && !allowedTaktRoute && !(parent === "src/app" && gateAppCompositionFile(root, rel, fach, findings))) {
           findings.push(`[naht1] ${rel}: Fach '${fach}' hat ein Modul, darf nicht mehr ausserhalb ${MODULES_DIR}/${fach}/ liegen`);
         }
       }

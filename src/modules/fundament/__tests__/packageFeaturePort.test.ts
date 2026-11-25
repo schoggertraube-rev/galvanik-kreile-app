@@ -3,7 +3,7 @@ import {PACKAGE_SWITCHES,mapPackageSwitchRows} from '../featureCatalog';
 const mocks=vi.hoisted(()=>({execute:vi.fn(),transaction:vi.fn()}));
 vi.mock('server-only',()=>({}));
 vi.mock('@/lib/server/privilegedDb',()=>({withPrivilegedTenantTransaction:mocks.transaction}));
-import {readPackageSwitches} from '../server/packageFeaturePort';
+import {readPackageSwitches,readPackageSwitchValuesForTakt} from '../server/packageFeaturePort';
 const context={tenantId:'TEST-package-source',actorId:'11111111-1111-4111-8111-111111111111',role:'meister' as const,canManage:true};
 // Explicit synthetic rows exercise read failures; writes have real native tests.
 const flags=()=>PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[] as string[]}));
@@ -17,6 +17,13 @@ it('projects validated config values without introducing a second role decision'
  mocks.execute.mockResolvedValue(rows);
  expect(mapPackageSwitchRows(rows)).toMatchObject({offline_24h:true,p2_eingang:true});
  expect(await readPackageSwitches(context)).toMatchObject({code:'OK',switches:{offline_24h:true,p2_eingang:true}});
+});
+it('reads the same tenant package source for Takt without a write actor',async()=>{
+ const values=await readPackageSwitchValuesForTakt(context.tenantId);
+ expect(values.p4_lager).toBe(false);
+ expect(mocks.transaction).toHaveBeenCalledWith({tenantId:context.tenantId},expect.any(Function));
+ mocks.execute.mockResolvedValueOnce(flags().slice(1));
+ await expect(readPackageSwitchValuesForTakt(context.tenantId)).rejects.toThrow('PACKAGE_SWITCH_SET_INCOMPLETE');
 });
 it('does not replace a missing flag source with false or an empty result',async()=>{
  mocks.execute.mockResolvedValue(flags().slice(1));

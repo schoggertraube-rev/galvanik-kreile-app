@@ -1,0 +1,26 @@
+{
+  "moduleId": "takt",
+  "version": "1.0.0",
+  "owner": "S38b Teil 1",
+  "publicExports": [
+    "@/modules/takt/public#TaktLeser",
+    "@/modules/takt/public#TaktJob",
+    "@/modules/takt/public#TAKT_BUDGET_MS",
+    "@/modules/takt/public#TAKT_NACHHOLEN_BUDGET_MS",
+    "@/modules/takt/public#TAKT_WIEDERHOLUNG_MIN",
+    "@/modules/takt/server-public#pruefeTaktZugriff",
+    "@/modules/takt/server-public#pruefeTaktHandzugriff",
+    "@/modules/takt/server-public#TaktZugriff",
+    "@/modules/takt/server-public#fuehreTaktAus",
+    "@/modules/takt/server-public#holeTaktNach",
+    "@/modules/takt/server-public#liesTaktLaeufe",
+    "@/modules/takt/server-public#TaktLaufZeile"
+  ],
+  "capabilities": [],
+  "migrations": [],
+  "ownsTables": ["public.takt_job_runs"],
+  "viewsFunctions": [],
+  "storagePurposes": [],
+  "events": { "emits": [], "consumes": [] },
+  "dependencies": ["fundament", "logging"]
+}
