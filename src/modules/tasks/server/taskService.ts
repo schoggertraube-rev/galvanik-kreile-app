@@ -798,10 +798,12 @@ export async function synchronizeLagerPreisTask(
   lesePreisstand:(tx:PrivilegedTenantTransaction,artikelId:string,einheit:string)=>Promise<{artikelName:string;preisVorhanden:boolean}|null>;
  },
 ):Promise<string|null>{
- if(!hasLagerCapability(auth,'lager.buchen')&&!hasLagerCapability(auth,'lager.werte'))throw Error('LAGER_PREISAUFGABE_RECHT_FEHLT');
+ const canBook=hasLagerCapability(auth,'lager.buchen');
+ if(!canBook&&!hasAuthorizationArea(auth,'preise'))throw Error('LAGER_PREISAUFGABE_RECHT_FEHLT');
  if(!einheit||einheit!==einheit.trim())throw Error('LAGER_PREISAUFGABE_EINHEIT_FEHLT');
  const stand=await deps.lesePreisstand(tx,artikelId,einheit);
  if(!stand)throw Error('LAGER_PREISAUFGABE_ARTIKEL_FEHLT');
+ if(!stand.preisVorhanden&&!canBook)throw Error('LAGER_PREISAUFGABE_RECHT_FEHLT');
 
  const articleUnit=JSON.stringify([artikelId,einheit]);
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('lager-preis-aufgabe:'||${auth.tenantId}||':'||${articleUnit},0))`);

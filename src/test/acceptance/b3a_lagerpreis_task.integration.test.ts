@@ -20,71 +20,89 @@ const sql=postgres(url,{max:2,prepare:false});
 vi.stubEnv('APP_SESSION_SECRET',randomUUID());
 afterAll(async()=>{vi.unstubAllEnvs();await sql.end({timeout:5});});
 
-it('ein Fehlpreis erzeugt auch bei paralleler Wiederholung nur eine Aufgabe und der bestätigte Preis beendet sie',async()=>{
+it('Lagerbuchen und Preise & Rechnungen können mit getrennten Rechten dieselbe Aufgabe anlegen und erledigen',async()=>{
  const {NextRequest}=await import('next/server');
  const {createRequestStoreForAPI}=await import('next/dist/server/async-storage/request-store');
  const {workAsyncStorage}=await import('next/dist/server/app-render/work-async-storage.external');
  const {workUnitAsyncStorage}=await import('next/dist/server/app-render/work-unit-async-storage.external');
  const {COOKIE_NAME,getSecretKey,signAppSession}=await import('@/lib/server/appSession');
  const {resolveAuthorization}=await import('@/lib/server/authorization');
+ const {hasAuthorizationArea,hasLagerCapability}=await import('@/lib/auth/authorizationContract');
  const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
  const {readCustomerProfile}=await import('@/modules/customers/server-public');
  const {recordIntakeTaskEffect}=await import('@/modules/eingang/server-public');
  const {completeTask,synchronizeLagerPreisTask}=await import('@/modules/tasks/server-public');
 
- const userId=randomUUID();
- await sql`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active,updated_at)
-  VALUES(${userId}::uuid,${mandant},${userId+'@local.invalid'},'TEST Lagerpreise','buero',true,statement_timestamp()-interval '1 second')`;
- await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by)
-  SELECT ${mandant},${userId}::uuid,bereich,${userId}::uuid FROM unnest(ARRAY['lager.stamm','preise']) AS bereich`;
- const cookie=signAppSession({userId,tenantId:mandant,role:'buero',displayName:'TEST Lagerpreise',issuedAt:Date.now(),
-  expiresAt:Date.now()+300_000},getSecretKey());
  const route='/test-lagerpreis';
- const request=new NextRequest('http://127.0.0.1'+route,{headers:{cookie:COOKIE_NAME+'='+cookie}});
- const requestStore=createRequestStoreForAPI(request,{pathname:route,search:''},{tags:[],expirationsByCacheKind:new Map()},undefined,undefined as never);
  const workStore={isStaticGeneration:false,page:route,route,afterContext:{},previouslyRevalidatedTags:[],
   refreshTagsByCacheKind:new Map(),shouldTrackFetchMetrics:false,deploymentId:'test',buildId:'test',incrementalCache:{},
   cacheComponentsEnabled:false,runInCleanSnapshot:(fn:(...args:never[])=>unknown,...args:never[])=>fn(...args),
   reactServerErrorsByDigest:new Map(),} as unknown as import('next/dist/server/app-render/work-async-storage.external').WorkStore;
+ const createLogin=async(role:'werkstatt'|'readonly',right:'eingang'|'preise')=>{
+  const userId=randomUUID();
+  await sql`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active,updated_at)
+   VALUES(${userId}::uuid,${mandant},${userId+'@local.invalid'},'TEST Lagerpreise',${role},true,statement_timestamp()-interval '1 second')`;
+  await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${mandant},${userId}::uuid,${right},${userId}::uuid)`;
+  return {userId,role};
+ };
+ type Actor=Parameters<typeof synchronizeLagerPreisTask>[1];
+ const withLogin=async<T>(login:Awaited<ReturnType<typeof createLogin>>,work:(auth:Actor)=>Promise<T>):Promise<T>=>{
+  const cookie=signAppSession({...login,tenantId:mandant,displayName:'TEST Lagerpreise',issuedAt:Date.now(),
+   expiresAt:Date.now()+300_000},getSecretKey());
+  const request=new NextRequest('http://127.0.0.1'+route,{headers:{cookie:COOKIE_NAME+'='+cookie}});
+  const requestStore=createRequestStoreForAPI(request,{pathname:route,search:''},{tags:[],expirationsByCacheKind:new Map()},undefined,undefined as never);
+  return workAsyncStorage.run(workStore,()=>workUnitAsyncStorage.run(requestStore,async()=>{
+   const session=await resolveAuthorization();
+   if(!session.ok)throw Error('TEST_REAL_AUTH_REQUIRED: '+session.reason);
+   return work(session.data);
+  }));
+ };
+ const lager=await createLogin('werkstatt','eingang');
+ const preise=await createLogin('readonly','preise');
  const artikelId='TEST-B3A-'+randomUUID();
  await sql`INSERT INTO public.inventory_items(id,tenant_id,name,basiseinheit,stamm_status)
   VALUES(${artikelId},${mandant},'TEST Schleifmittel','stk','aktiv')`;
 
- await workAsyncStorage.run(workStore,()=>workUnitAsyncStorage.run(requestStore,async()=>{
-  const session=await resolveAuthorization();
-  if(!session.ok)throw Error('TEST_REAL_AUTH_REQUIRED: '+session.reason);
-  const auth=session.data;
-  const deps:Parameters<typeof synchronizeLagerPreisTask>[4]={
-   effect:(tx,from,input)=>recordIntakeTaskEffect(tx,from,input,readCustomerProfile),
-   // Isolierte TEST-Quelle mit festem Stamm-Einheitwert. Der B3-a-Preisleser wird im Folge-PR angebunden.
-   lesePreisstand:async(tx,id,einheit)=>{
-    const [artikel]=await tx.execute<{artikelName:string}>(query`
-     SELECT name AS "artikelName" FROM public.inventory_items
-     WHERE tenant_id=${mandant} AND id=${id} AND basiseinheit=${einheit} FOR UPDATE
-    `);
-    if(!artikel)return null;
-    const [stand]=await tx.execute<{preisVorhanden:boolean}>(query`
-     SELECT EXISTS (SELECT 1 FROM public.material_prices
-      WHERE tenant_id=${mandant} AND artikel_id=${id} AND bestaetigt_am IS NOT NULL) AS "preisVorhanden"
-    `);
-    return {...artikel,preisVorhanden:stand.preisVorhanden};
-   },
-  };
-  const synchronize=()=>withPrivilegedTenantTransaction(auth,tx=>synchronizeLagerPreisTask(tx,auth,artikelId,'stk',deps));
-  const [first,retry]=await Promise.all([synchronize(),synchronize()]);
-  expect(first).toEqual(expect.any(String));
-  expect(retry).toBe(first);
-  const taskRows=()=>sql`SELECT id::text,version,titel,status,fuer_bereich FROM public.tasks
-   WHERE tenant_id=${mandant} AND bezug_typ='lagerartikel' AND bezug_id=${artikelId}`;
-  const open=await taskRows();
-  expect(open).toEqual([{id:first,version:1,titel:'Preis für TEST Schleifmittel je stk hinterlegen',status:'offen',fuer_bereich:'preise'}]);
+ const deps:Parameters<typeof synchronizeLagerPreisTask>[4]={
+  effect:(tx,from,input)=>recordIntakeTaskEffect(tx,from,input,readCustomerProfile),
+  // Isolierte TEST-Quelle mit festem Stamm-Einheitwert. Der B3-a-Preisleser wird im Folge-PR angebunden.
+  lesePreisstand:async(tx,id,einheit)=>{
+   const [artikel]=await tx.execute<{artikelName:string}>(query`
+    SELECT name AS "artikelName" FROM public.inventory_items
+    WHERE tenant_id=${mandant} AND id=${id} AND basiseinheit=${einheit} FOR UPDATE
+   `);
+   if(!artikel)return null;
+   const [stand]=await tx.execute<{preisVorhanden:boolean}>(query`
+    SELECT EXISTS (SELECT 1 FROM public.material_prices
+     WHERE tenant_id=${mandant} AND artikel_id=${id} AND bestaetigt_am IS NOT NULL) AS "preisVorhanden"
+   `);
+   return {...artikel,preisVorhanden:stand.preisVorhanden};
+  },
+ };
+ const synchronize=(auth:Actor)=>withPrivilegedTenantTransaction(auth,tx=>synchronizeLagerPreisTask(tx,auth,artikelId,'stk',deps));
+ const [first,retry]=await withLogin(lager,auth=>{
+  expect(hasLagerCapability(auth,'lager.buchen')).toBe(true);
+  expect(hasAuthorizationArea(auth,'preise')).toBe(false);
+  return Promise.all([synchronize(auth),synchronize(auth)]);
+ });
+ expect(first).toEqual(expect.any(String));
+ expect(retry).toBe(first);
+ const taskRows=()=>sql`SELECT id::text,version,titel,status,fuer_bereich,erstellt_von::text,erledigt_von::text FROM public.tasks
+  WHERE tenant_id=${mandant} AND bezug_typ='lagerartikel' AND bezug_id=${artikelId}`;
+ const open=await taskRows();
+ expect(open).toEqual([{id:first,version:1,titel:'Preis für TEST Schleifmittel je stk hinterlegen',status:'offen',fuer_bereich:'preise',
+  erstellt_von:lager.userId,erledigt_von:null}]);
+ await withLogin(preise,async auth=>{
+  expect(hasAuthorizationArea(auth,'preise')).toBe(true);
+  expect(hasLagerCapability(auth,'lager.buchen')).toBe(false);
   const unchanged=await completeTask({taskId:first,version:1,note:null},{effect:deps.effect});
   expect(unchanged.code).toBe('FORBIDDEN');
-
-  await sql`INSERT INTO public.material_prices(tenant_id,artikel_id,einzelpreis,waehrung,quelle,gueltig_ab,bestaetigt_am)
-   VALUES(${mandant},${artikelId},3.4,'EUR','import',statement_timestamp(),statement_timestamp())`;
-  expect(await synchronize()).toBe(first);
-  expect(await synchronize()).toBeNull();
-  expect(await taskRows()).toEqual([{...open[0],version:2,status:'erledigt'}]);
- }));
+  expect(await withPrivilegedTenantTransaction(auth,async tx=>{
+   await tx.execute(query`INSERT INTO public.material_prices(tenant_id,artikel_id,einzelpreis,waehrung,quelle,gueltig_ab,bestaetigt_am)
+    VALUES(${mandant},${artikelId},3.4,'EUR','import',statement_timestamp(),statement_timestamp())`);
+   return synchronizeLagerPreisTask(tx,auth,artikelId,'stk',deps);
+  })).toBe(first);
+  expect(await synchronize(auth)).toBeNull();
+ });
+ expect(await taskRows()).toEqual([{...open[0],version:2,status:'erledigt',erledigt_von:preise.userId}]);
 },60_000);
