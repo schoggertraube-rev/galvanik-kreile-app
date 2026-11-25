@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -74,7 +74,8 @@ vi.mock("@/components/layout/GlobalSearch", () => ({
   GlobalSearch: ({ open }: { open: boolean }) => open ? <div data-testid="global-search-marker" /> : null,
 }));
 vi.mock("@/components/layout/MoreMenu", () => ({
-  MoreMenu: ({ open }: { open: boolean }) => open ? <div data-testid="more-menu-marker" /> : null,
+  MoreMenu: ({ open, werkzeuge }: { open: boolean; werkzeuge?: React.ReactNode }) =>
+    open ? <div data-testid="more-menu-marker">{werkzeuge}</div> : null,
 }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({
   requestGlobalCreate: vi.fn(),
@@ -108,10 +109,10 @@ vi.mock("@/components/telefonnotiz/FloatingParkedCall", () => ({
 
 import { KreileAppShell } from "@/components/layout/KreileAppShell";
 
-function renderShell(pathname: string) {
+function renderShell(pathname: string, loginHandle?: string) {
   boundary.pathname.value = pathname;
   return render(
-    <KreileAppShell globalCreate={<div data-testid="global-create-marker" />}>
+    <KreileAppShell loginHandle={loginHandle} globalCreate={<div data-testid="global-create-marker" />}>
       <div data-testid="children-marker" />
     </KreileAppShell>,
   );
@@ -133,6 +134,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -176,6 +178,19 @@ describe("W2C-B2M5V global browser provider containment", () => {
     boundary.permissions.status = "error";
     renderShell("/orders");
     expect(screen.getByTestId("session-warning-marker")).toHaveAttribute("data-show", "true");
+  });
+
+  it("keeps release notes reachable alongside the workshop actions on a phone", () => {
+    vi.stubGlobal("innerWidth", 375);
+    setPermissionSnapshot("werkstatt", ["perm_view_leitstand", "perm_op_status"]);
+    renderShell("/warendurchlauf", "synthetic-workshop-nav");
+
+    expect(screen.queryByRole("button", { name: /^Was ist neu/ })).toBeNull();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Hauptnavigation" })).getByRole("button", { name: "Mehr" }));
+
+    const menu = within(screen.getByTestId("more-menu-marker"));
+    expect(menu.getByRole("button", { name: "Fertig melden" })).toBeEnabled();
+    expect(menu.getByRole("button", { name: /^Was ist neu/ })).toBeEnabled();
   });
 
   it("removes unsafe global providers and composes the single app-side entity stack", () => {

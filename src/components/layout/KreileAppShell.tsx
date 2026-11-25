@@ -110,7 +110,7 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   const overlay = (werkstattWerkzeuge: ReactNode) => (
     <>
       <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} ziele={menuTargets}
-        werkzeuge={device === 'handy' ? (workshop ? werkstattWerkzeuge : news) : null} />
+        werkzeuge={device === 'handy' ? <>{workshop && werkstattWerkzeuge}{news}</> : null} />
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </>
   );
