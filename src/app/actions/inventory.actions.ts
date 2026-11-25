@@ -10,6 +10,12 @@ import {
   leseLagerBewegungenAltvertrag,
 } from "@/modules/lager/server-public";
 import { synchronizeLagerBestandTask } from "@/modules/tasks/server-public";
+import { LAGER_BUCHUNG_COPY } from "@/ui/lagerBuchungCopy";
+
+function fehlendeArtikelId(artikelId: unknown) {
+  if (typeof artikelId === "string" && artikelId.trim() !== "") return null;
+  return { ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.artikelIdUngueltig } as const;
+}
 
 export async function getInventoryItemsAction(): Promise<ActionResult<InventoryItem[]>> {
   return observeAction("getInventoryItemsAction", subjectForAction("getInventoryItemsAction", undefined),
@@ -23,6 +29,8 @@ export async function getInventoryMovementsAction(): Promise<ActionResult<StockM
 
 export async function getInventoryItemAction(artikelId: string): Promise<ActionResult<InventoryItem | null>> {
   return observeAction("getInventoryItemAction", subjectForAction("getInventoryItemAction", { artikelId }), async () => {
+    const fehler = fehlendeArtikelId(artikelId);
+    if (fehler) return fehler;
     const ergebnis = await leseLagerArtikelAltvertrag(readLagerEinstellungen, artikelId);
     return ergebnis.ok ? { ok: true, data: ergebnis.data[0] ?? null } : ergebnis;
   }, readLoggingSettings);
@@ -30,7 +38,7 @@ export async function getInventoryItemAction(artikelId: string): Promise<ActionR
 
 export async function getInventoryMovementsByItemAction(artikelId: string): Promise<ActionResult<StockMovement[]>> {
   return observeAction("getInventoryMovementsByItemAction", subjectForAction("getInventoryMovementsByItemAction", { artikelId }),
-    () => leseLagerBewegungenAltvertrag({ artikelId }), readLoggingSettings);
+    async () => fehlendeArtikelId(artikelId) ?? leseLagerBewegungenAltvertrag({ artikelId }), readLoggingSettings);
 }
 
 export async function createInventoryMovementAction(input: CreateStockMovementInput): Promise<ActionResult<StockMovement>> {

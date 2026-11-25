@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 const mandant = vi.hoisted(() => "TEST-ablauf-" + globalThis.crypto.randomUUID());
 vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: mandant }));
 
+import { createFixture, sql, withSession } from "../../../e2e/ablauf/replayHarness";
 import {
   bucheAuftragsverbrauchAction,
   bucheLagerAction,
@@ -13,7 +14,6 @@ import {
   leseLagerBestandAction,
   leseLagerBewegungenAction,
 } from "@/app/actions/lager.actions";
-import { createInventoryMovementAction } from "@/app/actions/inventory.actions";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { readLagerEinstellungen } from "@/modules/fundament/server-public";
 import {
@@ -26,7 +26,6 @@ import {
 } from "@/modules/lager/server-public";
 import { synchronizeLagerBestandTask } from "@/modules/tasks/server-public";
 import { LAGER_BUCHUNG_COPY } from "@/ui/lagerBuchungCopy";
-import { createFixture, sql, withSession } from "../../../e2e/ablauf/replayHarness";
 
 type Anmeldung = Awaited<ReturnType<typeof createFixture>>;
 const replay = process.env.DATABASE_URL;
@@ -35,6 +34,8 @@ if (!replay || replay !== process.env.H18_EXPECTED_DATABASE_URL
   || new URL(replay).hostname !== "127.0.0.1" || new URL(replay).port !== replayPort) {
   throw Error("LAGER_B1A3_DEDICATED_REPLAY_REQUIRED");
 }
+// Das Replay-Harness bindet AsyncLocalStorage vor dem Laden der Next-Action.
+const { createInventoryMovementAction } = await import("@/app/actions/inventory.actions");
 const fremd = "TEST-fremd-" + randomUUID();
 const firma = randomUUID();
 let schalter: boolean | undefined;

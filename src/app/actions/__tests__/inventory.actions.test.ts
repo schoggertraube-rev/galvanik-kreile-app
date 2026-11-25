@@ -18,7 +18,7 @@ vi.mock("@/lib/server/privilegedDb", async importOriginal => ({
   withPrivilegedTenantTransaction: ports.transaktion,
 }));
 
-import { createInventoryMovementAction, getInventoryItemAction, getInventoryItemsAction } from "@/app/actions/inventory.actions";
+import { createInventoryMovementAction, getInventoryItemAction, getInventoryItemsAction, getInventoryMovementsByItemAction } from "@/app/actions/inventory.actions";
 
 const leser = {
   active: true, userId: "00000000-0000-4000-8000-000000000001", tenantId: "TEST-Mandant",
@@ -67,6 +67,14 @@ describe("Lageranschluss der bisherigen Inventory-Actions", () => {
       ortId: "00000000-0000-4000-8000-000000000002", fachzeit: "2026-11-25T08:00:00.000Z",
       revision: 1, mengenqualitaet: "exakt", geschaeftsgrund: "wareneingang",
     })).resolves.toEqual({ ok: false, error: "FORBIDDEN", message: LAGER_BUCHUNG_COPY.recht });
+    expect(ports.transaktion).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, "", " "])("verlangt bei beiden Artikelaufrufen eine Artikel-ID (%j)", async artikelId => {
+    const id = artikelId as string;
+    const fehler = { ok: false, error: "VALIDATION_ERROR", message: LAGER_BUCHUNG_COPY.artikelIdUngueltig };
+    await expect(getInventoryItemAction(id)).resolves.toEqual(fehler);
+    await expect(getInventoryMovementsByItemAction(id)).resolves.toEqual(fehler);
     expect(ports.transaktion).not.toHaveBeenCalled();
   });
 
