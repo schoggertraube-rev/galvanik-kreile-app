@@ -61,7 +61,7 @@ export type FlowCase = {
 
 type FlowRunState = {
   caseId: string;
-  loadFaults: Array<() => boolean>;
+  loadFaults: Array<() => Promise<boolean>>;
   before: Map<string, number>;
   beforeIds: Map<string, Set<string>>;
   rows: Map<string, Record<string, unknown>>;
@@ -1185,8 +1185,8 @@ async function interruptNextLoad(page: Page, state: FlowRunState) {
   const targetAction=loadActionId(state.caseId);
   const matcher = "**/*";
   let handled = false;
-  let aborted = false;
-  state.loadFaults.push(()=>aborted);
+  let abortResult: Promise<void> | undefined;
+  state.loadFaults.push(async()=>abortResult ? (await abortResult, true) : false);
   let interruptedRequest: import('@playwright/test').Request | undefined;
   const metadata=(request:import('@playwright/test').Request)=>{
     const reference=manifest.node[request.headers()['next-action']??''] as {exportedName?:string;workers?:Record<string,{exportedName?:string}>}|undefined;
@@ -1209,8 +1209,8 @@ async function interruptNextLoad(page: Page, state: FlowRunState) {
       handled = true;
       interruptedRequest=request;
       console.info('FLOW_LOAD_INTERRUPTED',JSON.stringify(metadata(request)));
-      await route.abort("failed");
-      aborted = true;
+      abortResult = route.abort("failed");
+      await abortResult;
       await page.unroute(matcher, handler);
       return;
     }
@@ -1929,7 +1929,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
     await expect(dataSpec(page,'reklamation.fotos')).toBeEnabled();
   }
   for (const step of flowCase.wenn ?? []) await executeStep(page, step, state);
-  for(const observed of state.loadFaults)expect(observed(),`FLOW_LOAD_TARGET_NOT_HIT:${flowCase.id}`).toBe(true);
+  for(const observed of state.loadFaults)expect(await observed(),`FLOW_LOAD_TARGET_NOT_HIT:${flowCase.id}`).toBe(true);
   await captureDbResults(dbExpectations, state);
   await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
   await assertDb(dbExpectations, state);
