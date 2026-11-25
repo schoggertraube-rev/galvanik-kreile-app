@@ -92,7 +92,7 @@ jobs:
     needs: berlin-clock
     if: needs.berlin-clock.outputs.run == 'yes'
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v6
