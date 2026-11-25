@@ -743,7 +743,7 @@ describe("AP-EIN E18 / PositionZeile.rechte: catalog without money",()=>{
   await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,tagesleistung_eur)
     SELECT 'h18-intake-suggestions',${KREILE_TENANT_SLUG},'SYNTHETISCH Vorschlagsprüfung',800
     WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
-  const {getOrderIntakeSuggestionsAction}=await import("@/app/warendurchlauf/actions");
+  const {getOrderIntakeSuggestionsAction}=await import("@/app/actions/eingang.actions");
   const suggestionInput={customerId:customer.receipt.customerId,kind:"ORDER" as const,wishDate:null,
     positions:[{key:"synthetic-mass",catalogServiceId:massService.service.id,name:massService.service.name,quantity:0.125,surfaceRequested:"verchromen",unit:"kg",unitPriceCents:null}]};
   const suggestions=await withSession(owner,()=>getOrderIntakeSuggestionsAction(suggestionInput));

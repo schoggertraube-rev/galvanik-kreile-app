@@ -6,7 +6,7 @@ const tenant = vi.hoisted(() => 'TEST-ablauf-' + globalThis.crypto.randomUUID())
 vi.mock('@/lib/tenant', () => ({ KREILE_TENANT_SLUG: tenant }));
 
 import { full, sql, withSession } from '../../../e2e/ablauf/replayHarness';
-import { getOrderIntakeSuggestionsAction } from '@/app/warendurchlauf/actions';
+import { getOrderIntakeSuggestionsAction } from '@/app/actions/eingang.actions';
 import { workingDaysBetween } from '@/lib/domain/workingDays';
 
 it('berücksichtigt den gespeicherten Versandpuffer im Terminvorschlag', async () => {
