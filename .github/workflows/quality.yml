@@ -871,7 +871,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21.0.13+9'
+          java-version: '21.0.13+100000002.0.LTS'
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
