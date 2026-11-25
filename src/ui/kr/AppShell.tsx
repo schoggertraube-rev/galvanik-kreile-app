@@ -3,6 +3,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 import { weiterMitEnter } from './tastatur';
 import { Icon, type IconName } from './Icon';
 import { Chip } from './Chip';
+import { Glasknopf, type GlasknopfProps } from './design-final/Glasknopf';
 import { useHydrated } from '@/hooks/useHydrated';
 import type { Geraet } from './typen';
 import { cx } from './typen';
@@ -25,7 +26,7 @@ export interface AppShellProps {
   onPlanung?: () => void;
   navigationsleiste?: boolean;
   /** nur variante=werkstatt */ onAuftragOeffnen?: () => void; onMehrarbeit?: () => void; onFertigMelden?: () => void;
-  ebene?: ReactNode; zustand?:ReactNode;children: ReactNode;
+  ebene?: ReactNode | ((werkstattWerkzeuge: ReactNode) => ReactNode); zustand?:ReactNode;children: ReactNode;
 }
 /** Navigation nach Gerät, nicht nach Rolle. Aktionsleiste NUR variante=werkstatt – nie auf Büro-Desktop (G3/G4). Kalender-Menüpunkt erst nach M365-Abnahme. */
 export function AppShell(p: AppShellProps) {
@@ -33,7 +34,8 @@ export function AppShell(p: AppShellProps) {
   const [menuOffen,setMenuOffen] = useState(false);
   const handy = p.geraet === 'handy';
   const leiste = p.navigationsleiste ?? p.geraet === 'desktop';
-  const klein = handy && p.variante === 'buero';
+  const klein = handy;
+  const werkstatt = p.variante === 'werkstatt';
   const kopf = (
     <header className={cx('kr-kopf', klein && styles.handyKopf)}>
       <button type="button" className="kr-marke" aria-label="Startseite" disabled={!interactive} onClick={p.onStart}><span className="kr-logo">{KREILE_KOPF_KUERZEL}</span><span className="kr-marke-name">KREILE</span></button>
@@ -45,14 +47,22 @@ export function AppShell(p: AppShellProps) {
     </header>
   );
   const aus = p.ausgeblendet ?? [];
-  if (p.variante === 'werkstatt') {
-    const A: Array<[string, string, IconName, (() => void) | undefined, string]> = [
-      ['Auftrag öffnen / scannen', 'Öffnen', 'open', p.onAuftragOeffnen, 'kr-aktion kr-aktion--primaer'],
-      ['Mehrarbeit', 'Mehrarbeit', 'layers', p.onMehrarbeit, 'kr-aktion'], ['Fertig melden', 'Fertig', 'check', p.onFertigMelden, 'kr-aktion'],
-      ['Neu erfassen', 'Erfassen', 'inbox', p.onNeuerEingang, 'kr-aktion kr-aktion--ruhig'], ['Ware raus', 'Raus', 'truck', p.onWareRaus, 'kr-aktion kr-aktion--ruhig']];
-    return (<><div className="kr-streifen" /><div className="kr-tshell kr-wshell">{kopf}{p.zustand}<main className="kr-inhalt">{p.children}</main>
-      <nav className="kr-aktionsleiste" aria-label="Werkstatt-Aktionen">{A.filter(([, , , f]) => Boolean(f)).map(([t, k, ic, f, c]) => <button key={t} type="button" className={c} disabled={!interactive} onClick={f}><Icon name={ic} />{handy ? k : t}</button>)}</nav></div>{p.ebene}</>);
-  }
+  const werkstattAktionen: readonly {
+    text: string; icon: IconName; ton: NonNullable<GlasknopfProps['ton']>; ausloesen?: () => void; imDock?: true
+  }[] = werkstatt ? [
+    {text: 'Auftrag öffnen / scannen', icon: 'open', ton: 'haupt', ausloesen: p.onAuftragOeffnen},
+    {text: 'Mehrarbeit', icon: 'layers', ton: 'sekundaer', ausloesen: p.onMehrarbeit},
+    {text: 'Fertig melden', icon: 'check', ton: 'sekundaer', ausloesen: p.onFertigMelden},
+    {text: 'Neu erfassen', icon: 'inbox', ton: 'leise', ausloesen: p.onNeuerEingang, imDock: true},
+    {text: 'Ware raus', icon: 'truck', ton: 'leise', ausloesen: p.onWareRaus},
+  ] : [];
+  const werkstattKnopf = (aktion: typeof werkstattAktionen[number]) => <Glasknopf key={aktion.text}
+    text={aktion.text} icon={<Icon name={aktion.icon} />} ton={aktion.ton} disabled={!interactive} onClick={aktion.ausloesen} />;
+  const werkstattLeiste = werkstattAktionen.filter(aktion => aktion.ausloesen && (!handy || aktion.ton === 'haupt'));
+  const werkstattWeitere = handy ? werkstattAktionen.filter(aktion => aktion.ausloesen && aktion.ton !== 'haupt' && !aktion.imDock) : [];
+  const ebene = typeof p.ebene === 'function' ? p.ebene(werkstattWeitere.length > 0
+    ? <div className={styles.werkstattWerkzeuge}>{werkstattWeitere.map(werkstattKnopf)}</div> : null)
+    : p.ebene;
   const sichtbareZiele: Glaseintrag[] = NAVIGATION.filter(entry => !aus.includes(entry.id)).map(entry => ({
     id: entry.id, text: entry.text, icon: <Icon name={entry.icon} />,
     specId: `navigation.${entry.id}`, gruppe: entry.platz === 'unten' ? 'unten' : 'haupt',
@@ -67,7 +77,7 @@ export function AppShell(p: AppShellProps) {
     dockSpalte: 4, specId: 'navigation.planung', aufrufen: p.onPlanung });
   const weitereZiele = sichtbareZiele.filter(entry => !dockEintraege.some(dock => dock.id === entry.id));
   const erfassung = p.onNeuerEingang && {text: 'Eingang', icon: <Icon name="plus" />, ausloesen: p.onNeuerEingang};
-  const werkzeuge = [
+  const werkzeuge = werkstatt ? [] : [
     ...(p.onNeuerEingang ? [{text: 'Neu erfassen', icon: <Icon name="inbox" />, ausloesen: p.onNeuerEingang}] : []),
     ...(p.onWareRaus ? [{text: 'Ware raus', icon: <Icon name="truck" />, ausloesen: p.onWareRaus}] : []),
   ];
@@ -82,8 +92,14 @@ export function AppShell(p: AppShellProps) {
         eintraege={dockEintraege} deaktiviert={!interactive} erfassung={erfassung}
         weitere={{text: 'Mehr', icon: <Icon name="grid" />, eintraege: weitereZiele, aufrufen: () => p.onNav('mehr')}} />;
   return <><div className="kr-streifen" /><div className={cx('kr-tshell', styles.rahmen, leiste ? styles.mitLeiste : styles.mitDock)}>
-    {kopf}{p.zustand}<main className="kr-inhalt">{p.children}</main>{nav}
-  </div>{p.ebene}</>;
+    {kopf}{p.zustand}<main className="kr-inhalt">{p.children}</main>
+    {werkstattLeiste.length > 0 ? <>
+      <nav className={styles.werkstattAktionen} aria-label="Werkstatt-Aktionen">
+        {werkstattLeiste.map(werkstattKnopf)}
+      </nav>
+      {nav}
+    </> : nav}
+  </div>{ebene}</>;
 }
 export interface SeitenKopfProps { titel: string; werkzeug?: ReactNode; }
 /** Genau EINE Überschrift je Seite (G5). Keine Overline, keine Unterzeile. */

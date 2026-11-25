@@ -51,4 +51,25 @@ describe('Nähte-b: neues Menü mit den bestehenden Zielen',()=>{
   expect(onPlanung).toHaveBeenCalledOnce();
   expect(onNav).toHaveBeenCalledExactlyOnceWith('mehr');
  });
+ it('behält die Werkstattbefehle am gemeinsamen Handy-Menü und zeigt nur Öffnen als Hauptaktion',()=>{
+  const onNav=vi.fn(), onAuftragOeffnen=vi.fn(), onFertigMelden=vi.fn(), onNeuerEingang=vi.fn();
+  render(<AppShell geraet="handy" variante="werkstatt" aktiv="werkstatt" kuerzel="GK"
+   ausgeblendet={['nachrichten','geld']} suche={null} plus={null} onNav={onNav} onStart={()=>{}} onKonto={()=>{}}
+   onNeuerEingang={onNeuerEingang} onAuftragOeffnen={onAuftragOeffnen} onFertigMelden={onFertigMelden}
+   ebene={werkzeuge=><div role="group" aria-label="Weitere Werkstatt-Aktionen">{werkzeuge}</div>}
+  ><section>TEST Werkstatt</section></AppShell>);
+  const navigation=within(screen.getByRole('navigation',{name:'Hauptnavigation'}));
+  const leiste=within(screen.getByRole('navigation',{name:'Werkstatt-Aktionen'}));
+  expect(leiste.getAllByRole('button')).toHaveLength(1);
+  fireEvent.click(leiste.getByRole('button',{name:'Auftrag öffnen / scannen'}));
+  fireEvent.click(navigation.getByRole('button',{name:'Eingang'}));
+  fireEvent.click(navigation.getByRole('button',{name:'Mehr'}));
+  const weitere=within(screen.getByRole('group',{name:'Weitere Werkstatt-Aktionen'}));
+  expect(weitere.queryByRole('button',{name:'Mehrarbeit'})).toBeNull();
+  fireEvent.click(weitere.getByRole('button',{name:'Fertig melden'}));
+  expect(onAuftragOeffnen).toHaveBeenCalledOnce();
+  expect(onFertigMelden).toHaveBeenCalledOnce();
+  expect(onNeuerEingang).toHaveBeenCalledOnce();
+  expect(onNav).toHaveBeenCalledExactlyOnceWith('mehr');
+ });
 });

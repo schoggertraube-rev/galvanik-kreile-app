@@ -14,3 +14,20 @@
 .rahmen.mitLeiste:has(>[data-spec-id="offline.zeile"]) { grid-template-rows: var(--kopf) auto minmax(0,1fr); }
 .handyKopf { justify-content: flex-end; padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)); }
 .handyKopf > :global(.kr-marke) { display: none; }
+.werkstattAktionen {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--a-3);
+  padding: var(--a-3) var(--a-5);
+}
+.mitDock:has(> .werkstattAktionen) > :global(.kr-inhalt) { padding-block-end: var(--a-3); }
+.mitDock > .werkstattAktionen {
+  padding-block-end: calc(var(--gb-dock-hoehe) + 2 * var(--gb-dock-unten) + env(safe-area-inset-bottom));
+}
+.werkstattWerkzeuge {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--a-3);
+}

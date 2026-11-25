@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AppShell,
@@ -103,10 +103,14 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   }}/> : null;
   const menuTargets = NAVIGATION.filter(entry => !hidden.includes(entry.id)
     && !['tag', 'werkstatt', 'nachrichten', 'einstellungen'].includes(entry.id));
-  const overlay = (
+  const schliesseUndOeffne = (aktion: () => void) => () => {
+    setMoreOpen(false);
+    aktion();
+  };
+  const overlay = (werkstattWerkzeuge: ReactNode) => (
     <>
       <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} ziele={menuTargets}
-        werkzeuge={device === 'handy' && !workshop ? news : null} />
+        werkzeuge={device === 'handy' ? (workshop ? werkstattWerkzeuge : news) : null} />
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </>
   );
@@ -136,11 +140,11 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
           onStart={() => router.push("/")}
           onKonto={() => setMoreOpen(true)}
           onNeuerEingang={permissions.hasArea("eingang") ? () => requestGlobalCreate() : undefined}
-          onWareRaus={permissions.hasPermission("perm_op_status") ? () => router.push("/orders?station=fertig") : undefined}
+          onWareRaus={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/orders?station=fertig")) : undefined}
           onAuftragOeffnen={permissions.hasPermission("perm_view_leitstand") ? () => router.push("/orders") : undefined}
           onPlanung={permissions.hasPermission("perm_view_leitstand") ? () => router.push(ORDER_WEEK_ROUTE) : undefined}
-          onMehrarbeit={permissions.hasPermission("perm_op_status") ? () => router.push("/warendurchlauf") : undefined}
-          onFertigMelden={permissions.hasPermission("perm_op_status") ? () => router.push("/warendurchlauf") : undefined}
+          onMehrarbeit={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/warendurchlauf")) : undefined}
+          onFertigMelden={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/warendurchlauf")) : undefined}
           ebene={overlay}
           >
             {children}
