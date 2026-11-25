@@ -519,7 +519,9 @@ export const companySettingsTable = pgTable("company_settings", {
   emailFooter: text("email_footer").default("Mit freundlichen Gruessen, Ihr Team von Galvanik Kreile"),
   emailAdditionalNotes: text("email_additional_notes").default(""),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  uebergabepufferTage: integer("uebergabepuffer_tage").notNull().default(1),
+  versandpufferArbeitstage: integer("versandpuffer_arbeitstage").notNull()
+    .default(sql`((private.s16d_spur_d_standardwerte()->>'versandpuffer_arbeitstage')::integer)`),
+  terminKnappArbeitstage: integer("termin_knapp_arbeitstage").notNull().default(2),
   auslastungPasstPct: integer("auslastung_passt_pct").notNull().default(80),
   auslastungKnappPct: integer("auslastung_knapp_pct").notNull().default(100),
   auslastungWenigPct: integer("auslastung_wenig_pct").notNull().default(50),

@@ -22,6 +22,15 @@ export {readLoggingSettings} from './server/loggingSettingsPort';
 // Einstellungs-Leser eingang
 export {readMailboxFetchState,writeMailboxFetchState} from "./server/systemSettingsPort";
 
+// Einstellungs-Leser werkstatt
+export {
+  readAusschussBerechnenInTransaction,
+  readBetriebsruheInTransaction,
+  readWerkstattKostensatzInTransaction,
+  readWerkstattMehrarbeitInTransaction,
+  readWerkstattZeitstationInTransaction,
+} from "./server/s16dSpurDSettingsPort";
+
 // Einstellungs-Leser lager
 export {readLagerEinstellungen} from "./server/s16dSpurDSettingsPort";
 export type {LagerEinstellungen} from "./server/s16dSpurDSettingsPort";

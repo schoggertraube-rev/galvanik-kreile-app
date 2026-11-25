@@ -145,6 +145,8 @@ function completeSyntheticReplaySettings(row: Record<string, unknown>) {
   const vatRate = row.invoice_vat_rate_basis_points;
   return {
     ...row,
+    // Keep the scheduling fixture's buffer when the production default differs.
+    versandpuffer_arbeitstage: generatedFlowRuntime.datenlagen.termine_einstellungen.versandpuffer_arbeitstage,
     company_name: text("company_name", "SYNTHETISCH Replay-Betrieb"),
     street: text("street", "Replaystraße 1"),
     zip: text("zip", "99099"),

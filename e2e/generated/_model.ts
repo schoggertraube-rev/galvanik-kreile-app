@@ -928,7 +928,7 @@ export const generatedFlowRuntime = {
       "id": "20000000-0000-4000-8000-000000000031",
       "tabelle": "company_settings",
       "tagesleistung_eur": 1000,
-      "uebergabepuffer_tage": 1,
+      "versandpuffer_arbeitstage": 1,
       "auslastung_passt_pct": 80,
       "auslastung_knapp_pct": 100,
       "auslastung_wenig_pct": 50,

@@ -5,7 +5,7 @@ import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
-import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
@@ -45,9 +45,31 @@ async function withPackageExpectation(result:IntakeCaptureResult):Promise<Intake
 
 import { createHash,randomUUID } from "node:crypto";
 import { after } from "next/server";
-import {revalidatePath} from "next/cache";
+import {revalidatePath,unstable_noStore as noStore} from "next/cache";
+import type {IntakeSuggestions,IntakeSuggestionsInput} from "@/lib/intakeSuggestionsContract";
+import type {WarendurchlaufActionResult} from "@/app/warendurchlauf/actions";
 import { getAppSession } from "@/lib/server/appSession";
 import {readIntakeMessages} from '@/modules/eingang/server-public';
+export async function getOrderIntakeSuggestionsAction(
+  input: IntakeSuggestionsInput,
+): Promise<WarendurchlaufActionResult<IntakeSuggestions>> {
+  noStore();
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return { ok: false, error: "AUTH_ERROR", message: authorization.message };
+  }
+  if (!authorization.data.permissions.includes("perm_data_orders") || authorization.data.areas?.includes("eingang") !== true) {
+    return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
+  }
+  try {
+    const { readIntakeSuggestions } = await import("@/lib/server/intakeSuggestions");
+    return { ok: true, data: await readIntakeSuggestions(authorization.data, input, readBetriebsruheInTransaction) };
+  } catch (error) {
+    console.error("getOrderIntakeSuggestionsAction failed", error);
+    return { ok: false, error: "QUERY_ERROR", message: "Vorschläge sind derzeit nicht verfügbar." };
+  }
+}
+
 export async function getIntakeMessagesAction(filter:unknown='offen'){const device=!!filter&&typeof filter==='object'&&!Array.isArray(filter)&&Object.keys(filter).length===1&&'purpose' in filter&&filter.purpose==='device';const result=await readIntakeMessages(device?'alle':filter,undefined,device?new Date(Date.now()-24*60*60*1000).toISOString():undefined);return result.code==='OK'||device&&result.code==='FORBIDDEN'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;}
 import {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
 export async function getIntakeAssignmentAction(input:unknown){return readIntakeAssignment(input,readCustomerProfile);}
