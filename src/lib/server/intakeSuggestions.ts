@@ -265,8 +265,8 @@ export async function readIntakeSuggestions(
 
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
     const [settings, catalogRows, historyRows, capacityRows,customerRows] = await Promise.all([
-      tx.execute<{ tagesleistung_eur: number | string;uebergabepuffer_tage:number;auslastung_passt_pct:number;auslastung_knapp_pct:number;auslastung_vorrang_pct:number }>(sql`
-        SELECT tagesleistung_eur,uebergabepuffer_tage,auslastung_passt_pct,auslastung_knapp_pct,auslastung_vorrang_pct
+      tx.execute<{ tagesleistung_eur: number | string;versandpuffer_arbeitstage:number;auslastung_passt_pct:number;auslastung_knapp_pct:number;auslastung_vorrang_pct:number }>(sql`
+        SELECT tagesleistung_eur,versandpuffer_arbeitstage,auslastung_passt_pct,auslastung_knapp_pct,auslastung_vorrang_pct
         FROM public.company_settings
         WHERE tenant_id = ${authorization.tenantId}
         ORDER BY updated_at DESC, id
@@ -335,7 +335,7 @@ export async function readIntakeSuggestions(
         positions: input.positions.map(position=>!canReadMoney&&position.catalogServiceId?{...position,unitPriceCents:catalogById.has(position.catalogServiceId)?Number(catalogById.get(position.catalogServiceId)!.net_price_cents):null}:position),
         catalogById,
         dailyOutputEur,
-        settings:{handoverBufferDays:settings[0].uebergabepuffer_tage,fitsPercent:settings[0].auslastung_passt_pct,tightPercent:settings[0].auslastung_knapp_pct,priorityPercent:settings[0].auslastung_vorrang_pct},
+        settings:{handoverBufferDays:settings[0].versandpuffer_arbeitstage,fitsPercent:settings[0].auslastung_passt_pct,tightPercent:settings[0].auslastung_knapp_pct,priorityPercent:settings[0].auslastung_vorrang_pct},
         openOrders:capacityRows.map(row=>({...row,valueCents:Number(row.valueCents)})),priority:customerRows[0]?.vorrang===true,processingWeeks:input.processingWeeks,kind:input.kind,
       }),
       prices: canReadMoney
