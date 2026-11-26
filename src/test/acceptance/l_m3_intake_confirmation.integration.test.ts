@@ -130,7 +130,7 @@ it("L-M3 keeps the order draft out until its original mail is assigned", async (
   await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,text)
     VALUES(${itemId}::uuid,${KREILE_TENANT_SLUG},${itemId},'mail','rein','mailabruf',
       ${full.actorId}::uuid,${customerId},'automatisch','TEST Original für Auftragsentwurf')`;
-  const { assignIntakeCustomerAction, getIntakeDraftsAction, saveIntakeDraftAction } =
+  const { assignIntakeCustomerAction, erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction } =
     await import("@/app/actions/eingang.actions");
   const save = {
     id, clientEventId, art: "eingang", lastField: null, expectedVersion: null,
@@ -146,11 +146,34 @@ it("L-M3 keeps the order draft out until its original mail is assigned", async (
 
   const saved = await withSession(full, () => saveIntakeDraftAction(fresh(save)));
   expect(saved, JSON.stringify(saved)).toMatchObject({ code: "OK" });
+  if(saved.code!=='OK')throw Error('TEST_DRAFT_SAVE_REQUIRED');
+  const originalDraft=saved.drafts.find(row=>row.id===id);
+  if(!originalDraft)throw Error('TEST_DRAFT_READBACK_REQUIRED');
   const expected = { code: "OK", drafts: expect.arrayContaining([expect.objectContaining({ id, payload: save.payload })]) };
   expect(await withSession(full, () => getIntakeDraftsAction())).toMatchObject(expected);
   expect(await withSession(full, () => saveIntakeDraftAction(fresh(save)))).toMatchObject(expected);
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}
     AND event_type='INTAKE_DRAFT_SAVED_V1' AND client_event_id=${clientEventId}::uuid`).toHaveLength(1);
+  const withdrawn=await withSession(full,()=>assignIntakeCustomerAction({
+    itemId,version:2,clientEventId:randomUUID(),mode:"undo",
+  }));
+  expect(withdrawn).toMatchObject({code:"OK",restoredTaskId:null});
+  expect(await withSession(full,()=>getIntakeDraftsAction())).toMatchObject({code:"OK",drafts:[]});
+  expect(await withSession(full,()=>saveIntakeDraftAction(fresh(save)))).toMatchObject({code:"OK",drafts:[]});
+  expect(await withSession(full,()=>saveIntakeDraftAction({ ...save,clientEventId:randomUUID(),expectedVersion:originalDraft.version })))
+    .toMatchObject({code:"CONFLICT"});
+  const bookingKey=randomUUID();
+  expect(await withSession(full,()=>erfasseAuftragAusEingangAction({
+    clientKey:bookingKey,draftId:id,geprueft:false,text:'TEST eingefrorener Entwurf aus Kundennachricht',
+    customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',
+    intakeSource:'anfrage_mail',handoverMode:'pickup',paymentMode:'rechnung',sourceCaptures:[{id:itemId,version:3}],
+    items:[{catalogServiceId:null,name:'TEST Teil',quantity:3,material:'Messing',surfaceRequested:'Verchromen',
+      executionRequested:'offen',unit:'Stück',unitPriceCents:null,vatRateBasisPoints:null}],
+  }))).toMatchObject({code:'CONFLICT'});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}
+    AND event_type='ORDER_INTAKE_CREATED_V1' AND client_event_id=${bookingKey}::uuid`).toHaveLength(0);
+  expect(await sql`SELECT payload,version FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}::uuid`)
+    .toEqual([{payload:save.payload,version:originalDraft.version}]);
 });
 
 it("L-M3 binds a thread only to the original MIME and the saved outgoing mail", async () => {

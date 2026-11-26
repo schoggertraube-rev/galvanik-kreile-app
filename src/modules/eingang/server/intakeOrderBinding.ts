@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { OrderIntakeTransactionBinding } from "@/lib/server/commands/orderIntakeCommand";
 import { queueIntakeConfirmation } from "./intakeConfirmation";
+import { intakeDraftMailFailure } from "./intakeDraft";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -85,9 +86,11 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
         }
       }
       if(draftId){
-        const own=await tx.execute(sql`SELECT id FROM private.intake_drafts WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND id=${draftId}::uuid AND status='open' FOR UPDATE`);
+        const own=await tx.execute<{art:string;payload:Record<string,unknown>}>(sql`SELECT art,payload FROM private.intake_drafts WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND id=${draftId}::uuid AND status='open' FOR UPDATE`);
         if(own.length!==1){
           if(!await hasOwnOrderIntakeReceipt(tx,auth,input.clientEventId))throw Error("INTAKE_DRAFT_NOT_FOUND");
+        }else if(own[0].art==='eingang'&&await intakeDraftMailFailure(tx,auth,own[0].payload)){
+          throw Error("INTAKE_CAPTURE_CUSTOMER_CONFLICT");
         }
       }
       for(const key of sources.length?sources.map(source=>source.id):[input.clientEventId])

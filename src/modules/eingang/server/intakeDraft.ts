@@ -23,10 +23,17 @@ export async function readIntakeDrafts() {
   const auth = await authorizeDraft();
   if ("code" in auth) return auth;
   try {
-    const drafts = await withPrivilegedTenantTransaction(auth, tx => tx.execute<DraftRow>(sql`
-      SELECT id::text,art,payload,zuletzt_feld,version,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at FROM private.intake_drafts
-      WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND status='open'
-      ORDER BY updated_at DESC,id`));
+    const drafts = await withPrivilegedTenantTransaction(auth, async tx => {
+      const rows = await tx.execute<DraftRow>(sql`
+        SELECT id::text,art,payload,zuletzt_feld,version,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at FROM private.intake_drafts
+        WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND status='open'
+        ORDER BY updated_at DESC,id`);
+      const usable:DraftRow[] = [];
+      for (const row of rows) {
+        if (row.art !== 'eingang' || !await intakeDraftMailFailure(tx, auth, row.payload, {lock:false})) usable.push(row);
+      }
+      return usable;
+    });
     return { code: "OK" as const, drafts };
   } catch (error) {
     console.error("[INTAKE_DRAFT_READ_FAILED]", error);
@@ -85,10 +92,11 @@ export async function discardIntakeDraft(input: unknown) {
 
 export type DraftWriteInput={id:string;clientEventId:string;art:'eingang'|'kunde';payload:Record<string,unknown>;lastField:string|null;expectedVersion:number|null};
 
-async function draftMailFailure(
+export async function intakeDraftMailFailure(
   tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, payload: DraftWriteInput['payload'],
-  continuationOriginals?: readonly string[],
+  options: {continuationOriginals?:readonly string[];lock?:boolean} = {},
 ) {
+  const {continuationOriginals,lock = true} = options;
   const { documents, sourceItemId } = payload;
   const copy = INTAKE_DRAFT_MAIL_ASSIGNMENT_COPY;
   if (!continuationOriginals && documents !== undefined && !Array.isArray(documents)) {
@@ -119,7 +127,7 @@ async function draftMailFailure(
     SELECT id::text,version,kunde_id,zuordnung,kennzeichen FROM public.intake_item
     WHERE tenant_id=${auth.tenantId} AND kanal='mail'
       AND id=ANY(ARRAY[${sql.join([...mailIds].map(id => sql`${id}`), sql`, `)}]::uuid[])
-    ORDER BY id FOR SHARE NOWAIT`);
+    ORDER BY id ${lock?sql`FOR SHARE NOWAIT`:sql``}`);
   const customer = object(payload.request) && object(payload.request.customer) ? payload.request.customer : null;
   const selectedCustomerId = payload.customerId ?? customer?.customerId;
   const confirmedCustomers = new Set(mails.map(mail => mail.kunde_id));
@@ -147,7 +155,7 @@ export async function writeIntakeDraftInTransaction(tx:PrivilegedTenantTransacti
   if (!current.length && input.expectedVersion!==null) return {code:"CONFLICT" as const,message:"Dieser Entwurf wurde bereits gebucht oder verworfen. Eingaben bleiben erhalten."};
   if (current.length && current[0]!.version!==input.expectedVersion) return {code:"CONFLICT" as const,message:"Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten."};
   if (input.art === 'eingang') {
-    const failure = await draftMailFailure(tx, auth, input.payload, continuationOriginals);
+    const failure = await intakeDraftMailFailure(tx, auth, input.payload, {continuationOriginals});
     if (failure) return failure;
   }
   if (current.length) await tx.execute(sql`UPDATE private.intake_drafts SET art=${input.art},payload=${serialized}::jsonb,
