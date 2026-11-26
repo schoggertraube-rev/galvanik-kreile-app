@@ -24,23 +24,42 @@ import {
 } from "@/lib/server/microsoftGraph";
 
 type TargetType = "CUSTOMER" | "ORDER";
+type SentMailProof = { id: string; threadId: string; customerId: string | null; orderId: string | null };
 
-/** A queued send can be removed only after its existing outgoing message and send event agree. */
-export async function readQueuedMailSentEvent(auth:AuthorizationSnapshot,clientRequestId:string,receipt:{threadId:string;messageId:string}){
- const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string}>(sql`
-  SELECT event.id::text
+function readSentMailProof(
+ tx: PrivilegedTenantTransaction, tenantId: string, clientRequestId: string,
+ receipt?: { threadId: string; messageId: string; actorId: string },
+) {
+ const binding = receipt
+  ? sql`AND event.user_id::text=${receipt.actorId} AND thread.id::text=${receipt.threadId} AND message.id::text=${receipt.messageId}`
+  : sql`AND thread.source=${'MS_GRAPH_OUT:'+clientRequestId}`;
+ return tx.execute<SentMailProof>(sql`
+  SELECT event.id::text,thread.id::text AS "threadId",thread.customer_id AS "customerId",thread.order_id AS "orderId"
   FROM public.events event
   JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->>'threadId'
   JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id
-  WHERE event.tenant_id=${auth.tenantId} AND event.correlation_id=${clientRequestId}::uuid
+  WHERE event.tenant_id=${tenantId} AND event.correlation_id=${clientRequestId}::uuid
     AND event.event_type IN ('COMMUNICATION_MAIL_SENT_V1','COMMUNICATION_DOCUMENT_SENT_V1')
-    AND event.status='success' AND event.event_schema_version=1 AND event.user_id::text=${auth.userId}
-    AND thread.id::text=${receipt.threadId} AND thread.status='sent' AND thread.created_by=event.user_id
-    AND message.id::text=${receipt.messageId} AND message.direction='outgoing' AND message.channel='email'
-    AND message.created_by=event.user_id
+    AND event.status='success' AND event.event_schema_version=1
+    AND thread.status='sent' AND thread.created_by=event.user_id
+    AND message.direction='outgoing' AND message.channel='email' AND message.created_by=event.user_id
     AND (event.event_type='COMMUNICATION_DOCUMENT_SENT_V1' OR event.payload->>'messageId'=message.id::text)
-  LIMIT 2`));
+    ${binding}
+  LIMIT 2`);
+}
+
+/** A queued send can be removed only after its existing outgoing message and send event agree. */
+export async function readQueuedMailSentEvent(auth:AuthorizationSnapshot,clientRequestId:string,receipt:{threadId:string;messageId:string}){
+ const rows=await withPrivilegedTenantTransaction(auth,tx=>readSentMailProof(tx,auth.tenantId,clientRequestId,{...receipt,actorId:auth.userId}));
  return rows.length===1?rows[0].id:null;
+}
+
+/** Loads the outgoing side of a verified Graph reference, using the same stored sent receipt. */
+export async function readSentMailThreadTarget(tx:PrivilegedTenantTransaction,tenantId:string,clientRequestId:string) {
+ const rows = await readSentMailProof(tx, tenantId, clientRequestId);
+ if (rows.length > 1) throw Error('COMMUNICATION_SENT_THREAD_AMBIGUOUS');
+ const target = rows[0];
+ return target?.customerId ? { threadId:target.threadId, customerId:target.customerId, orderId:target.orderId } : null;
 }
 
 export async function readComplaintGoodsReminderContext(auth:AuthorizationSnapshot,orderId:string) {

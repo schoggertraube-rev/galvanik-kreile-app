@@ -4,10 +4,53 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readMicrosoftGraphSentMailReference} from './microsoftGraph';
+import {readSentMailThreadTarget} from './communicationPort';
 
 export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE';proofs:Array<{itemId:string;threadId:string;graphMessageId:string;originalSha256:string;receivedAt:string;inReplyTo:string;orderIds:string[];freezes:Array<{orderId:string;freezeId:string}>}>};
 type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]};deliveryReport?:{status:string}}};
 export type DispatchResponsePorts={readGraphSettings?:import('./microsoftGraph').GraphReadSettingsSource;readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string|null;senderAddress?:string|null}>}>};
+
+/** A saved original can bind only to one of this tenant's recorded outgoing messages. */
+export async function readSavedMailReplyTarget(
+ auth: AuthorizationSnapshot, itemId: string, readGraphSettings?: DispatchResponsePorts['readGraphSettings'],
+) {
+ if (!hasAuthorizationArea(auth, 'mails')) return { code: 'FORBIDDEN' as const };
+ try {
+  const rows = await withPrivilegedTenantTransaction(auth, tx => tx.execute<{
+   customer_id: string | null; graph_message_id: string; received_at: Date | string | null;
+   sender: string | null; reply_chain: NonNullable<Original['message']['replyChain']> | null; proof_ok: boolean;
+  }>(sql`
+   SELECT proof.customer_id,proof.graph_message_id,proof.received_at,proof.reply_chain,proof.proof_ok,
+     source.absender_adresse AS sender
+   FROM private.v_intake_reply_evidence_v1 proof
+   JOIN public.intake_item source ON source.tenant_id=proof.tenant_id AND source.id::text=proof.item_id
+   WHERE proof.tenant_id=${auth.tenantId} AND proof.item_id=${itemId} LIMIT 2`));
+  if (rows.length > 1) throw Error('INTAKE_REPLY_ORIGINAL_AMBIGUOUS');
+  const original = rows[0];
+  const chain = original?.reply_chain;
+  if (!original || !chain || chain.status === 'missing') return { code: 'NO_BINDING' as const };
+  if (!original.proof_ok || chain.source !== 'original_mime' || chain.status !== 'present'
+    || typeof chain.originalSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(chain.originalSha256)
+    || !original.sender || !original.received_at) throw Error('INTAKE_REPLY_SOURCE_INCOMPLETE');
+  if (!Array.isArray(chain.inReplyTo) || chain.inReplyTo.length !== 1) return { code: 'NO_BINDING' as const };
+  const sent = await readMicrosoftGraphSentMailReference(chain.inReplyTo[0], original.sender, undefined, undefined, readGraphSettings);
+  if (sent.code !== 'OK') return { code: 'UNAVAILABLE' as const };
+  if (!sent.data.clientRequestId || Date.parse(sent.data.sentAt) > new Date(original.received_at).getTime()) {
+   return { code: 'NO_BINDING' as const };
+  }
+  const target = await withPrivilegedTenantTransaction(auth, tx => readSentMailThreadTarget(tx, auth.tenantId, sent.data.clientRequestId!));
+  if (!target || original.customer_id && original.customer_id !== target.customerId) return { code: 'NO_BINDING' as const };
+  return {
+   code: 'OK' as const, target,
+   proof: { itemId, originalSha256: chain.originalSha256, graphMessageId: original.graph_message_id,
+     originalMessageId: sent.data.internetMessageId, sentGraphMessageId: sent.data.graphMessageId,
+     clientRequestId: sent.data.clientRequestId },
+  };
+ } catch (error) {
+  console.error('[INTAKE_REPLY_BINDING_FAILED]', { name:error instanceof Error ? error.name : 'UnknownError' });
+  return { code: 'UNAVAILABLE' as const };
+ }
+}
 
 /** Incoming MIME and the exact Sent-Items request header bind the reaction to the real notice. */
 export async function readDispatchResponses(auth:AuthorizationSnapshot,input:{customerId:string;noticeThreadIds:string[];oldestNoticeAt:string},ports:DispatchResponsePorts):Promise<DispatchResponseCheck>{

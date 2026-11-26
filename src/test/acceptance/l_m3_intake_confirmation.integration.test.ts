@@ -152,3 +152,75 @@ it("L-M3 keeps the order draft out until its original mail is assigned", async (
   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}
     AND event_type='INTAKE_DRAFT_SAVED_V1' AND client_event_id=${clientEventId}::uuid`).toHaveLength(1);
 });
+
+it("L-M3 binds a thread only to the original MIME and the saved outgoing mail", async () => {
+  const customerId = await customerFixture("L-M3 Mailfaden");
+  const order = await intakeOrderFixture("L-M3 Mailfaden", customerId);
+  const [customer] = await sql`SELECT email FROM public.customers
+    WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}`;
+  const requestId = randomUUID();
+  const graphId = "TEST-reply-" + randomUUID();
+  const originalId = `<TEST-outgoing-${requestId}@example.invalid>`;
+  const incomingId = `<${graphId}@example.invalid>`;
+  const sender = customer.email;
+  const receivedAt = "2026-11-26T20:02:00.000Z";
+  const mime = [
+    `From: TEST Kunde <${sender}>`, `To: ${process.env.MS_GRAPH_MAILBOX}`,
+    `Message-ID: ${incomingId}`, `In-Reply-To: ${originalId}`, `References: ${originalId}`,
+    "Subject: TEST Antwort", "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8",
+    "", "Danke für Ihre Nachricht.", "",
+  ].join("\r\n");
+  let sentRequest = requestId;
+  const graph = vi.spyOn(globalThis, "fetch").mockImplementation(async (request, init) => {
+    const url = new URL(typeof request === "string" ? request : request instanceof URL ? request.href : request.url);
+    if (url.hostname === "login.microsoftonline.com") {
+      return Response.json({ access_token: "TEST-LM3-thread-token".repeat(4), expires_in: 3600 });
+    }
+    if (url.hostname !== "graph.microsoft.com") return nativeFetch(request, init);
+    if (url.pathname.endsWith("/sendMail")) return new Response(null, { status: 202 });
+    if (url.pathname.includes("/mailFolders/sentitems/messages")) {
+      return Response.json({ value: [{
+        id: "TEST-sent-thread", internetMessageId: originalId,
+        from: { emailAddress: { address: process.env.MS_GRAPH_MAILBOX } },
+        toRecipients: [{ emailAddress: { address: sender } }],
+        isDraft: false, sentDateTime: "2026-11-26T20:00:00.000Z",
+        internetMessageHeaders: [{ name: "x-kreile-request-id", value: sentRequest }],
+      }] });
+    }
+    if (url.pathname.endsWith("/$value")) return new Response(mime);
+    if (url.pathname.endsWith("/attachments")) return Response.json({ value: [] });
+    return Response.json({
+      id: graphId, internetMessageId: incomingId, subject: "TEST Antwort",
+      from: { emailAddress: { address: sender, name: "TEST Kunde" } },
+      receivedDateTime: receivedAt, bodyPreview: "Danke für Ihre Nachricht.",
+      body: { contentType: "text", content: "Danke für Ihre Nachricht." }, hasAttachments: false,
+    });
+  });
+
+  try {
+    const { sendCustomerMailAction, importOutlookMailAction } = await import("@/app/actions/communications.actions");
+    const sent = await withSession(full, () => sendCustomerMailAction({
+      targetType: "ORDER", targetId: order.receipt.orderId, clientRequestId: requestId,
+      subject: "TEST Mailfaden", body: "TEST M3 Ausgangsoriginal",
+    }));
+    if (sent.code !== "OK") throw Error(`TEST_LM3_SENT:${sent.code}`);
+    const imported = await withSession(full, () => importOutlookMailAction(graphId, { deferDispatchReply: true }));
+    if (imported.code !== "OK") throw Error(`TEST_LM3_IMPORT:${imported.code}`);
+    const { readSavedMailReplyTarget } = await import("@/lib/server/dispatchResponsePort");
+    const { resolveAuthorization } = await import("@/lib/server/authorization");
+    const read = () => withSession(full, async () => {
+      const auth = await resolveAuthorization();
+      if (!auth.ok) throw Error("TEST_LM3_SESSION");
+      return readSavedMailReplyTarget(auth.data, imported.itemId);
+    });
+    expect(await read()).toMatchObject({
+      code: "OK",
+      target: { threadId: sent.data.threadId, customerId, orderId: order.receipt.orderId },
+      proof: { itemId: imported.itemId, graphMessageId: graphId, originalMessageId: originalId, clientRequestId: requestId },
+    });
+    sentRequest = randomUUID();
+    expect(await read()).toEqual({ code: "NO_BINDING" });
+  } finally {
+    graph.mockRestore();
+  }
+});
