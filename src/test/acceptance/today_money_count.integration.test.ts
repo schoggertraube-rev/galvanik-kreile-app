@@ -41,12 +41,17 @@ it('W-TAG T05-3 counts all 25 historical invoice fixtures while limiting the lis
  expect(first.moneyMetric).toMatchObject({code:'OK',count:25});
  expect(first.invoiceMoney).toMatchObject({code:'OK',openCount:27,openCents:303500,overdueCount:25,overdueCents:297500,today:25,upcoming:1});
  expect(again.invoiceMoney).toEqual(first.invoiceMoney);
+ expect(first.invoiceSheet).toMatchObject({incomplete:false});
+ expect(first.invoiceSheet?.rows).toHaveLength(27);
+ expect(first.invoiceSheet?.rows[0]).toMatchObject({id:ids[0],number:'TEST-S05-000',customerId,amountCents:11900,overdue:true,openOriginal:false});
+ expect(first.invoiceSheet?.rows.at(-1)).toMatchObject({number:'TEST-S05-FUTURE-8',amountCents:3000,overdue:false});
+ expect(again.invoiceSheet).toEqual(first.invoiceSheet);
  expect(first.moneySources).toEqual({invoices:{code:'OK',count:27},prepayments:{code:'OK',count:0},collections:{code:'OK',count:0}});
  expect(first.moneyMetric?.code==='OK'?first.moneyMetric.sources.map(row=>row.id).sort():null).toEqual(ids.slice().sort());
  expect(first.items.filter(row=>row.kind==='invoice')).toHaveLength(20);
  expect(again.moneyMetric).toEqual(first.moneyMetric);
  const restricted=await createFixture(['auftraege'],'werkstatt'),hidden=await read(restricted);
- expect(hidden).not.toHaveProperty('invoiceMoney');expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden).not.toHaveProperty('moneySources');expect(hidden.allowedFields).not.toContain('money');
+ expect(hidden).not.toHaveProperty('invoiceMoney');expect(hidden).not.toHaveProperty('invoiceSheet');expect(hidden).not.toHaveProperty('moneyMetric');expect(hidden).not.toHaveProperty('moneySources');expect(hidden.allowedFields).not.toContain('money');
  expect(hidden.items.some(row=>row.invoiceId||row.kind==='invoice')).toBe(false);
  expect(JSON.stringify(hidden)).not.toContain('119,00');expect(JSON.stringify(hidden.challenges)).not.toContain('day.challenge_debt');
 });

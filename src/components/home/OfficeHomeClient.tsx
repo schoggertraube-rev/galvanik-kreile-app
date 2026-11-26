@@ -1,10 +1,9 @@
 "use client";
 import dynamic from 'next/dynamic';
-const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
-import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY,ORDER_STATION_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY,ORDER_STATION_COPY,TODAY_PLAN_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { confirmInvoiceHandoverAction,listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -14,10 +13,19 @@ import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import { deriveTodayReminder, type TodayProductionWeek, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
 import { OfficeDaySchedule } from "./OfficeDaySchedule";
+import {OfficeInvoiceControl} from './OfficeInvoiceControl';
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { IntakeDraftList, type IntakeDraftResult } from "@/modules/eingang/public";
 import { discardIntakeDraftAction } from "@/app/actions/eingang.actions";
-import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
+import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Icon, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
+import { GlasDialog } from '@/ui/kr/design-final/GlasDialog';
+
+const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
+const OfficeOwnNotes=dynamic(()=>import('./OfficeOwnNotes').then(module=>module.OfficeOwnNotes),{ssr:false});
+const CalendarOrders=dynamic(()=>import('@/app/orders/OrdersAppAdapter').then(module=>module.OrdersAppAdapter),{
+  ssr:false,
+  loading:()=> <p role="status">{PAGE_READ_COPY.loading}</p>,
+});
 
 type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;maxPollMs?:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>} };
 export type OfficeHomeModel =
@@ -57,7 +65,7 @@ function actionType(item: TodayItem): HandlungsArt { return item.urgency === "co
 function reminderLabel(value: string) { return `Aufgeschoben bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))} · zählt weiter mit`; }
 function assignmentDeadline(value?: string) { return value ? `Frist ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`))}` : "bis erledigt"; }
 
-export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
+export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { model: OfficeHomeModel; ports: OfficeHomePorts; weekControl?:ReactNode }) {
   const [polled,setPolled]=useState<{base:OfficeHomeModel;value:OfficeHomeModel}|null>(null);
   const model=polled?.base===initialModel?polled.value:initialModel;
   const openOrder = useOverlayStore((state) => state.openOrder);
@@ -80,6 +88,17 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
   const [mailId, setMailId] = useState<string | null>(null);
   const [mailPreview, setMailPreview] = useState<MailPreview | null>(null);
   const [mailMessage, setMailMessage] = useState("");
+  const [schedulePeriod,setSchedulePeriod]=useState('today');
+  const [calendarOpen,setCalendarOpen]=useState(false);
+  const [calendarOpener,setCalendarOpener]=useState<HTMLButtonElement|null>(null);
+  const calendarChanged=useRef(false);
+  const calendarMounted=calendarOpener!==null;
+  useEffect(()=>{
+    if(!calendarMounted)return;
+    const recordChange=()=>{calendarChanged.current=true;};
+    window.addEventListener('kreile-sync-orders',recordChange);
+    return ()=>window.removeEventListener('kreile-sync-orders',recordChange);
+  },[calendarMounted]);
   const modelPoll=useRef<((changed?:boolean)=>Promise<void>)|null>(null);
   useEffect(()=>{
     if(!('dashboard'in initialModel)||!initialModel.modelRead||!initialModel.cacheLoginScope)return;
@@ -120,6 +139,14 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     return ()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);stopped=true;controller.abort();if(timer)clearTimeout(timer);if(modelPoll.current===poll)modelPoll.current=null;};
   },[initialModel]);
   const refreshToday=()=>{if(modelPoll.current)void modelPoll.current(true);else router.refresh();};
+  function finishCalendar() {
+    setCalendarOpen(false);
+    setCalendarOpener(null);
+    if(calendarChanged.current){
+      calendarChanged.current=false;
+      refreshToday();
+    }
+  }
   const openMail = async (graphMessageId: string) => {
     setMailId(graphMessageId);
     setMailPreview(null);
@@ -146,11 +173,11 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
   const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({
     anzahl: keyboardItems.length,
-    aktiv: device === "desktop" && !later && !more && !customize && (model.kind === "data" || model.kind === "empty" || model.kind==='partial'),
+    aktiv: device === "desktop" && !calendarMounted && !later && !more && !customize && (model.kind === "data" || model.kind === "empty" || model.kind==='partial'),
     onHaupt: (index) => { const item = keyboardItems[index]?.item; if (item) primary(item); },
     onSpaeter: (index) => { const item = keyboardItems[index]?.item; if (item) setLater(item); },
   });
-  if (model.kind === "no_areas") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art="leer" text="Noch keine Bereiche freigegeben" /></section>;
+  if (model.kind === "no_areas") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" werkzeug={weekControl} /><Zustand art="leer" text="Noch keine Bereiche freigegeben" /></section>;
   if (model.kind === "denied" || model.kind === "error") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art={model.kind === "error" ? "fehler" : "gesperrt"} text={model.kind === "error" ? "Aufträge konnten nicht geladen werden" : "Du kannst den Tagesbestand nicht öffnen."} aktion={model.kind === "error" ? { text: "Erneut laden", onClick: () => router.refresh() } : undefined} /></section>;
 
   const canStartOrder = model.canCreateOrder && !permissionsLoading && hasArea("eingang");
@@ -228,14 +255,18 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
 
   const daySchedule = canWorkOrders && model.dashboard.calendar && model.dashboard.orderSchedule ? <OfficeDaySchedule
     calendar={model.dashboard.calendar} schedule={model.dashboard.orderSchedule} orders={model.dashboard.orderActions?.rows ?? []}
-    onOpen={orderId => openOrder(orderId)} onEdit={() => router.push('/orders?view=woche')} /> : null;
+    period={schedulePeriod} onPeriod={setSchedulePeriod}
+    onOpen={orderId=>openOrder(orderId)} onEdit={opener=>{setCalendarOpener(opener);setCalendarOpen(true);}} /> : null;
   const visibleLayout = activeLayout.filter(item => customize || fieldHasContent(item.field) || (item.field === 'assign' && model.dashboard.outlookMessage));
   const [firstMobileField, ...remainingMobileFields] = visibleLayout;
 
   return <section data-testid="rolf-v11-home" data-spec-id="tag">
     {model.kind==='partial'?<Hinweis ton="warn">{PAGE_READ_COPY.partial}<Button art="leise" icon="refresh" text={PAGE_READ_COPY.reload} onClick={()=>router.refresh()}/></Hinweis>:null}
     <IntakeDraftList readDrafts={readHomeIntakeDrafts} discardDraft={discardIntakeDraftAction} />
-    <SeitenKopf titel="Der Tag" werkzeug={<div className="kr-schnellleiste"><Button data-spec-id="tag.anpassen" art="leise" icon="grid" text="Anpassen · geplant" disabled onClick={() => { setLayout(model.dashboard.layout); setCustomize(true); setMessage(""); }} /><Button art="leise" icon="layers" text="Bündeln · geplant" disabled /></div>} />
+    <SeitenKopf titel="Der Tag" werkzeug={weekControl} />
+    {model.dashboard.invoiceSheet&&model.dashboard.invoiceMoney&&model.dashboard.calendar&&
+      <OfficeInvoiceControl key={model.cacheLoginScope} sheet={model.dashboard.invoiceSheet} money={model.dashboard.invoiceMoney}
+        today={model.dashboard.calendar.today} onReload={refreshToday} onOpenInvoice={openInvoice}/>}
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}
@@ -254,8 +285,15 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
       </>}
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
+    <OfficeOwnNotes key={model.cacheLoginScope} loginScope={model.cacheLoginScope}/>
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
     {invoiceMail?<Dialog titel={V45_TEXT.out$action$unsent({invoice:invoiceMail.number,name:invoiceMail.customerName})} icon="mail" groesse="breit" onSchliessen={()=>setInvoiceMail(null)}><CommunicationPanel key={invoiceMail.documentId} targetType="CUSTOMER" targetId={invoiceMail.customerId} invoiceOriginal={invoiceMail}/></Dialog>:null}
+    {calendarMounted ? <GlasDialog offen={calendarOpen&&canWorkOrders} titel={TODAY_PLAN_COPY.calendarTitle}
+      ansicht="blatt" groesse="breit" oeffner={calendarOpener} dataSpecId="kalender"
+      schliessenText={TODAY_PLAN_COPY.closeCalendar} schliessenSymbol={<Icon name="x" />}
+      onSchliessen={()=>setCalendarOpen(false)} onGeschlossen={finishCalendar}>
+      {canWorkOrders?<CalendarOrders initialView="woche" />:null}
+    </GlasDialog> : null}
     {mailId ? <Dialog titel="Mail" icon="mail" groesse="breit" onSchliessen={() => setMailId(null)}><div className="kr-stapel">
       {!mailPreview && !mailMessage ? <Hinweis>Mail wird gelesen …</Hinweis> : null}
       {mailMessage ? <Hinweis ton="warn">{mailMessage}</Hinweis> : null}
