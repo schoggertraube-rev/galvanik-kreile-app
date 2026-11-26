@@ -68,7 +68,8 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
   let prospect:IntakeProspectReference|null=null;
   let draftId=input.draftId;
   let itemId:string|null=null;
-  let locked:Row[]=[];
+  let locked:Array<Row&{zuordnung:string}>=[];
+  let replaysMailOrder=false;
   return {
     ...(sources.length||input.draftId||input.telefonNotiz?{intentKey:JSON.stringify({sources:sources.map(source=>[source.id,source.version]),draftId:input.draftId??null,...(input.telefonNotiz?{telefonNotiz:input.telefonNotiz}:{})})}:{}),
     itemId:()=>itemId,
@@ -89,15 +90,16 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
       }
       for(const key of sources.length?sources.map(source=>source.id):[input.clientEventId])
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${key},0))`);
-      locked=await tx.execute<Row>(sql`SELECT id::text,kanal,fortsetzung_von::text,kunde_id,vorgang_art,vorgang_id,version,kennzeichen,erstellt_von::text,text
+      locked=await tx.execute<Row&{zuordnung:string}>(sql`SELECT id::text,kanal,fortsetzung_von::text,kunde_id,vorgang_art,vorgang_id,version,kennzeichen,erstellt_von::text,text,zuordnung
         FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND ${sources.length?sql`id=ANY(ARRAY[${sql.join(sources.map(source=>sql`${source.id}`),sql`, `)}]::uuid[])`:sql`client_key=${input.clientEventId}`} ORDER BY id FOR UPDATE`);
       if(sources.length?locked.length!==sources.length:locked.length>1)throw Error("INTAKE_CAPTURE_NOT_FOUND");
       itemId=locked[0]?.id??null;
+      replaysMailOrder=locked.some(row=>row.kanal==='mail')&&await hasOwnOrderIntakeReceipt(tx,auth,input.clientEventId);
       for(const row of locked){
         if((row.kanal==="mail"||row.erstellt_von!==auth.userId)&&!hasAuthorizationArea(auth,"mails"))throw Error("INTAKE_CAPTURE_FORBIDDEN");
         if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,row.id))throw Error("INTAKE_CAPTURE_FORBIDDEN");
         if(row.kennzeichen.includes("in_erfassung_verworfen"))throw Error("INTAKE_CAPTURE_DISCARDED");
-        const ownNewCustomerReplay=input.customerId===null&&Boolean(row.vorgang_id)&&await hasOwnOrderIntakeReceipt(tx,auth,input.clientEventId);
+        const ownNewCustomerReplay=input.customerId===null&&Boolean(row.vorgang_id)&&(replaysMailOrder||await hasOwnOrderIntakeReceipt(tx,auth,input.clientEventId));
         if(row.kunde_id&&row.kunde_id!==(prospect?.customerId??input.customerId)&&!ownNewCustomerReplay)throw Error("INTAKE_CAPTURE_CUSTOMER_CONFLICT");
         if(sources.length&&!row.vorgang_id&&row.version!==sources.find(source=>source.id===row.id)?.version)throw Error("INTAKE_CAPTURE_VERSION_CONFLICT");
         if(!sources.length&&(row.erstellt_von!==auth.userId||row.text!==(row.kanal==="telefon"?input.telefonNotiz:input.note)))throw Error("INTAKE_CAPTURE_CLIENT_KEY_CONFLICT");
@@ -136,7 +138,11 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
       await bindIntakeOriginalToOrder(tx,auth,{itemId:id!,customerId:receipt.customerId,orderId:receipt.orderId,clientEventId:input.clientEventId,complete:true});
       await tx.execute(sql`UPDATE public.intake_suggestion SET order_id=${receipt.orderId} WHERE tenant_id=${auth.tenantId} AND item_id=${id}::uuid AND order_id IS NULL`);
       }
-      await queueIntakeConfirmation(tx,auth,receipt);
+      // A replay uses the outbox decision made before the original was linked to the order.
+      const confirmedMailSources=locked.every(row=>row.kanal!=='mail'||(
+        row.kunde_id===receipt.customerId&&(row.zuordnung==='bestaetigt'||row.zuordnung==='hand')
+      ));
+      if(!replaysMailOrder&&confirmedMailSources)await queueIntakeConfirmation(tx,auth,receipt);
     },
   };
 }
