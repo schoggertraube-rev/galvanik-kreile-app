@@ -92,7 +92,7 @@ const REAL_DB_TEST_FILE = /^src\/test\/.+\.integration\.test\.ts$/;
 // E2 Projektor, PL 22.11. 04:3x (Entscheid 04:25:53): exactly one named root.
 const TODAY_PROJECTOR_FILE = 'src/lib/server/todayProjection.ts';
 const TODAY_TAG_COMPOSITION_FILE = 'src/lib/server/todayProjectionSchedule.ts';
-const TODAY_TAG_SOURCE_MODULES = new Set(['orders', 'eingang', 'accounting', 'complaints', 'quotes', 'tasks', 'fundament']);
+const TODAY_TAG_SOURCE_MODULES = new Set(['orders', 'eingang', 'accounting', 'complaints', 'quotes', 'tasks', 'fundament', 'takt']);
 const TODAY_PROJECTOR_READ_FACADES = new Map([
   ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction','readBetriebsruheInTransaction'])],
   ['orders',new Set(['readManualShipping','readManualShippingBatch'])],
@@ -104,7 +104,8 @@ const TODAY_PROJECTOR_READ_FACADES = new Map([
   ['quotes',new Set(['listOpenQuotesCommand','readQuoteCommand','readQuoteActors'])],
   ['complaints',new Set(['readComplaintsForAuthorization'])],
   ['eingang',new Set(['readIntakeMessagesForAuthorization'])],
-  ['tasks',new Set(['readTaskForAuthorization','readQuoteFollowupTasksForToday'])],
+  ['tasks',new Set(['readTaskForAuthorization','readQuoteFollowupTasksForToday','liesAufgabenFuerTag'])],
+  ['takt',new Set(['liesTaktAusfallZeilen'])],
 ]);
 const SERVER_ONLY_SPEC = /^(?:server-only|postgres(?:\/|$)|drizzle-orm(?:\/|$)|@supabase(?:\/|$)|node:)|^@\/(?:db(?:\/|$)|lib\/server\/privilegedDb(?:\/|$)|lib\/supabase(?:\/|$)|utils\/supabase(?:\/|$))/;
 const ENTRYPOINT_BASELINE_STATUS = "TRANSITIONAL_BOOTSTRAP_SHRINK_ONLY";
