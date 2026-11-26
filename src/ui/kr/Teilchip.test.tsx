@@ -10,7 +10,7 @@ it.each([['offen',0],['teilfertig',1],['fertig',3]] as const)('opens precisely t
  document.documentElement.dataset.ui='v45';
  render(<Teilchip {...data} zustand={zustand}/>);
  const button=screen.getByRole('button',{name:V45_TEXT.work$card_part({part:data.name})});
- expect(button).toHaveClass('btn2');expect(button).toHaveAttribute('data-glass','pill');
+ expect(button).toHaveAttribute('data-form','text');
  expect(button).toHaveAttribute('data-zustand',zustand);expect(button).toHaveAttribute('data-spec-id','work.part');
  expect(button).toHaveTextContent(V45_TEXT.work$card_total({done:String(gut),total:'3'}));
  button.focus();expect(button).toHaveFocus();fireEvent.click(button);

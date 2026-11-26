@@ -1,6 +1,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {cleanup,fireEvent,render,screen} from '@testing-library/react';
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {Formularfeld,type FormularfeldProps} from './Formularfeld';
+import {Eingabe,Feld} from './Formular';
 
 afterEach(cleanup);
 
@@ -35,4 +36,54 @@ it('returns the entered value without domain conversion and keeps multiline Ente
   expect(fireEvent.keyDown(field,{key:'Enter'})).toBe(true);
   fireEvent.change(field,{target:{value:'TEST Original\nTEST Folge'}});
   expect(changed).toHaveBeenCalledWith('TEST Original\nTEST Folge');
+});
+
+it('setzt nur ein erlaubtes Datum in das vorhandene Formularfeld',async()=>{
+  const changed=vi.fn();
+  render(<Formularfeld id="TEST-datum" label="TEST Datum" art="datum" wert="2026-11-20"
+    grenzen={{max:'2026-11-22'}} laden={false} deaktiviert={false} onWert={changed}/>);
+  fireEvent.keyDown(screen.getByLabelText('TEST Datum'),{key:'F4'});
+  const wahl=within(screen.getByRole('dialog',{name:'TEST Datum'}));
+  expect(wahl.getByRole('button',{name:'Nächster Monat'})).toBeDisabled();
+  expect(wahl.getByRole('button',{name:/23\. November 2026/})).toBeDisabled();
+  expect(changed).not.toHaveBeenCalled();
+  fireEvent.click(wahl.getByRole('button',{name:/22\. November 2026/}));
+  expect(changed).toHaveBeenCalledExactlyOnceWith('2026-11-22');
+  await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+it('setzt den angetippten Minutenwert mit der gewählten Stunde in den vorhandenen Entwurf',async()=>{
+  const changed=vi.fn();
+  render(<Feld label="TEST Uhrzeit"><Eingabe type="time" value="10:30"
+    onChange={event=>changed(event.currentTarget.value)}/></Feld>);
+  fireEvent.keyDown(screen.getByLabelText('TEST Uhrzeit'),{key:'ArrowDown',altKey:true});
+  const wahl=within(screen.getByRole('dialog',{name:'TEST Uhrzeit'}));
+  fireEvent.click(wahl.getByRole('button',{name:'Stunden erhöhen'}));
+  expect(changed).not.toHaveBeenCalled();
+  fireEvent.click(wahl.getByText('47'));
+  expect(changed).toHaveBeenCalledExactlyOnceWith('11:47');
+  await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+});
+
+it('behält die genaue Dezimalzahl bis zur Übernahme und verwirft die offene Wahl mit Browser-Zurück',async()=>{
+  const changed=vi.fn();
+  render(<Feld label="TEST Menge"><Eingabe type="number" value="1" min="0" max="5" step="0.001"
+    onChange={event=>changed(event.currentTarget.value)}/></Feld>);
+  const feld=screen.getByRole('spinbutton',{name:'TEST Menge'});
+  fireEvent.keyDown(feld,{key:'F4'});
+  let wahl=within(screen.getByRole('dialog',{name:'TEST Menge'}));
+  fireEvent.click(wahl.getByRole('button',{name:'Leeren'}));
+  for(const taste of ['0','Dezimalkomma','3','7','5']) fireEvent.click(wahl.getByRole('button',{name:taste}));
+  expect(changed).not.toHaveBeenCalled();
+  window.history.back();
+  await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+  expect(changed).not.toHaveBeenCalled();
+  expect(feld).toHaveValue(1);
+  fireEvent.keyDown(feld,{key:'F4'});
+  wahl=within(screen.getByRole('dialog',{name:'TEST Menge'}));
+  fireEvent.click(wahl.getByRole('button',{name:'Gerätetastatur'}));
+  fireEvent.change(wahl.getByRole('textbox',{name:'Wert direkt eingeben'}),{target:{value:'0,375'}});
+  fireEvent.click(wahl.getByRole('button',{name:'Wert übernehmen'}));
+  expect(changed).toHaveBeenCalledExactlyOnceWith('0.375');
+  await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
 });

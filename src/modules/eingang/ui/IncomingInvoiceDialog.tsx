@@ -25,7 +25,8 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
  const [message,setMessage]=useState<string|null>(null),[retry,setRetry]=useState(false),[busy,setBusy]=useState(false),[discard,setDiscard]=useState(false),[uncertain,setUncertain]=useState(initial.uncertain);
  const working=useRef(false),key=useRef(crypto.randomUUID()),root=useRef<HTMLDivElement>(null);
  const changed=JSON.stringify(fields)!==JSON.stringify(initial.fields)||proofRetry||proofFileId!==(initial.invoice?.nachweis_file_id??null)||paidDate!==initialPaidDate||reason!==''||duplicateReason!==''||mode==='bezahlt'||correct||outcome!==' ';
- const close=()=>{if(working.current)return;if(changed)setDiscard(true);else onClose();};
+ const canClose=()=>{if(working.current)return false;if(!changed)return true;setDiscard(true);return false;};
+ const close=()=>{if(canClose())onClose();};
  useEffect(()=>{
   if(supplierQuery.trim().length<2||selected&&supplierQuery===selected.name)return;
   let active=true;const timer=setTimeout(async()=>{
@@ -93,7 +94,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
  const warnings=[...invoiceWarnings(fields,selected),...(view.taxRateWarning?[view.taxRateWarning]:[])],due=dateLabel(fields.faelligAm),primaryLabel=uploading?'Nachweis wird gesichert …':busy?'Wird erfasst …':mode==='klaeren'?'Klärung speichern':mode==='bezahlt_markieren'?'Als bezahlt markieren':mode==='unklar'?'Als unklar erfassen':mode==='bezahlt'?'Erfassen · bezahlt':due?'Erfassen · fällig '+due:'Erfassen';
  const primaryId=mode==='klaeren'?'klaerung-speichern':mode==='bezahlt_markieren'?'als-bezahlt':mode==='unklar'?'unklar-speichern':mode==='bezahlt'?'bezahlt-speichern':'offen';
  const primary=()=>void save(mode==='klaeren'?(outcome===' '?'offen':outcome):mode==='bezahlt'||mode==='bezahlt_markieren'?'bezahlt':mode==='unklar'?'unklar':'offen');
- return <><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={close} vorSchliessen={()=>!working.current}
+ return <><Dialog titel="Rechnung prüfen" icon="file" groesse="breit" schliessenSpecId="rechnungein.schliessen" onSchliessen={onClose} vorSchliessen={canClose}
   unterzeile={mode==='klaeren'?'Rechnung klären':mode==='bezahlt_markieren'?'Eingangsrechnung · als bezahlt markieren':undefined}
   meldung={message?{text:message,ton:'fehler'}:null}
   fuss={<><Button data-spec-id={mode==='klaeren'?'rechnungein.klaeren-abbrechen':'rechnungein.abbrechen'} text={mode==='ansicht'?'Schließen':'Abbrechen'} onClick={close} disabled={busy}/>

@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useOverlayStore } from "@/lib/overlayStore";
 import { SearchDialog, type SearchHit } from "@/modules/suche/public";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { ORDER_WEEK_ROUTE } from '@/ui/navigation/orders';
 import { requestGlobalCreate } from "./globalCreateRequest";
 
 type GlobalSearchProps = {
@@ -51,7 +52,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
       onGoodsOut: canWorkOrders ? () => router.push("/orders?station=fertig") : undefined,
       onFinish: canWorkOrders ? () => router.push("/warendurchlauf") : undefined,
       onExtraWork: canWorkOrders ? () => router.push("/warendurchlauf") : undefined,
-      onWeek: () => router.push("/orders?view=woche"),
+      onWeek: () => router.push(ORDER_WEEK_ROUTE),
     }}
   />;
 }

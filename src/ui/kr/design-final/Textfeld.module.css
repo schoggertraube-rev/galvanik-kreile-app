@@ -1,0 +1,49 @@
+.feld {
+  display: grid;
+  gap: var(--r53-form-text-feld-gap);
+  min-inline-size: var(--r53-form-text-feld-min-inline-size);
+}
+.label {
+  font-size: var(--r53-form-text-label-font-size);
+  font-weight: var(--r53-form-text-label-font-weight);
+  color: var(--r53-form-text-label-color);
+}
+.eingabe {
+  display: block;
+  box-sizing: border-box;
+  max-inline-size: var(--r53-form-text-eingabe-max-inline-size);
+  inline-size: var(--r53-form-text-eingabe-inline-size);
+  min-inline-size: var(--r53-form-text-eingabe-min-inline-size);
+  min-block-size: var(--r53-form-text-eingabe-min-block-size);
+  border: var(--r53-form-text-eingabe-border);
+  border-radius: var(--r53-form-text-eingabe-border-radius);
+  padding: var(--r53-form-text-eingabe-padding);
+  background: var(--r53-form-text-eingabe-background);
+  box-shadow: var(--r53-form-text-eingabe-box-shadow);
+  font: var(--r53-form-text-eingabe-font);
+  color: var(--r53-form-text-eingabe-color);
+  scroll-margin-block: var(--r53-form-text-eingabe-scroll-margin-block);
+}
+.eingabe:focus-visible {
+  outline: var(--r53-form-text-fokus-outline);
+  outline-offset: var(--r53-form-text-fokus-outline-offset);
+}
+.eingabe[aria-invalid] {
+  border-color: var(--r53-form-text-rahmenfehler-border-color);
+}
+.eingabe:disabled {
+  opacity: var(--r53-form-text-deaktiviert-opacity);
+}
+.fehler {
+  margin: var(--r53-form-text-fehler-margin);
+  color: var(--r53-form-text-fehler-color);
+  font-size: var(--r53-form-text-fehler-font-size);
+}
+textarea.eingabe { resize: vertical; }
+textarea.eingabe:focus { max-block-size:var(--r53-form-texte-max); }
+.kaestchen {
+  inline-size: var(--gb-knopf-symbolmass);
+  block-size: var(--gb-knopf-symbolmass);
+  margin: 0;
+  accent-color: var(--gb-fokus-tinte);
+}

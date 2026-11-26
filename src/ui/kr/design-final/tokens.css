@@ -1,0 +1,809 @@
+/* Werkstatt-, Nachrichten- und Materialschicht aus der HTML-Referenz b5ff14be. */
+:root {
+  --kr-arbeit-null: 0;
+  --kr-arbeit-voll: 100%;
+  --kr-arbeit-spalte: 1fr;
+  --kr-arbeit-flex: 1 1 auto;
+  --kr-arbeit-quadrat: 1;
+  --kr-arbeit-ganze-reihe: 1 / -1;
+  --kr-arbeit-linie: 1px;
+  --kr-arbeit-innen: clamp(9px, 1.2vw, 14px);
+  --kr-arbeit-kompakt-innen: 3px 5px;
+  --kr-arbeit-abstand: 8px;
+  --kr-arbeit-eng: 4px;
+  --kr-arbeit-rasterabstand: clamp(8px, 1vw, 16px);
+  --kr-arbeit-zeilenpolster: 7px 5px;
+  --kr-arbeit-chippolster: 3px 5px;
+  --kr-arbeit-touch: 44px;
+  --kr-arbeit-bild-gross: 65px;
+  --kr-arbeit-bild-kompakt: 42px;
+  --kr-arbeit-symbol: 18px;
+  --kr-arbeit-punkt: 6px;
+  --kr-arbeit-kartenminimum: 335px;
+  --kr-arbeit-statusminimum: 122px;
+  --kr-arbeit-rund-tafel: 23px;
+  --kr-arbeit-rund-karte: 16px;
+  --kr-arbeit-rund-bild: 11px;
+  --kr-arbeit-rund-chip: 10px;
+  --kr-arbeit-rund-minichip: 5px;
+  --kr-arbeit-rund-voll: 999px;
+  --kr-arbeit-schrift: 15px;
+  --kr-arbeit-klein: 12px;
+  --kr-arbeit-werkstatt-schrift: 21px;
+  --kr-arbeit-kompakt-schrift: 14px;
+  --kr-arbeit-fett: 675;
+  --kr-arbeit-akzentgewicht: 620;
+  --kr-arbeit-grossgewicht: 460;
+  --kr-arbeit-zeilenhoehe: 1.25;
+  --kr-arbeit-titelzeile: 1.12;
+  --kr-arbeit-tinte: #193642;
+  --kr-arbeit-neben: #47616a;
+  --kr-arbeit-link: #1d5d77;
+  --kr-arbeit-lichtkante: #fff;
+  --kr-arbeit-trennlinie: #66858d24;
+  --kr-arbeit-neutral-grund: #e5eef0;
+  --kr-arbeit-neutral-kante: #c1d1d4;
+  --kr-arbeit-neutral-tinte: #415b65;
+  --kr-arbeit-goldgrund: #faebcc;
+  --kr-arbeit-goldkante: #dbc89e;
+  --kr-arbeit-goldtinte: #715018;
+  --kr-arbeit-rotgrund: linear-gradient(132deg, #fbe8e2a8, #f0c6c04c);
+  --kr-arbeit-rotchip: #f7d9d2;
+  --kr-arbeit-rotkante: #d2a098;
+  --kr-arbeit-rottinte: #852f27;
+  --kr-arbeit-gruen: #256e60;
+  --kr-arbeit-blau: #3b7588;
+  --kr-arbeit-gruengrund: #e5f1ed;
+  --kr-arbeit-gruenkante: #b0c6c0;
+  --kr-arbeit-gruentinte: #2d5148;
+  --kr-arbeit-bildgrund: linear-gradient(140deg, #e4efed, #c4d8d8);
+  --kr-arbeit-bildkante: inset 0 1px 1px #fff;
+  --kr-arbeit-leseglas: linear-gradient(132deg, rgba(255, 255, 255, .92) 2%, rgba(240, 247, 249, .89) 49%, rgba(221, 234, 238, .87));
+  --kr-arbeit-leseschatten: inset 0 1px 0 #fff, inset 0 -1px 1px #afc5c9, 0 1px 2px #7490943d, 0 12px 28px -20px #345b69;
+  --kr-arbeit-kartenglas: linear-gradient(155deg, #ffffffe0, #e7f1f1e0 62%, #dbebefdb);
+  --kr-arbeit-kartenschatten: inset 0 1px 0 #fff, inset 0 -2px 1px #a6bfc3, 0 3px 0 -1px #9bb6b8, 0 6px 10px -8px #234c5f;
+  --kr-arbeit-aktive-nachricht: linear-gradient(105deg, #dcebea, #e8f2f0);
+  --kr-arbeit-aktive-kante: inset 3px 0 0 #2a7569;
+  --kr-arbeit-fokusring: 2px solid #226f94;
+  --kr-arbeit-fokusabstand: 2px;
+  --kr-arbeit-innerer-fokus: -2px;
+  --kr-arbeit-inaktiv: .55;
+  --kr-arbeit-gedrueckt: 1px;
+  --kr-arbeit-druckzeit: 120ms;
+  --kr-arbeit-haltedauer: 450ms;
+  --kr-arbeit-wischweg: 44px;
+  --kr-arbeit-gestentoleranz: 9px;
+  --kr-arbeit-break-kompakt: 560px;
+  --kr-arbeit-break-lagermittel: 610px;
+  --kr-arbeit-break-lagerweit: 900px;
+  --kr-arbeit-lager-gap: 8px;
+  --kr-arbeit-lager-kante: #c1d0d5;
+  --kr-arbeit-lager-rund: 14px;
+  --kr-arbeit-lager-polster: 11px 13px;
+  --kr-arbeit-lager-glas: linear-gradient(156deg, #ffffffb8, #edf3f3a6 78%, #e9eff3da);
+  --kr-arbeit-lager-schatten: inset 0 1px 0 #fff, 0 2px 4px -3px #24485975;
+  --kr-arbeit-lager-streifen: 3px;
+  --kr-arbeit-lager-gold: #cd903b;
+  --kr-arbeit-lager-aktivkante: #6b9d985c;
+  --kr-arbeit-lager-aktivglas: linear-gradient(122deg, #fbfffe, #e5f4f0d4 65%, #dfeded);
+  --kr-arbeit-lager-aktivschatten: inset 3px 0 #337971, inset 0 1px 0 #fff, 0 4px 9px -6px #295554b5;
+  --kr-arbeit-lager-tinte: #153447;
+  --kr-arbeit-lager-titel: clamp(21px, 2.2vw, 30px);
+  --kr-arbeit-lager-titelzeile: 1.08;
+  --kr-arbeit-lager-bild: 48px;
+  --kr-arbeit-lager-neben: #455e68;
+  --kr-arbeit-lager-nebenschrift: 12px;
+  --kr-arbeit-lager-ortabstand: 12px;
+  --kr-arbeit-lager-vorrat: linear-gradient(125deg, #d8ebe175, #f1f8f051);
+  --kr-arbeit-lager-stockgap: 4px 8px;
+  --kr-arbeit-lager-stockpolster: 9px 10px;
+  --kr-arbeit-lager-knapp: linear-gradient(125deg, #f8e4c7cb, #fbefdeac);
+  --kr-arbeit-lager-knapptinte: #66380c;
+  --kr-arbeit-lager-menge: clamp(20px, 2vw, 27px);
+  --kr-arbeit-lager-statusschrift: 11px;
+  --kr-arbeit-lager-stocksymbol: 14px;
+  --kr-arbeit-lager-hauptspalte: 1.55fr;
+  --kr-arbeit-lager-aktionsgap: 6px;
+  --kr-arbeit-lager-aktionshoehe: 49px;
+  --kr-arbeit-lager-aktionspolster: 5px 6px;
+  --kr-arbeit-lager-unterabstand: 1px;
+  --kr-arbeit-lager-nebenkante: #a4c8c0;
+  --kr-arbeit-lager-nebentinte: #124c4a;
+  --kr-arbeit-lager-nebenglas: linear-gradient(145deg, #f3faf7, #d7e9e3);
+  --kr-arbeit-lager-nebenschatten: inset 0 1px #fff, 0 2px 5px -4px #416b68;
+  --kr-arbeit-lager-hauptkante: #386e6b;
+  --kr-arbeit-lager-hauptglas: linear-gradient(148deg, #36867b 0%, #19695f 42%, #104d51 96%);
+  --kr-arbeit-lager-hauptschatten: inset 0 1px #b9e8d76b, inset 0 -2px #0b3e4a63, 0 3px 6px -3px #134a4d;
+  --kr-arbeit-lager-anderekante: #bfd0d581;
+  --kr-arbeit-lager-andere-radius: 10px;
+  --kr-arbeit-lager-andereglas: linear-gradient(140deg, #ffffffc9, #e9f0f0b0);
+  --kr-arbeit-lager-werkzeugabstand: 3px;
+  --kr-arbeit-lager-werkzeugkante: #c3d4d970;
+  --kr-arbeit-lager-werkzeugglas: linear-gradient(145deg, #ffffffa8, #e1ecef91);
+  --kr-arbeit-lager-werkzeugschatten: inset 0 1px #fff9, 0 1px 3px #54707c1a;
+  --kr-arbeit-lager-idmin: 115px;
+  --kr-arbeit-lager-stockmin: 112px;
+  --kr-arbeit-lager-aktionsmin: 138px;
+  --kr-arbeit-lager-idminweit: 155px;
+  --kr-arbeit-lager-stockminweit: 145px;
+  --kr-arbeit-lager-aktionsminweit: 265px;
+  --kr-arbeit-lager-stockspalte: .8fr;
+  --kr-arbeit-lager-mittelaktionsspalte: 1.12fr;
+  --kr-arbeit-lager-weitaktionsspalte: 1.4fr;
+  --kr-arbeit-lager-weithauptspalte: 1.4fr;
+  --kr-arbeit-lager-zeit: 170ms;
+  --kr-arbeit-auftragsabstand: 12px;
+  --kr-arbeit-auftragsfoto: clamp(68px, 20vw, 82px);
+  --kr-arbeit-auftragstitel: clamp(24px, 2.2vw, 33px);
+  --kr-arbeit-auftragshinweis: 12px 14px;
+  --kr-arbeit-fortschritt-hoehe: 15px;
+  --kr-arbeit-fortschritt-grund: #c7d2d9;
+  --kr-arbeit-fortschritt-fuellung: #9bc2e6;
+  --kr-arbeit-reiter-aktiv: linear-gradient(155deg, #28515e, #1c3d4a);
+}
+
+/* Referenz: Kreile-WerkstattCockpit.html, b5ff14be. gb = Anschlussnamen für die Bedienbausteine. */
+:root {
+  --gb-null: 0;
+  --gb-eins: 1;
+  --gb-voll: 100%;
+  --gb-haelfte: 50%;
+  --gb-minus-haelfte: -50%;
+  --gb-quadrat-verhaeltnis: 1;
+  --gb-ein-anteil: 1fr;
+  --gb-halbes-fenster: 50vw;
+  --gb-fenster-breite: 100vw;
+  --gb-fenster-hoehe: 100dvh;
+  --gb-kreis-radius: 50%;
+  --gb-rand-breite: 1px;
+  --gb-ui-schrift: var(--font-kreile-ui, 'Kreile Plex'), 'Segoe UI', sans-serif;
+  --gb-hell: #fff;
+  --gb-fokus-tinte: #075a82;
+  --gb-fokus-breite: 2px;
+  --gb-fokus-abstand: 3px;
+  --gb-deaktiviert: .55;
+  --gb-reduziert: 0s;
+  --gb-bewegung-kurve: cubic-bezier(.2, .74, .22, 1);
+  --gb-bewegung-knopf: 155ms;
+  --gb-bewegung-druck: 60ms;
+  --gb-bewegung-markierung: 245ms;
+  --gb-bewegung-leiste: 320ms;
+  --gb-icon-mass: 23px;
+
+  --gb-knopf-hoehe: 44px;
+  --gb-knopf-symbolmass: 48px;
+  --gb-knopf-radius: 12px;
+  --gb-knopf-pad-y: 5px;
+  --gb-knopf-pad-x: 10px;
+  --gb-knopf-abstand: 7px;
+  --gb-knopf-endkreis: 30px;
+  --gb-knopf-endkreis-pad: 5px;
+  --gb-knopf-schrift: 630 13px/1.2 var(--gb-ui-schrift);
+  --gb-knopf-rand: #91a8a28a;
+  --gb-knopf-glas: linear-gradient(165deg,#ffffffb8,#eef2efa1);
+  --gb-knopf-tinte: #314743;
+  --gb-knopf-schatten: inset 0 1px 0 #ffffff88,0 1px 3px #34505a1f;
+  --gb-knopf-druckschatten: inset 0 1px 3px #3048514a,inset 0 -1px 0 #ffffff66;
+  --gb-knopf-druckweg: 1px;
+  --gb-knopf-druckverhaeltnis: .985;
+  --gb-knopf-helligkeit: 1.055;
+  --gb-haupt-schrift: 630 12px/1.2 var(--gb-ui-schrift);
+  --gb-haupt-rand: #2d786c;
+  --gb-haupt-glas: linear-gradient(155deg,#2d796a,#185f54 44%,#075348 82%,#20695c);
+  --gb-haupt-schatten: inset 0 1px 1px #f2fff7ba,inset 0 -2px 0 #06483e87,0 2px 3px -1px #24443f57,0 5px 9px -6px #17443c85;
+  --gb-risiko-tinte: #9b392f;
+  --gb-risiko-rand: #c487746b;
+  --gb-risiko-glas: linear-gradient(120deg,#fff5ece8,#efd0c3d9);
+  --gb-eingang-glas: linear-gradient(140deg,#f2fcfff2,#cceafb 49%,#b6d9ed 91%,#ddf0fb);
+  --gb-eingang-rand: #739eb5;
+  --gb-eingang-tinte: #114e6f;
+  --gb-eingang-schatten: inset 0 1px 0 1px #ffffffe0,inset 0 -2px 1px #83adbf85,0 2px 3px -1px #37596d63;
+
+  --gb-navigation-ziel: 48px;
+  --gb-navigation-ebene: 20;
+  --gb-navigation-effekt-ebene: 0;
+  --gb-navigation-interaktiv-ebene: 1;
+  --gb-navigation-fokus: #075a82;
+  --gb-navigation-fokus-innen: -2px;
+  --gb-navigation-hover: #e7f7ff42;
+  --gb-leiste-aussen: 18px;
+  --gb-leiste-klein-x: 8px;
+  --gb-leiste-klein-y: 10px;
+  --gb-leiste-breite: 72px;
+  --gb-leiste-klein-breite: 68px;
+  --gb-leiste-offen-breite: 286px;
+  --gb-leiste-klein-offen-breite: 228px;
+  --gb-leiste-innen-x: 8px;
+  --gb-leiste-innen-y: 9px;
+  --gb-leiste-radius: 27px;
+  --gb-leiste-abstand: 8px;
+  --gb-leiste-kopfhoehe: 58px;
+  --gb-leiste-kopfabstand: 16px;
+  --gb-leiste-schrift: 520 14px/1.2 var(--gb-ui-schrift);
+  --gb-leiste-markenschrift: 570 16px/1.18 var(--gb-ui-schrift);
+  --gb-leiste-tinte: #f0f9ff;
+  --gb-leiste-kanten: #ecf7fd #8aa8ba #668195 #d9eaf5;
+  --gb-leiste-trennlinie: #d2edff42;
+  --gb-leiste-glas: linear-gradient(168deg,#7497ae 0%,#4c758e 17%,#36596f 41%,#263f52 78%,#24394c);
+  --gb-leiste-schatten: inset 1px 2px 1px #f6fdffe8,inset 3px 0 2px -1px #b8d6e8c4,inset -2px -2px 1px #9cb8cb96,0 3px 4px -2px #2b485d8f,0 12px 21px -15px #173448bd;
+  --gb-leiste-logomass: 36px;
+  --gb-leiste-logoradius: 11px;
+  --gb-leiste-logo-x: 8px;
+  --gb-leiste-logo-y: 8px;
+  --gb-leiste-logo-schatten: inset 0 1px #fff,0 0 0 2px #d3eaf482,0 3px 4px #25475957;
+  --gb-leiste-schalter-mass: 20px;
+  --gb-leiste-schalter-klein-x: -16px;
+  --gb-leiste-schalter-offen-x: -3px;
+  --gb-leiste-schalter-y: 17px;
+  --gb-leiste-schalter-icon-mass: 12px;
+  --gb-leiste-schalter-glas: linear-gradient(145deg,#fff,#dbeaf2 63%,#bfd4e0);
+  --gb-leiste-schalter-schatten: inset 0 1px #fff,inset 0 -1px 1px #8aa9b9,0 2px 3px #20374633;
+  --gb-leiste-eintrag-radius: 15px;
+  --gb-leiste-iconabstand: 8px;
+  --gb-leiste-textabstand: 12px;
+  --gb-leiste-iconmass: 35px;
+  --gb-leiste-iconpad: 4px;
+  --gb-leiste-iconradius: 10px;
+  --gb-leiste-icon-glas: linear-gradient(145deg,#b5d1e32e,#173d5442);
+  --gb-leiste-icon-schatten: inset 0 1px 0 #d2edff42,inset 0 -1px 0 #17344955;
+  --gb-leiste-aktiv-glas: linear-gradient(126deg,#fff 4%,#eaf4fb 56%,#d6e9f3);
+  --gb-leiste-aktiv-schatten: inset 0 1px 1px #fff,inset 0 -1px 1px #93b0c4,0 2px 4px #162e4142;
+  --gb-leiste-aktiv-tinte: #11374c;
+  --gb-leiste-werkzeug-aussen: 7px;
+  --gb-leiste-werkzeug-breite: 49px;
+  --gb-leiste-werkzeug-radius: 18px;
+  --gb-leiste-werkzeug-innen: 58px;
+  --gb-leiste-werkzeug-knopf: 44px;
+  --gb-leiste-werkzeuge-abzug: 47px;
+  --gb-leiste-werkzeug-glas: linear-gradient(95deg,#dcebf6 0%,#f8fcff 72%,#e0eff8);
+  --gb-werkzeug-ecke: 10px;
+  --gb-werkzeug-anschluss-oben: radial-gradient(circle at 0 0,transparent 9.3px,#dcecf6 10px);
+  --gb-werkzeug-anschluss-unten: radial-gradient(circle at 0 100%,transparent 9.3px,#dcecf6 10px);
+
+  --gb-dock-unten: 10px;
+  --gb-dock-hoehe: 68px;
+  --gb-dock-breite: 410px;
+  --gb-dock-aussen: 24px;
+  --gb-dock-innen: 4px;
+  --gb-dock-radius: 34px;
+  --gb-dock-klein-breite: 360px;
+  --gb-dock-klein-aussen: 16px;
+  --gb-dock-klein-innen: 6px;
+  --gb-dock-klein-radius: 22px;
+  --gb-dock-abstand: 3px;
+  --gb-dock-rand: #a4bac699;
+  --gb-dock-schrift: 560 11px/1.12 var(--gb-ui-schrift);
+  --gb-dock-glas: linear-gradient(157deg,#feffffed,#e7f2f9e8 45%,#d2e7f3f0);
+  --gb-dock-schatten: inset 0 1px 0 1px #ffffffde,inset 1px 0 1px #ffffffe6,inset 0 -2px 1px #7294a747,inset 0 -4px 3px #ffffff66,0 3px 6px #203c4933,0 10px 28px -8px #153a4b69;
+  --gb-dock-filter: blur(22px) saturate(1.7);
+  --gb-dock-tinte: #25495d;
+  --gb-dock-aktiv-radius: 13px;
+  --gb-dock-aktiv-glas: linear-gradient(135deg,#336e86,#24566d 65%,#1f4a60);
+  --gb-dock-aktiv-schatten: inset 0 1px 0 #e2f8ff9e,inset 0 -2px 1px #15394f70,0 2px 3px -1px #284d6159;
+  --gb-dock-erfassungsmass: 54px;
+  --gb-dock-erfassungsradius: 14px;
+  --gb-dock-erfassungsabstand: 1px;
+  --gb-dock-erfassung-tablet-mass: 64px;
+  --gb-dock-erfassung-tablet-hebung: -12px;
+  --gb-zaehler-glas: #dcebf6;
+  --gb-zaehler-tinte: #11374c;
+  --gb-zaehler-innen-y: 2px;
+  --gb-zaehler-innen-x: 5px;
+  --gb-dock-mehr-aussen: 8px;
+  --gb-dock-mehr-start: 195px;
+  --gb-dock-mehr-unten: 84px;
+  --gb-dock-mehr-breite: 292px;
+  --gb-dock-mehr-radius: 18px;
+  --gb-dock-mehr-innen: 9px;
+  --gb-dock-mehr-abstand: 4px;
+  --gb-dock-mehr-spalten: 2;
+  --gb-dock-mehr-knopfhoehe: 58px;
+  --gb-dock-mehr-schrift: 560 13px/1.15 var(--gb-ui-schrift);
+  --gb-dock-mehr-glas: linear-gradient(122deg,#f9fdfff5,#eef6f9ef 43%,#dcebf2f0 88%,#eaf4f9f2);
+  --gb-dock-mehr-schatten: inset 1px 1px 0 1px #ffffffd9,inset -1px 0 1px #92b4c328,inset 0 -2px 1px #7898ac69,inset 0 -4px 2px #f7fdff94,0 4px 7px #213e4d38,0 21px 60px -16px #17364978;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root { --gb-dock-filter: none; --gb-dock-glas: #e7f2f9; --gb-dock-mehr-glas: #eef6f9; }
+}
+
+:root {
+  --kr-tag-ink: #14313a;
+  --kr-tag-aux: #47616c;
+  --kr-tag-blau: #195a80;
+  --kr-tag-ruhig-ink: #133b42;
+  --kr-tag-ruhig-ruhig: #344e54;
+  --kr-tag-ruhig-glanz: rgba(95,175,184,.42);
+  --kr-tag-ruhig-kante: rgba(67,129,142,.6);
+  --kr-tag-ruhig-scheibe: rgba(180,219,222,.55);
+  --kr-tag-ruhig-matte: rgba(217,236,234,.52);
+  --kr-tag-zusage-ink: #352f25;
+  --kr-tag-zusage-ruhig: #524b41;
+  --kr-tag-zusage-glanz: rgba(207,142,39,.51);
+  --kr-tag-zusage-kante: rgba(162,125,73,.66);
+  --kr-tag-zusage-scheibe: rgba(250,213,147,.53);
+  --kr-tag-zusage-matte: rgba(255,239,192,.46);
+  --kr-tag-risiko-ink: #502b2a;
+  --kr-tag-risiko-ruhig: #69443f;
+  --kr-tag-risiko-glanz: rgba(202,103,83,.39);
+  --kr-tag-risiko-kante: rgba(170,88,76,.63);
+  --kr-tag-risiko-scheibe: rgba(236,181,162,.56);
+  --kr-tag-risiko-matte: rgba(253,230,218,.50);
+  --kr-tag-prio-rahmen: rgba(255,255,255,.88);
+  --kr-tag-prio-licht: rgba(255,255,255,.84);
+  --kr-tag-prio-schatten: inset 1px 1px 1px #fff,inset -1px -2px 2px #507c7c58,0 2px 2px #31595e36,0 15px 30px -21px #294c59a8;
+  --kr-tag-prio-filter: blur(18px) saturate(1.2);
+  --kr-tag-glanzort: 102% 95%;
+  --kr-tag-glanzreichweite: 55%;
+  --kr-tag-prio-winkel: 124deg;
+  --kr-tag-lichtstopp: 1%;
+  --kr-tag-mattstopp: 54%;
+  --kr-tag-stapel-eins: linear-gradient(162deg,#ffffffe0,#d2dfd9bc 82%,#93aab0a8);
+  --kr-tag-stapel-zwei: linear-gradient(162deg,#e4f2f0c7,#b1cbd1a6 82%,#84a1af99);
+  --kr-tag-stapel-schatten: 0 2px 2px #31595e36;
+  --kr-tag-stapel-abstand: 12px;
+  --kr-tag-stapel-einzug: 4px;
+  --kr-tag-stapel-versatz: -5px;
+  --kr-tag-stapel-einzug-zwei: 8px;
+  --kr-tag-stapel-versatz-zwei: -9px;
+  --kr-tag-kenn-grund: linear-gradient(125deg,#fcffffb3,#e3f0f55e);
+  --kr-tag-kenn-tag-glanz: rgba(170,211,230,.34);
+  --kr-tag-kenn-tag-akzent: #477c95;
+  --kr-tag-kenn-kunde-glanz: rgba(192,184,221,.34);
+  --kr-tag-kenn-kunde-akzent: #535382;
+  --kr-tag-kenn-rechnung-glanz: rgba(165,210,187,.32);
+  --kr-tag-kenn-rechnung-akzent: #3b7064;
+  --kr-tag-kenn-risiko-glanz: rgba(232,175,155,.4);
+  --kr-tag-kenn-risiko-akzent: #973d33;
+  --kr-tag-kenn-glanzort: 98% 90%;
+  --kr-tag-kenn-reichweite: 74%;
+  --kr-tag-kenn-kante: #8fadb47d;
+  --kr-tag-kenn-rand: #ffffffd4;
+  --kr-tag-kenn-schatten: inset 0 1px #fff,0 2px 2px #31595e36,0 9px 22px -17px #294c59a8;
+  --kr-tag-kenn-fuss: 34px;
+  --kr-tag-kenn-basis: 145px;
+  --kr-tag-kenn-zahl: clamp(27px,3vw,40px);
+  --kr-tag-kenn-padding: 15px 18px 10px;
+  --kr-tag-platte-grund: linear-gradient(145deg,#ffffff99,#e9eee28c);
+  --kr-tag-platte-rand: #ffffffcc;
+  --kr-tag-platte-schatten: inset 0 1px #fff,0 2px 3px #53666833,0 8px 16px -10px #29434799;
+  --kr-tag-platte-innen: 5px;
+  --kr-tag-platte-radius: 14px;
+  --kr-tag-foto-radius: 9px;
+  --kr-tag-foto-breite: clamp(110px,12vw,192px);
+  --kr-tag-foto-kompakt: clamp(94px,20vw,126px);
+  --kr-tag-titel-mobil: clamp(29px,8vw,44px);
+  --kr-tag-titel-weit: clamp(31px,3.6vw,50px);
+  --kr-tag-titel-zeile: 1.08;
+  --kr-tag-kicker-spationierung: .025em;
+  --kr-tag-kicker-gewicht: 650;
+  --kr-tag-prio-padding: clamp(12px,2.3vw,30px);
+  --kr-tag-luecke: clamp(10px,1.25vh,19px);
+  --kr-tag-tile-luecke: 12px;
+  --kr-tag-innen-luecke: clamp(8px,1.4vh,16px);
+  --kr-tag-kartenradius: 18px;
+  --kr-tag-notizabstand: 5px;
+  --kr-tag-linie: 1px;
+  --kr-tag-frist-padding: 4px 8px;
+  --kr-tag-frist-grund: rgba(255,255,255,.55);
+  --kr-tag-frist-radius: 7px;
+  --kr-tag-fokus-breite: 2px;
+  --kr-tag-fokus-versatz: -3px;
+  --kr-tag-break-tablet: 760px;
+  --kr-tag-break-hoch: 900px;
+  --kr-tag-break-desktop: 1100px;
+  --kr-tag-tablet-links: 1.08fr;
+  --kr-tag-desktop-links: 1.24fr;
+  --kr-tag-band-rand: #ffffffc9;
+  --kr-tag-band-kante: #86aab98c;
+  --kr-tag-band-grund: linear-gradient(135deg,rgba(250,254,255,.76),rgba(201,230,245,.44) 70%, rgba(164,207,228,.43));
+  --kr-tag-band-schiene: linear-gradient(166deg,#95b6ca26,#ffffff57 60%);
+  --kr-tag-band-schiene-schatten: inset 0 2px 6px #21435924,inset 0 -1px #fff;
+  --kr-tag-band-fortschritt: linear-gradient(125deg,#3f9fc373,#69b9dd5e);
+  --kr-tag-band-punkt: #266d89;
+  --kr-tag-band-punktmass: 8px;
+  --kr-tag-band-punktschatten: 0 0 0 3px #ffffffed,0 2px 7px #1743534a;
+  --kr-tag-band-termin: #9d6536;
+  --kr-tag-band-aktiv: linear-gradient(180deg,#2d5562,#0c313b);
+  --kr-tag-band-aktivtext: #f3fff9;
+  --kr-tag-band-randpuffer: clamp(12px,4vw,50px);
+  --kr-tag-band-padding: clamp(11px,1.3vw,20px);
+  --kr-tag-band-hoehe: 104px;
+  --kr-tag-band-mitte: -50%;
+  --kr-tag-band-skala: 4px;
+  --kr-tag-band-jetzt: 25px;
+  --kr-tag-band-marke: 12px;
+  --kr-tag-band-klein: 12px;
+  --kr-tag-band-titel: clamp(20px,2.4vw,34px);
+  --kr-tag-tippziel: 44px;
+  --kr-tag-karten-dauer: 280ms;
+  --kr-tag-karten-kurve: cubic-bezier(.2,.72,.26,1);
+  --kr-tag-karten-eintritt: .72;
+  --kr-tag-karten-versatz: 9px;
+}
+
+:root {
+  --r53-form-zero: 0;
+  --r53-form-voll: 1;
+  --r53-form-inset: 0;
+  --r53-form-icon-min: 44px;
+  --r53-form-icon-grafik: 21px;
+  --r53-form-focus-ring: 2px solid #116a83;
+  --r53-form-focus-offset: 2px;
+  --r53-form-deaktiviert: .51;
+  --r53-form-druck: translateY(1px) scale(.98);
+  --r53-form-druck-dauer: 120ms;
+  --r53-form-druck-kurve: ease-out;
+  --r53-form-modal-margin: auto;
+  --r53-form-modal-width: min(590px, calc(100% - 24px));
+  --r53-form-modal-height: calc(var(--r53-form-visible-height, 100dvh) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  --r53-form-modal-ink: #152f3d;
+  --r53-form-modal-font: 500 16px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r53-form-modal-glass: linear-gradient(142deg, rgba(255,255,255,.99) 0%, rgba(242,249,251,.98) 42%, rgba(225,238,244,.98) 100%);
+  --r53-form-modal-border: 1px solid white;
+  --r53-form-modal-radius: 25px;
+  --r53-form-modal-shadow: inset 0 1px 0 white, inset 0 -2px 1px #acc2ce, 0 2px 3px #344f5b26, 0 18px 45px #1a354750;
+  --r53-form-modal-dauer: .18s;
+  --r53-form-modal-kurve: cubic-bezier(.16,.8,.28,1);
+  --r53-form-modal-tritt: translateY(8px) scale(.99);
+  --r53-form-modal-tritt-opacity: .6;
+  --r53-form-modal-backdrop: rgba(20,37,47,.34);
+  --r53-form-modal-backdrop-filter: blur(4px);
+  --r53-form-modal-head-gap: 12px;
+  --r53-form-modal-head-padding: 13px 16px 10px;
+  --r53-form-modal-head-border: 1px solid #adbfca74;
+  --r53-form-modal-head-font: 650 22px/1.13 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r53-form-modal-head-letter: -.035em;
+  --r53-form-modal-body-padding: 9px 10px 13px;
+  --r53-form-modal-scroll-padding: 12px;
+  --r53-form-modal-close-border: 1px solid #adc3cc;
+  --r53-form-modal-close-radius: 15px;
+  --r53-form-modal-close-glass: linear-gradient(150deg, #fffeff, #e5eff3 85%);
+  --r53-form-modal-close-shadow: inset 0 1px 0 #fff, 0 2px 5px #2944523b;
+  --r53-form-modal-close-ink: #173c4d;
+  --r53-form-blatt-margin: auto;
+  --r53-form-blatt-width: min(720px, calc(100% - 8px));
+  --r53-form-blatt-height: fit-content;
+  --r53-form-objekt-margin: auto;
+  --r53-form-objekt-height: fit-content;
+  --r53-form-modal-filter: none;
+  --r53-form-zeit-margin: auto;
+  --r53-form-zeit-width: min(360px, calc(100vw - 12px));
+  --r53-form-zeit-height: calc(var(--r53-form-visible-height, 100dvh) - 16px);
+  --r53-form-zeit-close-padding: 0 7px;
+  --r53-form-zeit-close-font: 600 15px/1.15 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r53-form-zeit-einheit-ink: #45606d;
+  --r53-form-zeit-einheit-font: 650 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r53-form-zeit-einheit-margin: 2px;
+  --r53-form-zeit-uebernehmen-height: 48px;
+  --r53-form-zeit-uebernehmen-width: calc(100% - 10px);
+  --r53-form-zeit-uebernehmen-radius: 16px;
+  --r53-form-zeit-uebernehmen-margin: 5px;
+  --r53-form-zeit-uebernehmen-weight: 630;
+  --r53-form-zeit-grid: auto auto auto auto / minmax(0,1fr);
+  --r53-form-zeit-einheit-area: auto;
+  --r53-form-zeit-rad-area: auto;
+  --r53-form-zeit-minus-area: auto;
+  --r53-form-zeit-plus-area: auto;
+  --r53-form-zahl-margin: auto;
+  --r53-form-zahl-width: min(26rem, calc(100vw - 1.5rem));
+  --r53-form-zahl-height: calc(var(--r53-form-visible-height, 100dvh) - 1.5rem);
+  --r53-form-zahl-bodenkante: #8babb6;
+  --r53-form-zahl-close-radius: 50%;
+  --r53-form-zahl-flaeche: radial-gradient(110% 80% at 110% 98%, rgba(104,172,195,.24), transparent 72%), linear-gradient(148deg, rgba(250,254,254,.95), rgba(232,245,247,.9) 52%, rgba(202,226,234,.92));
+  --r53-form-zahl-rahmen: 1px solid rgba(239,255,255,.95);
+  --r53-form-zahl-schatten: inset 0 2px 1px #fff, inset 0 -3px 2px #78a4b238, 0 3px 3px #18374350, 0 16px 45px #18374344;
+  --r53-form-zahl-filter: blur(20px) saturate(125%);
+  --r53-form-zahl-radius: 26px;
+  --r53-form-zahl-backdrop: rgba(22,43,54,.28);
+  --r53-form-zahl-tritt: translateY(10px) scale(.985);
+  --r53-form-zahl-tritt-opacity: .65;
+  --r53-form-zahl-dauer: 210ms;
+  --r53-form-zahl-kurve: cubic-bezier(.2,.76,.24,1);
+  --r53-form-zahl-font: 500 1rem/1.28 system-ui,sans-serif;
+  --r53-form-zahl-grid: "wert wert" "ziffern ziffern" "werkzeuge uebernehmen" / minmax(0,1fr) auto;
+  --r53-form-zahl-grid-tastatur: "wert wert" "werkzeuge uebernehmen" / minmax(0,1fr) auto;
+  --r53-form-zahl-luecke: 10px 8px;
+  --r53-form-zahl-kopfpadd: clamp(12px,3vw,21px);
+  --r53-form-zahl-kopffont: 650 clamp(1.15rem,3.4vw,1.45rem)/1.08 system-ui,sans-serif;
+  --r53-form-zahl-kopfletter: -.025em;
+  --r53-form-texte-max: clamp(76px, calc(var(--r53-form-visible-height,100dvh) * .42), 250px);
+  --r53-form-texte-zoom: 16px;
+  --r53-form-sicht-abstand: 4px;
+}
+
+[data-r53-form="fenster"], [data-r53-form="blatt"], [data-r53-form="objekt"] {
+  --r53-form-modal-font: var(--r53-form-objekt-font);
+  --r53-form-objekt-font: 500 16px/1.35 "Kreile Plex", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --r53-form-modal-glass: linear-gradient(122deg,#f9fdfff5,#eef6f9ef 43%,#dcebf2f0 88%,#eaf4f9f2);
+  --r53-form-modal-filter: blur(16px) saturate(1.22);
+  --r53-form-modal-border: 1px solid #f5fcff;
+  --r53-form-modal-radius: 20px;
+  --r53-form-modal-shadow: inset 1px 1px 0 1px rgba(255,255,255,.85), inset -1px 0 1px rgba(146,180,195,.157), inset 0 -2px 1px rgba(120,152,172,.41), inset 0 -4px 2px rgba(247,253,255,.58), 0 4px 7px rgba(33,62,77,.22), 0 21px 60px -16px rgba(23,54,73,.47);
+}
+
+[data-r53-groesse="kompakt"] { --r53-form-modal-width: min(670px, calc(100% - 16px)); }
+[data-r53-groesse="antwort"] { --r53-form-modal-width: min(850px, calc(100% - 16px)); }
+[data-r53-groesse="akte"] { --r53-form-modal-width: min(950px, calc(100% - 16px)); }
+[data-r53-groesse="breit"] { --r53-form-modal-width: min(1080px, calc(100% - 16px)); }
+
+[data-r53-form="zahlwahl"] {
+  --r53-form-modal-glass: var(--r53-form-zahl-flaeche);
+  --r53-form-modal-radius: var(--r53-form-zahl-radius);
+  --r53-form-modal-shadow: var(--r53-form-zahl-schatten);
+  --r53-form-modal-border: var(--r53-form-zahl-rahmen);
+  --r53-form-modal-font: var(--r53-form-zahl-font);
+  --r53-form-modal-backdrop: var(--r53-form-zahl-backdrop);
+  --r53-form-modal-tritt: var(--r53-form-zahl-tritt);
+  --r53-form-modal-tritt-opacity: var(--r53-form-zahl-tritt-opacity);
+  --r53-form-modal-dauer: var(--r53-form-zahl-dauer);
+  --r53-form-modal-kurve: var(--r53-form-zahl-kurve);
+  --r53-form-modal-head-padding: var(--r53-form-zahl-kopfpadd);
+  --r53-form-modal-head-font: var(--r53-form-zahl-kopffont);
+  --r53-form-modal-head-letter: var(--r53-form-zahl-kopfletter);
+  --r53-form-modal-head-border: none;
+  --r53-form-modal-body-padding: var(--r53-form-zero);
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --r53-form-blatt-margin: auto auto 0;
+    --r53-form-blatt-width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  [data-r53-form="fenster"], [data-r53-form="objekt"] {
+    --r53-form-window-margin: auto auto max(6px,env(safe-area-inset-bottom));
+    --r53-form-modal-width: calc(100% - 16px);
+    --r53-form-modal-radius: 24px;
+    --r53-form-objekt-margin: var(--r53-form-window-margin);
+  }
+  [data-r53-form="blatt"] {
+    --r53-form-modal-radius: 28px 28px 0 0;
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --r53-form-zahl-margin: auto auto max(5px,env(safe-area-inset-bottom));
+    --r53-form-zahl-width: min(calc(100% - 10px), 26rem);
+    --r53-form-zahl-height: calc(var(--r53-form-visible-height, 100dvh) - max(10px,env(safe-area-inset-top)) - max(5px,env(safe-area-inset-bottom)));
+  }
+}
+
+@media (min-width: 550px) and (max-height: 535px) {
+  :root {
+    --r53-form-zahl-width: min(40rem, calc(100vw - 16px));
+    --r53-form-zahl-grid: "wert ziffern" "werkzeuge ziffern" "uebernehmen ziffern" / minmax(0,.92fr) minmax(220px,1.08fr);
+    --r53-form-zahl-luecke: 5px 8px;
+  }
+}
+
+@media (max-width: 480px), (pointer: coarse) {
+  :root {
+    --r53-form-zeit-margin: auto auto max(6px, env(safe-area-inset-bottom));
+    --r53-form-zeit-width: min(390px, calc(100vw - 8px));
+  }
+}
+
+@media (max-width: 350px) {
+  :root { --r53-form-zeit-width: calc(100vw - 6px); }
+  [data-r53-form="zeitwahl"] { --r53-form-modal-body-padding: 9px 2px 13px; }
+}
+
+@media (max-height: 480px) {
+  [data-r53-form="zeitwahl"] {
+    --r53-form-modal-head-padding: 2px 16px;
+    --r53-form-modal-body-padding: 4px 10px;
+    --r53-form-zeit-grid: auto auto auto / minmax(0,1fr) minmax(0,1fr);
+    --r53-form-zeit-einheit-area: 1 / 1 / 2 / 3;
+    --r53-form-zeit-rad-area: 2 / 1 / 3 / 3;
+    --r53-form-zeit-minus-area: 3 / 1;
+    --r53-form-zeit-plus-area: 3 / 2;
+  }
+}
+
+:root {
+  --r53-form-pad-ink: #183543;
+  --r53-form-pad-muted: #415f6c;
+  --r53-form-pad-blue: #115476;
+  --r53-form-zeit-tasten-line-height: 1.15;
+  --r53-form-zeit-tasten-min-width: 0;
+  --r53-form-zeit-tasten-margin: 0;
+  --r53-form-zeit-tasten-transition: transform .11s,box-shadow .15s,background-color .15s;
+  --r53-form-zeit-druck-transform: translateY(1px) scale(.98);
+  --r53-form-zeit-fokus-outline: 2px solid #116a83;
+  --r53-form-zeit-fokus-outline-offset: -3px;
+  --r53-form-zeit-gesperrt-opacity: .34;
+  --r53-form-zeit-raeder-grid-template-columns: 1fr 1fr;
+  --r53-form-zeit-raeder-gap: 12px;
+  --r53-form-zeit-raeder-margin: 4px 5px 10px;
+  --r53-form-zeit-spalte-gap: 3px;
+  --r53-form-zeit-spalte-min-width: 0;
+  --r53-form-zeit-schritt-border: 1px solid #bcced5;
+  --r53-form-zeit-schritt-border-radius: 15px;
+  --r53-form-zeit-schritt-min-height: 46px;
+  --r53-form-zeit-schritt-padding: 0 10px;
+  --r53-form-zeit-schritt-background: linear-gradient(#fff,#e2edf2);
+  --r53-form-zeit-schritt-box-shadow: inset 0 1px #fff,0 1px 2px #38586a22;
+  --r53-form-zeit-schritt-font-size: 24px;
+  --r53-form-zeit-schritt-line-height: 1;
+  --r53-form-zeit-rad-height: 132px;
+  --r53-form-zeit-rad-border-radius: 17px;
+  --r53-form-zeit-rad-outline-offset: 0;
+  --r53-form-zeit-rad-box-shadow: inset 0 1px 3px #506e7926,inset 0 -1px 0 #fff;
+  --r53-form-zeit-rad-background: linear-gradient(#f2f6f680 0 33%,#d4e6ee 33%,#e3f0f5 66%,#edf4f580 66%);
+  --r53-form-zeit-spur-padding-block: 44px;
+  --r53-form-zeit-spur-min-width: 0;
+  --r53-form-zeit-wert-height: 44px;
+  --r53-form-zeit-wert-font: 480 20px/1 system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r53-form-zeit-wert-color: #657b88;
+  --r53-form-zeit-uebernehmen-background: linear-gradient(165deg,#216575,#103f53);
+  --r53-form-zeit-uebernehmen-color: white;
+  --r53-form-zeit-uebernehmen-border: 1px solid #174d61;
+  --r53-form-zeit-uebernehmen-box-shadow: inset 0 1px 0 #8eb6bf80,0 2px 4px #1c4a5c30;
+  --r53-form-zeit-fehler-margin: 0 16px 10px;
+  --r53-form-zeit-fehler-color: #903720;
+  --r53-form-zeit-fehler-font-size: 13px;
+  --r53-form-zeit-wertaktiv-color: #153749;
+  --r53-form-zeit-wertaktiv-font-size: 30px;
+  --r53-form-zeit-wertaktiv-font-weight: 640;
+  --r53-form-zeit-wertaktiv-letter-spacing: -.045em;
+  --r53-form-zeit-uebernehmenflaeche-background: linear-gradient(165deg,#216575,#103f53);
+  --r53-form-zeit-uebernehmenflaeche-color: white;
+  --r53-form-zeit-uebernehmenflaeche-border: 1px solid #174d61;
+  --r53-form-zeit-uebernehmenflaeche-box-shadow: inset 0 1px 0 #8eb6bf80,0 2px 4px #1c4a5c30;
+  --r53-form-zeit-monat-grid-template-columns: 46px 1fr 46px;
+  --r53-form-zeit-monat-gap: 5px;
+  --r53-form-zeit-monat-margin: 2px 4px 5px;
+  --r53-form-zeit-kalender-grid-template-columns: repeat(7,minmax(0,1fr));
+  --r53-form-zeit-wochentag-padding: 8px 0 2px;
+  --r53-form-zeit-wochentag-font-size: 12px;
+  --r53-form-zeit-wochentag-color: #44616e;
+  --r53-form-zeit-tag-background: transparent;
+  --r53-form-zeit-tag-min-height: 44px;
+  --r53-form-zeit-tag-border: 1px solid transparent;
+  --r53-form-zeit-tag-padding: 0 2px;
+  --r53-form-zeit-tag-border-radius: 14px;
+  --r53-form-zeit-tag-font-weight: 550;
+  --r53-form-zeit-monatswechsel-border: 1px solid #bcced5;
+  --r53-form-zeit-monatswechsel-border-radius: 15px;
+  --r53-form-zeit-monatswechsel-min-height: 46px;
+  --r53-form-zeit-monatswechsel-padding: 0 10px;
+  --r53-form-zeit-monatswechsel-background: linear-gradient(#fff,#e2edf2);
+  --r53-form-zeit-monatswechsel-box-shadow: inset 0 1px #fff,0 1px 2px #38586a22;
+  --r53-form-zeit-monatswechsel-font-size: 24px;
+  --r53-form-zeit-monatswechsel-line-height: 1;
+  --r53-form-zeit-monatkopf-font: 650 16px/1.3 system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r53-form-zeit-heute-text-underline-offset: 5px;
+  --r53-form-zeit-tagaktiv-background: linear-gradient(165deg,#216575,#103f53);
+  --r53-form-zeit-tagaktiv-color: white;
+  --r53-form-zeit-tagaktiv-border: 1px solid #174d61;
+  --r53-form-zeit-tagaktiv-box-shadow: inset 0 1px 0 #8eb6bf80,0 2px 4px #1c4a5c30;
+  --r53-form-pad-taste-min-width: 0;
+  --r53-form-pad-taste-min-height: 44px;
+  --r53-form-pad-taste-margin: 0;
+  --r53-form-pad-taste-padding: 4px 9px;
+  --r53-form-pad-taste-gap: 6px;
+  --r53-form-pad-taste-font: 600 .9rem/1.16 system-ui,sans-serif;
+  --r53-form-pad-taste-border: 1px solid #a7bdc6;
+  --r53-form-pad-taste-border-top-color: #faffff;
+  --r53-form-pad-taste-border-radius: 14px;
+  --r53-form-pad-taste-background: linear-gradient(148deg,rgba(255,255,255,.9),rgba(219,235,240,.62));
+  --r53-form-pad-taste-box-shadow: inset 0 1px 1px #fff,0 2px 1px #7798a24d,0 4px 8px #53728016;
+  --r53-form-pad-taste-transition: transform 120ms ease-out,box-shadow 120ms ease-out,filter 150ms ease-out;
+  --r53-form-pad-druck-transform: translateY(2px) scale(.984);
+  --r53-form-pad-druck-box-shadow: inset 0 2px 3px #36576224,0 1px 1px #7798a232;
+  --r53-form-pad-fokus-outline: 2px solid #08668c;
+  --r53-form-pad-fokus-outline-offset: 2px;
+  --r53-form-pad-gesperrt-opacity: .51;
+  --r53-form-pad-tastensymbol-width: 21px;
+  --r53-form-pad-tastensymbol-height: 21px;
+  --r53-form-pad-tastensymbol-stroke-width: 1.7;
+  --r53-form-pad-wertgruppe-min-width: 0;
+  --r53-form-pad-wertfeld-grid-template-columns: 44px minmax(0,1fr) 44px;
+  --r53-form-pad-wertfeld-gap: 4px;
+  --r53-form-pad-wertfeld-min-height: 78px;
+  --r53-form-pad-wertfeld-padding: 8px;
+  --r53-form-pad-wertfeld-border-radius: 20px;
+  --r53-form-pad-wertfeld-border: 1px solid #8eacb9;
+  --r53-form-pad-wertfeld-border-bottom-color: #f4ffff;
+  --r53-form-pad-wertfeld-background: linear-gradient(170deg,#95bbcd50 0%,#d9eaf071 28%,#f1fcfdab 70%,#d0e5ec99);
+  --r53-form-pad-wertfeld-box-shadow: inset 0 2px 5px #42758630,inset 0 -1px #fff,0 1px 0 #ffffffc9;
+  --r53-form-pad-schritt-width: 44px;
+  --r53-form-pad-schritt-height: 46px;
+  --r53-form-pad-schritt-padding: 0;
+  --r53-form-pad-schritt-border-radius: 14px;
+  --r53-form-pad-schritt-color: #155977;
+  --r53-form-pad-abgelesen-gap: .32em;
+  --r53-form-pad-abgelesen-min-width: 0;
+  --r53-form-pad-wert-font: 550 clamp(1.5rem,7.7vw,2.3rem)/1.05 system-ui,sans-serif;
+  --r53-form-pad-wert-letter-spacing: -.055em;
+  --r53-form-pad-wert-color: #103c50;
+  --r53-form-pad-einheit-font: 600 .95rem/1.15 system-ui,sans-serif;
+  --r53-form-pad-einheit-color: #355663;
+  --r53-form-pad-nativ-width: 100%;
+  --r53-form-pad-nativ-min-width: 0;
+  --r53-form-pad-nativ-min-height: 44px;
+  --r53-form-pad-nativ-font: 600 max(16px,1.25rem)/1.15 system-ui,sans-serif;
+  --r53-form-pad-nativ-border-radius: 9px;
+  --r53-form-pad-nativ-color: #103c50;
+  --r53-form-pad-nativ-background: #f4fcff;
+  --r53-form-pad-hinweis-margin: 6px 3px 0;
+  --r53-form-pad-hinweis-font: 500 .8rem/1.25 system-ui,sans-serif;
+  --r53-form-pad-ziffern-grid-template-columns: repeat(3,minmax(0,1fr));
+  --r53-form-pad-ziffern-gap: 6px;
+  --r53-form-pad-ziffer-width: 100%;
+  --r53-form-pad-ziffer-min-height: clamp(46px,6.15dvh,57px);
+  --r53-form-pad-ziffer-font: 580 1.33rem/1 system-ui,sans-serif;
+  --r53-form-pad-werkzeug-gap: 3px;
+  --r53-form-pad-werkzeug-min-width: 44px;
+  --r53-form-pad-werkzeug-padding-inline: 8px;
+  --r53-form-pad-werkzeug-color: #345464;
+  --r53-form-pad-werkzeug-border: 1px solid transparent;
+  --r53-form-pad-werkzeug-background: transparent;
+  --r53-form-pad-uebernehmen-min-height: 48px;
+  --r53-form-pad-uebernehmen-padding-inline: 13px;
+  --r53-form-pad-uebernehmen-color: #fcfffd;
+  --r53-form-pad-uebernehmen-background: linear-gradient(155deg,#398e86,#216a65 47%,#155751);
+  --r53-form-pad-uebernehmen-border-color: #5aa29a;
+  --r53-form-pad-uebernehmen-border-bottom-color: #104a43;
+  --r53-form-pad-uebernehmen-box-shadow: inset 0 1px 1px #baf5df9e,0 2px 1px #20594e6b,0 6px 12px #1a555631;
+  --r53-form-pad-nebentaste-background: linear-gradient(145deg,#edf8fcde,#c6dce7b0);
+  --r53-form-pad-fehlhinweis-color: #983526;
+  --r53-form-pad-fehlwert-border-color: #ad5146;
+  --r53-form-text-feld-gap: 4px;
+  --r53-form-text-feld-min-inline-size: 0;
+  --r53-form-text-label-font-size: 14px;
+  --r53-form-text-label-font-weight: 640;
+  --r53-form-text-label-color: #344f5e;
+  --r53-form-text-eingabe-max-inline-size: 100%;
+  --r53-form-text-eingabe-inline-size: 100%;
+  --r53-form-text-eingabe-min-inline-size: 0;
+  --r53-form-text-eingabe-min-block-size: 48px;
+  --r53-form-text-eingabe-border: 1px solid #b6c7ce;
+  --r53-form-text-eingabe-border-radius: 14px;
+  --r53-form-text-eingabe-padding: 8px 12px;
+  --r53-form-text-eingabe-background: linear-gradient(140deg,#fff,#eaf2f6);
+  --r53-form-text-eingabe-box-shadow: inset 0 1px #fff,0 1px 2px #3754651a;
+  --r53-form-text-eingabe-font: 600 16px/1.3 system-ui,-apple-system,Segoe UI,sans-serif;
+  --r53-form-text-eingabe-color: #1b3948;
+  --r53-form-text-eingabe-scroll-margin-block: 12px max(18px,env(safe-area-inset-bottom));
+  --r53-form-text-fokus-outline: 2px solid #116a83;
+  --r53-form-text-fokus-outline-offset: 1px;
+  --r53-form-text-rahmenfehler-border-color: #ad5146;
+  --r53-form-text-deaktiviert-opacity: .51;
+  --r53-form-text-fehler-margin: 0;
+  --r53-form-text-fehler-color: #903720;
+  --r53-form-text-fehler-font-size: 13px;
+}
+
+@font-face {
+  font-family: 'Kreile Plex';
+  src: url('/design/kreile-plex-3b031aa4.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 700;
+  font-stretch: 75% 100%;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Kreile Barlow';
+  src: url('/design/kreile-barlow-4998b693.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: MaterialInter;
+  src: url('/design/materialinter-2c295d99.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+:root {
+  --kr-app-schrift: 'Kreile Plex', system-ui, sans-serif;
+  --kr-app-zahlen: 'Kreile Plex', system-ui, sans-serif;
+  --kr-app-akzent: 'Kreile Barlow', system-ui, sans-serif;
+  --kr-app-lager-schrift: MaterialInter, system-ui, sans-serif;
+}

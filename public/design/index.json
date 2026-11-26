@@ -1,0 +1,270 @@
+[
+  {
+    "datei": "kreile-plex-3b031aa4.ttf",
+    "sha256": "3b031aa4216174205bd8471f88a49b91f093169e9e87bd5262242bc5967fe2e3",
+    "bytes": 537244,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 461
+      }
+    ]
+  },
+  {
+    "datei": "kreile-barlow-4998b693.ttf",
+    "sha256": "4998b693a190b76f2b11315844345a8546c1e2e6a320905507a9eed04edf8b48",
+    "bytes": 105560,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 462
+      }
+    ]
+  },
+  {
+    "datei": "station-galvanik-evening-normal-6972ef32.webp",
+    "sha256": "6972ef3224ddd7706d4d79839aa2f192d2c8746ac2a08330d13c21b4dc2dccb4",
+    "bytes": 35728,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-galvanik-evening-rain-f9df44a2.webp",
+    "sha256": "f9df44a2d67a3be4412352b4b3a3a1e28271e4f9ca11bf6cf253ac79c4ad0fde",
+    "bytes": 117286,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-galvanik-morning-normal-fbb3ec2d.webp",
+    "sha256": "fbb3ec2d13bf72df03838987be0a57075f5ed4e117cae6fedc8cd7d38fa8ceb9",
+    "bytes": 33560,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-galvanik-morning-rain-8ef359f9.webp",
+    "sha256": "8ef359f94bf41d4b8aaa2229dc4e5b4ed2fd4680b20d79ee55d10957de253880",
+    "bytes": 60640,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-galvanik-noon-normal-9b29227c.webp",
+    "sha256": "9b29227cbdf337cc0beaf4cf2457b6436454097108f41c6bde9007670128b7c4",
+    "bytes": 36646,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-galvanik-noon-rain-ffc03944.webp",
+    "sha256": "ffc039441f1b403b932d40a9b203bd97ea9203a3f0da7a3663770d02df8ff230",
+    "bytes": 86308,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-galvanik-125c6352.webp",
+    "sha256": "125c63523a828f26cc3cba1fecfa9bf3453992ba265ff561b57fb84e805f443a",
+    "bytes": 28444,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-warenausgang-dd7ed57f.webp",
+    "sha256": "dd7ed57f481fafa5297cb7ca0106d7ca314c87e129a206f47e4c2cecec32669c",
+    "bytes": 31732,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "station-wareneingang-00baef20.webp",
+    "sha256": "00baef20535bdbda31cf4d62aff73676213bdddb4bd11d059d64c4bbdf1af35f",
+    "bytes": 45452,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2104
+      }
+    ]
+  },
+  {
+    "datei": "examplephoto-2d57e5bc.webp",
+    "sha256": "2d57e5bc901f5fe65ee979bc0afa3187b124511d721bdce68589d0ba72f11bb7",
+    "bytes": 55546,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2448
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 8332
+      }
+    ]
+  },
+  {
+    "datei": "ein_img-af89aad3.svg",
+    "sha256": "af89aad3fb5900cefc29fcec2327231f52d468dae3203a124df46757c54b925e",
+    "bytes": 941,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 2493
+      }
+    ]
+  },
+  {
+    "datei": "querformat-4e67c3b7.webp",
+    "sha256": "4e67c3b7e6257834d91ab92354981ee65ecd4e513c348fa4ce384f4ffd082cc0",
+    "bytes": 19188,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 6347
+      }
+    ]
+  },
+  {
+    "datei": "hochformat-cf6cad17.webp",
+    "sha256": "cf6cad174b835e67ec717e6b7847ca3835155a08a06b05f719c6d87e1fee18e9",
+    "bytes": 19122,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 6347
+      }
+    ]
+  },
+  {
+    "datei": "bild-cb9d2615.png",
+    "sha256": "cb9d26157164af1181b7c5fbdc4232c27a6775002a29a0ed70451fca92d72250",
+    "bytes": 9165,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 6467
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 6727
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 6808
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 7865
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 7867
+      }
+    ]
+  },
+  {
+    "datei": "bild-ac3436fd.svg",
+    "sha256": "ac3436fd00d1e4976bfd1b23592fb74b456e1f2b0b1d070c00fa4570f0f2aac6",
+    "bytes": 8561,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 8167
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 8169
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 11714
+      }
+    ]
+  },
+  {
+    "datei": "data-29f4af46.png",
+    "sha256": "29f4af46c9d8984f75ab99933f855fa9d759b6a2d5e4d8c4eaba889f0b4ab9ff",
+    "bytes": 15990,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 12768
+      }
+    ]
+  },
+  {
+    "datei": "materialinter-2c295d99.woff2",
+    "sha256": "2c295d99e26dcf357d4d01bcf270fd6924b600c9a13dd8c363ef114f4c6976fa",
+    "bytes": 72920,
+    "fundstellen": [
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 12770
+      },
+      {
+        "datei": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+        "einbettung": "Datei",
+        "zeile": 12784
+      }
+    ]
+  }
+]

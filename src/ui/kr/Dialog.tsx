@@ -1,82 +1,41 @@
 'use client';
-import { useEffect, useLayoutEffect, useId, useRef, useState, type CSSProperties,type ReactNode } from 'react';
-import {useVorfinalStyle} from '@/ui/useVorfinalStyle';
-import {dialog as dialogMoment} from '@/ui/motion';
+
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {V45_TEXT} from '@/ui/situationCatalog';
-import { Icon, type IconName } from './Icon';
-import { Button } from './Button';
-import { cx } from './typen';
-import { useKrGeraet } from './AppShell';
+import {Icon,type IconName} from './Icon';
+import {Button} from './Button';
+import {cx} from './typen';
+import {useKrGeraet} from './AppShell';
+import {GlasDialog,isTopGlassDialog,type GlasDialogProps} from './design-final/GlasDialog';
+
 export type DialogMeldung = { text: string; ton: 'fehler' | 'erfolg'; specId?:string };
-export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; vorfinalForm?:'overlay'; beschaeftigt?:boolean; dataSpecId?:string; oeffner?:HTMLElement|null; }
-export function isTopDialog(element: HTMLElement | null) {
-  const dialogs = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter(dialog => !dialog.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(dialog).display !== 'none');
-  return dialogs.at(-1) === element;
+export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; vorfinalForm?:'overlay'; beschaeftigt?:boolean; dataSpecId?:string; oeffner?:HTMLElement|null; amDock?:boolean; }
+
+export const isTopDialog = isTopGlassDialog;
+
+const groessen = {
+  normal:'normal', breit:'breit', schmal:'kompakt', karte:'akte', werkbank:'antwort',
+} satisfies Record<NonNullable<DialogProps['groesse']>, GlasDialogProps['groesse']>;
+
+export function Dialog({titel,unterzeile,icon='file',groesse='normal',onSchliessen,vorSchliessen,onZurueck,
+  schliessenSpecId,fuss,meldung,children,beschaeftigt=false,dataSpecId,oeffner,amDock}:DialogProps) {
+  const [offen,setOffen]=useState(true);
+  const geraet=useKrGeraet();
+  const [opener]=useState(()=>oeffner===undefined
+    ? typeof document!=='undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null
+    : oeffner);
+  return <GlasDialog offen={offen} titel={titel} beschreibung={unterzeile} groesse={groessen[groesse]}
+    ansicht={amDock?'dock':geraet==='handy'?'blatt':groesse==='karte'?'objekt':'fenster'} kopfVerborgen={amDock}
+    schliessenText={V45_TEXT.common$close} schliessenSymbol={<Icon name="x"/>} schliessenSpecId={schliessenSpecId}
+    schliesstGesperrt={beschaeftigt} beschaeftigt={beschaeftigt} dataSpecId={dataSpecId} oeffner={opener}
+    onSchliessen={()=>{if(vorSchliessen?.()===false)return false;setOffen(false);}} onGeschlossen={onSchliessen}
+    kopfSymbol={<Icon name={icon}/>} kopfAktionen={onZurueck && <Button art="leise" icon="back"
+      label={V45_TEXT.common$back} disabled={beschaeftigt} onClick={onZurueck}/>} fuss={fuss}>
+    {meldung && <DialogAktionsmeldung meldung={meldung}/>}
+    {children}
+  </GlasDialog>;
 }
-/** Der Seitenname bleibt die Überschrift; ein Modus steht als Unterzeile darunter. */
-/** Schließt mit umgekehrter Bewegung (180 ms), dann onSchliessen – kein hartes Verschwinden. */
-export function Dialog({ titel, unterzeile, icon = 'file', groesse = 'normal', onSchliessen: sofort, vorSchliessen, onZurueck, schliessenSpecId, fuss, meldung, children,vorfinalForm,beschaeftigt=false,dataSpecId,oeffner }: DialogProps) {
-  const [zu, setZu] = useState(false);
-  const dialogRef = useRef<HTMLElement>(null);
-  // Capture before child commit/autofocus or an immediate first edit can move
-  // focus inside this dialog; the passive effect is too late for that origin.
-  const openerRef=useRef<HTMLElement|null>(oeffner===undefined?(typeof document!=='undefined'&&document.activeElement instanceof HTMLElement?document.activeElement:null):oeffner),closingRef=useRef(false);
-  const vorfinal=useVorfinalStyle(),titelId=useId(),sourceOverlay=vorfinal&&vorfinalForm==='overlay';
-  // The existing dialog owns focus as well as Esc. Source v10 openOv's order:
-  // autofocus, main action, close. No second overlay stack/keyboard listener.
-  useEffect(()=>{
-    if(!sourceOverlay)return;
-    const previous=openerRef.current;
-    const dialog=dialogRef.current;
-    if(dialog)dialogMoment.oeffnen(dialog,previous!==document.body?previous:null);
-    (dialog?.querySelector<HTMLElement>('[autofocus]:not(:disabled)')??dialog?.querySelector<HTMLElement>('.act:not(:disabled)')??dialog?.querySelector<HTMLElement>('[data-overlay-close]:not(:disabled)')??dialog)?.focus();
-    return()=>{if(previous?.isConnected)previous.focus();};
-  },[sourceOverlay]);
-  const onSchliessen = () => {
-    if(zu||sourceOverlay&&closingRef.current||vorSchliessen?.()===false)return;
-    if(sourceOverlay)closingRef.current=true;
-    if(sourceOverlay&&dialogRef.current){
-      setZu(true);
-      dialogMoment.zurueck(dialogRef.current,openerRef.current,sofort);
-      return;
-    }
-    const still=matchMedia('(prefers-reduced-motion:reduce)').matches;if(still)return sofort();
-    setZu(true);
-    setTimeout(sofort,190);
-  };
-  useLayoutEffect(() => { const h = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return;
-    if (!isTopDialog(dialogRef.current)) return;
-    e.preventDefault(); e.stopImmediatePropagation(); onSchliessen();
-  }; addEventListener('keydown', h); return () => removeEventListener('keydown', h); });
-  if(sourceOverlay)return <div className="ov on" data-closing={zu} style={{pointerEvents:zu?'none':undefined}}
-    onClick={event=>{if(event.target===event.currentTarget)onSchliessen();}}>
-    <section ref={dialogRef} className="ov-box" role="dialog" aria-modal="true" aria-labelledby={titelId} tabIndex={-1}
-      aria-busy={beschaeftigt} data-spec-id={dataSpecId}
-      style={{'--ovw':groesse==='schmal'?'560px':'640px'} as CSSProperties}>
-      <div className="ov-in" data-glass="sheet"><div data-overlay-body style={{position:'relative'}}>
-        <header className="ov-head small">
-          {onZurueck?<Button vorfinalForm="icon" icon="back" label={V45_TEXT.common$back} disabled={beschaeftigt} onClick={onZurueck}/>:null}
-          <div><h2 id={titelId}>{titel}</h2>{unterzeile?<p>{unterzeile}</p>:null}</div>
-          <Button vorfinalForm="icon" icon="x" label={V45_TEXT.common$close} disabled={beschaeftigt}
-            data-overlay-close data-spec-id={schliessenSpecId} onClick={onSchliessen}/>
-        </header>
-        {meldung?<DialogAktionsmeldung meldung={meldung}/>:null}{children}
-        {fuss?<div className="lead-acts" inert={beschaeftigt}>{fuss}</div>:null}
-      </div></div>
-    </section>
-  </div>;
-  if (groesse === 'karte') return <div className={zu ? 'kr-ebene kr-ebene--zu' : 'kr-ebene'} style={{pointerEvents:'auto'}} onClick={e => e.target === e.currentTarget && onSchliessen()}><section ref={dialogRef} className="kr-dialog kr-dialog--karte" role="dialog" aria-modal="true" aria-label={titel}><div className="kr-streifen" />{children}</section></div>;
-  return (
-    <div className={zu ? 'kr-ebene kr-ebene--zu' : 'kr-ebene'} style={{pointerEvents:'auto'}} onClick={e => e.target === e.currentTarget && onSchliessen()}>
-      <section ref={dialogRef} className={cx('kr-dialog', groesse !== 'normal' && 'kr-dialog--' + groesse)} role="dialog" aria-modal="true" aria-label={titel}>
-        <header className="kr-dialog-kopf">{onZurueck && <Button art="leise" icon="back" label="Zurück" onClick={onZurueck} />}<span className="kr-dialog-ic"><Icon name={icon} /></span><h2 className="kr-dialog-titel">{titel}{unterzeile ? <span className="r51-modus">{unterzeile}</span> : null}</h2><Button data-spec-id={schliessenSpecId} art="leise" icon="x" label="Schließen" onClick={onSchliessen} /></header>
-        <div className="kr-dialog-inhalt">{meldung ? <DialogAktionsmeldung meldung={meldung} /> : null}{children}</div>
-        {fuss && <footer className="kr-dialog-fuss">{fuss}</footer>}
-      </section>
-    </div>
-  );
-}
+
 export function DialogAktionsmeldung({ meldung }: { meldung: DialogMeldung }) {
   return <div data-spec-id={meldung.specId} role="status" aria-live="polite"><Hinweis ton={meldung.ton === 'erfolg' ? 'ok' : 'warn'} icon={meldung.ton === 'erfolg' ? 'check' : 'alert'}>{meldung.text}</Hinweis></div>;
 }

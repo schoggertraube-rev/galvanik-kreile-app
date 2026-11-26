@@ -537,6 +537,8 @@ it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende
   };
   let erster:Promise<Response>|undefined;
   try {
+    // Der Handlauf beginnt nach dem Tageslauf dieses TEST-Falls.
+    await sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau'`;
     await fuehreTaktAus({tenantId:tenant,jetzt:zeit});
     expect(await laeufe()).toEqual([{faellig_fuer:tag,status:'ok'}]);
     const vorher = await modellStand();

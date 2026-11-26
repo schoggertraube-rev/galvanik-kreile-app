@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AppShell,
   GlobalesPlus,
@@ -19,7 +19,8 @@ import { requestGlobalCreate } from "./GlobalCreateFlow";
 import styles from "./TargetShell.module.css";
 import {WasIstNeu} from './WasIstNeu';
 import {DeviceStandStatus} from '@/lib/offline/DeviceStandStatus';
-import {NAVIGATION} from '@/ui/navigation/register';
+import {NAVIGATION,sichtbareNavigation} from '@/ui/navigation/register';
+import {ORDER_WEEK_NAVIGATION, ORDER_WEEK_ROUTE} from '@/ui/navigation/orders';
 
 function readDevice(): Geraet {
   if (window.innerWidth < 768) return "handy";
@@ -35,6 +36,8 @@ function subscribeDevice(onChange: () => void) {
 }
 
 const readServerDevice = (): Geraet => "desktop";
+const readNavigationRail = () => window.innerWidth >= 1024;
+const readServerNavigationRail = () => true;
 
 function areaForPath(pathname: string): Bereich {
   return NAVIGATION.find(entry=>entry.pfad!==null&&pathname.startsWith(entry.pfad))?.id
@@ -54,11 +57,13 @@ function berlinDate() {
 
 export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyle=false }: { children: React.ReactNode; globalCreate?: React.ReactNode;loginHandle?:string;vorfinalStyle?:boolean }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const permissions = usePermissions();
   const device = useSyncExternalStore(subscribeDevice, readDevice, readServerDevice);
+  const navigationRail = useSyncExternalStore(subscribeDevice, readNavigationRail, readServerNavigationRail);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreMenu, setMoreMenu] = useState<{oeffner?: HTMLButtonElement} | null>(null);
   const loginOnly = pathname === "/start" || pathname === "/login";
   const sessionInvalid = !permissions.loading && permissions.status !== "authenticated";
 
@@ -78,9 +83,9 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   if (!permissions.hasPermission("perm_view_prices")) hidden.push("geld");
   if (!permissions.hasPermission("perm_sys_toggles") && !permissions.hasPermission("perm_sys_users") && !permissions.hasPermission("perm_sys_diag")) hidden.push("einstellungen");
 
-  const go = (target: Bereich | "mehr") => {
+  const go = (target: Bereich | "mehr", oeffner?: HTMLButtonElement) => {
     if (target === "mehr") {
-      setMoreOpen(true);
+      setMoreMenu({oeffner});
       return;
     }
     // Enter messages/settings as a complete document. WebKit can receive Flight
@@ -92,9 +97,26 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
     router.push(ROUTES[target]);
   };
 
-  const overlay = (
+  const news = canUseShell && loginHandle ? <WasIstNeu key={loginHandle} loginHandle={loginHandle} geraet={device} onNavigate={path=>{
+    if(path==='rein'){requestGlobalCreate();return true;}
+    if(path==='/nachrichten'){const event=new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'nachrichten'}});return !window.dispatchEvent(event);}
+    router.push(path);return true;
+  }}/> : null;
+  const menuTargets = sichtbareNavigation(hidden).filter(entry =>
+    !['tag', 'werkstatt', 'nachrichten', 'einstellungen'].includes(entry.id));
+  const schliesseUndOeffne = (ziel: string) => () => {
+    if (device === 'handy' && moreMenu) {
+      if (new URL(ziel, window.location.href).href === window.location.href) setMoreMenu(null);
+      else window.location.replace(ziel);
+      return;
+    }
+    setMoreMenu(null);
+    router.push(ziel);
+  };
+  const overlay = (werkstattWerkzeuge: ReactNode) => (
     <>
-      <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} />
+      <MoreMenu open={moreMenu !== null} oeffner={moreMenu?.oeffner} onClose={() => setMoreMenu(null)} ziele={menuTargets} amDock={device === 'handy'}
+        werkzeuge={device === 'handy' ? <>{workshop && werkstattWerkzeuge}{news}</> : null} />
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </>
   );
@@ -108,16 +130,13 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
           geraet={device}
           zustand={permissions.offline24h?<DeviceStandStatus/>:null}
           variante={workshop ? "werkstatt" : "buero"}
+          navigationsleiste={navigationRail}
           aktiv={areaForPath(pathname)}
           kuerzel={permissions.initials || "K"}
           datum={berlinDate()}
           ausgeblendet={hidden}
           suche={canUseShell ? <SuchKopf onOeffnen={() => setSearchOpen(true)} /> : <span />}
-          neuigkeiten={canUseShell&&loginHandle?<WasIstNeu key={loginHandle} loginHandle={loginHandle} geraet={device} onNavigate={path=>{
-            if(path==='rein'){requestGlobalCreate();return true;}
-            if(path==='/nachrichten'){const event=new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'nachrichten'}});return !window.dispatchEvent(event);}
-            router.push(path);return true;
-          }}/>:null}
+          neuigkeiten={news}
           plus={canUseShell && canCreate ? (
             <GlobalesPlus
               onOeffnen={() => requestGlobalCreate()}
@@ -125,12 +144,14 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
           ) : <span />}
           onNav={go}
           onStart={() => router.push("/")}
-          onKonto={() => setMoreOpen(true)}
+          onKonto={oeffner => setMoreMenu({oeffner})}
           onNeuerEingang={permissions.hasArea("eingang") ? () => requestGlobalCreate() : undefined}
-          onWareRaus={permissions.hasPermission("perm_op_status") ? () => router.push("/orders?station=fertig") : undefined}
+          onWareRaus={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne("/orders?station=fertig") : undefined}
           onAuftragOeffnen={permissions.hasPermission("perm_view_leitstand") ? () => router.push("/orders") : undefined}
-          onMehrarbeit={permissions.hasPermission("perm_op_status") ? () => router.push("/warendurchlauf") : undefined}
-          onFertigMelden={permissions.hasPermission("perm_op_status") ? () => router.push("/warendurchlauf") : undefined}
+          planungAktiv={pathname === ORDER_WEEK_NAVIGATION.pfad && searchParams?.get('view') === ORDER_WEEK_NAVIGATION.view}
+          onPlanung={permissions.hasPermission("perm_view_leitstand") ? () => window.location.assign(ORDER_WEEK_ROUTE) : undefined}
+          onMehrarbeit={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne("/warendurchlauf") : undefined}
+          onFertigMelden={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne("/warendurchlauf") : undefined}
           ebene={overlay}
           >
             {children}

@@ -65,7 +65,7 @@ describe("P63: the camera action is reachable in the fixed footer", () => {
     Object.defineProperties(video, { readyState: { value: 2 }, videoWidth: { value: 1920 }, videoHeight: { value: 1080 } });
     fireEvent.loadedData(video);
     expect(shutter).toBeEnabled();
-    expect(shutter.closest(".kr-dialog-fuss")).not.toBeNull();
+    expect(shutter.closest("footer[data-dialog-actions]")).not.toBeNull();
     cleanup();
     expect(stop).toHaveBeenCalledOnce();
   });

@@ -3,6 +3,7 @@
 import {it,expect} from 'vitest';
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {build} from 'esbuild';
 import {chromium,firefox,webkit} from 'playwright';
 
@@ -15,12 +16,16 @@ it(`keeps owner control geometry, keyboard and reduced motion across ${engines.l
   import {GlobalesPlus} from './src/ui/kr/GlobalesPlus';import {Button} from './src/ui/kr/Button';
   const counters={open:0,command:0};Object.assign(window,{TEST_s18:counters});
   createRoot(document.getElementById('root')).render(<><GlobalesPlus onOeffnen={()=>counters.open++}/><Button art="primaer" text="TEST Befehl" onClick={()=>counters.command++}/></>);
- `},bundle:true,write:false,outfile:'TEST-s18.js',platform:'browser',jsx:'automatic',define:{'process.env.NODE_ENV':'"test"'}});
+ `},bundle:true,write:false,outfile:'TEST-s18.js',platform:'browser',jsx:'automatic',define:{'process.env':'{"NODE_ENV":"test"}'},
+ loader:{'.svg':'dataurl'},plugins:[{name:'kreile-public-design',setup(bundle){
+  bundle.onResolve({filter:/^\/design\/[a-z0-9-]+\.svg$/},({path})=>({path:resolve('public',path.slice(1))}));
+ }}]});
  const script=result.outputFiles.find(file=>file.path.endsWith('.js'))?.text;
  if(!script)throw Error('TEST_S18_BROWSER_BUNDLE_MISSING');
  const moduleCss=result.outputFiles.filter(file=>file.path.endsWith('.css')).map(file=>file.text).join('\n');
  const css=JSON.parse(readFileSync('src/ui/generated/vorfinalCss.json','utf8')).css;
- const html='<!doctype html><html data-ui="v45"><head><style>'+moduleCss+'</style><style>'+css+'</style></head><body><div id="root"></div><script>'+script.replaceAll('</script','<\\/script')+'</script></body></html>';
+ const tokens=readFileSync('src/ui/kr/design-final/tokens.css','utf8');
+ const html='<!doctype html><html data-ui="v45"><head><style>'+tokens+'</style><style>'+moduleCss+'</style><style>'+css+'</style></head><body><div id="root"></div><script>'+script.replaceAll('</script','<\\/script')+'</script></body></html>';
  const server=createServer((request,response)=>{
   if(request.url!=='/TEST-s18'){response.writeHead(404).end();return;}
   response.writeHead(200,{'content-type':'text/html; charset=utf-8'}).end(html);
@@ -34,13 +39,16 @@ it(`keeps owner control geometry, keyboard and reduced motion across ${engines.l
     for(const width of [1440,820,390]){
      const page=await browser.newPage({viewport:{width,height:900}});
      try{
+      const errors:string[]=[];
+      page.on('pageerror',error=>errors.push(error.message));
       await page.goto('http://127.0.0.1:'+address.port+'/TEST-s18');
+      expect(errors).toEqual([]);
       const plus=page.getByRole('button',{name:'Neuer Eingang'}),primary=page.getByRole('button',{name:'TEST Befehl'});
       await plus.waitFor({state:'visible'});await page.evaluate(()=>document.fonts.ready);
       const plusBox=await plus.boundingBox(),primaryBox=await primary.boundingBox();
-      expect(plusBox?.width).toBe(58);expect(plusBox?.height).toBe(58);
-      expect(primaryBox?.height).toBeGreaterThanOrEqual(60);expect(primaryBox?.width).toBeGreaterThanOrEqual(48);
-      expect(await plus.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(196, 67, 47)');
+      expect(plusBox?.width).toBe(48);expect(plusBox?.height).toBe(48);
+      expect(primaryBox?.height).toBeGreaterThanOrEqual(44);expect(primaryBox?.width).toBeGreaterThanOrEqual(48);
+      expect(await plus.evaluate(el=>getComputedStyle(el).backgroundImage)).toContain('rgb(204, 234, 251)');
       await plus.focus();await page.keyboard.press('Enter');
       await page.keyboard.press('Tab');expect(await primary.evaluate(el=>el===document.activeElement)).toBe(true);
       await page.keyboard.press('Enter');

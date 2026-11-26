@@ -1,0 +1,1160 @@
+{
+  "source": ".tmp\\kreile-finesse\\site\\dist\\Kreile-WerkstattCockpit.html",
+  "sourceSha256": "b5ff14beb592264d106f47996e49609c726a9512565b3215294247fdfcb8e518",
+  "symbole": [
+    {
+      "name": "erledigt-haken-kreis",
+      "datei": "erledigt-haken-kreis.svg",
+      "offset": 908989,
+      "sourceFragmentSha256": "6c07b6b40cb0078f1dfe584c7d8b114120fcf8c80c141894a5d88942c8910bfd",
+      "sha256": "6c07b6b40cb0078f1dfe584c7d8b114120fcf8c80c141894a5d88942c8910bfd"
+    },
+    {
+      "name": "farbverlaeufe-svg-definitionen",
+      "datei": "farbverlaeufe-svg-definitionen.svg",
+      "offset": 1718203,
+      "sourceFragmentSha256": "a756360fc061224465c028f480d972998a370c71f0bc8a51c62ed235d644a79a",
+      "sha256": "3993b871574fff4d6aff334f5a65291728b57e9d1b8def510cb75723a3ec3b51"
+    },
+    {
+      "name": "vorgang-zurueck",
+      "datei": "vorgang-zurueck.svg",
+      "offset": 1730817,
+      "sourceFragmentSha256": "b1cc5d864ac1aefd0da86d8e0f44215263db7c9dbf50f443e61cdc47f8386540",
+      "sha256": "6dfef4838a67d6f36f07d92cad4a17049c2d3586702e29488a0542c4d13eb6ba",
+      "quelle": "Quell-CSS `svg.ic`"
+    },
+    {
+      "name": "fenster-schliessen",
+      "datei": "fenster-schliessen.svg",
+      "offset": 1731365,
+      "sourceFragmentSha256": "28994550bbb60ddc63f3be1756cde11c26fe23fa820036e4cfa54a3dda693d02",
+      "sha256": "2b5322d68475c8651946cc2017d7df401f2b3dfc5ba1e70a1cfad13e4ff48471",
+      "quelle": "Quell-CSS `svg.ic`"
+    },
+    {
+      "name": "aktionsquittung-haken",
+      "datei": "aktionsquittung-haken.svg",
+      "offset": 1738595,
+      "sourceFragmentSha256": "90f7cc672e6287a0c28abb1fa4a35fc0397142d663defa2210072993b994466e",
+      "sha256": "66135a8f57fd01b5b0a0e4e7ac8feb280fd13901aa84495de077f4164923a4eb",
+      "quelle": "Quell-CSS `.hdone>svg` und `.okmark`"
+    },
+    {
+      "name": "bildansicht-vergroessern",
+      "datei": "bildansicht-vergroessern.svg",
+      "offset": 1866100,
+      "sourceFragmentSha256": "278db35258090980835b6f1954ea25755bb957b8571ebc372f0dd50ceb3f6346",
+      "sha256": "6de5a7b3bb66743f080fb900bd55259f805a5bd049df6aa7931df81eecae64ee"
+    },
+    {
+      "name": "produktbild-platzhalter",
+      "datei": "produktbild-platzhalter.svg",
+      "offset": 1979016,
+      "sourceFragmentSha256": "7a01f90c15303d07347628206477b6f5531b22c1ef876f6989958ed484c7ed43",
+      "sha256": "46e596fcd9557082d866568b1a7085b568e5cf465c4332f63da9cb47b3520226"
+    },
+    {
+      "name": "quellgrafik-10",
+      "datei": "quellgrafik-10.svg",
+      "offset": 1993651,
+      "sourceFragmentSha256": "75ccedfcf85146f40772e9fc2fb3117bd641f9f05fc84a02be239e064f812c90",
+      "sha256": "b67c37885672f22af76d3e5594051fd9f46760e9b26878135ce9ff062c48039e"
+    },
+    {
+      "name": "woche-fertig-haken",
+      "datei": "woche-fertig-haken.svg",
+      "offset": 2266141,
+      "sourceFragmentSha256": "73303c43bf59f969a4aadc18348bd6ff320969cf6b6382f5ffa69368aae26371",
+      "sha256": "f0c9805259001ed5672ad57b3526e10dec8ae12459981b8f912b7e3e1f93a035"
+    },
+    {
+      "name": "erledigte-zeile-haken",
+      "datei": "erledigte-zeile-haken.svg",
+      "offset": 2283087,
+      "sourceFragmentSha256": "73303c43bf59f969a4aadc18348bd6ff320969cf6b6382f5ffa69368aae26371",
+      "sha256": "0cd0343e91825273808d0a57822bccd954b501c3fb8a08f81a799665af531192",
+      "quelle": "Quell-CSS `.hdone>svg` und `.okmark`"
+    },
+    {
+      "name": "stopp-zeile-hinweis",
+      "datei": "stopp-zeile-hinweis.svg",
+      "offset": 2284624,
+      "sourceFragmentSha256": "8992a4816a4b4f71400055bf1e84e3b30a2d864bcc4b9eeca34b267ee678092a",
+      "sha256": "153e6313983ac6d80f002a5883137c89973957f2681dd29024120ee86bd2e8ca",
+      "quelle": "Quell-CSS `.hdone>svg` und `.okmark`"
+    },
+    {
+      "name": "fertigung-zeilenstatus-haken",
+      "datei": "erledigte-zeile-haken.svg",
+      "offset": 2286971,
+      "sourceFragmentSha256": "73303c43bf59f969a4aadc18348bd6ff320969cf6b6382f5ffa69368aae26371",
+      "sha256": "0cd0343e91825273808d0a57822bccd954b501c3fb8a08f81a799665af531192",
+      "quelle": "Quell-CSS `.hdone>svg` und `.okmark`"
+    },
+    {
+      "name": "lager-zeilenstatus-haken",
+      "datei": "erledigte-zeile-haken.svg",
+      "offset": 2370296,
+      "sourceFragmentSha256": "73303c43bf59f969a4aadc18348bd6ff320969cf6b6382f5ffa69368aae26371",
+      "sha256": "0cd0343e91825273808d0a57822bccd954b501c3fb8a08f81a799665af531192",
+      "quelle": "Quell-CSS `.hdone>svg` und `.okmark`"
+    },
+    {
+      "name": "teilansicht-ohne-bild",
+      "datei": "teilansicht-ohne-bild.svg",
+      "offset": 2722574,
+      "sourceFragmentSha256": "ddee26735dcb5d1236249f6eb5693733578fdeddc400c1f8c164415db44e8fec",
+      "sha256": "9bb79a3bd77eee36dc48c76dce079ed175fd38825d1339398cd04268f57aa420"
+    },
+    {
+      "name": "geldkachel-zeitstempel",
+      "datei": "geldkachel-zeitstempel.svg",
+      "offset": 2731683,
+      "sourceFragmentSha256": "c9a8353b61c623a339a1ed449888b6301cf04cd3b877ee6a6d3c33b3e68cff0d",
+      "sha256": "4a8ab9331127680d241bec47112c192ecf944cea6a558d6fe8cc85c115578c38"
+    },
+    {
+      "name": "drei-punkte-kontext",
+      "datei": "drei-punkte-kontext.svg",
+      "offset": 2733239,
+      "sourceFragmentSha256": "3375d6acad0e556f6bca950eb000c1277695a95be102739cf6e8a9b22b35c127",
+      "sha256": "740932e248d6e7984bd333b7cca77bbf003b135a1bb79449446df44e0cf0b8ff"
+    },
+    {
+      "name": "hauptmenue-weitere",
+      "datei": "hauptmenue-weitere.svg",
+      "offset": 3063255,
+      "sourceFragmentSha256": "397adcdeae028d8728da4f7546499ab7fb0f618b8fa1d2046e8fcbe0ddeb8ba9",
+      "sha256": "32f976f1c80ea404ff3dff3be1c87809b63c50630f5f5e5b20f3284d43570a41"
+    },
+    {
+      "name": "material-scheibe",
+      "datei": "material-scheibe.svg",
+      "offset": 4741852,
+      "sourceFragmentSha256": "87da344e4a51e7ac01d303c496e9255f0e05efd00c81ecd89f90392fd6b9c763",
+      "sha256": "87da344e4a51e7ac01d303c496e9255f0e05efd00c81ecd89f90392fd6b9c763"
+    },
+    {
+      "name": "material-buch",
+      "datei": "material-buch.svg",
+      "offset": 4742176,
+      "sourceFragmentSha256": "992bcf7dc64d11973c942bf40d2634634b6f5deb1c5ad67ce4eaa838b9127f70",
+      "sha256": "992bcf7dc64d11973c942bf40d2634634b6f5deb1c5ad67ce4eaa838b9127f70"
+    },
+    {
+      "name": "material-archivkasten",
+      "datei": "material-archivkasten.svg",
+      "offset": 4742525,
+      "sourceFragmentSha256": "b312ed9d446985f50a4578edb87ea466c46d0f7f5303a8be976cff4785cb4cb5",
+      "sha256": "b312ed9d446985f50a4578edb87ea466c46d0f7f5303a8be976cff4785cb4cb5"
+    },
+    {
+      "name": "material-stopp-dreieck",
+      "datei": "material-stopp-dreieck.svg",
+      "offset": 4742959,
+      "sourceFragmentSha256": "1e1ab14dd7579c3c58e42160878c9ed8b70fbb470b7eb0cdb1d534a45c98de20",
+      "sha256": "1e1ab14dd7579c3c58e42160878c9ed8b70fbb470b7eb0cdb1d534a45c98de20"
+    },
+    {
+      "name": "material-paket-erster",
+      "datei": "material-paket-erster.svg",
+      "offset": 4743357,
+      "sourceFragmentSha256": "5bdc1e940f2db7a27873881adc36dcbe70d53c599655ec19bbf2405a8247827c",
+      "sha256": "5bdc1e940f2db7a27873881adc36dcbe70d53c599655ec19bbf2405a8247827c"
+    },
+    {
+      "name": "material-haken",
+      "datei": "material-haken.svg",
+      "offset": 4743855,
+      "sourceFragmentSha256": "d7b8211205f101e9eb24d5948e741e7cd65c34611d86ec43bc1a1f97d0a82fe9",
+      "sha256": "d7b8211205f101e9eb24d5948e741e7cd65c34611d86ec43bc1a1f97d0a82fe9"
+    },
+    {
+      "name": "material-zurueckbiegen",
+      "datei": "material-zurueckbiegen.svg",
+      "offset": 4744134,
+      "sourceFragmentSha256": "37bd75d0017c6d1b7a18d0219ada8893293c66ba2a1d60eb0d362229a927c908",
+      "sha256": "37bd75d0017c6d1b7a18d0219ada8893293c66ba2a1d60eb0d362229a927c908"
+    },
+    {
+      "name": "material-rueckgaengig",
+      "datei": "material-rueckgaengig.svg",
+      "offset": 4744499,
+      "sourceFragmentSha256": "a9826e04341592eebaddf155033c06a41659b7310457958e9e6de043c2e10308",
+      "sha256": "a9826e04341592eebaddf155033c06a41659b7310457958e9e6de043c2e10308"
+    },
+    {
+      "name": "material-hinzufuegen",
+      "datei": "material-hinzufuegen.svg",
+      "offset": 4744829,
+      "sourceFragmentSha256": "05f577552def41fc6afda89a41d780487831109ae90e0636086ad1f52cb25cce",
+      "sha256": "05f577552def41fc6afda89a41d780487831109ae90e0636086ad1f52cb25cce"
+    },
+    {
+      "name": "material-pfeil-lang",
+      "datei": "material-pfeil-lang.svg",
+      "offset": 4745126,
+      "sourceFragmentSha256": "55d6a145c58a8dbb248ba08880c4a816c7f67320f838018978fb827cc982f377",
+      "sha256": "55d6a145c58a8dbb248ba08880c4a816c7f67320f838018978fb827cc982f377"
+    },
+    {
+      "name": "material-verbindungen",
+      "datei": "material-verbindungen.svg",
+      "offset": 4745438,
+      "sourceFragmentSha256": "d4627a3765b4b032187cf6f6962e32e391507e7fd838978968a518b96912b8b6",
+      "sha256": "d4627a3765b4b032187cf6f6962e32e391507e7fd838978968a518b96912b8b6"
+    },
+    {
+      "name": "material-rahmen-paket",
+      "datei": "material-rahmen-paket.svg",
+      "offset": 4745830,
+      "sourceFragmentSha256": "226c7866988e9c7cbe766c9e6406429cafdaae4292090a910c1373b1541c4d73",
+      "sha256": "226c7866988e9c7cbe766c9e6406429cafdaae4292090a910c1373b1541c4d73"
+    },
+    {
+      "name": "material-wuerfel",
+      "datei": "material-wuerfel.svg",
+      "offset": 4746354,
+      "sourceFragmentSha256": "3b31bdaa80dd13ce8096ea55d6fa77079645eaeded52985af0502e4b6afb38d2",
+      "sha256": "3b31bdaa80dd13ce8096ea55d6fa77079645eaeded52985af0502e4b6afb38d2"
+    },
+    {
+      "name": "material-paket-mit-falz",
+      "datei": "material-paket-mit-falz.svg",
+      "offset": 4746797,
+      "sourceFragmentSha256": "1163a929561d64f0ec1e983eaaa59115f25ce08d826faa8d59890227c0a3c1c4",
+      "sha256": "1163a929561d64f0ec1e983eaaa59115f25ce08d826faa8d59890227c0a3c1c4"
+    },
+    {
+      "name": "material-qr-rahmen",
+      "datei": "material-qr-rahmen.svg",
+      "offset": 4747323,
+      "sourceFragmentSha256": "26ae33085cb8d5b0223f4e6ffa289fa32c1d874d3e09f07ef060a9ce5366dcc7",
+      "sha256": "26ae33085cb8d5b0223f4e6ffa289fa32c1d874d3e09f07ef060a9ce5366dcc7"
+    },
+    {
+      "name": "material-erfasst-qr-haken",
+      "datei": "material-erfasst-qr-haken.svg",
+      "offset": 4747734,
+      "sourceFragmentSha256": "70172dabf3f2953a0f2b96728916e9ae12ffc940459e8a8d85c9bbe2f53911f8",
+      "sha256": "70172dabf3f2953a0f2b96728916e9ae12ffc940459e8a8d85c9bbe2f53911f8"
+    },
+    {
+      "name": "material-aktualisieren",
+      "datei": "material-aktualisieren.svg",
+      "offset": 4748171,
+      "sourceFragmentSha256": "0162e62d255834834d674c5aac35808f4c706511fd9a1d5fba793db148b8e639",
+      "sha256": "0162e62d255834834d674c5aac35808f4c706511fd9a1d5fba793db148b8e639"
+    },
+    {
+      "name": "material-tastaturkurzbefehl",
+      "datei": "material-tastaturkurzbefehl.svg",
+      "offset": 4748614,
+      "sourceFragmentSha256": "3d5f5eebfdd0904ae2e491b5fb7f2a66b87a081a633ca8abfffd964448cae3d7",
+      "sha256": "3d5f5eebfdd0904ae2e491b5fb7f2a66b87a081a633ca8abfffd964448cae3d7"
+    },
+    {
+      "name": "material-text-ausrichten",
+      "datei": "material-text-ausrichten.svg",
+      "offset": 4748951,
+      "sourceFragmentSha256": "70636952439be7e68df5bec154bd0a1ff745e75d3f74bc6618c01e058689be6d",
+      "sha256": "70636952439be7e68df5bec154bd0a1ff745e75d3f74bc6618c01e058689be6d"
+    },
+    {
+      "name": "material-ruecktaste",
+      "datei": "material-ruecktaste.svg",
+      "offset": 4749285,
+      "sourceFragmentSha256": "1bd3761dd8e9e8bb15a2a8c7a2b21365016888e53a302eb7bd1815c1fc0f8e5b",
+      "sha256": "1bd3761dd8e9e8bb15a2a8c7a2b21365016888e53a302eb7bd1815c1fc0f8e5b"
+    },
+    {
+      "name": "material-drei-punkte",
+      "datei": "material-drei-punkte.svg",
+      "offset": 4749721,
+      "sourceFragmentSha256": "7cff4e9b597f52ff2c29cf64e89236886dddcd1b4683b780a4d1f7aea6ff0588",
+      "sha256": "7cff4e9b597f52ff2c29cf64e89236886dddcd1b4683b780a4d1f7aea6ff0588"
+    },
+    {
+      "name": "material-einstellungen-zahnrad",
+      "datei": "material-einstellungen-zahnrad.svg",
+      "offset": 4750086,
+      "sourceFragmentSha256": "bac3962e47bc68d7848af47b735ebf527c232a2d5d181345e983a548038072c5",
+      "sha256": "bac3962e47bc68d7848af47b735ebf527c232a2d5d181345e983a548038072c5"
+    },
+    {
+      "name": "material-quadrat",
+      "datei": "material-quadrat.svg",
+      "offset": 4750719,
+      "sourceFragmentSha256": "f2e740f7a74f9fa79c79934717b78301a4bd59c3aab5e73032970a982abc9028",
+      "sha256": "f2e740f7a74f9fa79c79934717b78301a4bd59c3aab5e73032970a982abc9028"
+    },
+    {
+      "name": "material-zurueck",
+      "datei": "material-zurueck.svg",
+      "offset": 4751090,
+      "sourceFragmentSha256": "bfa42829fd0b67426bcc5a0e8f8d523868c03c9602e8de2bd7d4d11e59a02dad",
+      "sha256": "bfa42829fd0b67426bcc5a0e8f8d523868c03c9602e8de2bd7d4d11e59a02dad"
+    },
+    {
+      "name": "material-rahmen-minus",
+      "datei": "material-rahmen-minus.svg",
+      "offset": 4751399,
+      "sourceFragmentSha256": "def8006ca0b176d3e42b75267b03587329445ac2d3d1d260f225f0c69a87beba",
+      "sha256": "def8006ca0b176d3e42b75267b03587329445ac2d3d1d260f225f0c69a87beba"
+    },
+    {
+      "name": "material-dokument",
+      "datei": "material-dokument.svg",
+      "offset": 4751841,
+      "sourceFragmentSha256": "29957622045fd7fac048c938b8322a76515b109eac8e4c4d72e909cf8f399ebf",
+      "sha256": "29957622045fd7fac048c938b8322a76515b109eac8e4c4d72e909cf8f399ebf"
+    },
+    {
+      "name": "material-dokument-haken",
+      "datei": "material-dokument-haken.svg",
+      "offset": 4752337,
+      "sourceFragmentSha256": "1cdc2495ddcf79ff989094bb98d3fec230e3961900d650c04fc3932584ae183b",
+      "sha256": "1cdc2495ddcf79ff989094bb98d3fec230e3961900d650c04fc3932584ae183b"
+    },
+    {
+      "name": "material-nach-rechts",
+      "datei": "material-nach-rechts.svg",
+      "offset": 4752757,
+      "sourceFragmentSha256": "687880ab07a10a29d7cf4b3de3c68d1744333981f94da513e93da55efd0cbbe8",
+      "sha256": "687880ab07a10a29d7cf4b3de3c68d1744333981f94da513e93da55efd0cbbe8"
+    },
+    {
+      "name": "material-paket-mit-falz-wiederholung",
+      "datei": "material-paket-mit-falz-wiederholung.svg",
+      "offset": 4753042,
+      "sourceFragmentSha256": "7b8053bc564879fdd73d303101905aefa191cacd50c719d3fe40044448fb3bcd",
+      "sha256": "7b8053bc564879fdd73d303101905aefa191cacd50c719d3fe40044448fb3bcd"
+    },
+    {
+      "name": "material-eintragen",
+      "datei": "material-eintragen.svg",
+      "offset": 4753588,
+      "sourceFragmentSha256": "f326b5e162a9006638655c11e1512fabf29bf829fad0cfa84738345a7b602747",
+      "sha256": "f326b5e162a9006638655c11e1512fabf29bf829fad0cfa84738345a7b602747"
+    },
+    {
+      "name": "material-qr-rahmen-marken",
+      "datei": "material-qr-rahmen-marken.svg",
+      "offset": 4754079,
+      "sourceFragmentSha256": "0a3a27e151c57b200434535222866346d24b17a194d0ec0f87768344e4e0c34f",
+      "sha256": "0a3a27e151c57b200434535222866346d24b17a194d0ec0f87768344e4e0c34f"
+    },
+    {
+      "name": "material-drucker",
+      "datei": "material-drucker.svg",
+      "offset": 4754763,
+      "sourceFragmentSha256": "50e439c9664a10b8e0200ba6bf2840442b13e906e567ef67b30d9d85484574b0",
+      "sha256": "50e439c9664a10b8e0200ba6bf2840442b13e906e567ef67b30d9d85484574b0"
+    },
+    {
+      "name": "material-ordner",
+      "datei": "material-ordner.svg",
+      "offset": 4755215,
+      "sourceFragmentSha256": "6a66168a92e6a244a4cfc97e4e1c38b52bcbb3cd19e5e5aec165c956bbe7610f",
+      "sha256": "6a66168a92e6a244a4cfc97e4e1c38b52bcbb3cd19e5e5aec165c956bbe7610f"
+    },
+    {
+      "name": "material-nach-links",
+      "datei": "material-nach-links.svg",
+      "offset": 4755598,
+      "sourceFragmentSha256": "852f57ce81b745837d9de422fb22c0f37d7869b2ef572c20404e1c9bc40d099d",
+      "sha256": "852f57ce81b745837d9de422fb22c0f37d7869b2ef572c20404e1c9bc40d099d"
+    },
+    {
+      "name": "material-schliessen",
+      "datei": "material-schliessen.svg",
+      "offset": 4755883,
+      "sourceFragmentSha256": "b67d9ea7e9c24592abdcc473e3308c1a3928390c72309dbfa697f0c05b4defad",
+      "sha256": "b67d9ea7e9c24592abdcc473e3308c1a3928390c72309dbfa697f0c05b4defad"
+    },
+    {
+      "name": "material-verlauf",
+      "datei": "material-verlauf.svg",
+      "offset": 4756181,
+      "sourceFragmentSha256": "b12991405d2e756a560d3fe10d60c0cd8d11b1995f233567742aa467671cd052",
+      "sha256": "b12991405d2e756a560d3fe10d60c0cd8d11b1995f233567742aa467671cd052"
+    },
+    {
+      "name": "material-standort",
+      "datei": "material-standort.svg",
+      "offset": 4756551,
+      "sourceFragmentSha256": "66c345c30c9fe18fe1ffb859b622aaf4efc1d92b4dcff66b316522f43ed79bfa",
+      "sha256": "66c345c30c9fe18fe1ffb859b622aaf4efc1d92b4dcff66b316522f43ed79bfa"
+    },
+    {
+      "name": "material-wagen",
+      "datei": "material-wagen.svg",
+      "offset": 4756956,
+      "sourceFragmentSha256": "1e0f28433f73d2e59d6ce5b3ab2c6c246364e03550226a9e23d84e615af82cbb",
+      "sha256": "1e0f28433f73d2e59d6ce5b3ab2c6c246364e03550226a9e23d84e615af82cbb"
+    },
+    {
+      "name": "material-verknuepfung",
+      "datei": "material-verknuepfung.svg",
+      "offset": 4757477,
+      "sourceFragmentSha256": "2bacc6d52e93c8004411119b44e3c547d99ced143d7371728515c5228ee0e499",
+      "sha256": "2bacc6d52e93c8004411119b44e3c547d99ced143d7371728515c5228ee0e499"
+    },
+    {
+      "name": "material-staebe",
+      "datei": "material-staebe.svg",
+      "offset": 4757877,
+      "sourceFragmentSha256": "ddd4ffd98daa35e5cd04234ae94540c72f9c0564bf70d822dbe0a7fcee9d95a0",
+      "sha256": "ddd4ffd98daa35e5cd04234ae94540c72f9c0564bf70d822dbe0a7fcee9d95a0"
+    },
+    {
+      "name": "material-durchsage",
+      "datei": "material-durchsage.svg",
+      "offset": 4758376,
+      "sourceFragmentSha256": "9ad6cc9c6316d776d58dfe6b32abecb9c0b99cb62e0768f78990c1d0b0a49b66",
+      "sha256": "9ad6cc9c6316d776d58dfe6b32abecb9c0b99cb62e0768f78990c1d0b0a49b66"
+    },
+    {
+      "name": "material-liste-erledigt",
+      "datei": "material-liste-erledigt.svg",
+      "offset": 4759163,
+      "sourceFragmentSha256": "5c3d91307ec1009b2293d4a75850316020566287c4aa902ea61ec018c6e9c50d",
+      "sha256": "5c3d91307ec1009b2293d4a75850316020566287c4aa902ea61ec018c6e9c50d"
+    },
+    {
+      "name": "material-ebenen",
+      "datei": "material-ebenen.svg",
+      "offset": 4759523,
+      "sourceFragmentSha256": "610a8ff3195f8ae840a1d363272a9a6d4b3a20eab6305bc2b3671a1674c45131",
+      "sha256": "610a8ff3195f8ae840a1d363272a9a6d4b3a20eab6305bc2b3671a1674c45131"
+    },
+    {
+      "name": "material-nutzer",
+      "datei": "material-nutzer.svg",
+      "offset": 4760224,
+      "sourceFragmentSha256": "1ef6cdd6b89cd702bade44da76897489fa5bc52defbeeb72b6b06aa886aa156b",
+      "sha256": "1ef6cdd6b89cd702bade44da76897489fa5bc52defbeeb72b6b06aa886aa156b"
+    },
+    {
+      "name": "material-uhr",
+      "datei": "material-uhr.svg",
+      "offset": 4760552,
+      "sourceFragmentSha256": "e620fdceaa7b1d7aca84e0f3b823e91181b2287be74a9e5f3886243cce56a2a1",
+      "sha256": "e620fdceaa7b1d7aca84e0f3b823e91181b2287be74a9e5f3886243cce56a2a1"
+    },
+    {
+      "name": "material-lupe",
+      "datei": "material-lupe.svg",
+      "offset": 4760881,
+      "sourceFragmentSha256": "a7aab764eaaf296300190d7106b4b2ed2f4e94fc366a3883689de2c7b4c54848",
+      "sha256": "a7aab764eaaf296300190d7106b4b2ed2f4e94fc366a3883689de2c7b4c54848"
+    },
+    {
+      "name": "material-hilfe",
+      "datei": "material-hilfe.svg",
+      "offset": 4761341,
+      "sourceFragmentSha256": "42d757098d95a7fe5f1d9728f3599592a03ec566c447891dc8aee09975a3bcc2",
+      "sha256": "42d757098d95a7fe5f1d9728f3599592a03ec566c447891dc8aee09975a3bcc2"
+    },
+    {
+      "name": "material-kamera",
+      "datei": "material-kamera.svg",
+      "offset": 4761724,
+      "sourceFragmentSha256": "71f5b6865e7b98169b5ff1ea0b0e432b769b9f49a771bf235f86b4dc8aacffb8",
+      "sha256": "71f5b6865e7b98169b5ff1ea0b0e432b769b9f49a771bf235f86b4dc8aacffb8"
+    },
+    {
+      "name": "material-bearbeiten",
+      "datei": "material-bearbeiten.svg",
+      "offset": 4762206,
+      "sourceFragmentSha256": "99447319a6a592bdac47b7c20222b445962228fb10f575a9695f6ea448789fbb",
+      "sha256": "99447319a6a592bdac47b7c20222b445962228fb10f575a9695f6ea448789fbb"
+    },
+    {
+      "name": "material-paket-markiert",
+      "datei": "material-paket-markiert.svg",
+      "offset": 4762648,
+      "sourceFragmentSha256": "45b1faed6e349ddaad60e376ffbeda298ac64c0884cb532e79ecfbac9649a3ef",
+      "sha256": "45b1faed6e349ddaad60e376ffbeda298ac64c0884cb532e79ecfbac9649a3ef"
+    },
+    {
+      "name": "material-liste",
+      "datei": "material-liste.svg",
+      "offset": 4763223,
+      "sourceFragmentSha256": "fa295ffe5c7eb042c9e52ad32a8e95ded51220b70ea6a4ecbab9a37eb8a7a670",
+      "sha256": "fa295ffe5c7eb042c9e52ad32a8e95ded51220b70ea6a4ecbab9a37eb8a7a670"
+    },
+    {
+      "name": "material-labor-gefaess",
+      "datei": "material-labor-gefaess.svg",
+      "offset": 4763625,
+      "sourceFragmentSha256": "87c1e5501a541b422e5f2989d283e8b15d2ac907b2fbc4a25cb89b448c76079c",
+      "sha256": "87c1e5501a541b422e5f2989d283e8b15d2ac907b2fbc4a25cb89b448c76079c"
+    },
+    {
+      "name": "material-becher",
+      "datei": "material-becher.svg",
+      "offset": 4764060,
+      "sourceFragmentSha256": "e0a8ab699c3451f6a664b0a26959afaea6d4292b1a33c5675a416b738292d1f9",
+      "sha256": "e0a8ab699c3451f6a664b0a26959afaea6d4292b1a33c5675a416b738292d1f9"
+    },
+    {
+      "name": "material-schluessel",
+      "datei": "material-schluessel.svg",
+      "offset": 4764503,
+      "sourceFragmentSha256": "d909f4445994abf87599c25ee4ba790f10d90bbaf07ed84654b98d938a7c3ba4",
+      "sha256": "d909f4445994abf87599c25ee4ba790f10d90bbaf07ed84654b98d938a7c3ba4"
+    },
+    {
+      "name": "material-doppelhaken",
+      "datei": "material-doppelhaken.svg",
+      "offset": 4765121,
+      "sourceFragmentSha256": "06b32d6268a388ca9491d05b53b6fdda20f1b82bb5a104e5b315dae3b546b13f",
+      "sha256": "06b32d6268a388ca9491d05b53b6fdda20f1b82bb5a104e5b315dae3b546b13f"
+    },
+    {
+      "name": "material-suchlupe",
+      "datei": "material-suchlupe.svg",
+      "offset": 4765444,
+      "sourceFragmentSha256": "f4c4b9333d1f3115b579d3a13119d3e73d81ba0070219f44b702d8c762bf953e",
+      "sha256": "f4c4b9333d1f3115b579d3a13119d3e73d81ba0070219f44b702d8c762bf953e"
+    },
+    {
+      "name": "material-info",
+      "datei": "material-info.svg",
+      "offset": 4765853,
+      "sourceFragmentSha256": "3de2e09a3c78e6fc00dbeb54f2fa5d6d54cfd927c0e7f44da7ae1178c65cc23d",
+      "sha256": "3de2e09a3c78e6fc00dbeb54f2fa5d6d54cfd927c0e7f44da7ae1178c65cc23d"
+    },
+    {
+      "name": "material-suche-klein",
+      "datei": "material-suche-klein.svg",
+      "offset": 4766192,
+      "sourceFragmentSha256": "6124b7cf5a24324962b3bd37af7f34e4160f71108d70c73ab4c1338a47d42df4",
+      "sha256": "6124b7cf5a24324962b3bd37af7f34e4160f71108d70c73ab4c1338a47d42df4"
+    },
+    {
+      "name": "material-einkauf",
+      "datei": "material-einkauf.svg",
+      "offset": 4766512,
+      "sourceFragmentSha256": "1d847f38de80ad3742592a01483a1ea149c1be4f6b0918849a76440cb3051de5",
+      "sha256": "1d847f38de80ad3742592a01483a1ea149c1be4f6b0918849a76440cb3051de5"
+    },
+    {
+      "name": "material-postfach",
+      "datei": "material-postfach.svg",
+      "offset": 4766941,
+      "sourceFragmentSha256": "759b2babc399d282e52b6b2de1dae70219f4befd6085c20219b2fed2c021193e",
+      "sha256": "759b2babc399d282e52b6b2de1dae70219f4befd6085c20219b2fed2c021193e"
+    },
+    {
+      "name": "material-funk",
+      "datei": "material-funk.svg",
+      "offset": 4767461,
+      "sourceFragmentSha256": "11030e6338f8fca0844abd0fd1546b8fccff23321274e95d89b77893494c250c",
+      "sha256": "11030e6338f8fca0844abd0fd1546b8fccff23321274e95d89b77893494c250c"
+    },
+    {
+      "name": "material-sprechblase",
+      "datei": "material-sprechblase.svg",
+      "offset": 4767888,
+      "sourceFragmentSha256": "ebdf25f551b3bc369af31814db165ddbc7879b76da8592c5de1203516b3565cc",
+      "sha256": "ebdf25f551b3bc369af31814db165ddbc7879b76da8592c5de1203516b3565cc"
+    },
+    {
+      "name": "material-karte",
+      "datei": "material-karte.svg",
+      "offset": 4768421,
+      "sourceFragmentSha256": "5a87c9719a41415f42bbd51785bd28ded4c62b534c5b2d7ba8d3a207449df4a3",
+      "sha256": "5a87c9719a41415f42bbd51785bd28ded4c62b534c5b2d7ba8d3a207449df4a3"
+    },
+    {
+      "name": "material-stecker",
+      "datei": "material-stecker.svg",
+      "offset": 4768778,
+      "sourceFragmentSha256": "d08c4414189555a3f71d45a13b03a070fa0fc3c55adc82d4f601fefd347a2c0b",
+      "sha256": "d08c4414189555a3f71d45a13b03a070fa0fc3c55adc82d4f601fefd347a2c0b"
+    },
+    {
+      "name": "material-pfeil-rechts",
+      "datei": "material-pfeil-rechts.svg",
+      "offset": 4769186,
+      "sourceFragmentSha256": "f56b53a71ff3b628098568dd01e871612a05e1414c02d15336aba8f22533bd72",
+      "sha256": "f56b53a71ff3b628098568dd01e871612a05e1414c02d15336aba8f22533bd72"
+    },
+    {
+      "name": "material-pfeil-rechts-variante",
+      "datei": "material-pfeil-rechts-variante.svg",
+      "offset": 4769495,
+      "sourceFragmentSha256": "a104778d56bfe50eccc59473a29998c3f18f15dbf4b79ec818cced0f0d5af2e0",
+      "sha256": "a104778d56bfe50eccc59473a29998c3f18f15dbf4b79ec818cced0f0d5af2e0"
+    },
+    {
+      "name": "inventur-ort-illustration",
+      "datei": "inventur-ort-illustration.svg",
+      "offset": 5094529,
+      "sourceFragmentSha256": "fa5c6a15e55010dd41c85d8e80c20566c061efa34cf64e1823d1ac1eb2c62823",
+      "sha256": "66f82e8cf25a262f7c4c611399f227d199c19a928f67396b078d5332c005ded5"
+    },
+    {
+      "name": "zahlenfeld-abbrechen",
+      "datei": "zahlenfeld-abbrechen.svg",
+      "offset": 5094805,
+      "sourceFragmentSha256": "f7ee44a83d29a82b780d260dbfc957ff4b32c00c8f969a5fbe61a15fa8aff9d2",
+      "sha256": "a3916acde6fff34164ec67c48f390f66dd49fa8352f40959e1acf6f1fd02cc62",
+      "quelle": "Quell-CSS `#gk-zahlpad button svg`"
+    },
+    {
+      "name": "zahlenfeld-minus",
+      "datei": "zahlenfeld-minus.svg",
+      "offset": 5095319,
+      "sourceFragmentSha256": "e1f3a1030018a9d08ec741176405d1f472ba07f42a04472113fee5ca6a5e8dc7",
+      "sha256": "b705cec284510507fbb799c1283978f28884189e0eac940a6db217b1507c7c67",
+      "quelle": "Quell-CSS `#gk-zahlpad button svg`"
+    },
+    {
+      "name": "zahlenfeld-plus",
+      "datei": "zahlenfeld-plus.svg",
+      "offset": 5096243,
+      "sourceFragmentSha256": "ecda316632d44ed28223e57e653b8371be41af36403fdc1c2eac3f5fe315eb35",
+      "sha256": "4a1b150da647aa8c5897729cf87e6b29f5ae4d8e17a9aec6f1a48d9d709b7445",
+      "quelle": "Quell-CSS `#gk-zahlpad button svg`"
+    },
+    {
+      "name": "zahlenfeld-loeschen",
+      "datei": "zahlenfeld-loeschen.svg",
+      "offset": 5096563,
+      "sourceFragmentSha256": "28b303ce9b26c4e4e6c0ca34ae38d0f7936e06e7cf9a4e0c2c5a58fbd625c46f",
+      "sha256": "0de02ae69530bd2a28529be3830792331f6661cb368192704406189547a2d378",
+      "quelle": "Quell-CSS `#gk-zahlpad button svg`"
+    },
+    {
+      "name": "zahlenfeld-tastatur",
+      "datei": "zahlenfeld-tastatur.svg",
+      "offset": 5096903,
+      "sourceFragmentSha256": "ff441179ac74c7178f543dcea9e6182234b752b4b49b122820ac84a521b8d602",
+      "sha256": "a7e56624a6532c3d619a817a67a84198260fab93b6f388aeda607aac29233842",
+      "quelle": "Quell-CSS `#gk-zahlpad button svg`"
+    },
+    {
+      "name": "app-dein-tag",
+      "datei": "app-dein-tag.svg",
+      "offset": 1736546,
+      "sourceFragmentSha256": "e4eaff9adc973419bae48cc73b7e679f691dbd4a71326ae6509bc97ebc5a2211",
+      "sha256": "8a574ee4654d4972c99722ba05e29b2220b560d537416f62d633c9160e28dbc9",
+      "quelle": "Pfade unverändert aus P[tag]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-werkstatt",
+      "datei": "app-werkstatt.svg",
+      "offset": 1736653,
+      "sourceFragmentSha256": "8f2612a8b65a4485817725ac614a58688da00e6bc66f7eb4178cbd6326d729e5",
+      "sha256": "6cf0cf291d7a481bced5e857c0aa58184779a641e9abcea5f1f6c13598c35271",
+      "quelle": "Pfade unverändert aus P[werkstatt]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-planung",
+      "datei": "app-planung.svg",
+      "offset": 1736814,
+      "sourceFragmentSha256": "4b7e7777ffe49cf92954f402ba152be802ef2503475c3d7c74496d037af08de6",
+      "sha256": "b0bb638bf865cead459259ce8b94153096e2ebc2d7755b8cf56f8b206771e451",
+      "quelle": "Pfade unverändert aus P[planung]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-nachrichten",
+      "datei": "app-nachrichten.svg",
+      "offset": 1736944,
+      "sourceFragmentSha256": "2fc38d00be9310c52cc5b93555706fbf148b17f1e7c960cba3d17e20236afdbd",
+      "sha256": "f49ccf325f89acab3cadce67c4a0e81fb00a9757652e7ae0462d02f0b1b70635",
+      "quelle": "Pfade unverändert aus P[nachrichten]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-auftraege",
+      "datei": "app-auftraege.svg",
+      "offset": 1737038,
+      "sourceFragmentSha256": "b60cda5cbb21561c14f9e8cb83693872ef5598e524de0e001340448fac10930a",
+      "sha256": "318911ba657604fbfbe54d9ababc94fb674a6abf56ddcd8d89c494d67ede1c96",
+      "quelle": "Pfade unverändert aus P[auftraege]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-zahlungen",
+      "datei": "app-zahlungen.svg",
+      "offset": 1737122,
+      "sourceFragmentSha256": "d6bab7b29de06bd1d8cd0765698c05091f6789d6ea0cefabb722f0a49a6037d6",
+      "sha256": "d71bf21b88f8d96148002887a43eb27d59328543c4b79b1ceeb4c927a2f30250",
+      "quelle": "Pfade unverändert aus P[zahlungen]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-einstellungen",
+      "datei": "app-einstellungen.svg",
+      "offset": 1737193,
+      "sourceFragmentSha256": "2bc3e6a75ae62744fa2e348d8efd78ccab92136153e6d4b4d313c6480a0ca51f",
+      "sha256": "80cfbfd926bb78125aa5d7832152e0417314db08734b933df53149a6af0a1310",
+      "quelle": "Pfade unverändert aus P[einstellungen]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-status-dreieck",
+      "datei": "app-status-dreieck.svg",
+      "offset": 1737314,
+      "sourceFragmentSha256": "2fd9d05a52dbc002f777b19666d287cc60da33eadb26361b6fa6807e521e8ed1",
+      "sha256": "95b601a5ff902781d37d1d44e618120fbba0b060c97330daab008f66945b1d06",
+      "quelle": "Pfade unverändert aus P[alert]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-zurueck",
+      "datei": "vorgang-zurueck.svg",
+      "offset": 1737393,
+      "sourceFragmentSha256": "167326a3cbdf3dbd51344664f9bcc241eda9f4ebb5f553fe765fa9b6f9225181",
+      "sha256": "6dfef4838a67d6f36f07d92cad4a17049c2d3586702e29488a0542c4d13eb6ba",
+      "quelle": "Pfade unverändert aus P[back]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-schliessen",
+      "datei": "fenster-schliessen.svg",
+      "offset": 1737434,
+      "sourceFragmentSha256": "1d8e24ff56a75bb09c86a58f843f752da41ba3967a442e4751bd5154fe3d14fc",
+      "sha256": "2b5322d68475c8651946cc2017d7df401f2b3dfc5ba1e70a1cfad13e4ff48471",
+      "quelle": "Pfade unverändert aus P[x]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-hinzufuegen",
+      "datei": "app-hinzufuegen.svg",
+      "offset": 1737478,
+      "sourceFragmentSha256": "690679d8e786e4aa2d0a55dda39cefa37a7c02998d53f9ac7e8cb1f766c46eb9",
+      "sha256": "d6335394f8667dcebc79c27546882a1ff3fae44e8ccc671b715ab182ece1f6bc",
+      "quelle": "Pfade unverändert aus P[plus]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-entnehmen",
+      "datei": "app-entnehmen.svg",
+      "offset": 1737517,
+      "sourceFragmentSha256": "cf70b18f6b23a5b8c968198188faa24c1716a5015ff8383bbe6e774910f6efa1",
+      "sha256": "cca52e2b66d2c601d3d35492e6644153ce41724daa682b60f58fd3f2ed6e8b7b",
+      "quelle": "Pfade unverändert aus P[minus]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-qr-code",
+      "datei": "app-qr-code.svg",
+      "offset": 1737545,
+      "sourceFragmentSha256": "32b9ae945799e0b5960e5ce27bbc7a158edeb9e1ae37701adac327dc2945756e",
+      "sha256": "7195df070d3e03a41a3b30f4f5c8e5c582e70c66fe4c218388d9c604c26dbb2d",
+      "quelle": "Pfade unverändert aus P[qr]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-drucken",
+      "datei": "app-drucken.svg",
+      "offset": 1737667,
+      "sourceFragmentSha256": "da24d382c4d85b915c09b89e95650f1d8d0d85b025a6cc136eceec7c499f0c5f",
+      "sha256": "d5824de149917e818885c36111492ab630f441593198fce34a66a28b1e736b7e",
+      "quelle": "Pfade unverändert aus P[print]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-verweis",
+      "datei": "app-verweis.svg",
+      "offset": 1737732,
+      "sourceFragmentSha256": "7a3bd4edcc3b80c668cb22ca9ebdc4c46d4fdbfd0d9114230c77805977ee1383",
+      "sha256": "bf594b0b06a29d5f65efc45ef6839805c5c0af8b8e3865754ab184f0d03a7f2e",
+      "quelle": "Pfade unverändert aus P[go]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-pfeil-rechts",
+      "datei": "app-pfeil-rechts.svg",
+      "offset": 1737778,
+      "sourceFragmentSha256": "63ac2689af529ab8710206f091fb8a51a239572b4d725a3fa351922f8f3ae16c",
+      "sha256": "398568e3927a124123f421659560a835885a90d5ed5cfcf86d91aa9cdd22fcce",
+      "quelle": "Pfade unverändert aus P[arrow]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-zum-detail",
+      "datei": "app-zum-detail.svg",
+      "offset": 1737821,
+      "sourceFragmentSha256": "faea700a8c9de1c5d3db725710b547a04f81bde3c0ed1d014b5ddf93deae8ab9",
+      "sha256": "c8ac051610539dd175725f88e2844a3e9d8339c9a35ff822eee6252505b07412",
+      "quelle": "Pfade unverändert aus P[chev]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-senden",
+      "datei": "app-senden.svg",
+      "offset": 1737857,
+      "sourceFragmentSha256": "14d1cdba63dbfb72991d64f6d6abd19e90357f8c1a75cef6fd4232bab8c7a174",
+      "sha256": "3b7f67d10e6d07cf505691b6364ce3ca6c49572ebcabbd70483d0bb43c713442",
+      "quelle": "Pfade unverändert aus P[send]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-erledigt",
+      "datei": "app-erledigt.svg",
+      "offset": 1737926,
+      "sourceFragmentSha256": "a075f2972012ca7dee00b854e651eaf969dfcdc8af0f05f3f708e154b19a6479",
+      "sha256": "efd1b475d165dbb3cb78ee364cefec778f4d3e22b3ffde904573e27e0583742c",
+      "quelle": "Pfade unverändert aus P[check]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-starten",
+      "datei": "app-starten.svg",
+      "offset": 1737972,
+      "sourceFragmentSha256": "068445c486e9ef530a17d69bb9743d30fe7a97d7e8d467b9ddb529f5e82af702",
+      "sha256": "601664ac6a7e43483bd1c0c6039ebc56310e084f284b6aca6cbc6a024a3c9e94",
+      "quelle": "Pfade unverändert aus P[play]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-anhalten",
+      "datei": "app-anhalten.svg",
+      "offset": 1738013,
+      "sourceFragmentSha256": "da8e51a6a37c48d06103f68e53e00360dda674adc2b8accf8d85cd2ca645cd5e",
+      "sha256": "a034afdd38e6fb7f99cbf0e0fb89bdb1ba4d7d00b9a09a44e66ad6cba8c56e17",
+      "quelle": "Pfade unverändert aus P[stop]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-uhr",
+      "datei": "app-uhr.svg",
+      "offset": 1738081,
+      "sourceFragmentSha256": "3c6d2d4fa2022dad9c6b4069ae5a03ebd3145a0e1a858a5b2074d065f16dc6e6",
+      "sha256": "9fb483ac84834af7bacad7dd6ed9dde502e2946ba45286301898151b285245e6",
+      "quelle": "Pfade unverändert aus P[clock]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-suche",
+      "datei": "app-suche.svg",
+      "offset": 1738152,
+      "sourceFragmentSha256": "1a02e7cefa255566503f19e944cf381310ecff958438ab3ef287e2a0ec7ffaeb",
+      "sha256": "5fe3c3a17b60cda3c08c2b3b09b9e06728a2d118ad5a4ada1cb0423ccdf1dbb4",
+      "quelle": "Pfade unverändert aus P[search]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-cam",
+      "datei": "app-cam.svg",
+      "offset": 1738222,
+      "sourceFragmentSha256": "9d71cfc83e1d270050e02d0ac4769dfcdcad4a1e51fdd964dccf95af2401d1a4",
+      "sha256": "33f0c4fadcd7f05298ae915638d26268e60293f5526b6a2c1c2d9697978d609b",
+      "quelle": "Pfade unverändert aus P[cam]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-file",
+      "datei": "app-file.svg",
+      "offset": 1738306,
+      "sourceFragmentSha256": "0d46fe0edf0e95c516890975fcf4ba83770d6fc767110908d21f11b7b88df6f6",
+      "sha256": "9097086c4ed38d50dd0ec2309fd115504cc3a093d3f54ccdef8864d37a72b1bf",
+      "quelle": "Pfade unverändert aus P[file]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-alle",
+      "datei": "werkstatt-alle.svg",
+      "offset": 1992756,
+      "sourceFragmentSha256": "ec3749f91ec10778981c3bf6f4432f8b5ff85175e1ef383bace4ff22e581cf2e",
+      "sha256": "90ec082ae8ce0f80c97ec956d4d9bc346bf692a373dcd2971fd9ee5961a5bcae",
+      "quelle": "Pfade unverändert aus paths[alle]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-wareneingang",
+      "datei": "werkstatt-wareneingang.svg",
+      "offset": 1992984,
+      "sourceFragmentSha256": "a351b4eabc98209ff38276ed68d04ffea26381fd14a50ed582238ca0bada6bad",
+      "sha256": "feaf9ffc249f191c3decdda68c6a1b91a70c8341c063884806ba3fa9b9c2aebc",
+      "quelle": "Pfade unverändert aus paths[ein]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-galvanik",
+      "datei": "werkstatt-galvanik.svg",
+      "offset": 1993074,
+      "sourceFragmentSha256": "7ff2cbee0da6c02f3c02b30a34932d0820926ea6773a0f1bd383d459d6fbafdc",
+      "sha256": "d0678b6bb625f8909781f0c6825df6ee74d7c604a69abc81a4d5acffdb096b82",
+      "quelle": "Pfade unverändert aus paths[bad]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-warenausgang",
+      "datei": "werkstatt-warenausgang.svg",
+      "offset": 1993178,
+      "sourceFragmentSha256": "e1451a583033538a28f9cdf86cbe40c124a71f6d754aaf420434e19611eedad4",
+      "sha256": "16041f6671971aa31c3830d7ecf8929ebad488f70767fdec88453c0ef174eacc",
+      "quelle": "Pfade unverändert aus paths[aus]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-filter",
+      "datei": "werkstatt-filter.svg",
+      "offset": 1993271,
+      "sourceFragmentSha256": "0c03ad32f9e88396c93ce16f0008247014cd3d81c31c774af08a9e11c59fe9d5",
+      "sha256": "1f733111f528a5cf33c0ff1b9a32e3a6c716fc0f62ff22d5315891cce795522d",
+      "quelle": "Pfade unverändert aus paths[filter]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-chevron",
+      "datei": "werkstatt-chevron.svg",
+      "offset": 1993321,
+      "sourceFragmentSha256": "6bb2dbf53e8ca42aa694025728b2733f62be90edb995a7d4e8154821e4c1edeb",
+      "sha256": "b00a12353cf566c572031e1c6a253e34b5acd2da4b490ffdc891a01e7cf6577a",
+      "quelle": "Pfade unverändert aus paths[chevron]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-zurueck",
+      "datei": "werkstatt-zurueck.svg",
+      "offset": 1993354,
+      "sourceFragmentSha256": "2528eeea6d5faac65dc13519176eef7a2d48445b1e9c93150eb82cfec542296e",
+      "sha256": "2aca338b3fc64d06b7f5ff20335028709bd3a1317e6a2a923eb3d86ce031e888",
+      "quelle": "Pfade unverändert aus paths[back]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-foto",
+      "datei": "werkstatt-foto.svg",
+      "offset": 1993392,
+      "sourceFragmentSha256": "02f11a03b0bfd7ef5c6ed4e6fc2645892a0e6345f01c44a90409d953786e0ad7",
+      "sha256": "4bf8a42135befb5997b526a16c5b2f7b660abb1f6de5f5e0cd39e1fdcbf187e0",
+      "quelle": "Pfade unverändert aus paths[foto]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-schliessen",
+      "datei": "werkstatt-schliessen.svg",
+      "offset": 1993475,
+      "sourceFragmentSha256": "7df5305fe08a2e053d4cc7e34d886c084475446b41adc61cf430df9c3c0caa39",
+      "sha256": "c55f2c1a4555fae3637a2e799d055b0bbfe9010c15b4c3a29fae57bbd4366d27",
+      "quelle": "Pfade unverändert aus paths[close]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-inbox",
+      "datei": "werkstatt-inbox.svg",
+      "offset": 1993521,
+      "sourceFragmentSha256": "adc6c40e1e911085f8913fcd59fdbf6c4d3bc6cd737e5ea122c1b337482d52ed",
+      "sha256": "b0e06926a71c8d247d7add711922dbc48bad39acb13ee46fac1131f241e5d831",
+      "quelle": "Pfade unverändert aus paths[inbox]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "werkstatt-bearbeiten",
+      "datei": "werkstatt-bearbeiten.svg",
+      "offset": 1993589,
+      "sourceFragmentSha256": "eb616148a345162fac465fb84d4e72391e9d68e524076f7d2eaef05a4559c217",
+      "sha256": "794ecc25f516d139cc0cff630aa056e335d41884b3f54fec3125ef115726818b",
+      "quelle": "Pfade unverändert aus paths[pen]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "hauptleiste-calendar",
+      "datei": "hauptleiste-calendar.svg",
+      "offset": 3072727,
+      "sourceFragmentSha256": "38c00cafaa6dabad039d60749a6663d80ebfbe2df1f968d1b09d730fd2550647",
+      "sha256": "a1761d430ef206834e855ce78abceaa9165c21cf0a2e5a42f233ea6aff905170",
+      "quelle": "Pfade unverändert aus icon[calendar]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "hauptleiste-notiz",
+      "datei": "hauptleiste-notiz.svg",
+      "offset": 3072852,
+      "sourceFragmentSha256": "b1858b72c1e6d3243b0bf6b2e056e364a29e700c8e1c843dc1acfe44e543deb8",
+      "sha256": "66f5ddcea02739b0c15df7d8f2d36b1e2f1a08f0fa6036ad7f36c9ea9328b117",
+      "quelle": "Pfade unverändert aus icon[note]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "hauptleiste-suche",
+      "datei": "hauptleiste-suche.svg",
+      "offset": 3073033,
+      "sourceFragmentSha256": "b98046450a67e3ca363405d4d55a284c818d69f4a73c78c75d36b413e6828fa2",
+      "sha256": "7b95e8f46a228ac80fadc23916d04d673e812d9792d289252d5369ee9bf18868",
+      "quelle": "Pfade unverändert aus icon[search]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "hauptleiste-intake",
+      "datei": "hauptleiste-intake.svg",
+      "offset": 3073111,
+      "sourceFragmentSha256": "00760901f2796de0b80d8d7665785e146a3afd5e2fad50a480c0d7e5c20d9017",
+      "sha256": "f2e46320b13d06b087bd568da90d6375666c01b11113d20bfc550eb6fd0a2d31",
+      "quelle": "Pfade unverändert aus icon[intake]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-today",
+      "datei": "dashboard-today.svg",
+      "offset": 3082641,
+      "sourceFragmentSha256": "e6ff3318cf611a7462198d8b1b3faef33714fac178f7a6a0b0382f4b408e7de2",
+      "sha256": "72484ea459047b77b42732c262736d4f2fd22fec216cd78e49110583f8fba652",
+      "quelle": "Pfade unverändert aus symbols[today]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-assign",
+      "datei": "dashboard-assign.svg",
+      "offset": 3082907,
+      "sourceFragmentSha256": "1a717eef7a33aa2f3c99fecc4c4303b7eff0840fb09e9e9e73df86ea1c7b2fee",
+      "sha256": "faeb0ec70970317dfaa17a6dc97e2a2a1f20a3534742f38491a3c1ac0660f0e8",
+      "quelle": "Pfade unverändert aus symbols[assign]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-money",
+      "datei": "dashboard-money.svg",
+      "offset": 3083220,
+      "sourceFragmentSha256": "ba0917bdb1ed5ff9a86925009ae715366d05884560eb4ac3b2e9c01a337dad84",
+      "sha256": "1c57018ba9efcccd7a2d6aeebaa69164387c8cee84a998de0c3d6921ed64250f",
+      "quelle": "Pfade unverändert aus symbols[money]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-dein-tag",
+      "datei": "dashboard-dein-tag.svg",
+      "offset": 3085088,
+      "sourceFragmentSha256": "38c00cafaa6dabad039d60749a6663d80ebfbe2df1f968d1b09d730fd2550647",
+      "sha256": "7c80e7ca895fd5083dc54b158ba3232e55c9769e55c0ed75396d036a656b5a71",
+      "quelle": "Pfade unverändert aus symbols[tag]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-werkstatt",
+      "datei": "dashboard-werkstatt.svg",
+      "offset": 3085218,
+      "sourceFragmentSha256": "1848137fb5aa0ce65c35b9e36e81e09c478666c08186050466a7fa70d1ed5bfa",
+      "sha256": "bdb3497928f39bc7cd6c56539c1dfe34db65caba4ca07768e728db496a53a9a2",
+      "quelle": "Pfade unverändert aus symbols[werkstatt]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-planung",
+      "datei": "dashboard-planung.svg",
+      "offset": 3085383,
+      "sourceFragmentSha256": "916fb8e56a99408890c94568040b5fd26ece28e9f36485e73ca535b5f3199a2c",
+      "sha256": "a782221401427bacbda61bc17410271cfb87c85e7ce5864dfce2534e4a097954",
+      "quelle": "Pfade unverändert aus symbols[planung]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-nachrichten",
+      "datei": "dashboard-nachrichten.svg",
+      "offset": 3085511,
+      "sourceFragmentSha256": "e46e7581d362770c94c27f869a650ca0efb3839dded63580b186fba7e75d325b",
+      "sha256": "01388fb0d9d602492766fc38cedc8eddd3c12db748f16219229da8464c48995e",
+      "quelle": "Pfade unverändert aus symbols[nachrichten]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-auftraege",
+      "datei": "dashboard-auftraege.svg",
+      "offset": 3085624,
+      "sourceFragmentSha256": "39fcda229890334c0f57b788edfb0147734daf0fb80b54dfb5dd6e48e152e0fa",
+      "sha256": "8afbb3a8bb6d31e3117b329e3cd480a3a699a3f253776d84222a6fc95695c6c2",
+      "quelle": "Pfade unverändert aus symbols[auftraege]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-lager",
+      "datei": "dashboard-lager.svg",
+      "offset": 3085741,
+      "sourceFragmentSha256": "bde605f7c7897a221bfa19738d3aa8a48b01a0c63ba539098dd7e2434ea3ec11",
+      "sha256": "77959c78dd70bcd3cd8b5456bbd2405e203eedc6e822a08682abb36393d3011c",
+      "quelle": "Pfade unverändert aus symbols[lager]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-zahlungen",
+      "datei": "dashboard-zahlungen.svg",
+      "offset": 3085882,
+      "sourceFragmentSha256": "1b0d16be5b3da312409cb1aafd68bc5bac055c8485f2ada63fa26ca1bca316be",
+      "sha256": "ed86f291036312f708c02e091c3eb7f755f5965b570df238a3e7bdd2f46c4463",
+      "quelle": "Pfade unverändert aus symbols[zahlungen]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "dashboard-einstellungen",
+      "datei": "dashboard-einstellungen.svg",
+      "offset": 3086032,
+      "sourceFragmentSha256": "5fe7f3675ff1ec9439c43a2a9b547b534586a03735e77ddea357769daaa7a0b1",
+      "sha256": "0d8cfd1c01132364a17d273a71ea68378512ee0ee9e93e9dfbaaaaf871b88398",
+      "quelle": "Pfade unverändert aus symbols[einstellungen]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "feld-today",
+      "datei": "feld-today.svg",
+      "offset": 3089590,
+      "sourceFragmentSha256": "bf7c953e1cac3a03f40baad1b684a007c780e026e01cd0c8e677611fd3d3c399",
+      "sha256": "8dcba51646f581f94efefb5473b649a01799c9c25ac34e52bb5dcc65097ea049",
+      "quelle": "Pfade unverändert aus signs[today]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "feld-assign",
+      "datei": "feld-assign.svg",
+      "offset": 3089685,
+      "sourceFragmentSha256": "6aa7783a654e01aa0789654e28c1139194ec7080380e192f8a8b27fd11d5cb41",
+      "sha256": "bf4eed69ece6aceab52c6b3417a5a9aee7fc64efc3f1b3672ca8c8a9f406eeb0",
+      "quelle": "Pfade unverändert aus signs[assign]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "feld-money",
+      "datei": "feld-money.svg",
+      "offset": 3089787,
+      "sourceFragmentSha256": "e636c2668bd78a5e39d448a47857704cac1ea971409d7e6d460234aa8236a087",
+      "sha256": "a0b00aefa5a2941062ba78d0ba7b04b8d7efd6ea83fb51148364846fc7e75a22",
+      "quelle": "Pfade unverändert aus signs[money]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "feld-notes",
+      "datei": "feld-notes.svg",
+      "offset": 3089936,
+      "sourceFragmentSha256": "d14d4f5d0f3f0505d1511ed24f5adf0d08aca44d399750ebbb32aa93202d9545",
+      "sha256": "1e5400113b6e7fb5ffcb0e0139bbd2d8f1a5a52bd716006ebc53fb58cc26a1a9",
+      "quelle": "Pfade unverändert aus signs[notes]; SVG-Rahmen aus dem Quellrenderer."
+    },
+    {
+      "name": "app-lager",
+      "datei": "app-lager.svg",
+      "offset": 1738409,
+      "sourceFragmentSha256": "4653cde1791d5ae905daa2a9b31ab6d20a4b14de466d08a291c3ffeb891ac917",
+      "sha256": "27144412f0d57180c6beedd3f85c6d87b3487d1026604a3000b0cae40eba2d5b",
+      "quelle": "Pfade unverändert aus einer späteren Zuweisung an P."
+    },
+    {
+      "name": "kalender-bearbeiten",
+      "datei": "kalender-bearbeiten.svg",
+      "offset": 3091014,
+      "sourceFragmentSha256": "1df46f4b9dd8ccde0c88ff3572788a33a969f10028e79ed08756ec7f450f328f",
+      "sha256": "381055ab18b0cd5f72e9432bf6176725e7f4917291a3878c6cf3c3764ca45b51",
+      "quelle": "Pfade und Rahmen unverändert aus Kalender-Renderer."
+    },
+    {
+      "name": "kalender-hinzufuegen",
+      "datei": "kalender-hinzufuegen.svg",
+      "offset": 3091135,
+      "sourceFragmentSha256": "690679d8e786e4aa2d0a55dda39cefa37a7c02998d53f9ac7e8cb1f766c46eb9",
+      "sha256": "f6ba9fdde0866c0df759dad2918e976be0e7a7028f540c5dd1fb57d2e7da2656",
+      "quelle": "Pfade und Rahmen unverändert aus Kalender-Renderer."
+    },
+    {
+      "name": "kalender-schliessen",
+      "datei": "kalender-schliessen.svg",
+      "offset": 3091178,
+      "sourceFragmentSha256": "7df5305fe08a2e053d4cc7e34d886c084475446b41adc61cf430df9c3c0caa39",
+      "sha256": "0c9fa1a135a8385669a7059336f135d2c3cf0f3505363a46e4e8359221e878b7",
+      "quelle": "Pfade und Rahmen unverändert aus Kalender-Renderer."
+    }
+  ],
+  "dynamisch": [
+    {
+      "index": 5,
+      "offset": 1738512,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 8,
+      "offset": 1964868,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 11,
+      "offset": 2146372,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 12,
+      "offset": 2210142,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 22,
+      "offset": 3074467,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 23,
+      "offset": 3083716,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 24,
+      "offset": 3090161,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 25,
+      "offset": 3090835,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    },
+    {
+      "index": 92,
+      "offset": 4772886,
+      "beschreibung": "Quellrenderer setzt Pfade oder Daten ein."
+    }
+  ]
+}

@@ -12,5 +12,11 @@ import {AUSGANG_NAVIGATION} from './ausgang';
 import {KALENDER_NAVIGATION} from './kalender';
 
 export type NavigationsEintrag = Readonly<{ id: string; text: string; icon: IconName; route: string; pfad: string | null; dockText: string | null; platz: 'liste' | 'unten' }>;
-export const NAVIGATION = [...FUNDAMENT_NAVIGATION,...EINGANG_NAVIGATION,...WERKSTATT_NAVIGATION,...ORDERS_NAVIGATION,...CUSTOMERS_NAVIGATION,...ACCOUNTING_NAVIGATION,...LAGER_NAVIGATION,...COMPLAINTS_NAVIGATION,...QUOTES_NAVIGATION,...AUSGANG_NAVIGATION,...KALENDER_NAVIGATION,...FUNDAMENT_NAVIGATION_UNTEN] as const;
+export const NAVIGATION = [...FUNDAMENT_NAVIGATION,...WERKSTATT_NAVIGATION,...EINGANG_NAVIGATION,...ORDERS_NAVIGATION,...CUSTOMERS_NAVIGATION,...LAGER_NAVIGATION,...ACCOUNTING_NAVIGATION,...COMPLAINTS_NAVIGATION,...QUOTES_NAVIGATION,...AUSGANG_NAVIGATION,...KALENDER_NAVIGATION,...FUNDAMENT_NAVIGATION_UNTEN] as const;
 export type Bereich = typeof NAVIGATION[number]['id'];
+
+export function sichtbareNavigation(ausgeblendet: readonly Bereich[]) {
+  const sichtbare = NAVIGATION.filter(eintrag => !ausgeblendet.includes(eintrag.id));
+  const auftragsrecht = sichtbare.some(eintrag => eintrag.id === ORDERS_NAVIGATION[0].id);
+  return auftragsrecht ? sichtbare.filter(eintrag => eintrag.id !== CUSTOMERS_NAVIGATION[0].id) : sichtbare;
+}

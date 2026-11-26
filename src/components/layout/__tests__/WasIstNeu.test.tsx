@@ -18,7 +18,8 @@ describe('AP-NEU P52 reading marker and real navigation boundary',()=>{
  it('keeps one login reading marker separate from another and shows newest entries first',()=>{
   const first=render(<WasIstNeu {...props}/>);expect(screen.getByRole('button',{name:/Was ist neu/})).toHaveTextContent(String(entries.length));
   fireEvent.click(screen.getByRole('button',{name:/Was ist neu/}));expect(screen.getByRole('dialog',{name:'Was ist neu'})).toBeVisible();
-  expect(screen.getByRole('dialog').parentElement?.className).toContain('kr-ebene');
+  expect(screen.getByRole('dialog')).toHaveAttribute('open');
+  expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal','true');
   expect(screen.getByRole('dialog').closest('.kr-app')).toBe(first.container.firstElementChild);
   expect(document.body.querySelectorAll('.kr-app')).toHaveLength(1);
   expect(screen.getByRole('button',{name:/^Was ist neu(?: · \d+ ungelesen)?$/})).not.toHaveTextContent(String(entries.length));
@@ -26,6 +27,19 @@ describe('AP-NEU P52 reading marker and real navigation boundary',()=>{
   const marker=localStorage.getItem('kreile:was-ist-neu:synthetic-public-login-A');expect(marker).toBeTruthy();first.unmount();
   render(<WasIstNeu {...props} loginHandle="synthetic-public-login-B"/>);expect(screen.getByRole('button',{name:/Was ist neu/})).toHaveTextContent(String(entries.length));
   expect(localStorage.getItem('kreile:was-ist-neu:synthetic-public-login-B')).toBeNull();
+ });
+ it('gibt den Fokus an den angetippten Knopf zurück, wenn der Browser ihn nicht fokussiert hat',()=>{
+  render(<><button type="button">TEST vorheriger Fokus</button><WasIstNeu {...props} geraet="handy"/></>);
+  const vorher=screen.getByRole('button',{name:'TEST vorheriger Fokus'});
+  const oeffner=screen.getByRole('button',{name:/^Was ist neu/});
+  expect(oeffner).toHaveTextContent('Was ist neu');
+  vorher.focus();
+  expect(vorher).toHaveFocus();
+  fireEvent.click(oeffner);
+  const dialog=screen.getByRole('dialog',{name:'Was ist neu'});
+  fireEvent.click(within(dialog).getAllByRole('button',{name:/^Schließen$/}).at(-1)!);
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(oeffner).toHaveFocus();
  });
  it('uses the canonical requested target and closes after navigation, while an unavailable future target stays visible',()=>{
   const navigate=vi.fn(()=>false);render(<WasIstNeu {...props} onNavigate={navigate}/>);fireEvent.click(screen.getByRole('button',{name:/Was ist neu/}));

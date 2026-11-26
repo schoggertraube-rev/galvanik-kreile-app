@@ -79,7 +79,7 @@ it('finds a delivered order Größe by the customer spelling Groesse',async()=>{
  window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'reklamation',arg:'TEST-customer#kundenwahl'},cancelable:true}));
  await screen.findByText('TEST Größe');
  const dialog=screen.getByRole('dialog',{name:'Vorgang wählen'});
- const input=within(dialog).getByRole('textbox');
+ const input=within(dialog).getByRole('searchbox',{name:'Auftragsnummer, Teil oder Oberfläche'});
  fireEvent.change(input,{target:{value:'Groesse'}});
  expect(within(dialog).getByText('TEST Größe')).toBeInTheDocument();
  fireEvent.change(input,{target:{value:'Xyzq'}});

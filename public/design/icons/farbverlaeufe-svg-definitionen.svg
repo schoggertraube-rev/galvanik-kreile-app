@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true"><defs>
+  <linearGradient id="f-blau" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#bcd3e6"/><stop offset=".6" stop-color="#f1f7fb"/><stop offset="1" stop-color="#88a9c6"/></linearGradient>
+  <linearGradient id="f-gelb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffbe0"/><stop offset=".45" stop-color="#e3cb6a"/><stop offset=".6" stop-color="#fbf2bd"/><stop offset="1" stop-color="#c2a23c"/></linearGradient>
+  <linearGradient id="f-chrom" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".4" stop-color="#9eabb2"/><stop offset=".55" stop-color="#ffffff"/><stop offset="1" stop-color="#7f8d95"/></linearGradient>
+  <linearGradient id="f-nickel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffaf0"/><stop offset=".45" stop-color="#cfc1a2"/><stop offset=".6" stop-color="#f6efdc"/><stop offset="1" stop-color="#a8997a"/></linearGradient>
+  <linearGradient id="ph-steel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b9b3a8"/><stop offset=".45" stop-color="#8d877d"/><stop offset=".6" stop-color="#a59f94"/><stop offset="1" stop-color="#6f6a62"/></linearGradient>
+  <linearGradient id="ph-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3e0d8"/><stop offset=".55" stop-color="#d2cec4"/><stop offset=".56" stop-color="#c3bfb4"/><stop offset="1" stop-color="#b3aea2"/></linearGradient>
+  <radialGradient id="ph-vig" cx=".5" cy=".45" r=".75"><stop offset=".6" stop-color="rgba(40,34,26,0)"/><stop offset="1" stop-color="rgba(40,34,26,.28)"/></radialGradient>
+  <path id="g-stange" d="M1.5 9.2c6.5-2.6 14.5-2.6 21 0v4.6c-1.2.9-1.8.9-3 0v-1.4c-5-1.6-10-1.6-15 0v1.4c-1.2.9-1.8.9-3 0z"/>
+  <path id="g-ring" fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 5.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9z"/>
+  <path id="g-zier" fill-rule="evenodd" d="M12 1.5a10.5 10.5 0 1 0 0 21 10.5 10.5 0 0 0 0-21zm0 3.6a6.9 6.9 0 1 1 0 13.8 6.9 6.9 0 0 1 0-13.8z"/>
+  <path id="g-bolt" d="M7 2.5h10v4.5h-2.5v13a2.5 2.5 0 0 1-5 0V7H7z"/>
+  <path id="g-griff" d="M3.5 21V11.5a8.5 8.5 0 0 1 17 0V21h-4.2v-9.5a4.3 4.3 0 0 0-8.6 0V21z"/>
+  <path id="g-platte" fill-rule="evenodd" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3.2 3.6a1.7 1.7 0 1 0 0 3.4 1.7 1.7 0 0 0 0-3.4zm7.6 7.4a1.7 1.7 0 1 0 0 3.4 1.7 1.7 0 0 0 0-3.4z"/>
+</defs></svg>

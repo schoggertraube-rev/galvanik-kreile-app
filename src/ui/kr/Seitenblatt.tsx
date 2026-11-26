@@ -1,8 +1,11 @@
 'use client';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { V45_TEXT } from '@/ui/situationCatalog';
 import { Button } from './Button';
 import { MitZustand } from './Zustand';
-import { isTopDialog } from './Dialog';
+import { Icon } from './Icon';
+import { useKrGeraet } from './AppShell';
+import { GlasDialog } from './design-final/GlasDialog';
 import type { DatenZustand, ZustandTexte } from './typen';
 export interface SeitenblattProps {
   /** aria-label, z. B. „Auftragskarte A-2026-0101“ – sichtbare Überschrift bleibt der Kartentitel */ titel: string;
@@ -14,35 +17,17 @@ export interface SeitenblattProps {
 }
 /** V1.1 B3: Karte als Seitenblatt – Desktop/Tablet von rechts, Handy von unten; Hintergrund bleibt sichtbar, Klick daneben schließt.
  *  „Fertig melden“ bleibt Dialog mit 3 Pflichtprüfungen (V5), danach Freeze – das Blatt verkürzt nichts. */
-export function Seitenblatt({ titel, onSchliessen: sofort, dataSpecId, zurueck, zustand = 'daten', texte, children }: SeitenblattProps) {
-  const [zu, setZu] = useState(false);
-  const dialogRef = useRef<HTMLElement>(null);
-  const layerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const header = document.querySelector<HTMLElement>('.kr-kopf');
-    if (!header) return;
-    // The global Plus remains reachable while a card is open; use the actual shell height.
-    const update = () => { if (layerRef.current) layerRef.current.style.top = `${header.getBoundingClientRect().bottom}px`; };
-    update();
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
-    observer?.observe(header); window.addEventListener('resize', update);
-    return () => { observer?.disconnect(); window.removeEventListener('resize', update); };
-  }, []);
-  const onSchliessen = () => { if (zu) return; if (matchMedia('(prefers-reduced-motion:reduce)').matches) return sofort(); setZu(true); setTimeout(sofort, 200); };
-  useEffect(() => { const h = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return;
-    if (!isTopDialog(dialogRef.current)) return;
-    e.preventDefault(); e.stopImmediatePropagation(); onSchliessen();
-  }; addEventListener('keydown', h); return () => removeEventListener('keydown', h); });
-  return (
-    <div ref={layerRef} className={zu ? 'kr-ebene kr-ebene--blatt kr-ebene--zu' : 'kr-ebene kr-ebene--blatt'} style={{pointerEvents:'auto'}} onClick={e => e.target === e.currentTarget && onSchliessen()}>
-      <section ref={dialogRef} data-spec-id={dataSpecId} className="kr-dialog kr-dialog--karte" role="dialog" aria-modal="true" aria-label={titel}>
-        <div className="kr-streifen" />
-        {zustand === 'daten' ? children : <div className="kr-karte"><div className="kr-karte-scroll" style={{ padding: 16 }}><MitZustand zustand={zustand} texte={{ titel, ...texte }}>{null}</MitZustand></div></div>}
-      </section>
-      {zurueck && <span className="kr-sr">{zurueck.text}</span>}
-    </div>
-  );
+export function Seitenblatt({ titel, onSchliessen, dataSpecId, zurueck, zustand = 'daten', texte, children }: SeitenblattProps) {
+  const [offen, setOffen] = useState(true);
+  const handy = useKrGeraet() === 'handy';
+  const [opener] = useState(() => typeof document !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null);
+  return <GlasDialog offen={offen} titel={titel} ansicht={handy ? 'blatt' : 'objekt'} groesse="akte"
+    oeffner={opener} nebenKopf={!handy} kopfVerborgen={zustand === 'daten'} dataSpecId={dataSpecId}
+    schliessenText={V45_TEXT.common$close} schliessenSymbol={<Icon name="x" />}
+    onSchliessen={() => setOffen(false)} onGeschlossen={onSchliessen}>
+    {zustand === 'daten' ? children : <MitZustand zustand={zustand} texte={{ titel, ...texte }}>{null}</MitZustand>}
+    {zurueck && <span className="kr-sr">{zurueck.text}</span>}
+  </GlasDialog>;
 }
 /** Zurück-Zeile oben im Kartenkopf-Bereich (in <Karte kopf> vor dem Kartenkopf einsetzen) */
 export function BlattZurueck({ text, onClick }: { text: string; onClick: () => void }) {
