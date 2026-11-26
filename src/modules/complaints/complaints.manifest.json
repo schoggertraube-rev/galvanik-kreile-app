@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "AP-EIN Teil 4 – Reklamation",
   "publicExports": [
+    "@/modules/complaints/server-public#tagQuellen",
     "@/modules/complaints/public#Complaint",
     "@/modules/complaints/public#ComplaintFilter",
     "@/modules/complaints/public#ComplaintReadResult",

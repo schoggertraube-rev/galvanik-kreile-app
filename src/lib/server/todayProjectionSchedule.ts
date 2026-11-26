@@ -5,8 +5,7 @@ import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 import {TAKT_READ_BUDGET_MS} from '@/modules/takt/public';
 
-export const TODAY_PROJECTOR_VERSION=1;
-export const TODAY_MODEL_LIST_KINDS=['orders','messages','money','complaints','quote_followups','quotes','tasks','company'] as const;
+export const TODAY_PROJECTOR_VERSION=2;
 
 /** Der Nachlauf liest unvollständige Zeilen erst bei einer neuen Änderung ihres Schlüssels. */
 export function todaySourceNeedsRebuild(day:string,fullRebuild=false){

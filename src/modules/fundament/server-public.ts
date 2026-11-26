@@ -42,3 +42,4 @@ export type {QuoteCalculationSettings} from './server/quoteSettingsPort';
 
 // Einstellungs-Leser ausgang
 export { readShippingSettings,readShippingSettingsInTransaction,updateShippingSettings } from "./server/systemSettingsPort";
+export {tagQuellen} from './server/tagQuellen';

@@ -3,28 +3,43 @@ import {sql} from 'drizzle-orm';
 import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import {boundedTodayRefreshBudgetMs,type TodayReadSettings} from '@/modules/fundament/public';
-import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
+import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction,tagQuellen as fundamentQuellen} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
-import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
-import {readManualShippingBatch} from '@/modules/orders/server-public';
-import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
-import {readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
-import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors} from '@/modules/quotes/server-public';
-import {readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
+import {readInvoiceVat,readCustomerCreditInTransaction,tagQuellen as accountingQuellen} from '@/modules/accounting/server-public';
+import {readManualShippingBatch,tagQuellen as ordersQuellen} from '@/modules/orders/server-public';
+import {readComplaintsForAuthorization,tagQuellen as complaintsQuellen} from '@/modules/complaints/server-public';
+import {readIntakeMessagesForAuthorization,tagQuellen as eingangQuellen} from '@/modules/eingang/server-public';
+import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors,tagQuellen as quotesQuellen} from '@/modules/quotes/server-public';
+import {readTaskForAuthorization,readQuoteFollowupTasksForToday,tagQuellen as tasksQuellen} from '@/modules/tasks/server-public';
 import {paymentReadAuthorization,type PaymentReadProfile,type PaymentReadAuthorization} from './paymentContract';
 import {readTodayOrderSources,type TodayOrderReadPorts} from './todayOrderRead';
 import {readLiveOrderCardSource} from './orderCardRead';
 import {getOperationalOrders} from './operationalOrders';
 import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
+import {fuegeTagQuellenZusammen} from '@/lib/today/todaySourceRegistry';
 import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {TODAY_PROJECTOR_VERSION,TODAY_MODEL_LIST_KINDS as TODAY_LIST_KINDS,todaySourceNeedsRebuild} from './todayProjectionSchedule';
-type TodaySourceKind='order'|typeof TODAY_LIST_KINDS[number];
+import {TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
+
+const TAG_QUELLEN=fuegeTagQuellenZusammen([
+ {modul:'orders',quellen:ordersQuellen},
+ {modul:'eingang',quellen:eingangQuellen},
+ {modul:'accounting',quellen:accountingQuellen},
+ {modul:'complaints',quellen:complaintsQuellen},
+ {modul:'quotes',quellen:quotesQuellen},
+ {modul:'tasks',quellen:tasksQuellen},
+ {modul:'fundament',quellen:fundamentQuellen},
+]);
+const auftragsQuelle=TAG_QUELLEN.find(quelle=>quelle.bestand?.umfang==='auftrag'&&quelle.bestand.leser==='order');
+if(!auftragsQuelle)throw Error('TODAY_PROJECTOR_ORDER_SOURCE_MISSING');
+const AUFTRAGSQUELLE='quelle:'+auftragsQuelle.id;
+const listenQuellen=new Map<string,string>(TAG_QUELLEN.flatMap(quelle=>quelle.bestand?.umfang==='mandant'
+ ? [[`quelle:${quelle.id}`,quelle.bestand.leser] as const]:[]));
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
 export type ProjectorAuthorization=Readonly<{tenantId:string;areas:readonly AccessArea[];permissions:readonly PermissionKey[];canReadArea:(area:AccessArea)=>boolean;canReadTaskArea:(area:AccessArea|null)=>boolean;payment:PaymentReadAuthorization;canReadOperationalQuotes:boolean;hasActiveProfiles:boolean;[projectionBrand]:true}>;
-type TodaySourceKey=Readonly<{kind:TodaySourceKind;sourceId:string}>;
+type TodaySourceKey=Readonly<{kind:string;sourceId:string}>;
 type TodayProjectionResult=
  | {code:'OK';payload:unknown;sourceVersion?:number;listed?:boolean}
  | {code:'GONE'}
@@ -108,7 +123,7 @@ function productivePorts():TodayProjectionPorts{
    // financial/task result. Keep every section unavailable for the live escape.
    if(!auth.hasActiveProfiles)return new Map(keys.map(key=>[todaySourceKey(key),{code:'SOURCE_INCOMPLETE' as const,errorCode:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING'}]));
    const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(new Date()).today,access=todaySourceAccess(auth);
-   const requestedOrderKeys=keys.filter(key=>key.kind==='order');
+   const requestedOrderKeys=keys.filter(key=>key.kind===AUFTRAGSQUELLE);
    const orderKeys:TodaySourceKey[]=[];
    if(requestedOrderKeys.length){
     let listedIds:ReadonlySet<string>|null=null;
@@ -125,40 +140,39 @@ function productivePorts():TodayProjectionPorts{
    if(orderKeys.length){
     const rows=await readTodayOrderSources(auth,orderKeys.map(key=>key.sourceId),orderPorts);
     await Promise.all(rows.map(async row=>{
-     const key='order:'+row.orderId,result=row.result;
+     const key=todaySourceKey({kind:AUFTRAGSQUELLE,sourceId:row.orderId}),result=row.result;
      if(result.code!=='OK'){values.set(key,source(result,false,'TODAY_PROJECTOR_ORDER_SOURCE_INCOMPLETE'));return;}
      const liveCardStatus=await readLiveOrderCardSource(auth,{orderId:row.orderId});
      if(liveCardStatus.code!=='OK'||liveCardStatus.data.version!==result.data.card.version){values.set(key,source({result,liveCardStatus},false,'TODAY_PROJECTOR_LIVE_CARD_SOURCE_INCOMPLETE'));return;}
      values.set(key,{code:'OK',payload:{result,liveCardStatus},sourceVersion:result.data.card.version,listed:true});
     }));
    }
-   await Promise.all(keys.filter(key=>key.kind!=='order').map(async key=>{
+   const bestandsLeser:Readonly<Record<string,()=>Promise<TodayProjectionResult>>>={
+    orders:async()=>source(access.orders?await orders(auth):{code:'FORBIDDEN'}),
+    messages:async()=>{const read=await readIntakeMessagesForAuthorization(auth,'offen');return source(read,known(read));},
+    complaints:async()=>{const read=await readComplaintsForAuthorization(auth);return source(read,known(read));},
+    company:async()=>{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise'),fresh:true});return source(read,known(read));},
+    quote_followups:async()=>source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day))),
+    money:async()=>{const read=await readTodayMoneySupport(auth,day);return source(read,!read.supportMissing.length&&[read.invoiceSource,read.prepaymentSource,read.collectionSource,read.invoiceMailSource].every(known));},
+    tasks:async()=>{const read=await readTaskForAuthorization(auth,{calendar:true});return source(read,known(read));},
+    quotes:async()=>{
+     // Keep the existing operational read capability and actor-bound masking.
+     const context={tenantId:auth.tenantId,capabilities:{canReadQuote:auth.canReadOperationalQuotes&&access.messages}};
+     const list=await listOpenQuotesCommand(context);
+     if(list.code!=='OK')return source({list},known(list));
+     const cards=await Promise.all(list.quotes.map(async quote=>{
+      const read=await readQuoteCommand(context,{quoteId:quote.quoteId});
+      const actors=read.code==='OK'?await readQuoteActors(context,{quoteId:read.quote.quoteId,version:read.quote.version}):null;
+      return {quoteId:quote.quoteId,read,actors,versionMatches:read.code==='OK'&&read.quote.version===quote.version};
+     }));
+     return source({list,cards},cards.every(card=>card.versionMatches&&card.actors?.code==='OK'));
+    }
+   };
+   await Promise.all(keys.filter(key=>key.kind!==AUFTRAGSQUELLE).map(async key=>{
     try{
-     let result:TodayProjectionResult;
-     switch(key.kind){
-      case 'orders':result=source(access.orders?await orders(auth):{code:'FORBIDDEN'});break;
-      case 'messages':{const read=await readIntakeMessagesForAuthorization(auth,'offen');result=source(read,known(read));break;}
-      case 'complaints':{const read=await readComplaintsForAuthorization(auth);result=source(read,known(read));break;}
-      case 'company':{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise'),fresh:true});result=source(read,known(read));break;}
-      case 'quote_followups':result=source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day)));break;
-      case 'money':{const read=await readTodayMoneySupport(auth,day);result=source(read,!read.supportMissing.length&&[read.invoiceSource,read.prepaymentSource,read.collectionSource,read.invoiceMailSource].every(known));break;}
-      case 'tasks':{const read=await readTaskForAuthorization(auth,{calendar:true});result=source(read,known(read));break;}
-      case 'quotes':{
-       // The live Today list uses the existing operational read capability;
-       // financial masking and all actor-bound U2 commands remain live.
-       const context={tenantId:auth.tenantId,capabilities:{canReadQuote:auth.canReadOperationalQuotes&&access.messages}};
-       const list=await listOpenQuotesCommand(context);
-       if(list.code!=='OK'){result=source({list},known(list));break;}
-       const cards=await Promise.all(list.quotes.map(async quote=>{
-        const read=await readQuoteCommand(context,{quoteId:quote.quoteId});
-        const actors=read.code==='OK'?await readQuoteActors(context,{quoteId:read.quote.quoteId,version:read.quote.version}):null;
-        return {quoteId:quote.quoteId,read,actors,versionMatches:read.code==='OK'&&read.quote.version===quote.version};
-       }));
-       result=source({list,cards},cards.every(card=>card.versionMatches&&card.actors?.code==='OK'));break;
-      }
-      default:throw Error('TODAY_PROJECTOR_KIND_INVALID');
-     }
-     values.set(todaySourceKey(key),result);
+     const leser=listenQuellen.get(key.kind);
+     if(!leser||!Object.hasOwn(bestandsLeser,leser))throw Error('TODAY_PROJECTOR_KIND_INVALID');
+     values.set(todaySourceKey(key),await bestandsLeser[leser]());
     }catch{values.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_SOURCE_FAILED'});}
    }));
    return values;
@@ -201,7 +215,7 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
   let payload:string|null=null;
   try{
    if(result.code==='OK'){
-    if(result.payload===undefined||row.kind==='order'&&(!Number.isSafeInteger(result.sourceVersion)||Number(result.sourceVersion)<0||typeof result.listed!=='boolean'))throw Error('TODAY_PROJECTOR_RESULT_INVALID');
+    if(result.payload===undefined||row.kind===AUFTRAGSQUELLE&&(!Number.isSafeInteger(result.sourceVersion)||Number(result.sourceVersion)<0||typeof result.listed!=='boolean'))throw Error('TODAY_PROJECTOR_RESULT_INVALID');
     payload=JSON.stringify(result.payload);if(payload===undefined)throw Error('TODAY_PROJECTOR_PAYLOAD_MISSING');
    }else if(result.code==='SOURCE_INCOMPLETE'){
     if(!/^[A-Z][A-Z0-9_]{0,99}$/.test(result.errorCode))throw Error('TODAY_PROJECTOR_ERROR_CODE_INVALID');
@@ -210,14 +224,14 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
   }catch{result={code:'SOURCE_INCOMPLETE',errorCode:'TODAY_PROJECTOR_ROW_FAILED'};payload=null;}
   return sql`(${row.kind}::text,${row.sourceId}::text,${row.sourceSeq}::bigint,${row.tenantSeq}::bigint,${row.day}::date,
    ${result.code}::text,${result.code==='SOURCE_INCOMPLETE'?result.errorCode:null}::text,${payload}::jsonb,
-   ${result.code==='OK'&&row.kind==='order'?result.sourceVersion:null}::integer,${result.code==='OK'&&row.kind==='order'?result.listed:null}::boolean)`;
+   ${result.code==='OK'&&row.kind===AUFTRAGSQUELLE?result.sourceVersion:null}::integer,${result.code==='OK'&&row.kind===AUFTRAGSQUELLE?result.listed:null}::boolean)`;
  });
  try{
   const saved=await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
    await lockProjectionSources(tx,tenantId,rows);
    return tx.execute(sql`UPDATE private.today_source_v1 source
    SET payload=build.payload,status=build.status,error_code=build.error_code,
-    listed=CASE WHEN build.status='GONE' THEN false WHEN build.kind='order' AND build.status='OK' THEN build.listed ELSE source.listed END,
+    listed=CASE WHEN build.status='GONE' THEN false WHEN build.kind=${AUFTRAGSQUELLE} AND build.status='OK' THEN build.listed ELSE source.listed END,
     source_version=build.source_version,built_seq=build.source_seq,built_tenant_seq=build.tenant_seq,built_day=build.day,
     projector_version=${TODAY_PROJECTOR_VERSION},built_at=statement_timestamp(),build_ms=${buildMs}
    FROM (VALUES ${sql.join(values,sql`, `)}) AS build(kind,source_id,source_seq,tenant_seq,day,status,error_code,payload,source_version,listed),private.today_tenant_v1 tenant
@@ -225,7 +239,7 @@ async function publishGroup(tenantId:string,lease:Lease,rows:readonly Snapshot[]
     AND tenant.tenant_id=source.tenant_id AND tenant.tenant_seq=build.tenant_seq
     AND tenant.tenant_seq=${lease.tenantSeq}::bigint
     AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
-    AND (build.kind<>'order' OR build.status<>'OK' OR EXISTS(SELECT 1 FROM public.orders orders
+    AND (build.kind<>${AUFTRAGSQUELLE} OR build.status<>'OK' OR EXISTS(SELECT 1 FROM public.orders orders
       WHERE orders.tenant_id=source.tenant_id AND orders.id=source.source_id AND orders.version=build.source_version))
    RETURNING source.source_id`);
   }));
@@ -262,12 +276,12 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   assertOwned();
   const auth=await projectorAuthorization(tenantId);
   if(rebuild){
-   const known=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{id:string;seq:string}>(sql`SELECT source_id AS id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenantId} AND kind='order' ORDER BY source_id`));
+   const known=await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<{id:string;seq:string}>(sql`SELECT source_id AS id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenantId} AND kind=${AUFTRAGSQUELLE} ORDER BY source_id`));
    const ids=await ports.listOrderIds(auth);
    if(ids.some(id=>typeof id!=='string'||!id.length||id.length>128)||new Set(ids).size!==ids.length)throw Error('TODAY_PROJECTOR_ORDER_LIST_INVALID');
-   const keys:TodaySourceKey[]=[...TODAY_LIST_KINDS.map(kind=>({kind,sourceId:'*'})),...ids.map(sourceId=>({kind:'order' as const,sourceId}))];
+   const keys:TodaySourceKey[]=[...Array.from(listenQuellen.keys(),kind=>({kind,sourceId:'*'})),...ids.map(sourceId=>({kind:AUFTRAGSQUELLE,sourceId}))];
    await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},async tx=>{
-    await lockProjectionSources(tx,tenantId,[...keys,...known.map(row=>({kind:'order' as const,sourceId:row.id}))]);
+    await lockProjectionSources(tx,tenantId,[...keys,...known.map(row=>({kind:AUFTRAGSQUELLE,sourceId:row.id}))]);
     const generation=await tx.execute<{initializing:boolean}>(sql`SELECT rebuilt_at IS DISTINCT FROM '-infinity'::timestamptz AS initializing
      FROM private.today_tenant_v1 WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint
       AND refresh_lease_until=${lease.token}::timestamptz FOR UPDATE`);
@@ -283,7 +297,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
     if(removed.length)await tx.execute(sql`UPDATE private.today_source_v1 source SET listed=false,status='GONE',payload=NULL,source_version=NULL,built_seq=source_seq,
      built_tenant_seq=${lease.tenantSeq}::bigint,built_day=${lease.day}::date,projector_version=${TODAY_PROJECTOR_VERSION},built_at=statement_timestamp()
      FROM (VALUES ${sql.join(removed.map(row=>sql`(${row.id}::text,${row.seq}::bigint)`),sql`, `)}) AS old(id,seq)
-     WHERE source.tenant_id=${tenantId} AND source.kind='order' AND source.source_id=old.id AND source.source_seq=old.seq
+     WHERE source.tenant_id=${tenantId} AND source.kind=${AUFTRAGSQUELLE} AND source.source_id=old.id AND source.source_seq=old.seq
       AND EXISTS(SELECT 1 FROM private.today_tenant_v1 tenant WHERE tenant.tenant_id=${tenantId} AND tenant.tenant_seq=${lease.tenantSeq}::bigint
        AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp())`);
    }));

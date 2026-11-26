@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "Path-1 Quotes (KV persistence and F1.1 conversion)",
   "publicExports": [
+    "@/modules/quotes/server-public#tagQuellen",
     "@/modules/quotes/public#ConvertQuoteInput",
     "@/modules/quotes/public#CreateQuoteInput",
     "@/modules/quotes/public#CreateQuoteResult",

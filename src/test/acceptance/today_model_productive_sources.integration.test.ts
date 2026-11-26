@@ -40,15 +40,20 @@ it('rebuilds all eight real list sources and both real order sources without any
  expect(result).toMatchObject({code:'OK',built:10,stale:0});
  const rows=await sql`SELECT kind,source_id,status,payload,source_seq=built_seq AS fresh,source_version FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
  expect(rows).toHaveLength(10);
+ expect([...new Set(rows.map(row=>row.kind))]).toEqual([
+  'quelle:accounting.geld','quelle:complaints.liste','quelle:eingang.nachrichten',
+  'quelle:fundament.firma','quelle:orders.auftrag','quelle:orders.liste',
+  'quelle:quotes.liste','quelle:quotes.nachfassen','quelle:tasks.aufgabe',
+ ]);
  for(const row of rows)expect(row,`${row.kind}:${row.source_id}`).toMatchObject({status:'OK',fresh:true});
  const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_REAL_AUTH_REQUIRED');
  const orders=await getOperationalOrders(resolved.data,{purpose:'today'});
- expect(rows.find(row=>row.kind==='orders')?.payload).toEqual(JSON.parse(JSON.stringify(orders)));
+ expect(rows.find(row=>row.kind==='quelle:orders.liste')?.payload).toEqual(JSON.parse(JSON.stringify(orders)));
  for(const order of [pickup,shipping]){
   const live=await readLiveOrderCard(resolved.data,{orderId:order.orderId});if(live.code!=='OK')throw Error('TEST_LIVE_CARD_REQUIRED');
   const {assignment,...facts}=live.data;
   const raw=assignment?((({isAssignedToCurrentUser,...value})=>{void isAssignedToCurrentUser;return value;})(assignment)):null;
-  const saved=rows.find(row=>row.kind==='order'&&row.source_id===order.orderId)!;
+  const saved=rows.find(row=>row.kind==='quelle:orders.auftrag'&&row.source_id===order.orderId)!;
   expect(saved.source_version).toBe(live.data.version);
   expect(saved.payload.liveCardStatus).toEqual(JSON.parse(JSON.stringify({code:'OK',data:{...facts,assignment:raw}})));
   expect(saved.payload.result.data.card.id).toBe(order.orderId);
@@ -67,12 +72,12 @@ it('keeps the real partial company result retryable while all other known source
  }},async()=>{
   await sql`UPDATE public.company_settings SET street='' WHERE tenant_id=${tenant}`;
   expect((await refreshTodayModel(tenant)).code).toBe('OK');
-  const [company]=await sql`SELECT status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='company'`;
+  const [company]=await sql`SELECT status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:fundament.firma'`;
   expect(company).toMatchObject({status:'SOURCE_INCOMPLETE',payload:{code:'VALIDATION_ERROR',missingFields:['street']}});
-  expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'company' AND status='OK'`).toEqual([{count:9}]);
+  expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:fundament.firma' AND status='OK'`).toEqual([{count:9}]);
  });
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
- expect(await sql`SELECT status,payload->>'code' AS code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='company'`).toEqual([{status:'OK',code:'OK'}]);
+ expect(await sql`SELECT status,payload->>'code' AS code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:fundament.firma'`).toEqual([{status:'OK',code:'OK'}]);
 });
 
 it('PL08:59 refuses to manufacture payment or task facts when no actual active profile remains',async()=>{
@@ -93,14 +98,14 @@ it('PL08:59 refuses to manufacture payment or task facts when no actual active p
   for(const row of rows)expect(row).toMatchObject({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING',payload:null});
   await sql`UPDATE public.app_users SET active=true WHERE tenant_id=${tenant} AND id=${readonly.actorId}::uuid`;
   expect((await rebuildTodayModel(tenant)).code).toBe('OK');
-  const unavailable=await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' ORDER BY source_id`;
+  const unavailable=await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' ORDER BY source_id`;
   expect(unavailable).toHaveLength(2);
   for(const row of unavailable)expect(row).toEqual({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ORDER_LIST_UNAVAILABLE'});
-  const denied=await sql`SELECT kind,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind IN ('orders','quotes','tasks') ORDER BY kind`;
+  const denied=await sql`SELECT kind,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind IN ('quelle:orders.liste','quelle:quotes.liste','quelle:tasks.aufgabe') ORDER BY kind`;
   expect(denied).toEqual([
-   {kind:'orders',payload:{code:'FORBIDDEN'}},
-   {kind:'quotes',payload:{list:{code:'FORBIDDEN',message:'Offene KVs dürfen mit dieser Rolle nicht gelesen werden.'}}},
-   {kind:'tasks',payload:expect.objectContaining({code:'FORBIDDEN'})},
+   {kind:'quelle:orders.liste',payload:{code:'FORBIDDEN'}},
+   {kind:'quelle:quotes.liste',payload:{list:{code:'FORBIDDEN',message:'Offene KVs dürfen mit dieser Rolle nicht gelesen werden.'}}},
+   {kind:'quelle:tasks.aufgabe',payload:expect.objectContaining({code:'FORBIDDEN'})},
   ]);
  });
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
@@ -127,7 +132,7 @@ it('uses fresh background firm settings after the real RSC cache already read th
    const prior=await readCompanyLetterSettings({tenantId:tenant,canRead:true});expect(prior.code).toBe('OK');
    await sql`UPDATE public.company_settings SET company_name='TEST current background sender',today_refresh_batch_limit=1 WHERE tenant_id=${tenant}`;
    expect(await refreshTodayModel(tenant)).toMatchObject({code:'OK',built:1,stale:0});
-   expect(await sql`SELECT payload->'company'->>'companyName' AS name FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='company'`).toEqual([{name:'TEST current background sender'}]);
+   expect(await sql`SELECT payload->'company'->>'companyName' AS name FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:fundament.firma'`).toEqual([{name:'TEST current background sender'}]);
   }finally{internals.A=previous;}
  });
 });
@@ -145,13 +150,13 @@ it('keeps a TEST-only order outside canonical Today membership without a page-tr
  const listed=await getOperationalOrders(resolved.data,{purpose:'today'});
  expect(listed.some(row=>row.id===order.orderId)).toBe(false);
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
- expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);
+ expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);
  const output=vi.spyOn(console,'info');
  try{
   await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction),true);
   const records=output.mock.calls.filter(call=>call[0]==='[TODAY_MODEL_SHADOW]').map(call=>JSON.parse(String(call[1])));
   expect(records).toEqual([]);
-  expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);
+  expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);
  }finally{output.mockRestore();}
 });
 
@@ -203,7 +208,7 @@ it('uses only the real existing diagnostic permission when no Cron credential is
   expect(accepted.status).toBe(204);expect(await accepted.text()).toBe('');
   expect(accepted.headers.get('Cache-Control')).toBe('private, no-store');
  }finally{vi.useRealTimers();}
- expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'order'`).toEqual([{count:8}]);
+ expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:orders.auftrag'`).toEqual([{count:8}]);
  expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
 });
 

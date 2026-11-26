@@ -32,3 +32,4 @@ export {reverseQuoteConversionCommand,readQuoteUndoContext} from './server/quote
 
 export {readQuoteActors} from "./server/quoteReads";
 export {readPackageQuoteHistory} from './server/quoteReads';
+export {tagQuellen} from './server/tagQuellen';
