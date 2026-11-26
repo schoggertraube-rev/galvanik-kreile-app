@@ -20,11 +20,14 @@ type TaktAusfallFakten = Readonly<{
   faelligFuer: string;
   laufstand: TaktLaufstand;
 }>;
+type TaktAusfallLesestand =
+  | {code: 'OK'; ausfaelle: TaktAusfallFakten[]}
+  | {code: 'SOURCE_INCOMPLETE'};
 
 /** Nur fällige, eingeschaltete Jobs zählen. Kalender und letztes echtes Ergebnis bleiben belegt. */
 export async function liesTaktAusfallFakten(
   context: Readonly<{tenantId: string}>, jetzt: Date,
-): Promise<{code: 'OK'; ausfaelle: TaktAusfallFakten[]} | {code: 'SOURCE_INCOMPLETE'}> {
+): Promise<TaktAusfallLesestand> {
   const {tenantId} = context;
   if (!tenantId || !Number.isFinite(jetzt.getTime())) return {code: 'SOURCE_INCOMPLETE'};
   try {
@@ -56,9 +59,10 @@ export async function liesTaktAusfallFakten(
   }
 }
 
-/** Use the same real outage for the row and the authorized restart. */
-export async function liesTaktAusfallZeilen(auth: Pick<AuthorizationSnapshot,'tenantId'|'permissions'>, jetzt: Date) {
-  const result=await liesTaktAusfallFakten(auth,jetzt);
+/** Add the actor's restart right only when presenting the tenant's facts. */
+function projektiereTaktAusfallZeilen(
+  auth: Pick<AuthorizationSnapshot,'permissions'>, result: TaktAusfallLesestand,
+) {
   if(result.code!=='OK')return result;
   const darfNeustart=darfTaktNeuStarten(auth);
   const zeilen=result.ausfaelle.map(({schluessel,laufstand})=>{
@@ -81,4 +85,9 @@ export async function liesTaktAusfallZeilen(auth: Pick<AuthorizationSnapshot,'te
     };
   });
   return {code:'OK' as const,zeilen};
+}
+
+/** Use the same real outage for the row and the authorized restart. */
+export async function liesTaktAusfallZeilen(auth: Pick<AuthorizationSnapshot,'tenantId'|'permissions'>, jetzt: Date) {
+  return projektiereTaktAusfallZeilen(auth,await liesTaktAusfallFakten(auth,jetzt));
 }
