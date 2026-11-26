@@ -484,7 +484,7 @@
       "src/test/acceptance/lager_stammdaten.integration.test.ts"
     ],
     "src/app/actions/takt.actions.ts#starteTaktJobNeu": [
-      "src/modules/takt/server/__tests__/tagQuellen.integration.test.ts"
+      "src/test/acceptance/s38b_takt_outage.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

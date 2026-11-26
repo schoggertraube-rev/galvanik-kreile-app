@@ -75,7 +75,7 @@ export async function liesTaktAusfallZeilen(auth: Pick<AuthorizationSnapshot,'te
     return {
       key:`${quelleId}:${schluessel}`,quelleId,
       gegenstand:zeit===null?job:TAKT_AUSFALL_COPY.seit(job,zeit),
-      handlung:darfNeustart?TAKT_AUSFALL_COPY.neustart(job):'',grund,
+      handlung:darfNeustart?TAKT_AUSFALL_COPY.neustart(job):TAKT_AUSFALL_COPY.nurSystemdiagnose,grund,
       faellig:null,rang:null,ziel:null,befehl:darfNeustart?'starteTaktJobNeu':null,
       bestand:{schluessel},
     };

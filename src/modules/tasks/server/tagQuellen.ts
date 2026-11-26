@@ -3,7 +3,8 @@ import {sql} from 'drizzle-orm';
 import {canReadTaskArea,isAccessArea} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {TASK_KIND_LABELS,TASK_TAG_COPY} from '../contract';
+import {TASK_TAG_COPY} from '@/ui/tasksCopy';
+import {TASK_KIND_LABELS} from '../contract';
 import {presentTaskSource,readTaskSourceInTransaction} from './taskService';
 
 const quelleId='tasks.aufgabe';

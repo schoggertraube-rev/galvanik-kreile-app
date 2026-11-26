@@ -19,6 +19,7 @@ export async function starteTaktJobNeu(input: unknown) {
     }
     return {code: ergebnis === 'nicht_reserviert' || ergebnis === 'besetzt' ? 'CONFLICT' as const : 'SOURCE_INCOMPLETE' as const};
   } catch {
+    console.error('[TAKT_MANUAL_RESTART_FAILED]');
     return {code: 'SOURCE_INCOMPLETE' as const};
   }
 }

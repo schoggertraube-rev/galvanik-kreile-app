@@ -8,6 +8,7 @@ export const TAKT_AUSFALL_COPY = {
   },
   erfolg: (job: string) => `${job} läuft wieder.`,
   verboten: 'Neu starten darf nur, wer die Systemdiagnose hat.',
+  nurSystemdiagnose: 'Nur mit Systemdiagnose',
   jobs: {
     heute_neuaufbau: 'Aktualisierung von „Der Tag“',
     protokoll_aufbewahrung: 'Aufräumen des Protokolls',
