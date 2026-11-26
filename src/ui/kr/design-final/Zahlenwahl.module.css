@@ -1,0 +1,174 @@
+.zahlfeld {
+  display: grid;
+  grid-template: var(--r53-form-zahl-grid);
+  gap: var(--r53-form-zahl-luecke);
+  padding: var(--r53-form-zahl-kopfpadd);
+  padding-block-start: var(--r53-form-zero);
+}
+.zahlfeld[data-r53-tastatur] {
+  grid-template: var(--r53-form-zahl-grid-tastatur);
+}
+.zahlfeld button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  inset: auto;
+  float: none;
+  min-width: var(--r53-form-pad-taste-min-width);
+  min-height: var(--r53-form-pad-taste-min-height);
+  margin: var(--r53-form-pad-taste-margin);
+  padding: var(--r53-form-pad-taste-padding);
+  gap: var(--r53-form-pad-taste-gap);
+  font: var(--r53-form-pad-taste-font);
+  color: var(--r53-form-pad-ink);
+  text-align: center;
+  letter-spacing: normal;
+  text-shadow: none;
+  -webkit-text-fill-color: currentColor;
+  border: var(--r53-form-pad-taste-border);
+  border-top-color: var(--r53-form-pad-taste-border-top-color);
+  border-radius: var(--r53-form-pad-taste-border-radius);
+  background: var(--r53-form-pad-taste-background);
+  box-shadow: var(--r53-form-pad-taste-box-shadow);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  transition: var(--r53-form-pad-taste-transition);
+}
+.zahlfeld button:active:not(:disabled) {
+  transform: var(--r53-form-pad-druck-transform);
+  box-shadow: var(--r53-form-pad-druck-box-shadow);
+}
+.zahlfeld button:focus-visible, .nativ:focus-visible {
+  outline: var(--r53-form-pad-fokus-outline);
+  outline-offset: var(--r53-form-pad-fokus-outline-offset);
+}
+.zahlfeld button:disabled {
+  opacity: var(--r53-form-pad-gesperrt-opacity);
+  cursor: default;
+}
+.zahlfeld button > svg {
+  width: var(--r53-form-pad-tastensymbol-width);
+  height: var(--r53-form-pad-tastensymbol-height);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--r53-form-pad-tastensymbol-stroke-width);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.wertgruppe {
+  grid-area: wert;
+  align-self: center;
+  min-width: var(--r53-form-pad-wertgruppe-min-width);
+}
+.wertfeld {
+  display: grid;
+  grid-template-columns: var(--r53-form-pad-wertfeld-grid-template-columns);
+  align-items: center;
+  gap: var(--r53-form-pad-wertfeld-gap);
+  isolation: isolate;
+  min-height: var(--r53-form-pad-wertfeld-min-height);
+  padding: var(--r53-form-pad-wertfeld-padding);
+  box-sizing: border-box;
+  border-radius: var(--r53-form-pad-wertfeld-border-radius);
+  border: var(--r53-form-pad-wertfeld-border);
+  border-bottom-color: var(--r53-form-pad-wertfeld-border-bottom-color);
+  background: var(--r53-form-pad-wertfeld-background);
+  box-shadow: var(--r53-form-pad-wertfeld-box-shadow);
+}
+.zahlfeld .schritt {
+  width: var(--r53-form-pad-schritt-width);
+  height: var(--r53-form-pad-schritt-height);
+  padding: var(--r53-form-pad-schritt-padding);
+  border-radius: var(--r53-form-pad-schritt-border-radius);
+  color: var(--r53-form-pad-schritt-color);
+}
+.abgelesen {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: var(--r53-form-pad-abgelesen-gap);
+  min-width: var(--r53-form-pad-abgelesen-min-width);
+  flex-wrap: wrap;
+}
+.wert {
+  display: block;
+  word-break: break-word;
+  text-align: center;
+  font: var(--r53-form-pad-wert-font);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--r53-form-pad-wert-letter-spacing);
+  color: var(--r53-form-pad-wert-color);
+}
+.einheit {
+  font: var(--r53-form-pad-einheit-font);
+  color: var(--r53-form-pad-einheit-color);
+}
+.nativ {
+  box-sizing: border-box;
+  width: var(--r53-form-pad-nativ-width);
+  min-width: var(--r53-form-pad-nativ-min-width);
+  min-height: var(--r53-form-pad-nativ-min-height);
+  font: var(--r53-form-pad-nativ-font);
+  text-align: center;
+  border-radius: var(--r53-form-pad-nativ-border-radius);
+  color: var(--r53-form-pad-nativ-color);
+  background: var(--r53-form-pad-nativ-background);
+  -webkit-text-fill-color: currentColor;
+}
+.hinweis {
+  margin: var(--r53-form-pad-hinweis-margin);
+  font: var(--r53-form-pad-hinweis-font);
+  color: var(--r53-form-pad-muted);
+}
+.ziffern {
+  grid-area: ziffern;
+  display: grid;
+  grid-template-columns: var(--r53-form-pad-ziffern-grid-template-columns);
+  gap: var(--r53-form-pad-ziffern-gap);
+}
+.zahlfeld .ziffer {
+  width: var(--r53-form-pad-ziffer-width);
+  min-height: var(--r53-form-pad-ziffer-min-height);
+  font: var(--r53-form-pad-ziffer-font);
+  font-variant-numeric: tabular-nums;
+}
+.werkzeug {
+  grid-area: werkzeuge;
+  display: flex;
+  align-items: center;
+  gap: var(--r53-form-pad-werkzeug-gap);
+  flex-wrap: wrap;
+}
+.zahlfeld .werkzeug button {
+  min-width: var(--r53-form-pad-werkzeug-min-width);
+  padding-inline: var(--r53-form-pad-werkzeug-padding-inline);
+  color: var(--r53-form-pad-werkzeug-color);
+  box-shadow: none;
+  border: var(--r53-form-pad-werkzeug-border);
+  background: var(--r53-form-pad-werkzeug-background);
+}
+.zahlfeld .uebernehmen {
+  grid-area: uebernehmen;
+  min-height: var(--r53-form-pad-uebernehmen-min-height);
+  padding-inline: var(--r53-form-pad-uebernehmen-padding-inline);
+  color: var(--r53-form-pad-uebernehmen-color);
+  background: var(--r53-form-pad-uebernehmen-background);
+  border-color: var(--r53-form-pad-uebernehmen-border-color);
+  border-bottom-color: var(--r53-form-pad-uebernehmen-border-bottom-color);
+  box-shadow: var(--r53-form-pad-uebernehmen-box-shadow);
+}
+.zahlfeld .ziffer[data-r53-nebentaste] {
+  color: var(--r53-form-pad-blue);
+  background: var(--r53-form-pad-nebentaste-background);
+}
+.hinweis[data-r53-ungueltig] {
+  color: var(--r53-form-pad-fehlhinweis-color);
+}
+.wertfeld[data-r53-ungueltig] {
+  border-color: var(--r53-form-pad-fehlwert-border-color);
+}
+@media (prefers-reduced-motion: reduce) { .zahlfeld button { transition:none; } }

@@ -41,6 +41,37 @@
 .moreHeader p{margin:6px 0 0;color:var(--text-muted);font-size:13px}
 .moreClose{width:46px;height:46px;flex:none;border:1px solid var(--neutral-gray-300);border-radius:13px;display:grid;place-items:center;background:var(--surface-card);color:var(--navy-900);cursor:pointer}
 .moreGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.moreDockGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--gb-dock-mehr-spalten), minmax(0, 1fr));
+  gap: var(--gb-dock-mehr-abstand);
+}
+.moreDockTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--gb-dock-mehr-knopfhoehe);
+  gap: var(--gb-dock-abstand);
+  padding: var(--gb-dock-mehr-abstand);
+  border-radius: var(--gb-dock-aktiv-radius);
+  color: inherit;
+  text-align: center;
+  text-decoration: none;
+  font: var(--gb-dock-mehr-schrift);
+}
+.moreDockTile:focus-visible { outline: var(--gb-fokus-breite) solid currentColor; outline-offset: -2px; }
+.moreDockTile svg { inline-size: var(--gb-icon-mass); block-size: var(--gb-icon-mass); }
+.moreDockAktionen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--gb-dock-mehr-abstand);
+  border-block-start: var(--gb-rand-breite) solid var(--gb-dock-rand);
+  padding-block-start: var(--gb-dock-mehr-abstand);
+}
+.moreDockAktionen > * { flex: 1 1 auto; }
+.moreDockAktionen > button { inline-size: auto; min-block-size: 44px; }
 .moreGrid .moreTile{width:100%;min-height:88px;padding:14px;border:1px solid var(--neutral-gray-300);border-radius:14px;display:flex;align-items:center;gap:12px;background:var(--bg-app-soft);color:var(--navy-900);font:inherit;text-align:left;cursor:pointer}
 .moreGrid .moreTile > svg{width:23px;height:23px;flex:none;color:var(--accent-orange)}
 .moreGrid .moreTile > span{display:grid;gap:3px}

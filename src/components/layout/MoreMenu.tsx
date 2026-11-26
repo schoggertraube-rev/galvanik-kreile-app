@@ -1,15 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { Inbox, LogOut, Mail, PackageCheck, Settings, X } from "lucide-react";
-import { useEffect,useRef,useState } from "react";
+import { Inbox, LogOut } from "lucide-react";
+import { useEffect,useRef,useState,type MouseEvent,type ReactNode } from "react";
 import { usePathname,useRouter } from "next/navigation";
 import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { requestGlobalCreate } from "./GlobalCreateFlow";
+import { Dialog, Icon } from '@/ui/kr';
+import { GlasNavigationsSymbol } from '@/ui/kr/design-final/Glasnavigation';
+import type { NavigationsEintrag } from '@/ui/navigation/register';
 import styles from "./TargetShell.module.css";
 
-export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function MoreMenu({ open, oeffner, onClose, ziele, werkzeuge, amDock }: {
+  open: boolean; oeffner?: HTMLButtonElement; onClose: () => void; ziele?: readonly NavigationsEintrag[]; werkzeuge?: ReactNode; amDock?: boolean;
+}) {
   const router = useRouter();
   const pathname=usePathname();
   const openedAtPath=useRef(pathname);
@@ -24,7 +29,21 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
     if(!open){openedAtPath.current=pathname;return;}
     if(pathname!==openedAtPath.current)onClose();
   },[pathname,open,onClose]);
-  const closeIfCurrentRoute=(href:string)=>{if(pathname===href)onClose();};
+  const closeIfCurrentRoute = (href: string, cancel: () => void) => {
+    if (new URL(href, window.location.href).href !== window.location.href) return false;
+    cancel();
+    onClose();
+    return true;
+  };
+  const nativeLink = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const {href} = event.currentTarget;
+    if (!closeIfCurrentRoute(href, () => event.preventDefault()) && amDock) {
+      // Die Seite tritt an die Stelle des geöffneten Blatts im Browserverlauf.
+      event.preventDefault();
+      window.location.replace(href);
+    }
+  };
 
   if (!open || !supportedProfile) return null;
 
@@ -38,33 +57,44 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
     }
   };
 
+  const zielStil = amDock ? styles.moreDockTile : styles.moreTile;
+  const erfassen = hasPermission("perm_data_orders") && (!amDock || !hasArea("eingang")) && (
+    <button type="button" className={styles.moreTile} onClick={() => { onClose(); requestGlobalCreate("DIRECT_INTAKE"); }}>
+      <Inbox aria-hidden="true" /><strong>Neu erfassen</strong>
+    </button>
+  );
+  const abmelden = <button type="button" className={styles.moreTile} onClick={() => void signOut()} disabled={busy}>
+    <LogOut aria-hidden="true" /><strong>Abmelden</strong>
+  </button>;
+
   return (
-    <div className={styles.moreBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={styles.moreSheet} role="dialog" aria-modal="true" aria-labelledby="more-title">
-        <header className={styles.moreHeader}>
-          <h2 id="more-title">Mehr</h2>
-          <button type="button" className={styles.moreClose} onClick={onClose} aria-label="Schließen"><X aria-hidden="true" /></button>
-        </header>
-        <div className={styles.moreGrid}>
-          {hasArea("mails") ? <a className={styles.moreTile} data-spec-id="navigation.nachrichten" href="/nachrichten" onClick={event=>{if(pathname==='/nachrichten'){event.preventDefault();onClose();}}}>
-            <Mail aria-hidden="true" /><strong>Nachrichten</strong>
+    <Dialog titel="Mehr" icon="grid" oeffner={oeffner} onSchliessen={onClose} beschaeftigt={busy} amDock={amDock}>
+        <div className={amDock ? styles.moreDockGrid : styles.moreGrid}>
+          {hasArea("mails") ? <a className={zielStil} data-spec-id="navigation.nachrichten" href="/nachrichten" onClick={nativeLink}>
+            <GlasNavigationsSymbol bereich="nachrichten" /><strong>Nachrichten</strong>
           </a> : null}
-          {hasPermission("perm_data_orders") ? <button type="button" className={styles.moreTile} onClick={() => { onClose(); requestGlobalCreate("DIRECT_INTAKE"); }}>
-            <Inbox aria-hidden="true" /><strong>Neu erfassen</strong>
-          </button> : null}
-          {hasPermission("perm_view_leitstand") ? <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={()=>closeIfCurrentRoute('/warendurchlauf')}>
-            <PackageCheck aria-hidden="true" /><strong>Werkstatt</strong>
+          {!amDock && erfassen}
+          {!amDock && hasPermission("perm_view_leitstand") ? <Link className={zielStil} href="/warendurchlauf" prefetch={false} onNavigate={event=>{closeIfCurrentRoute('/warendurchlauf',event.preventDefault);}}>
+            <GlasNavigationsSymbol bereich="werkstatt" /><strong>Werkstatt</strong>
           </Link> : null}
+          {ziele?.map(ziel => {
+            const props = {className: zielStil, 'data-spec-id': `navigation.${ziel.id}`, href: ziel.route};
+            const inhalt = <><GlasNavigationsSymbol bereich={ziel.id} ersatz={<Icon name={ziel.icon}/>} /><strong>{ziel.text}</strong></>;
+            return amDock
+              ? <a key={ziel.id} {...props} onClick={nativeLink}>{inhalt}</a>
+              : <Link key={ziel.id} {...props} prefetch={false} onNavigate={event => {closeIfCurrentRoute(ziel.route,() => event.preventDefault());}}>{inhalt}</Link>;
+          })}
           {settingsVisible ? (
-            <a className={styles.moreTile} href="/settings" onClick={event=>{if(pathname==='/settings'){event.preventDefault();onClose();}}}>
-              <Settings aria-hidden="true" /><strong>Einstellungen</strong>
+            <a className={zielStil} data-spec-id="navigation.einstellungen" href="/settings" onClick={nativeLink}>
+              <GlasNavigationsSymbol bereich="einstellungen" /><strong>Einstellungen</strong>
             </a>
           ) : null}
-          <button type="button" className={styles.moreTile} onClick={() => void signOut()} disabled={busy}>
-            <LogOut aria-hidden="true" /><strong>Abmelden</strong>
-          </button>
+          {!amDock && abmelden}
+          {!amDock && werkzeuge}
         </div>
-      </section>
-    </div>
+        {amDock && <div className={styles.moreDockAktionen}>
+          {werkzeuge}{erfassen}{abmelden}
+        </div>}
+    </Dialog>
   );
 }

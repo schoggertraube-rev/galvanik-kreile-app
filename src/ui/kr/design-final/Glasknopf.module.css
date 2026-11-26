@@ -1,0 +1,109 @@
+.knopf {
+  box-sizing: border-box;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--gb-null);
+  min-block-size: var(--gb-knopf-hoehe);
+  border: var(--gb-rand-breite) solid var(--gb-knopf-rand);
+  border-radius: var(--gb-knopf-radius);
+  padding: var(--gb-knopf-pad-y) var(--gb-knopf-pad-x);
+  gap: var(--gb-knopf-abstand);
+  background: var(--gb-knopf-glas);
+  color: var(--gb-knopf-tinte);
+  box-shadow: var(--gb-knopf-schatten);
+  font: var(--gb-knopf-schrift);
+  text-align: center;
+  touch-action: manipulation;
+  cursor: pointer;
+  transition: transform var(--gb-bewegung-knopf) var(--gb-bewegung-kurve),
+    box-shadow var(--gb-bewegung-knopf) var(--gb-bewegung-kurve),
+    filter var(--gb-bewegung-knopf) var(--gb-bewegung-kurve);
+}
+
+.knopf[data-ton='haupt'] {
+  justify-content: space-between;
+  border-color: var(--gb-haupt-rand);
+  background: var(--gb-haupt-glas);
+  color: var(--gb-hell);
+  box-shadow: var(--gb-haupt-schatten);
+  font: var(--gb-haupt-schrift);
+  text-align: start;
+}
+
+.knopf[data-ton='erfassung'] {
+  border-color: var(--gb-eingang-rand);
+  background: var(--gb-eingang-glas);
+  color: var(--gb-eingang-tinte);
+  box-shadow: var(--gb-eingang-schatten);
+}
+
+.knopf[data-ton='kritisch'] {
+  border-color: var(--gb-risiko-rand);
+  background: var(--gb-risiko-glas);
+  color: var(--gb-risiko-tinte);
+}
+
+.knopf[data-ton='leise'] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.knopf[data-form='kreis'], .knopf[data-form='quadrat'], .knopf[data-form='dock'] {
+  flex: none;
+  justify-content: center;
+  inline-size: var(--gb-knopf-symbolmass);
+  min-inline-size: var(--gb-knopf-symbolmass);
+  block-size: var(--gb-knopf-symbolmass);
+  min-block-size: var(--gb-knopf-symbolmass);
+  aspect-ratio: var(--gb-quadrat-verhaeltnis);
+  padding: var(--gb-null);
+  text-align: center;
+}
+
+.knopf[data-form='kreis'] { border-radius: var(--gb-kreis-radius); }
+.knopf[data-form='dock'] {
+  flex-direction: column;
+  inline-size: var(--gb-dock-erfassungsmass);
+  min-inline-size: var(--gb-dock-erfassungsmass);
+  block-size: var(--gb-dock-erfassungsmass);
+  min-block-size: var(--gb-dock-erfassungsmass);
+  border-radius: var(--gb-dock-erfassungsradius);
+  gap: var(--gb-dock-erfassungsabstand);
+  font: var(--gb-dock-schrift);
+}
+
+.knopf[data-form='text'][data-volle-breite] { inline-size: var(--gb-voll); }
+.text { min-inline-size: var(--gb-null); overflow-wrap: anywhere; }
+.symbol, .kugel { display: grid; flex: none; place-items: center; }
+.symbol { inline-size: var(--gb-icon-mass); block-size: var(--gb-icon-mass); }
+.symbol > *, .kugel > * { inline-size: var(--gb-voll); block-size: var(--gb-voll); }
+.kugel {
+  box-sizing: border-box;
+  inline-size: var(--gb-knopf-endkreis);
+  block-size: var(--gb-knopf-endkreis);
+  aspect-ratio: var(--gb-quadrat-verhaeltnis);
+  border-radius: var(--gb-kreis-radius);
+  padding: var(--gb-knopf-endkreis-pad);
+}
+
+.knopf[data-glasknopf-zustand='fehler'] { border-color: var(--gb-risiko-rand); }
+.knopf:is(:disabled, [aria-disabled='true']) { opacity: var(--gb-deaktiviert); cursor: default; }
+.knopf:focus-visible { outline: var(--gb-fokus-breite) solid var(--gb-fokus-tinte); outline-offset: var(--gb-fokus-abstand); }
+
+@media (hover: hover) and (pointer: fine) {
+  .knopf:not(:disabled, [aria-disabled='true']):hover { filter: brightness(var(--gb-knopf-helligkeit)); }
+}
+
+.knopf:not(:disabled, [aria-disabled='true']):is(:active, [data-glasknopf-zustand='gedrueckt']) {
+  transform: translateY(var(--gb-knopf-druckweg)) scale(var(--gb-knopf-druckverhaeltnis));
+  box-shadow: var(--gb-knopf-druckschatten);
+  transition-duration: var(--gb-bewegung-druck);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knopf { transition-duration: var(--gb-reduziert); }
+  .knopf:not(:disabled, [aria-disabled='true']):is(:active, [data-glasknopf-zustand='gedrueckt']) { transform: none; }
+}

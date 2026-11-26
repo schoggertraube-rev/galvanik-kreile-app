@@ -1,11 +1,18 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { cx } from './typen';
+import { EingabeMitWahl } from './design-final/Eingabewahl';
 export interface FeldProps { label: ReactNode; fehler?: string; fehlerSpecId?:string; voll?: boolean; className?: string; children: ReactNode; }
 /** Label (10,5px, Versal) + Steuerelement + optional Fehler. Keine Hilfetexte (§6.4). */
 export function Feld({ label, fehler, fehlerSpecId, voll, className, children }: FeldProps) {
   return <label className={cx('kr-feld', fehler && 'kr-feld--fehler', voll && 'kr-voll', className)}><span className="kr-feld-label">{label}</span>{children}{fehler && <span data-spec-id={fehlerSpecId} className="kr-feld-fehler">{fehler}</span>}</label>;
 }
-export function Eingabe(p: InputHTMLAttributes<HTMLInputElement>) { return <input {...p} className={cx('kr-eingabe', p.className)} />; }
+export function Eingabe(p: InputHTMLAttributes<HTMLInputElement>) {
+  const className = cx('kr-eingabe', p.className);
+  if (p.onChange && (p.type === 'date' || p.type === 'time' || p.type === 'number')) {
+    return <EingabeMitWahl {...p} className={className} />;
+  }
+  return <input {...p} className={className} />;
+}
 export interface AuswahlOption { wert: string; text: string; gesperrt?: boolean; }
 export function Auswahl({ optionen, ...p }: SelectHTMLAttributes<HTMLSelectElement> & { optionen: AuswahlOption[] }) {
   const gewaehlt = p.value !== undefined && p.value !== '' && optionen.some(option => option.wert === String(p.value) && !option.gesperrt);

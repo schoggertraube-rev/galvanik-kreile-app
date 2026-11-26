@@ -1,0 +1,28 @@
+.kopf { display: grid; gap: var(--kr-arbeit-auftragsabstand); min-inline-size: var(--kr-arbeit-null); color: var(--kr-arbeit-tinte); }
+.identitaet { display: grid; align-items: start; grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)) auto; gap: var(--kr-arbeit-abstand); }
+.identitaet:has(> .bild) { grid-template-columns: var(--kr-arbeit-auftragsfoto) minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)) auto; }
+.bild { display: block; appearance: none; inline-size: var(--kr-arbeit-voll); aspect-ratio: var(--kr-arbeit-quadrat); padding: var(--kr-arbeit-null); border: none; border-radius: var(--kr-arbeit-rund-karte); overflow: hidden; background: var(--kr-arbeit-bildgrund); box-shadow: var(--kr-arbeit-bildkante); }
+button.bild { cursor: pointer; }
+.bild img { display: block; inline-size: var(--kr-arbeit-voll); block-size: var(--kr-arbeit-voll); object-fit: cover; }
+.wortblock { display: grid; gap: var(--kr-arbeit-eng); justify-items: start; min-inline-size: var(--kr-arbeit-null); overflow-wrap: anywhere; }
+.titel { margin: var(--kr-arbeit-null); font-size: var(--kr-arbeit-auftragstitel); font-weight: var(--kr-arbeit-fett); line-height: var(--kr-arbeit-titelzeile); }
+.termin { display: inline-block; padding: var(--kr-arbeit-chippolster); border: var(--kr-arbeit-linie) solid var(--kr-arbeit-gruenkante); border-radius: var(--kr-arbeit-rund-minichip); background: var(--kr-arbeit-gruengrund); color: var(--kr-arbeit-gruentinte); font-size: var(--kr-arbeit-klein); }
+.verweise { display: flex; align-items: center; flex-wrap: wrap; gap: var(--kr-arbeit-abstand); min-inline-size: var(--kr-arbeit-null); }
+.verweise a { display: inline-flex; align-items: center; min-block-size: var(--kr-arbeit-touch); color: var(--kr-arbeit-link); font-size: var(--kr-arbeit-klein); font-weight: var(--kr-arbeit-fett); }
+.hinweis { display: flex; gap: var(--kr-arbeit-abstand); align-items: baseline; padding: var(--kr-arbeit-auftragshinweis); border: var(--kr-arbeit-linie) solid var(--kr-arbeit-neutral-kante); border-radius: var(--kr-arbeit-rund-karte); background: var(--kr-arbeit-neutral-grund); }
+.hinweis[data-ton="frist"] { border-color: var(--kr-arbeit-goldkante); background: var(--kr-arbeit-goldgrund); color: var(--kr-arbeit-goldtinte); }
+.hinweis[data-ton="sperre"] { border-color: var(--kr-arbeit-rotkante); background: var(--kr-arbeit-rotchip); color: var(--kr-arbeit-rottinte); }
+.hinweis svg { display: block; inline-size: var(--kr-arbeit-symbol); block-size: var(--kr-arbeit-symbol); }
+.fortschritt { display: grid; gap: var(--kr-arbeit-abstand); color: var(--kr-arbeit-neben); font-size: var(--kr-arbeit-klein); font-weight: var(--kr-arbeit-fett); }
+.fortschritt progress { appearance: none; inline-size: var(--kr-arbeit-voll); block-size: var(--kr-arbeit-fortschritt-hoehe); border: none; border-radius: var(--kr-arbeit-rund-voll); background: var(--kr-arbeit-fortschritt-grund); }
+.fortschritt progress::-webkit-progress-bar { border-radius: var(--kr-arbeit-rund-voll); background: var(--kr-arbeit-fortschritt-grund); }
+.fortschritt progress::-webkit-progress-value { border-radius: var(--kr-arbeit-rund-voll); background: var(--kr-arbeit-fortschritt-fuellung); }
+.fortschritt progress::-moz-progress-bar { border-radius: var(--kr-arbeit-rund-voll); background: var(--kr-arbeit-fortschritt-fuellung); }
+.reiter { display: flex; align-items: center; gap: var(--kr-arbeit-eng); min-inline-size: var(--kr-arbeit-null); overflow-x: auto; scrollbar-width: none; }
+.reiter::-webkit-scrollbar { display: none; }
+.reiter button { appearance: none; display: inline-flex; flex: none; align-items: center; gap: var(--kr-arbeit-abstand); min-block-size: var(--kr-arbeit-touch); padding: var(--kr-arbeit-zeilenpolster); border: var(--kr-arbeit-linie) solid var(--kr-arbeit-neutral-kante); border-radius: var(--kr-arbeit-rund-voll); background: var(--kr-arbeit-leseglas); color: var(--kr-arbeit-tinte); font: inherit; cursor: pointer; }
+.reiter button[aria-selected="true"] { color: var(--kr-arbeit-lichtkante); border-color: transparent; background: var(--kr-arbeit-reiter-aktiv); }
+.reiter button:disabled { opacity: var(--kr-arbeit-inaktiv); cursor: default; }
+.reiter svg { display: block; inline-size: var(--kr-arbeit-symbol); block-size: var(--kr-arbeit-symbol); }
+:is(.kopf, .reiter) :is(a, button):focus-visible { outline: var(--kr-arbeit-fokusring); outline-offset: var(--kr-arbeit-fokusabstand); }
+.reiter button:focus-visible { outline-offset: var(--kr-arbeit-innerer-fokus); }

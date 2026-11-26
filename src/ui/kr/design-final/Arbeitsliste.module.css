@@ -1,0 +1,171 @@
+.rahmen {
+  container: kr-arbeitsliste / inline-size;
+  min-inline-size: var(--kr-arbeit-null);
+  color: var(--kr-arbeit-tinte);
+}
+
+.liste { margin: var(--kr-arbeit-null); padding: var(--kr-arbeit-null); list-style: none; }
+.rahmen[data-layout="werkstatt"] .liste {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--kr-arbeit-kartenminimum), var(--kr-arbeit-voll)), var(--kr-arbeit-spalte)));
+  align-items: stretch;
+  gap: var(--kr-arbeit-rasterabstand);
+}
+.rahmen:not([data-layout="werkstatt"]) .liste {
+  padding: var(--kr-arbeit-innen);
+  border: var(--kr-arbeit-linie) solid var(--kr-arbeit-lichtkante);
+  border-radius: var(--kr-arbeit-rund-tafel);
+  background: var(--kr-arbeit-leseglas);
+  box-shadow: var(--kr-arbeit-leseschatten);
+}
+.zeile { min-inline-size: var(--kr-arbeit-null); overflow-wrap: anywhere; }
+.rahmen[data-layout="werkstatt"] .zeile {
+  display: grid;
+  align-content: start;
+  gap: var(--kr-arbeit-abstand);
+  padding: var(--kr-arbeit-innen);
+  border: var(--kr-arbeit-linie) solid var(--kr-arbeit-lichtkante);
+  border-radius: var(--kr-arbeit-rund-karte);
+  background: var(--kr-arbeit-kartenglas);
+  box-shadow: var(--kr-arbeit-kartenschatten);
+}
+.rahmen:not([data-layout="werkstatt"]) .zeile + .zeile {
+  border-block-start: var(--kr-arbeit-linie) solid var(--kr-arbeit-trennlinie);
+}
+.rahmen[data-layout="zahlungen"] .zeile[data-ton="sperre"] {
+  border: var(--kr-arbeit-linie) solid var(--kr-arbeit-rotkante);
+  border-radius: var(--kr-arbeit-rund-karte);
+  background: var(--kr-arbeit-rotgrund);
+}
+.rahmen[data-layout="nachrichten"] .zeile[data-aktiv="true"] {
+  border-radius: var(--kr-arbeit-rund-chip);
+  background: var(--kr-arbeit-aktive-nachricht);
+  box-shadow: var(--kr-arbeit-aktive-kante);
+}
+.kopf { display: flex; align-items: center; min-inline-size: var(--kr-arbeit-null); }
+.oeffnen {
+  appearance: none;
+  display: grid;
+  flex: var(--kr-arbeit-flex);
+  align-items: center;
+  grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)) max-content;
+  grid-template-areas: "titel zeit" "meta meta" "detail detail";
+  gap: var(--kr-arbeit-eng) var(--kr-arbeit-abstand);
+  box-sizing: border-box;
+  min-block-size: var(--kr-arbeit-touch);
+  min-inline-size: var(--kr-arbeit-null);
+  padding: var(--kr-arbeit-zeilenpolster);
+  border: none;
+  border-radius: var(--kr-arbeit-rund-chip);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+.oeffnen:has(.bild) {
+  grid-template-columns: var(--kr-arbeit-bild-gross) minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)) max-content;
+  grid-template-areas: "bild titel zeit" "bild meta meta" "bild detail detail";
+}
+button.oeffnen, .menue { cursor: pointer; }
+.oeffnen[data-gesten] { touch-action: pan-y pinch-zoom; user-select: none; }
+.oeffnen:focus-visible, .menue:focus-visible { outline: var(--kr-arbeit-fokusring); outline-offset: var(--kr-arbeit-fokusabstand); }
+
+.bild {
+  grid-area: bild;
+  display: grid;
+  place-items: center;
+  align-self: start;
+  aspect-ratio: var(--kr-arbeit-quadrat);
+  inline-size: var(--kr-arbeit-voll);
+  overflow: hidden;
+  color: var(--kr-arbeit-neben);
+  border-radius: var(--kr-arbeit-rund-bild);
+  background: var(--kr-arbeit-bildgrund);
+  box-shadow: var(--kr-arbeit-bildkante);
+}
+.bild img { display: block; inline-size: var(--kr-arbeit-voll); block-size: var(--kr-arbeit-voll); object-fit: cover; }
+.bild svg, .menue svg { inline-size: var(--kr-arbeit-symbol); block-size: var(--kr-arbeit-symbol); }
+.titel { grid-area: titel; font-size: var(--kr-arbeit-schrift); font-weight: var(--kr-arbeit-fett); line-height: var(--kr-arbeit-zeilenhoehe); }
+.rahmen[data-layout="werkstatt"] .titel { font-size: var(--kr-arbeit-werkstatt-schrift); font-weight: var(--kr-arbeit-grossgewicht); }
+.metaZeile { display: contents; }
+.meta { grid-area: meta; display: flex; align-items: center; flex-wrap: wrap; gap: var(--kr-arbeit-eng); min-inline-size: var(--kr-arbeit-null); color: var(--kr-arbeit-neben); }
+.meta, .zeit, .detail, .status { font-size: var(--kr-arbeit-klein); line-height: var(--kr-arbeit-zeilenhoehe); }
+.zeit { grid-area: zeit; justify-self: end; align-self: start; color: var(--kr-arbeit-neben); font-variant-numeric: tabular-nums; }
+.detail { grid-area: detail; }
+.punkte { display: inline-flex; gap: var(--kr-arbeit-eng); }
+.punkt { inline-size: var(--kr-arbeit-punkt); aspect-ratio: var(--kr-arbeit-quadrat); border-radius: var(--kr-arbeit-rund-voll); background: var(--kr-arbeit-punktton); }
+.status {
+  display: inline-block;
+  padding: var(--kr-arbeit-chippolster);
+  border-radius: var(--kr-arbeit-rund-minichip);
+  border: var(--kr-arbeit-linie) solid var(--kr-arbeit-statuskante);
+  color: var(--kr-arbeit-statustinte);
+  background: var(--kr-arbeit-statusgrund);
+  font-weight: var(--kr-arbeit-akzentgewicht);
+}
+.punkt, .status, .hinweis {
+  --kr-arbeit-punktton: var(--kr-arbeit-neben);
+  --kr-arbeit-statuskante: var(--kr-arbeit-neutral-kante);
+  --kr-arbeit-statusgrund: var(--kr-arbeit-neutral-grund);
+  --kr-arbeit-statustinte: var(--kr-arbeit-neutral-tinte);
+}
+:is(.punkt, .status, .hinweis)[data-ton="offen"] { --kr-arbeit-punktton: var(--kr-arbeit-blau); }
+:is(.punkt, .status, .hinweis)[data-ton="fertig"] {
+  --kr-arbeit-punktton: var(--kr-arbeit-gruen);
+  --kr-arbeit-statuskante: var(--kr-arbeit-gruenkante);
+  --kr-arbeit-statusgrund: var(--kr-arbeit-gruengrund);
+  --kr-arbeit-statustinte: var(--kr-arbeit-gruentinte);
+}
+:is(.punkt, .status, .hinweis)[data-ton="frist"] {
+  --kr-arbeit-punktton: var(--kr-arbeit-goldtinte);
+  --kr-arbeit-statuskante: var(--kr-arbeit-goldkante);
+  --kr-arbeit-statusgrund: var(--kr-arbeit-goldgrund);
+  --kr-arbeit-statustinte: var(--kr-arbeit-goldtinte);
+}
+:is(.punkt, .status, .hinweis)[data-ton="sperre"] {
+  --kr-arbeit-punktton: var(--kr-arbeit-rottinte);
+  --kr-arbeit-statuskante: var(--kr-arbeit-rotkante);
+  --kr-arbeit-statusgrund: var(--kr-arbeit-rotchip);
+  --kr-arbeit-statustinte: var(--kr-arbeit-rottinte);
+}
+.menue {
+  display: grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  inline-size: var(--kr-arbeit-touch);
+  block-size: var(--kr-arbeit-touch);
+  aspect-ratio: var(--kr-arbeit-quadrat);
+  padding: var(--kr-arbeit-null);
+  border: none;
+  border-radius: var(--kr-arbeit-rund-chip);
+  color: var(--kr-arbeit-tinte);
+  background: none;
+}
+.hinweis {
+  padding: var(--kr-arbeit-chippolster);
+  margin: var(--kr-arbeit-null);
+  border: var(--kr-arbeit-linie) solid var(--kr-arbeit-statuskante);
+  border-radius: var(--kr-arbeit-rund-chip);
+  color: var(--kr-arbeit-statustinte);
+  background: var(--kr-arbeit-statusgrund);
+  font-size: var(--kr-arbeit-klein);
+}
+.aktionen, .statusaktionen { display: grid; gap: var(--kr-arbeit-eng); min-inline-size: var(--kr-arbeit-null); }
+.statusaktionen { grid-template-columns: repeat(auto-fit, minmax(min(var(--kr-arbeit-statusminimum), var(--kr-arbeit-voll)), var(--kr-arbeit-spalte))); }
+.fuss { border-block-start: var(--kr-arbeit-linie) solid var(--kr-arbeit-trennlinie); color: var(--kr-arbeit-neben); }
+.hauptaktion > :is(button, a) { inline-size: var(--kr-arbeit-voll); }
+
+@container kr-arbeitsliste (max-width: 560px) {
+  .liste { grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)); }
+  .zeile .oeffnen:has(.bild) {
+    grid-template-columns: var(--kr-arbeit-bild-kompakt) minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte));
+  }
+  .zeile .titel { font-size: var(--kr-arbeit-kompakt-schrift); font-weight: var(--kr-arbeit-fett); }
+  .zeile .detail { display: none; }
+  .zeile .oeffnen { grid-template-columns: minmax(var(--kr-arbeit-null), var(--kr-arbeit-spalte)); grid-template-areas: "titel" "meta"; }
+  .zeile .oeffnen:has(.bild) { grid-template-areas: "bild titel" "bild meta"; }
+  .metaZeile { grid-area: meta; display: flex; align-items: center; flex-wrap: wrap; gap: var(--kr-arbeit-eng); min-inline-size: var(--kr-arbeit-null); }
+  .rahmen[data-layout="werkstatt"] .zeile { padding: var(--kr-arbeit-kompakt-innen); }
+  .rahmen[data-layout="werkstatt"] .hinweis, .rahmen[data-layout="werkstatt"] .aktionen { display: none; }
+}

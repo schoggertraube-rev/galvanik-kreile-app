@@ -1,0 +1,114 @@
+.schritt, .uebernehmen {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: normal;
+  line-height: var(--r53-form-zeit-tasten-line-height);
+  min-width: var(--r53-form-zeit-tasten-min-width);
+  display: grid;
+  place-items: center;
+  margin: var(--r53-form-zeit-tasten-margin);
+  color: inherit;
+  touch-action: manipulation;
+  transition: var(--r53-form-zeit-tasten-transition);
+}
+.schritt:active:not(:disabled), .uebernehmen:active:not(:disabled) {
+  transform: var(--r53-form-zeit-druck-transform);
+}
+.schritt:focus-visible, .uebernehmen:focus-visible {
+  outline: var(--r53-form-zeit-fokus-outline);
+  outline-offset: var(--r53-form-zeit-fokus-outline-offset);
+}
+.schritt:disabled, .uebernehmen:disabled {
+  opacity: var(--r53-form-zeit-gesperrt-opacity);
+  cursor: default;
+}
+.raeder {
+  display: grid;
+  grid-template-columns: var(--r53-form-zeit-raeder-grid-template-columns);
+  gap: var(--r53-form-zeit-raeder-gap);
+  margin: var(--r53-form-zeit-raeder-margin);
+}
+.spalte {
+  display: grid;
+  gap: var(--r53-form-zeit-spalte-gap);
+  justify-items: stretch;
+  min-width: var(--r53-form-zeit-spalte-min-width);
+  grid-template: var(--r53-form-zeit-grid);
+}
+.einheit {
+  text-align: center;
+  color: var(--r53-form-zeit-einheit-ink);
+  font: var(--r53-form-zeit-einheit-font);
+  margin-block-end: var(--r53-form-zeit-einheit-margin);
+  grid-area: var(--r53-form-zeit-einheit-area);
+}
+.schritt {
+  border: var(--r53-form-zeit-schritt-border);
+  border-radius: var(--r53-form-zeit-schritt-border-radius);
+  min-height: var(--r53-form-zeit-schritt-min-height);
+  padding: var(--r53-form-zeit-schritt-padding);
+  background: var(--r53-form-zeit-schritt-background);
+  box-shadow: var(--r53-form-zeit-schritt-box-shadow);
+  font-size: var(--r53-form-zeit-schritt-font-size);
+  line-height: var(--r53-form-zeit-schritt-line-height);
+  touch-action: manipulation;
+}
+.rad {
+  position: relative;
+  isolation: isolate;
+  height: var(--r53-form-zeit-rad-height);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  border-radius: var(--r53-form-zeit-rad-border-radius);
+  outline-offset: var(--r53-form-zeit-rad-outline-offset);
+  box-shadow: var(--r53-form-zeit-rad-box-shadow);
+  background: var(--r53-form-zeit-rad-background);
+  grid-area: var(--r53-form-zeit-rad-area);
+}
+.spur {
+  padding-block: var(--r53-form-zeit-spur-padding-block);
+  min-width: var(--r53-form-zeit-spur-min-width);
+}
+.wert {
+  display: grid;
+  place-items: center;
+  scroll-snap-align: center;
+  height: var(--r53-form-zeit-wert-height);
+  font: var(--r53-form-zeit-wert-font);
+  font-variant-numeric: tabular-nums;
+  color: var(--r53-form-zeit-wert-color);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.uebernehmen {
+  background: var(--r53-form-zeit-uebernehmen-background);
+  color: var(--r53-form-zeit-uebernehmen-color);
+  border: var(--r53-form-zeit-uebernehmen-border);
+  box-shadow: var(--r53-form-zeit-uebernehmen-box-shadow);
+  min-block-size: var(--r53-form-zeit-uebernehmen-height);
+  inline-size: var(--r53-form-zeit-uebernehmen-width);
+  border-radius: var(--r53-form-zeit-uebernehmen-radius);
+  margin-inline: var(--r53-form-zeit-uebernehmen-margin);
+  font-weight: var(--r53-form-zeit-uebernehmen-weight);
+  font-variant-numeric: tabular-nums;
+}
+.fehler {
+  margin: var(--r53-form-zeit-fehler-margin);
+  color: var(--r53-form-zeit-fehler-color);
+  font-size: var(--r53-form-zeit-fehler-font-size);
+}
+.wert[data-aktiv] {
+  color: var(--r53-form-zeit-wertaktiv-color);
+  font-size: var(--r53-form-zeit-wertaktiv-font-size);
+  font-weight: var(--r53-form-zeit-wertaktiv-font-weight);
+  letter-spacing: var(--r53-form-zeit-wertaktiv-letter-spacing);
+}
+.schritt:first-of-type { grid-area: var(--r53-form-zeit-minus-area); }
+.schritt:last-of-type { grid-area: var(--r53-form-zeit-plus-area); }
+.rad::-webkit-scrollbar { display:none; }
+@media (prefers-reduced-motion: reduce) { .schritt, .uebernehmen { transition:none; } }

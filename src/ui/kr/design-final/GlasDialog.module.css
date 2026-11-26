@@ -1,0 +1,229 @@
+.dialog {
+  box-sizing: border-box;
+  position: fixed;
+  inset: var(--r53-form-inset);
+  margin: var(--r53-form-window-margin, var(--r53-form-modal-margin));
+  inline-size: var(--r53-form-modal-width);
+  max-inline-size: none;
+  max-block-size: var(--r53-form-modal-height);
+  padding: var(--r53-form-zero);
+  color: var(--r53-form-modal-ink);
+  color-scheme: light;
+  font: var(--r53-form-modal-font);
+  background: var(--r53-form-modal-glass);
+  border: var(--r53-form-modal-border);
+  border-radius: var(--r53-form-modal-radius);
+  box-shadow: var(--r53-form-modal-shadow);
+  backdrop-filter: var(--r53-form-modal-filter);
+  overflow: hidden;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  animation: herein var(--r53-form-modal-dauer) var(--r53-form-modal-kurve) both;
+}
+
+.dialog[open][data-r53-ausgang] {
+  animation: hinaus var(--r53-form-modal-dauer) var(--r53-form-modal-kurve) both;
+}
+
+.dialog::backdrop {
+  background: var(--r53-form-modal-backdrop);
+  backdrop-filter: var(--r53-form-modal-backdrop-filter);
+}
+
+.dialog[data-r53-form="dock"]::backdrop { background: transparent; backdrop-filter: none; }
+.dialog[data-r53-form="dock"] .inhalt { padding: 0; }
+.dialog[data-r53-form="dock"] .kopf { display: contents; }
+.dialog[data-r53-form="dock"] .schliessen {
+  position: absolute;
+  inset-block-start: var(--gb-dock-mehr-innen);
+  inset-inline-end: var(--gb-dock-mehr-innen);
+}
+
+.dialog[data-r53-form="blatt"] {
+  margin: var(--r53-form-blatt-margin);
+  inline-size: var(--r53-form-blatt-width);
+  block-size: var(--r53-form-blatt-height);
+}
+
+.dialog[data-r53-form="objekt"] {
+  margin: var(--r53-form-objekt-margin);
+  inline-size: var(--r53-form-modal-width);
+  block-size: var(--r53-form-objekt-height);
+}
+
+.seitenebene {
+  position: fixed;
+  inset: var(--r53-app-kopf-ende) 0 0;
+  z-index: 50;
+  pointer-events: none;
+}
+.seitenhintergrund {
+  position: absolute;
+  inset: 0;
+  background: var(--r53-form-modal-backdrop);
+  backdrop-filter: var(--r53-form-modal-backdrop-filter);
+  pointer-events: auto;
+}
+.seitenebene .dialog[data-r53-neben-kopf] {
+  position: absolute;
+  inset: 0 0 0 auto;
+  margin: 0;
+  block-size: 100%;
+  max-block-size: 100%;
+}
+.seitenebene .inhalt { flex: 1; padding: 0; }
+
+.griff { display: none; }
+@media (max-width: 767px) {
+  .dialog[data-r53-form='blatt'] {
+    margin: auto 0 0;
+    padding-block-end: env(safe-area-inset-bottom);
+  }
+  .dialog:is([data-r53-form='blatt'], [data-r53-form='dock']) .griff {
+    display: grid;
+    flex: none;
+    place-items: center;
+    min-block-size: 24px;
+    touch-action: none;
+  }
+  .dialog[data-r53-form='dock'] .griff { min-block-size: var(--r53-form-icon-min); }
+  .griff::before {
+    content: '';
+    inline-size: 36px;
+    block-size: 4px;
+    border-radius: var(--gb-kreis-radius);
+    background: var(--r53-form-modal-close-ink);
+    opacity: .38;
+  }
+}
+
+.dialog[data-r53-form="zeitwahl"] {
+  margin: var(--r53-form-zeit-margin);
+  inline-size: var(--r53-form-zeit-width);
+  max-block-size: var(--r53-form-zeit-height);
+}
+
+.dialog[data-r53-form="zahlwahl"] {
+  margin: var(--r53-form-zahl-margin);
+  inline-size: var(--r53-form-zahl-width);
+  max-block-size: var(--r53-form-zahl-height);
+  border-bottom-color: var(--r53-form-zahl-bodenkante);
+  backdrop-filter: var(--r53-form-zahl-filter);
+}
+
+.dialog[data-r53-form="zahlwahl"] .schliessen {
+  border-radius: var(--r53-form-zahl-close-radius);
+}
+
+.dialog[data-r53-sichtfenster] {
+  inset-block-start: var(--r53-form-visible-top);
+  inset-block-end: auto;
+  margin-block: var(--r53-form-sicht-abstand);
+}
+
+.kopf {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r53-form-modal-head-gap);
+  padding: var(--r53-form-modal-head-padding);
+  border-bottom: var(--r53-form-modal-head-border);
+}
+
+.titelgruppe {
+  min-inline-size: var(--r53-form-zero);
+  overflow-wrap: anywhere;
+}
+
+.titel {
+  margin: var(--r53-form-zero);
+  font: var(--r53-form-modal-head-font);
+  letter-spacing: var(--r53-form-modal-head-letter);
+}
+
+.inhalt {
+  min-block-size: var(--r53-form-zero);
+  overflow-y: auto;
+  overflow-x: clip;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  scroll-padding-block: var(--r53-form-modal-scroll-padding);
+  padding: var(--r53-form-modal-body-padding);
+}
+
+.inhalt::-webkit-scrollbar {
+  display: none;
+}
+
+.fuss {
+  flex: none;
+  padding: var(--r53-form-modal-head-padding);
+  padding-block-end: max(var(--r53-form-modal-scroll-padding), env(safe-area-inset-bottom));
+}
+
+.schliessen {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  box-sizing: border-box;
+  inline-size: var(--r53-form-icon-min);
+  block-size: var(--r53-form-icon-min);
+  min-inline-size: var(--r53-form-icon-min);
+  min-block-size: var(--r53-form-icon-min);
+  border: var(--r53-form-modal-close-border);
+  border-radius: var(--r53-form-modal-close-radius);
+  background: var(--r53-form-modal-close-glass);
+  box-shadow: var(--r53-form-modal-close-shadow);
+  color: var(--r53-form-modal-close-ink);
+  cursor: pointer;
+  touch-action: manipulation;
+  padding: var(--r53-form-zero);
+  transition: transform var(--r53-form-druck-dauer) var(--r53-form-druck-kurve);
+}
+
+.schliessen[data-r53-schliessen="text"] {
+  inline-size: auto;
+  background: none;
+  box-shadow: none;
+  border: none;
+  padding: var(--r53-form-zeit-close-padding);
+  font: var(--r53-form-zeit-close-font);
+}
+
+.schliessen:focus-visible {
+  outline: var(--r53-form-focus-ring);
+  outline-offset: var(--r53-form-focus-offset);
+}
+
+.schliessen:active:not(:disabled) {
+  transform: var(--r53-form-druck);
+}
+
+.schliessen:disabled {
+  opacity: var(--r53-form-deaktiviert);
+  cursor: default;
+}
+
+.schliessen > svg {
+  display: block;
+  inline-size: var(--r53-form-icon-grafik);
+  block-size: var(--r53-form-icon-grafik);
+}
+
+@keyframes herein {
+  from { opacity: var(--r53-form-modal-tritt-opacity); transform: var(--r53-form-modal-tritt); }
+  to { opacity: var(--r53-form-voll); transform: none; }
+}
+
+@keyframes hinaus {
+  to { opacity: var(--r53-form-modal-tritt-opacity); transform: var(--r53-form-modal-tritt); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog[open], .dialog[open][data-r53-ausgang], .schliessen { animation: none; transition: none; }
+}
