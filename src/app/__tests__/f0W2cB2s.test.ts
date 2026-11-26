@@ -84,13 +84,13 @@ describe("F0 W2C-B2S page truth containment", () => {
     },
   );
 
-  it("keeps retired admin routes out of settings while retaining embedded real tools", () => {
-    const settings = source("src/app/settings/SettingsClient.tsx");
+  it("keeps retired admin routes out of the active settings surface", () => {
+    const settings = source("src/app/settings/SettingsAdminClient.tsx");
     expect(settings).not.toMatch(
       /href=["']\/(?:admin\/(?:analytics|testanalyse)|kvp)/,
     );
-    expect(settings).toContain("<AdminDevicesClient />");
-    expect(settings).toContain("<DataImportCenter />");
+    expect(source("src/app/settings/SettingsAppAdapter.tsx")).toContain("<SettingsAdminClient");
+    expect(existsSync(resolve(root, "src/app/settings/SettingsClient.tsx"))).toBe(false);
   });
 });
 

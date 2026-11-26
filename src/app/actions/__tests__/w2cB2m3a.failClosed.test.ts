@@ -21,13 +21,11 @@ function expectNoPortCalls() {
 describe("W2C B2M3A fail-closed commands", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("denies every cockpit, service, and repository writer without data or port access", async () => {
-    const [cockpit, { eventsRepository }, { labelService }, { intakeService }] = await Promise.all([
-      import("@/app/cockpit/actions"),
+  it("denies service and repository writers without data or port access", async () => {
+    const [{ eventsRepository }, { labelService }, { intakeService }] = await Promise.all([
       import("@/lib/repositories/eventsRepository"), import("@/lib/services/labelService"), import("@/lib/services/intakeService"),
     ]);
 
-    await expect(cockpit.savePhoneNote({ raw_text: "note", category: "x", urgency: "x" })).resolves.toEqual({ ok: false, error: "NOT_AVAILABLE", message: denial });
     await expect(eventsRepository.addEvent({ eventType: "NOTE_ADDED" })).resolves.toEqual({ ok: false, error: "NOT_AVAILABLE", message: denial });
     await expect(eventsRepository.getAll()).resolves.toEqual([]);
     await expect(labelService.generateLabel("order-1")).resolves.toEqual({ ok: false, error: "NOT_AVAILABLE", message: denial });
@@ -41,9 +39,9 @@ describe("W2C B2M3A caller quarantine", () => {
     const files = await Promise.all([
       "components/telefonnotiz/TelefonnotizDesktop.tsx", "app/kommunikation/KommunikationClient.tsx", "app/kommunikation/PhoneNoteDetailView.tsx",
       "components/intake/IntakeCompletionSummary.tsx",
-      "app/cockpit/components/AgingKachel.tsx", "lib/repositories/eventsRepository.ts",
+      "lib/repositories/eventsRepository.ts",
     ].map((file) => readFile(path.join(root, file), "utf8")));
-    const [phoneDesktop, kommunikation, detail, intake, aging, events] = files;
+    const [phoneDesktop, kommunikation, detail, intake, events] = files;
 
     for (const source of [phoneDesktop, kommunikation, detail, intake]) {
       expect(source).toContain("FoundationUnavailable");
@@ -57,14 +55,9 @@ describe("W2C B2M3A caller quarantine", () => {
       "components/orders/LabelPrintView.tsx",
       "modules/orders/legacy-ui/OrderActionGrid.tsx",
       "modules/orders/legacy-ui/LabelPrintView.tsx",
+      "app/cockpit/components/AgingKachel.tsx",
+      "app/cockpit/actions.ts",
     ]) expect(existsSync(path.join(root, file))).toBe(false);
-    expect(aging).toContain("BUCKET_ORDER");
-    expect(aging).toContain("LABELS");
-    expect(aging).toContain("getAgingBucket");
-    expect(aging).toMatch(/dataPayload\.payload[\s\S]*bucketId/);
-    expect(aging).toContain("getAgingDaten");
-    expect(aging).toContain("getAgingRechnungen");
-    expect(aging).not.toMatch(/savePhoneNote|Telefonnotiz erfassen|handlePhone|handleSavePhoneNote/);
     expect(events).not.toMatch(/localStorage|createId|Date\.|createStatusEvent|getRecentStatusEvents/);
   });
 });

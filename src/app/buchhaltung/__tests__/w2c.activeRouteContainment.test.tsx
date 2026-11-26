@@ -66,7 +66,10 @@ const forbiddenTargets = [
   'src/lib/buchhaltung/index.ts',
   'src/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts',
   'src/components/analytics/AnalyticsDrillDrawer.tsx',
-].map((path) => comparisonKey(canonicalExistingPath(resolve(repoRoot, path))));
+].map((path) => {
+  const absolute = resolve(repoRoot, path);
+  return comparisonKey(existsSync(absolute) ? canonicalExistingPath(absolute) : absolute);
+});
 const forbiddenBindings = new Set(['getBuchhaltungProvider']);
 const srcRootKey = comparisonKey(canonicalExistingPath(srcRoot));
 
@@ -249,7 +252,16 @@ describe('W2C accounting active-route containment', () => {
       '../analysis.actions', '../actions', '../../buchhaltung/search-actions', '@/components/analytics/AnalyticsDrillDrawer',
       '../periodenabschluss/actions', '../periodenabschluss/PeriodenabschlussClient',
     ]));
-    expect(analysis.resolvedTargets).toEqual(new Set(forbiddenTargets));
+    expect(analysis.resolvedTargets).toEqual(new Set([forbiddenTargets[0], forbiddenTargets[2]]));
+    expect(analysis.edges.filter(edge => edge.unresolved).map(edge => edge.specifier)).toEqual([
+      '../BuchhaltungCockpitClient',
+      '@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider',
+      '@/lib/buchhaltung',
+      '../analysis.actions',
+      '@/components/analytics/AnalyticsDrillDrawer',
+      '../periodenabschluss/actions',
+      '../periodenabschluss/PeriodenabschlussClient',
+    ]);
     expect([...analysis.bindings]).toEqual(expect.arrayContaining(['DefaultClient', 'provider', 'getBuchhaltungProvider', 'Actions']));
     expect(analysis.moduleSpecifiers).not.toContain('@/app/buchhaltung/actions');
   });
@@ -257,37 +269,44 @@ describe('W2C accounting active-route containment', () => {
   it('ignores type-only import-equals and export edges while retaining mixed runtime edges', () => {
     const entryPath = resolve(appRoot, 'buchhaltung/fristen/page.tsx');
     const typeOnlyImportEquals = analyzeImports(entryPath, "import type Actions = require('../actions');");
-    const typeOnlyExport = analyzeImports(entryPath, "export { type ActionResult } from '../analysis.actions';");
-    const mixedExport = analyzeImports(entryPath, "export { type ActionResult, value } from '../analysis.actions';");
-    const mixedImport = analyzeImports(entryPath, "import { type ActionResult, value } from '../analysis.actions';");
+    const typeOnlyExport = analyzeImports(entryPath, "export { type ActionResult } from '../actions';");
+    const mixedExport = analyzeImports(entryPath, "export { type ActionResult, value } from '../actions';");
+    const mixedImport = analyzeImports(entryPath, "import { type ActionResult, value } from '../actions';");
 
     expect(typeOnlyImportEquals.edges).toEqual([]);
     expect(typeOnlyExport.edges).toEqual([]);
-    expect(mixedExport.edges).toEqual([{ specifier: '../analysis.actions', target: canonicalExistingPath(resolve(appRoot, 'buchhaltung/analysis.actions.ts')) }]);
-    expect(mixedImport.edges).toEqual([{ specifier: '../analysis.actions', target: canonicalExistingPath(resolve(appRoot, 'buchhaltung/analysis.actions.ts')) }]);
+    const runtimeEdge = { specifier: '../actions', target: canonicalExistingPath(resolve(appRoot, 'buchhaltung/actions.ts')) };
+    expect(mixedExport.edges).toEqual([runtimeEdge]);
+    expect(mixedImport.edges).toEqual([runtimeEdge]);
   });
 
-  it('uses TypeScript resolution for extensionless, explicit, alias, deep-relative, and directory-index forms', () => {
+  it('resolves existing accounting modules and rejects retired entrypoints', () => {
     const entryPath = resolve(appRoot, 'buchhaltung/fristen/page.tsx');
-    const extensionless = resolveModuleTarget(entryPath, '../analysis.actions');
-    const explicit = resolveModuleTarget(entryPath, '../analysis.actions.ts');
-    expect(comparisonKey(extensionless!)).toBe(forbiddenTargets[1]);
-    expect(comparisonKey(explicit!)).toBe(forbiddenTargets[1]);
-    expect(comparisonKey(resolveModuleTarget(entryPath, '../../buchhaltung/analysis.actions.ts')!)).toBe(forbiddenTargets[1]);
+    const extensionless = resolveModuleTarget(entryPath, '../actions');
+    const explicit = resolveModuleTarget(entryPath, '../actions.ts');
+    expect(comparisonKey(extensionless!)).toBe(forbiddenTargets[0]);
+    expect(comparisonKey(explicit!)).toBe(forbiddenTargets[0]);
+    expect(comparisonKey(resolveModuleTarget(entryPath, '../../buchhaltung/actions.ts')!)).toBe(forbiddenTargets[0]);
     expect(comparisonKey(resolveModuleTarget(entryPath, '@/app/buchhaltung/actions')!)).toBe(forbiddenTargets[0]);
-    expect(comparisonKey(resolveModuleTarget(entryPath, '../periodenabschluss/actions')!)).toBe(forbiddenTargets[4]);
-    expect(comparisonKey(resolveModuleTarget(entryPath, '../periodenabschluss/PeriodenabschlussClient')!)).toBe(forbiddenTargets[5]);
-    expect(comparisonKey(resolveModuleTarget(entryPath, '@/lib/buchhaltung')!)).toBe(forbiddenTargets[6]);
-    expect(comparisonKey(resolveModuleTarget(entryPath, '@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts')!)).toBe(forbiddenTargets[7]);
+    const directoryIndex = canonicalExistingPath(resolve(srcRoot, 'db/index.ts'));
+    expect(resolveModuleTarget(entryPath, '@/db')).toBe(directoryIndex);
+    for (const specifier of [
+      '../BuchhaltungCockpitClient',
+      '../analysis.actions',
+      '../periodenabschluss/actions',
+      '../periodenabschluss/PeriodenabschlussClient',
+      '@/lib/buchhaltung',
+      '@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts',
+    ]) expect(resolveModuleTarget(entryPath, specifier), specifier).toBeUndefined();
 
-    const javascript = resolveModuleTarget(entryPath, '../analysis.actions.js');
-    if (javascript) expect(comparisonKey(javascript)).toBe(forbiddenTargets[1]);
-    else expect(ts.resolveModuleName('../analysis.actions.js', entryPath, parsedTsconfig.options, ts.sys).resolvedModule).toBeUndefined();
+    const javascript = resolveModuleTarget(entryPath, '../actions.js');
+    if (javascript) expect(comparisonKey(javascript)).toBe(forbiddenTargets[0]);
+    else expect(ts.resolveModuleName('../actions.js', entryPath, parsedTsconfig.options, ts.sys).resolvedModule).toBeUndefined();
 
     const caseFixture = ts.sys.useCaseSensitiveFileNames
-      ? canonicalExistingPath(resolve(repoRoot, 'src/app/buchhaltung/analysis.actions.ts'))
-      : canonicalExistingPath(resolve(repoRoot, 'src/APP/BUCHHALTUNG/analysis.actions.ts'));
-    expect(comparisonKey(caseFixture)).toBe(forbiddenTargets[1]);
+      ? canonicalExistingPath(resolve(repoRoot, 'src/app/buchhaltung/actions.ts'))
+      : canonicalExistingPath(resolve(repoRoot, 'src/APP/BUCHHALTUNG/actions.ts'));
+    expect(comparisonKey(caseFixture)).toBe(forbiddenTargets[0]);
   });
 
   it('classifies forbidden direct and transitive dependency decisions without exclusions', () => {

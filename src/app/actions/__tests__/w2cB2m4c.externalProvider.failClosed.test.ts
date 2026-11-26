@@ -4,17 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 
 const extractZeitraum = vi.fn();
 const buildDataContext = vi.fn();
-const generateAiResponse = vi.fn();
-const generateGeminiContentWithFallback = vi.fn();
 const checkAppAuth = vi.fn();
-const GoogleGenerativeAI = vi.fn();
 const fetchSpy = vi.fn();
 const canonicalSearch = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/search/aiAggregation", () => ({ extractZeitraum, buildDataContext }));
-vi.mock("@/lib/ai/geminiClient", () => ({ generateAiResponse, generateGeminiContentWithFallback }));
 vi.mock("@/lib/server/authHelper", () => ({ checkAppAuth }));
-vi.mock("@google/generative-ai", () => ({ GoogleGenerativeAI }));
 vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/db/schema", () => ({ appUsers: {}, uiEventsTable: {} }));
 vi.mock("drizzle-orm", () => ({ and: vi.fn(), eq: vi.fn(), gte: vi.fn(), ne: vi.fn(), sql: vi.fn() }));
@@ -37,7 +32,7 @@ describe("W2C-B2M4C external provider fail-closed", () => {
     await expect(analyzePhoneNoteWithAI({ text: "Bitte zurückrufen", knownFacts: { customerCandidates: [], orderCandidates: [], selectedCustomer: null, selectedOrders: [], detectedDate: null, paymentKnown: null } })).resolves.toBeNull();
     await expect(getFeierabendEvents()).resolves.toEqual({ event: null, success: false });
 
-    for (const spy of [extractZeitraum, buildDataContext, generateAiResponse, generateGeminiContentWithFallback, checkAppAuth, GoogleGenerativeAI, fetchSpy]) {
+    for (const spy of [extractZeitraum, buildDataContext, checkAppAuth, fetchSpy]) {
       expect(spy).not.toHaveBeenCalled();
     }
   });
