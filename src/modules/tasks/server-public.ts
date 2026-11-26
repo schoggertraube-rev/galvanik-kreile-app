@@ -8,6 +8,7 @@ export {completeOrderCallbackTask} from './server/taskService';
 export {completeStorageTaskAfterGoodsOut} from './server/taskService';
 export {completeStorageTaskForAppointment} from './server/taskService';
 export {completeCollectionTaskForReply} from './server/taskService';
+export {restoreCollectionReplyTask} from './server/taskService';
 export {restrictCollectionTaskForReply} from './server/taskService';
 
 export {createGoodsOutClarificationTask} from './server/taskService';

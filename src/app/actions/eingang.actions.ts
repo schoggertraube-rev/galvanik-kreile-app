@@ -1,4 +1,5 @@
 "use server";
+import {sql} from 'drizzle-orm';
 import {leseLagerMaterialpositionenInTransaction} from '@/modules/lager/server-public';
 import {repairCancelledCollectionRouting} from '@/lib/server/commands/immutableInvoiceCommand';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
@@ -71,10 +72,18 @@ export async function getOrderIntakeSuggestionsAction(
 }
 
 export async function getIntakeMessagesAction(filter:unknown='offen'){const device=!!filter&&typeof filter==='object'&&!Array.isArray(filter)&&Object.keys(filter).length===1&&'purpose' in filter&&filter.purpose==='device';const result=await readIntakeMessages(device?'alle':filter,undefined,device?new Date(Date.now()-24*60*60*1000).toISOString():undefined);return result.code==='OK'||device&&result.code==='FORBIDDEN'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;}
-import {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
+import {readIntakeAssignment,assignIntakeCustomer,undoIntakeCustomerAssignment,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
 export async function getIntakeAssignmentAction(input:unknown){return readIntakeAssignment(input,readCustomerProfile);}
+export async function assignIntakeCustomerAction(input:{mode:'undo';itemId:string;clientEventId:string;version:number}):ReturnType<typeof undoIntakeCustomerAssignment>;
+export async function assignIntakeCustomerAction(input:unknown):ReturnType<typeof assignIntakeCustomer>;
 export async function assignIntakeCustomerAction(input:unknown){
- return observeAction('assignIntakeCustomerAction',subjectForAction('assignIntakeCustomerAction',input),async()=>{return assignIntakeCustomer(input,readCustomerProfile);
+ return observeAction('assignIntakeCustomerAction',subjectForAction('assignIntakeCustomerAction',input),async()=>{
+  if(input&&typeof input==='object'&&'mode'in input&&input.mode==='undo'){
+   const {restoreCollectionReplyTask}=await import('@/modules/tasks/server-public');
+   return undoIntakeCustomerAssignment(input,(tx,auth,itemId,source)=>restoreCollectionReplyTask(tx,auth,itemId,source,
+    {effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+  }
+  return assignIntakeCustomer(input,readCustomerProfile);
  },readLoggingSettings);
 }
 export async function setIntakeNoBusinessAction(input:unknown){
@@ -103,7 +112,7 @@ import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {createStorageFinalTask,readStorageFinalTaskReceipt,protectStorageFinalTask} from '@/lib/server/storageFinalStagePort';
 import {recordStoragePostalResult,readStoragePostalTask,protectStoragePostalTask} from '@/lib/server/storagePostalPort';
-import type {TaskOpenRequest} from '@/modules/tasks/public';
+import type {TaskOpenRequest,TaskResult} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect,recognizeInvoicePdf} from '@/modules/eingang/server-public';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
@@ -154,8 +163,11 @@ export async function saveIntakeTaskAction(input:unknown){
  return observeAction('saveIntakeTaskAction',subjectForAction('saveIntakeTaskAction',input),async()=>{return saveTask(input,taskEffects);
  },readLoggingSettings);
 }
+export async function completeIntakeTaskAction(input:{replyEventId:string;taskId:string;version:number}):ReturnType<typeof completeSelectedReplyTask>;
+export async function completeIntakeTaskAction(input:unknown):Promise<TaskResult>;
 export async function completeIntakeTaskAction(input:unknown){
  return observeAction('completeIntakeTaskAction',subjectForAction('completeIntakeTaskAction',input),async()=>{
+ if(input&&typeof input==='object'&&'replyEventId'in input)return completeSelectedReplyTask(input);
  if(input&&typeof input==='object'&&'callResult'in input){
   const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
   if(!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
@@ -168,6 +180,77 @@ export async function completeIntakeTaskAction(input:unknown){
  return completeTask(input,taskEffects);
 
  },readLoggingSettings);
+}
+
+async function completeSelectedReplyTask(input:object&{replyEventId:unknown}){
+ const keys=Object.keys(input).sort().join(',');
+ const taskId='taskId' in input?input.taskId:null,version='version' in input?input.version:null;
+ const replyEventId=input.replyEventId,uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+ const changed={code:'CONFLICT' as const,message:DISPATCH_CALL_COPY.changed};
+ if(keys!=='replyEventId,taskId,version'||typeof taskId!=='string'||!uuid.test(taskId)
+   ||typeof replyEventId!=='string'||!uuid.test(replyEventId)||typeof version!=='number'||!Number.isSafeInteger(version)||version<1)
+  return {code:'VALIDATION_ERROR' as const,message:DISPATCH_CALL_COPY.changed};
+ const session=await resolveAuthorization();
+ if(!session.ok)return {code:'UNAUTHENTICATED' as const,message:DISPATCH_CALL_COPY.session};
+ const auth=session.data;
+ if(!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))
+  return {code:'FORBIDDEN' as const,message:DISPATCH_CALL_COPY.forbidden};
+ const [
+  {readDispatchReplyReceipt}, {finishDispatchCallsForReply}, {finishPostalTasksForReply},
+  {finishFinalTasksForReply}, {readShippingSettingsInTransaction}, {customerCountryLabel},
+  {completeCollectionTaskForReply,restrictCollectionTaskForReply},
+ ]=await Promise.all([
+  import('@/lib/server/dispatchReplyPort'),import('@/lib/server/dispatchCallPort'),import('@/lib/server/storagePostalPort'),
+  import('@/lib/server/storageFinalStagePort'),import('@/modules/fundament/server-public'),import('@/modules/customers/public'),
+  import('@/modules/tasks/server-public'),
+ ]);
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const source=await readDispatchReplyReceipt(tx,auth,replyEventId);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${source.proof.itemId},0))`);
+  const reply=await readDispatchReplyReceipt(tx,auth,replyEventId);
+  await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId}
+   AND id=ANY(ARRAY[${sql.join(reply.proof.orderIds.slice().sort().map(id=>sql`${id}`),sql`, `)}]::text[])
+   ORDER BY id FOR UPDATE NOWAIT`);
+  const rows=await tx.execute<{version:number;status:string}>(sql`SELECT version,status FROM public.tasks
+   WHERE tenant_id=${auth.tenantId} AND id=${taskId}::uuid FOR UPDATE NOWAIT`);
+  const task=rows[0];
+  const receipt=()=>tx.execute(sql`SELECT event.id FROM public.events event JOIN public.tasks task
+   ON task.tenant_id=event.tenant_id AND task.id::text=event.payload->>'taskId'
+   WHERE task.tenant_id=${auth.tenantId} AND task.id=${taskId}::uuid AND task.version=${version+1}
+    AND event.status='success' AND event.user_id=${auth.userId}::uuid AND event.payload->>'replyEventId'=${replyEventId}
+    AND event.payload->>'version'=${String(version+1)} AND
+    ((event.event_type='ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1' AND task.status='erledigt' AND task.erledigt_von=event.user_id)
+    OR (event.event_type IN ('ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1') AND task.status='offen'))
+    LIMIT 2`);
+  if(task?.version===version+1&&(await receipt()).length===1)return {code:'OK' as const,replayed:true};
+  if(task?.version!==version||task.status!=='offen')return changed;
+  const previous=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId}
+   AND status='success' AND event_type IN ('ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1','ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1')
+   AND payload->>'replyEventId'=${replyEventId} LIMIT 1`);
+  if(previous.length)return changed;
+  const replyEffects={effect:(writeTx:PrivilegedTenantTransaction,actor:AuthorizationSnapshot,effect:TaskEffectRequest)=>
+   recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)};
+  const complete=(id:string,note:string)=>completeCollectionTaskForReply(tx,auth,{taskId:id,replyEventId,note},replyEffects);
+  const restrict=(id:string)=>restrictCollectionTaskForReply(tx,auth,{taskId:id,replyEventId},replyEffects);
+  await finishDispatchCallsForReply(tx,auth,reply,taskId,complete,restrict);
+  await finishFinalTasksForReply(tx,auth,reply,taskId,complete,restrict);
+  const settings=await readShippingSettingsInTransaction(tx,auth.tenantId);
+  await finishPostalTasksForReply(tx,auth,reply,taskId,complete,{
+   settingsUpdatedAt:settings?.updatedAt??'',
+   customerCurrent:async(writeTx,snapshot)=>{
+    const customer=await readCustomerProfile(writeTx,auth.tenantId,reply.customerId,true),recipient=snapshot.recipient;
+    return !!customer&&customer.name===recipient.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===recipient.street
+      &&customer.zipCode===recipient.zip&&customer.city===recipient.city&&customerCountryLabel(customer.country)===recipient.country;
+   },
+   createTask:(writeTx,value)=>createOrderHandoverTask(writeTx,auth,value,replyEffects),
+  });
+  if((await receipt()).length!==1)throw Error('DISPATCH_REPLY_SELECTED_EFFECT_NOT_SAVED');
+  return {code:'OK' as const,replayed:false};
+ });}catch(error){
+  recordObservedFailure('DISPATCH_REPLY_SELECTED_EFFECT_FAILED');
+  return error instanceof Error&&error.message==='DISPATCH_REPLY_SELECTED_EFFECT_NOT_SAVED'?changed:
+    {code:'UNAVAILABLE' as const,message:DISPATCH_CALL_COPY.unavailable};
+ }
 }
 export async function createDispatchCallTaskAction(input:{customerId:string;handover:'pickup'|'shipping';dueDate:string;clientKey:string}){
  return observeAction('createDispatchCallTaskAction',subjectForAction('createDispatchCallTaskAction',input),async()=>{

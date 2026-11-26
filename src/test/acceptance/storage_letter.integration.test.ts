@@ -225,7 +225,7 @@ it('E4 preview renders a real customer/sender PDF without invoice-only settings,
   await sql`UPDATE public.company_settings SET tax_id=${originalSettings.tax_id},iban=${originalSettings.iban},bic=${originalSettings.bic},bank_name=${originalSettings.bank_name},invoice_payment_term_days=${originalSettings.invoice_payment_term_days},logo_url=${originalSettings.logo_url} WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  }
 });
-it.each([false,true])('an original reply ends or narrows the actual callback without inventing a call result (shared=%s)',async(shared)=>{
+it.each([false,true])('an original reply keeps the callback open until its exact task is chosen (shared=%s)',async(shared)=>{
  const {order,callTaskId,plan,second}=await prepareLetter('Antwort beendet Anruf',false,shared);
  const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
@@ -239,13 +239,26 @@ it.each([false,true])('an original reply ends or narrows the actual callback wit
   if(url.hostname==='graph.microsoft.com'){
    if(url.pathname.includes('/mailFolders/sentitems/messages'))return Response.json({value:[{id:'TEST-call-original-sent',internetMessageId:reference,from:{emailAddress:{address:'TEST-mailbox@example.invalid'}},toRecipients:[{emailAddress:{address:notice.email}}],isDraft:false,sentDateTime:new Date().toISOString(),internetMessageHeaders:[{name:'x-kreile-request-id',value:notice.source.replace('MS_GRAPH_OUT:','')}]}]});
    if(url.pathname.endsWith('/attachments'))return Response.json({value:[]});
-   if(url.pathname.endsWith('/$value'))return new Response('Message-ID: <'+incomingId+'@example.invalid>\r\nFrom: '+notice.email+'\r\nIn-Reply-To: '+reference+'\r\nSubject: TEST Antwort\r\n\r\nTEST ich melde mich.');
-   return Response.json({id:incomingId,internetMessageId:'<'+incomingId+'@example.invalid>',subject:'TEST Antwort',from:{emailAddress:{name:'TEST Kunde',address:notice.email}},receivedDateTime:new Date(Date.now()+100).toISOString(),bodyPreview:'TEST Antwort',body:{contentType:'text',content:'TEST ich melde mich.'},hasAttachments:false});
+   if(url.pathname.endsWith('/$value'))return new Response('Message-ID: <'+incomingId+'@example.invalid>\r\nFrom: '+notice.email+'\r\nIn-Reply-To: '+reference+'\r\nSubject: TEST Antwort\r\n\r\nIch kann erst nächste Woche.');
+   return Response.json({id:incomingId,internetMessageId:'<'+incomingId+'@example.invalid>',subject:'TEST Antwort',from:{emailAddress:{name:'TEST Kunde',address:notice.email}},receivedDateTime:new Date(Date.now()+100).toISOString(),bodyPreview:'TEST Antwort',body:{contentType:'text',content:'Ich kann erst nächste Woche.'},hasAttachments:false});
   }return nativeFetch(input,init);
  });
  const {attachOutlookMailAction}=await import('@/app/actions/communications.actions');
  expect(await withSession(full,()=>attachOutlookMailAction({targetType:'CUSTOMER',targetId:order.customerId,graphMessageId:incomingId}))).toMatchObject({code:'OK'});
  expect((await plan())?.reminder).toMatchObject({responseState:'REPLIED'});
+ const pending=await withSession(full,()=>getIntakeTaskAction({taskId:callTaskId}));
+ expect(pending).toMatchObject({code:'OK',task:{status:'offen'}});
+ if(pending.code!=='OK'||!pending.task)throw Error('TEST_REPLY_OPEN_TASK_REQUIRED');
+ const replies=await sql`SELECT id,payload->'receipt'->'proof'->>'itemId' AS item_id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}
+  AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' AND payload->'receipt'->>'customerId'=${order.customerId}`;
+ expect(replies).toHaveLength(1);
+ expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}
+  AND payload->>'taskId'=${callTaskId} AND payload->>'replyEventId'=${replies[0].id}`).toHaveLength(0);
+ const {completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ const selected={taskId:callTaskId,version:pending.task.version,replyEventId:replies[0].id};
+ expect(await withSession(full,()=>completeIntakeTaskAction({...selected,taskId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(full,()=>completeIntakeTaskAction(selected))).toMatchObject({code:'OK',replayed:false});
+ expect(await withSession(full,()=>completeIntakeTaskAction(JSON.parse(JSON.stringify(selected))))).toMatchObject({code:'OK',replayed:true});
  expect(await withSession(full,()=>getIntakeTaskAction({taskId:callTaskId}))).toMatchObject({code:'OK',task:{status:shared?'offen':'erledigt'}});
  if(shared){
   expect(await sql`SELECT payload->'meta'->'orderIds' AS ids FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_UPDATED_V1' AND payload->>'taskId'=${callTaskId}`).toEqual([{ids:[second!.orderId]}]);
@@ -263,6 +276,28 @@ it.each([false,true])('an original reply ends or narrows the actual callback wit
  }else expect(await sql`SELECT user_id::text AS actor,payload->>'taskId' AS task FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1' AND payload->>'taskId'=${callTaskId}`).toEqual([{actor:full.actorId,task:callTaskId}]);
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='ORDER_COLLECTION_CALL_RESULT_V1' AND payload->>'taskId'=${callTaskId}`).toHaveLength(0);
  expect((await plan())?.reminder).toMatchObject({responseState:'REPLIED'});
+ if(!shared){
+  const {assignIntakeCustomerAction,getIntakeAssignmentAction}=await import('@/app/actions/eingang.actions');
+  const itemId=String(replies[0].item_id);
+  const assigned=await withSession(full,()=>getIntakeAssignmentAction({itemId,mode:'normal'}));
+  if(assigned.code!=='OK')throw Error('TEST_REPLY_ASSIGNMENT_REQUIRED');
+  const undo={mode:'undo' as const,itemId,version:assigned.view.version,clientEventId:randomUUID()};
+  const retry:typeof undo=JSON.parse(JSON.stringify(undo));
+  const results=await Promise.all([withSession(full,()=>assignIntakeCustomerAction(undo)),
+   withSession(full,()=>assignIntakeCustomerAction(retry))]);
+  for(const result of results)expect(result).toMatchObject({code:'OK',restoredTaskId:expect.any(String)});
+  const [first,second]=results;
+  if(first.code!=='OK'||second.code!=='OK')throw Error('TEST_REPLY_ASSIGNMENT_WITHDRAWAL_REQUIRED');
+  expect([first.replayed,second.replayed].sort()).toEqual([false,true]);
+  expect(first.restoredTaskId).toBe(second.restoredTaskId);
+  expect(first.restoredTaskId).not.toBe(callTaskId);
+  const readTask=(id:string)=>sql`SELECT status, faellig_am::text, fuer_login::text, fuer_bereich, bezug_id,item_id::text
+   FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}::uuid`;
+  const [original]=await readTask(callTaskId);
+  expect(original.status).toBe('erledigt');
+  expect(await readTask(first.restoredTaskId!)).toEqual([{...original,status:'offen'}]);
+  expect(await sql`SELECT zuordnung,kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{zuordnung:'offen',kunde_id:null}]);
+ }
 });
 it('an original customer reply ends the exact open postal task without inventing post dispatch and replays without Outlook',async()=>{
  const {order,request,plan,clock}=await prepareLetter('Antwort beendet Brief');

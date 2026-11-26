@@ -6,6 +6,7 @@ import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} fr
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {ACCESS_AREAS,canAssignIntakeCustomer,canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
 import {qualifySavedMailReplyBinding,type SavedMailReplyBinding} from '@/lib/server/dispatchResponsePort';
+import {readSelectedReplyTaskEnd} from '@/lib/server/dispatchReplyPort';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {CustomerWriter} from '@/lib/server/commands/orderIntakeCommand';
 import type {CustomerCreateCommandResult} from '@/modules/customers/public';
@@ -108,6 +109,45 @@ export async function assignIntakeMailThread(auth:AuthorizationSnapshot,binding:
  try{return await withPrivilegedTenantTransaction(auth,tx=>assignInTransaction(tx,auth,{
   mode:'thread',itemId:binding.proof.itemId,customerId:binding.target.customerId,version,clientEventId:randomUUID(),binding,
  },readCustomer,false));}catch(error){return failed(error);}
+}
+
+type SelectedReplyEnd=NonNullable<Awaited<ReturnType<typeof readSelectedReplyTaskEnd>>>;
+type RestoreReplyTask=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,source:SelectedReplyEnd)=>Promise<string>;
+export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTask:RestoreReplyTask){
+ if(!object(input)||Object.keys(input).sort().join(',')!=='clientEventId,itemId,mode,version'||
+    input.mode!=='undo'||!validIdentity(input))
+  return {code:'VALIDATION_ERROR' as const,message:'Zuordnungsaufruf ist ungültig.'};
+ const value=input as {itemId:string;clientEventId:string;version:number};
+ try{
+  const auth=await session();
+  if(!canAssignIntakeCustomer(auth)||!hasAuthorizationArea(auth,'mails'))reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
+  return await withPrivilegedTenantTransaction(auth,async tx=>{
+   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${auth.tenantId},0))`);
+   const row=await source(tx,auth,value.itemId,true);
+   const intent={command:'eingang.zuordnung_zuruecknehmen',version:value.version};
+   const prior=await tx.execute<{von:string;nachher:{intent:unknown;version:number;restoredTaskId:string|null}}>(sql`
+    SELECT von,nachher FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid
+      AND art='zurueckgenommen' AND befehl_id=${value.clientEventId}::uuid`);
+   if(prior.length){
+    const receipt=prior[0];
+    if(prior.length!==1||receipt.von!==auth.userId||!isDeepStrictEqual(receipt.nachher.intent,intent)||
+      row.version!==receipt.nachher.version||row.zuordnung!=='offen'||row.kunde_id)
+     reject('CONFLICT','Diese Anfragekennung gehört zu einem anderen Zuordnungsstand.');
+    return {code:'OK' as const,version:row.version,restoredTaskId:receipt.nachher.restoredTaskId,replayed:true};
+   }
+   if(row.version!==value.version||row.kanal!=='mail'||!row.kunde_id||row.zuordnung==='offen')
+    reject('CONFLICT','Eingang wurde inzwischen geändert. Bitte neu lesen.');
+   const replyCompletion=await readSelectedReplyTaskEnd(tx,auth,row.id);
+   const restoredTaskId=replyCompletion?await restoreReplyTask(tx,auth,row.id,replyCompletion):null;
+   const changed=await tx.execute(sql`UPDATE public.intake_item
+    SET kunde_id=NULL,vorgang_art=NULL,vorgang_id=NULL,zuordnung='offen',version=version+1,
+    geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp()
+    WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${row.version} RETURNING id`);
+   if(changed.length!==1)throw Error('INTAKE_ASSIGNMENT_WITHDRAWAL_NOT_SAVED');
+   await event(tx,auth,row,value.clientEventId,'zurueckgenommen',intent,{zuordnung:'offen',restoredTaskId,replyCompletion});
+   return {code:'OK' as const,version:row.version+1,restoredTaskId,replayed:false};
+  });
+ }catch(error){return failed(error);}
 }
 /** 3.1 from 3.4 composes the existing customer writer and the same assignment writer atomically. */
 export async function createCustomerForIntake(input:unknown,writeCustomer:CustomerWriter,readCustomer:CustomerReader):Promise<CustomerCreateCommandResult|AssignmentFailure>{

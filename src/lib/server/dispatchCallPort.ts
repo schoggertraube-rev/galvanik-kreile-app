@@ -104,8 +104,8 @@ export async function finishDispatchCallsForAppointment(tx:PrivilegedTenantTrans
   if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_CALL_CLOSE_RECEIPT_NOT_SAVED');
  }
 }
-export async function finishDispatchCallsForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,complete:(taskId:string,note:string)=>Promise<void>,restrict:(taskId:string)=>Promise<{version:number;note:string;freezes:CallMeta['freezes']}>){
- const rows=await tx.execute<{id:string}>(sql`SELECT task.id::text FROM public.tasks task WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND EXISTS(SELECT 1 FROM public.events source WHERE source.tenant_id=task.tenant_id AND source.event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND source.payload->>'taskId'=task.id::text AND source.payload->'meta'->>'customerId'=${reply.customerId} AND source.payload->'meta'->>'handover'=${reply.handover}) ORDER BY task.id FOR UPDATE NOWAIT`);
+export async function finishDispatchCallsForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,taskId:string,complete:(taskId:string,note:string)=>Promise<void>,restrict:(taskId:string)=>Promise<{version:number;note:string;freezes:CallMeta['freezes']}>){
+ const rows=await tx.execute<{id:string}>(sql`SELECT task.id::text FROM public.tasks task WHERE task.tenant_id=${auth.tenantId} AND task.id=${taskId}::uuid AND task.status='offen' AND EXISTS(SELECT 1 FROM public.events source WHERE source.tenant_id=task.tenant_id AND source.event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND source.payload->>'taskId'=task.id::text AND source.payload->'meta'->>'customerId'=${reply.customerId} AND source.payload->'meta'->>'handover'=${reply.handover}) ORDER BY task.id FOR UPDATE NOWAIT`);
  for(const row of rows){
   const created=await source(tx,auth,row.id);if(!created)throw Error('DISPATCH_REPLY_CALL_SOURCE_MISSING');
   if(!created.payload.meta.freezes.some(proof=>reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId)))continue;

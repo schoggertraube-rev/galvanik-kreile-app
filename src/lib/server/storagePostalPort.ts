@@ -85,7 +85,12 @@ export async function readStoragePostalTask(auth:AuthorizationSnapshot,taskId:st
   return {clientKey:rows[0].key,document:read.payload.document,state:read.replyEnd?'ENDED_BY_REPLY' as const:read.appointmentEnd?'ENDED_BY_APPOINTMENT' as const:read.outcome?.event_type==='ORDER_COLLECTION_REMINDER_SENT_V1'?'POSTED' as const:read.outcome?'VOIDED' as const:'WAIT_FOR_POST' as const};
  });
 }
-export async function finishPostalTasksForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>,replacement:Parameters<typeof finishPostalTasksForReply>[4]){
+type PostalTaskReplacement={
+ settingsUpdatedAt:string;
+ customerCurrent:(tx:PrivilegedTenantTransaction,snapshot:StorageLetterSnapshot)=>Promise<boolean>;
+ createTask:(tx:PrivilegedTenantTransaction,input:{orderId:string;clientKey:string;title:string;note:string;kind:'aufgabe';dueDate:string})=>Promise<string>;
+};
+export async function finishPostalTasksForAppointment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,appointment:{eventId:string;orderId:string;freezeId:string;date:string},complete:(taskId:string,note:string)=>Promise<void>,replacement:PostalTaskReplacement){
  const rows=await tx.execute<{key:string}>(sql`SELECT event.client_event_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post' AND event.payload->'meta'->'storageOrigin'->'freezes' @> ${JSON.stringify([{orderId:appointment.orderId,freezeId:appointment.freezeId}])}::jsonb ORDER BY task.id FOR UPDATE OF task NOWAIT`);
  for(const row of rows){
   const original=await source(tx,auth,row.key);if(!original||original.outcome||original.appointmentEnd||original.replyEnd)throw Error('POSTAL_APPOINTMENT_NOT_OPEN');
@@ -115,8 +120,8 @@ export async function readStoragePostalReceipt(auth:AuthorizationSnapshot,input:
   return {code:'OK' as const,taskId:row.payload.taskId,document:row.payload.document,replayed:true};
  });}catch(error){console.error('[POSTAL_LETTER_RECEIPT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
 }
-export async function finishPostalTasksForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,complete:(taskId:string,note:string)=>Promise<void>,replacement:{settingsUpdatedAt:string;customerCurrent:(tx:PrivilegedTenantTransaction,snapshot:StorageLetterSnapshot)=>Promise<boolean>;createTask:(tx:PrivilegedTenantTransaction,input:{orderId:string;clientKey:string;title:string;note:string;kind:'aufgabe';dueDate:string})=>Promise<string>}){
- const rows=await tx.execute<{key:string}>(sql`SELECT event.client_event_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post' AND event.payload->'meta'->>'customerId'=${reply.customerId} AND event.payload->'meta'->>'handover'=${reply.handover} ORDER BY task.id FOR UPDATE OF task NOWAIT`);
+export async function finishPostalTasksForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,taskId:string,complete:(taskId:string,note:string)=>Promise<void>,replacement:PostalTaskReplacement){
+ const rows=await tx.execute<{key:string}>(sql`SELECT event.client_event_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.id=${taskId}::uuid AND task.status='offen' AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post' AND event.payload->'meta'->>'customerId'=${reply.customerId} AND event.payload->'meta'->>'handover'=${reply.handover} ORDER BY task.id FOR UPDATE OF task NOWAIT`);
  for(const row of rows){
   const original=await source(tx,auth,row.key);if(!original)throw Error('REPLY_POSTAL_SOURCE_MISSING');
   const freezes=original.payload.meta.storageOrigin!.freezes;

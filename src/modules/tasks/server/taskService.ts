@@ -32,7 +32,7 @@ import {readQuoteFollowupFacts,readQuoteGoodsOrderRetrySource} from '@/lib/serve
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {QUOTE_CYCLE_COPY} from '@/ui/situationCatalog';
 import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPort';
-import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
+import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder,readSelectedReplyTaskEnd} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY,OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
 import {TODAY_OWN_NOTE_COPY} from '@/ui/allgemeinCopy';
@@ -366,6 +366,23 @@ export async function completeCollectionTaskForReply(tx:PrivilegedTenantTransact
  if(!before||!['aufgabe','rueckruf'].includes(before.art)||before.bezug_typ!=='auftrag')reject('CONFLICT',DISPATCH_CALL_COPY.changed);
  if(before.status==='erledigt')return;
  await finishTask(tx,auth,{taskId:before.id,version:before.version,note:input.note},deps,undefined,undefined,undefined,input.replyEventId);
+}
+/** Restore the work without changing its immutable completed record. */
+export async function restoreCollectionReplyTask(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,input:{id:string;taskId:string;replyEventId:string},deps:Dependencies,
+){
+ const closure=await readSelectedReplyTaskEnd(tx,auth,itemId);
+ if(!closure||closure.id!==input.id||closure.taskId!==input.taskId||closure.replyEventId!==input.replyEventId)
+  reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const original=await find(tx,auth,closure.taskId,true);
+ if(!original||original.status!=='erledigt'||original.bezug_typ!=='auftrag'||!original.bezug_id||
+  (original.art!=='aufgabe'&&original.art!=='rueckruf'))reject('CONFLICT',DISPATCH_CALL_COPY.changed);
+ const clientKey=eventKey(JSON.stringify([auth.tenantId,original.id,closure.id]),0,'reply-restore');
+ const saved=await persistTask(tx,auth,{clientKey,version:0,kind:original.art,title:original.titel,
+  dueDate:original.faellig_am,time:original.uhrzeit,forLogin:original.fuer_login,forArea:original.fuer_bereich,
+  reference:{type:'auftrag',id:original.bezug_id},note:original.notiz,...(original.item_id?{itemId:original.item_id}:{})},
+  {effect:(writeTx,actor,effect)=>deps.effect(writeTx,actor,{...effect,itemId:undefined})});
+ return saved.task.id;
 }
 /** Keep the task, recipient and date; preserve the immutable original reference and narrow only the ware note. */
 export async function restrictCollectionTaskForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{taskId:string;replyEventId:string},deps:Dependencies){
