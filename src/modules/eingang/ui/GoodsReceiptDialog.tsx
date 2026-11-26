@@ -11,6 +11,12 @@ import{retainPendingOriginal,readPendingOriginals,acknowledgePendingOriginal}fro
 type SaveResult={code:'OK';receipt:GoodsReceiptRecord;replayed:boolean}|GoodsReceiptFailure;
 export type GoodsReceiptPorts={scope:()=>Promise<{code:'OK';scope:string}|GoodsReceiptFailure>;read:(orderId:string)=>Promise<GoodsReceiptReadResult>;save:(input:GoodsReceiptInput)=>Promise<SaveResult>;prepareFile:(input:IntakeFileInput)=>Promise<IntakeFileGrant>;finishFile:(id:string)=>Promise<IntakeCaptureResult>};
 type Data=Extract<GoodsReceiptReadResult,{code:'OK'}>;
+function firstReceiptGap(value:GoodsReceiptInput,data:Data,fullInspection:boolean):string|null{
+ const first=fullInspection?goodsReceiptGaps(value,data.order.fromQuote)[0]:value.condition?undefined:'Zustand';
+ if(first!=='Positionen prüfen')return first??null;
+ const index=data.order.items.findIndex(item=>value.quantities.some(row=>row.itemId===item.id&&!row.confirmed&&row.received===null));
+ return index<0?first:`Menge bestätigen · Position ${index+1}`;
+}
 function restore(data:Data,sourceId?:string,receiptId?:string):GoodsReceiptInput{
  const saved=receiptId?data.receipts.find(r=>r.id===receiptId&&r.status==='entwurf'):[...data.receipts].reverse().find(r=>r.status==='entwurf');
  return saved?{id:saved.id,clientKey:saved.client_key,clientEventId:crypto.randomUUID(),itemId:saved.item_id,orderId:data.order.id,expectedOrderVersion:data.order.version,expectedVersion:saved.version,
@@ -21,6 +27,7 @@ function restore(data:Data,sourceId?:string,receiptId?:string):GoodsReceiptInput
 }
 export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,onMessage}:{orderId:string;sourceId?:string;ports:GoodsReceiptPorts;onClose:()=>void;onOriginal:(itemId:string,fileId:string)=>void;onMessage:(message:string)=>void}){
  const[data,setData]=useState<Data|null>(null),[input,setInput]=useState<GoodsReceiptInput|null>(null),[error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true);
+ const[gapInspection,setGapInspection]=useState<boolean|null>(null);
  const[pendingCommand,setPendingCommand]=useState<GoodsReceiptInput['command']|null>(null),[remainingUploads,setRemainingUploads]=useState(0);
  const current=useRef<GoodsReceiptInput|null>(null),version=useRef(0),orderVersion=useRef(0),queue=useRef(Promise.resolve(true)),timer=useRef<ReturnType<typeof setTimeout>|null>(null),submitting=useRef(false),dirty=useRef(false),uploaded=useRef(new Map<string,{file:File;fileId:string;itemId:string;kind:GoodsReceiptInput['photos'][number]['kind']}>());
  const pending=useRef<GoodsReceiptInput|null>(null),pendingSource=useRef<GoodsReceiptInput|null>(null);
@@ -28,7 +35,7 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
  const scope=useRef<string|null>(null),persistedPhotos=useRef(new Set<string>()),resumeUploads=useRef<()=>void>(()=>{});
  const acceptedReceipt=useRef<{id:string;replayed:boolean}|null>(null),[labelRetryOrderId,setLabelRetryOrderId]=useState<string|null>(null);
  const load=useCallback(async()=>{
-  setLoading(true);setError(null);
+  setLoading(true);setError(null);setGapInspection(null);
   try{const result=await ports.read(orderId);if(result.code!=='OK'){setError(result.message);return;}
    const local=await ports.scope();if(local.code!=='OK')throw Error(local.message);scope.current=local.scope;
    const files=(await readPendingOriginals(local.scope)).filter(original=>original.kind==='file'&&original.context?.orderId===orderId);
@@ -139,12 +146,12 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
   };
  const accept=async(primary:boolean)=>{
   if(submitting.current||!data||!current.current)return;const value=current.current;
-  const gaps=primary&&data.canStartGalvanik?goodsReceiptGaps(value,data.order.fromQuote):value.condition?[]:['Zustand'];
-  if(gaps.length){
-   const missingPosition=gaps[0]==='Positionen prüfen'?data.order.items.findIndex(item=>value.quantities.some(row=>row.itemId===item.id&&!row.confirmed&&row.received===null)):-1;
-   const first=missingPosition>=0?`Menge bestätigen · Position ${missingPosition+1}`:gaps[0];
-   focusGap(first);setError('Noch offen: '+first);return;
+  const fullInspection=primary&&data.canStartGalvanik;
+  const gap=firstReceiptGap(value,data,fullInspection);
+  if(gap){
+   focusGap(gap);setError(null);setGapInspection(fullInspection);return;
   }
+  setGapInspection(null);
   submitting.current=true;setBusy(true);
   try{const derived=goodsReceiptWare(value),packaging=value.condition==='abweichung'&&derived==='da';
    const command=primary&&data.canStartGalvanik&&(value.condition!=='abweichung'||packaging)?'galvanik':'accept';
@@ -163,6 +170,8 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
   finally{submitting.current=false;setBusy(false);}
  };
  const ware=input?goodsReceiptWare(input):null;
+ const openGap=data&&input&&gapInspection!==null?firstReceiptGap(input,data,gapInspection):null;
+ const feedback=error??(openGap?'Noch offen: '+openGap:null);
  const label=!data?.canStartGalvanik?'Ware annehmen':input?.condition==='teillieferung'?'Teillieferung · in Galvanik':ware==='abweichung'?'Mit Abweichung annehmen':'Annehmen · in Galvanik';
  return <Dialog titel="Ware annehmen" icon="box" groesse="breit" schliessenSpecId="ware.schliessen" onSchliessen={()=>void close()} vorSchliessen={()=>{void close();return false;}} fuss={<>
    <Button data-spec-id="ware.abbrechen" text="Abbrechen" onClick={()=>void close()}/>
@@ -174,7 +183,14 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
    <dl className="kr-fakten"><div><dt>Erwartet</dt><dd>{data.order.ware} · {data.order.fromQuote?'aus KV':'direkt beauftragt'}</dd></div><div><dt>Positionen</dt><dd>{data.order.items.length}</dd></div></dl>
    <GoodsInspectionForm value={input} order={data.order} busy={busy} onChange={change} onFile={addFiles} onOriginal={fileId=>{if(input.itemId)onOriginal(input.itemId,fileId);}}/>
   </>:null}
-   {error?<div role="alert" data-spec-id={error.startsWith('Noch offen:')?'ware.zustand.teilweise':'ware.zustand.fehler'}><Hinweis ton="warn">{error}</Hinweis>{data?<>{pendingCommand?<Button text="Erneut" data-spec-id="ware.erneut" disabled={busy} onClick={()=>void (pendingCommand==='draft'?persist('draft'):accept(pendingCommand==='galvanik'))}/>:null}{labelRetryOrderId?<Button text="Erneut drucken" data-spec-id="ware.laufzettel.erneut" disabled={busy} onClick={()=>void retryLabel()}/>:null}{error.startsWith('Noch offen:')?<Button text="Zur Lücke" data-spec-id="ware.zur-luecke" onClick={()=>{focusGap(error.slice('Noch offen: '.length));setError(null);}}/>:null}</>:<Button text="Erneut laden" onClick={()=>void load()}/>}</div>:null}
+   {feedback?<div role="alert" data-spec-id={error?'ware.zustand.fehler':'ware.zustand.teilweise'}>
+    <Hinweis ton="warn">{feedback}</Hinweis>
+    {data?<>
+     {pendingCommand?<Button text="Erneut" data-spec-id="ware.erneut" disabled={busy} onClick={()=>void (pendingCommand==='draft'?persist('draft'):accept(pendingCommand==='galvanik'))}/>:null}
+     {labelRetryOrderId?<Button text="Erneut drucken" data-spec-id="ware.laufzettel.erneut" disabled={busy} onClick={()=>void retryLabel()}/>:null}
+     {!error&&openGap?<Button text="Zur Lücke" data-spec-id="ware.zur-luecke" onClick={()=>{focusGap(openGap);setGapInspection(null);}}/>:null}
+    </>:<Button text="Erneut laden" onClick={()=>void load()}/>}
+   </div>:null}
   {remainingUploads&&!busy?<Button text="Erneut übertragen" onClick={()=>void upload()}/>:null}
  </div></Dialog>;
 }
