@@ -5,11 +5,16 @@ import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {authorizationReadContext} from '@/lib/server/authorizationReadContext';
 import {collectionTaskReferenceMayHaveChanged} from '@/lib/server/dispatchReplyPort';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import type {TagQuelle} from '@/lib/today/todaySourceRegistry';
 import {TASK_TAG_COPY} from '@/ui/tasksCopy';
 import {TASK_KIND_LABELS,type TaskKind,type TaskReferenceType} from '../contract';
 import {taskReferenceVisible} from './taskService';
 
-const quelleId='tasks.aufgabe';
+export const tagQuellen = [
+  {id: 'tasks.aufgabe', modul: 'tasks', bereich: null, rang: null, bestand: {leser: 'tasks', umfang: 'mandant'}},
+] as const satisfies readonly TagQuelle[];
+
+const quelleId=tagQuellen[0].id;
 type OffeneAufgabe={
  id:string;version:number;bereich:string|null;titel:string;art:TaskKind;faellig:string;
  bezugTyp:TaskReferenceType;bezugId:string|null;kanal:string|null;bezugGeaendert:boolean;
