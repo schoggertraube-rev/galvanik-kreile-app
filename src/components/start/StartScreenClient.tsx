@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Suspense, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, useTransition, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Suspense, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, useTransition, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { login } from "@/app/actions/auth";
 import { loginWithPin } from "@/app/actions/auth.actions";
@@ -15,7 +15,7 @@ import { Glasknopf } from "@/ui/kr/design-final/Glasknopf";
 import styles from "./StartScreenClient.module.css";
 
 const LAST_LOGIN_KEY = "kreile:last-login-handle";
-const MOBILE_LOGIN_QUERY = "(max-width: 600px) and (pointer: coarse)";
+const MOBILE_LOGIN_QUERY = "(pointer: coarse) and ((max-width: 600px) or (max-height: 600px))";
 
 function subscribeMobileLogin(onChange: () => void) {
   const media = window.matchMedia?.(MOBILE_LOGIN_QUERY);
@@ -51,6 +51,8 @@ function StartContent({
   const mobile = useSyncExternalStore(subscribeMobileLogin, mobileLoginSnapshot, () => false);
   const [selectedHandle, setSelectedHandle] = useState(users[0]?.loginHandle ?? "");
   const [rememberedHandle, setRememberedHandle] = useState<string | null>(null);
+  const [groupCapacity, setGroupCapacity] = useState(4);
+  const [groupAnchor, setGroupAnchor] = useState(0);
   const [enterShortCode, setEnterShortCode] = useState(false);
   const [shortCode, setShortCode] = useState("");
   const [pin, setPin] = useState("");
@@ -63,6 +65,10 @@ function StartContent({
   const submittingRef = useRef(false);
   const codeRef = useRef<HTMLDivElement>(null);
   const peopleRef = useRef<HTMLDivElement>(null);
+  const swipeStart = useRef<{ pointerId: number; x: number } | null>(null);
+  const ignoreClickUntil = useRef(0);
+  const lastWheel = useRef(-Infinity);
+  const typedShortcut = useRef({ text: "", at: 0 });
   const shortCodeRef = useRef<HTMLInputElement>(null);
   const remembered = users.find((user) => user.loginHandle === rememberedHandle);
   const shortCodeRequired = mobile && (enterShortCode || !remembered);
@@ -72,6 +78,10 @@ function StartContent({
   const selected = mobile
     ? (shortCodeRequired ? (shortCodeMatches.length === 1 ? shortCodeMatches[0] : undefined) : remembered)
     : users.find((user) => user.loginHandle === selectedHandle) ?? users[0];
+  const selectedIndex = users.findIndex((user) => user.loginHandle === selected?.loginHandle);
+  const groupStart = Math.floor(Math.min(groupAnchor, Math.max(0, users.length - 1)) / groupCapacity) * groupCapacity;
+  const activeGroup = users.slice(groupStart, groupStart + groupCapacity);
+  const rovingIndex = selectedIndex >= groupStart && selectedIndex < groupStart + groupCapacity ? selectedIndex : groupStart;
   const pinDisabled = !interactive || loginUnavailable || pinPending || users.length === 0;
   const serverMessage = showServerMessage ? searchParams?.get("message") : null;
   const safeSupportReference = (searchParams?.get("support") ?? supportReference)?.match(/^[0-9a-f-]{36}$/i)?.[0];
@@ -80,9 +90,11 @@ function StartContent({
     const frame = window.requestAnimationFrame(() => {
       try {
         const saved = window.localStorage.getItem(LAST_LOGIN_KEY);
-        if (saved && users.some((user) => user.loginHandle === saved)) {
+        const savedIndex = saved ? users.findIndex((user) => user.loginHandle === saved) : -1;
+        if (saved && savedIndex >= 0) {
           setRememberedHandle(saved);
           setSelectedHandle(saved);
+          setGroupAnchor(savedIndex);
         } else if (!loginUnavailable) {
           setRememberedHandle(null);
           if (saved) window.localStorage.removeItem(LAST_LOGIN_KEY);
@@ -93,6 +105,30 @@ function StartContent({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [users, loginUnavailable]);
+
+  useEffect(() => {
+    const list = peopleRef.current;
+    if (!list || mobile || mode !== "pin") return;
+    const measure = () => {
+      const button = list.querySelector("button");
+      const size = button?.getBoundingClientRect().width;
+      if (!size || !list.clientWidth) return;
+      const style = window.getComputedStyle(list);
+      const gap = Number.parseFloat(style.columnGap) || 0;
+      const padding = (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+      const columns = Math.max(1, Math.floor((list.clientWidth - padding + gap) / (size + gap)));
+      setGroupCapacity(columns * 2);
+    };
+    const frame = window.requestAnimationFrame(measure);
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(list);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [mobile, mode, users.length]);
 
   async function enterDigit(digit: string) {
     if (pinDisabled || submittingRef.current || pin.length >= 4) return;
@@ -146,9 +182,12 @@ function StartContent({
     setPin("");
     setMessage(null);
     setShowServerMessage(false);
-    const focus = peopleRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
-      ?? shortCodeRef.current ?? codeRef.current;
-    focus?.focus();
+    if (!mobile && selectedIndex >= 0) {
+      setGroupAnchor(selectedIndex);
+      focusPerson(selectedIndex);
+    } else {
+      (shortCodeRef.current ?? codeRef.current)?.focus();
+    }
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -180,23 +219,75 @@ function StartContent({
     setMode("pin");
   }
 
+  function focusPerson(index: number) {
+    const find = () => peopleRef.current?.querySelector<HTMLButtonElement>(`button[data-login-index="${index}"]`);
+    const current = find();
+    if (current) current.focus();
+    else window.requestAnimationFrame(() => find()?.focus());
+  }
+
   function navigatePeople(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (pinDisabled || event.ctrlKey || event.metaKey || event.altKey || /^Numpad[0-9]$/.test(event.code)) return;
-    const current = users.findIndex((user) => user.loginHandle === selected?.loginHandle);
+    const current = event.target instanceof HTMLElement
+      ? Number(event.target.closest("button")?.dataset.loginIndex ?? rovingIndex)
+      : rovingIndex;
+    const columns = Math.min(groupCapacity / 2, users.length);
     let next: number;
     switch (event.key) {
-      case "ArrowLeft": case "ArrowUp": next = (current + users.length - 1) % users.length; break;
-      case "ArrowRight": case "ArrowDown": next = (current + 1) % users.length; break;
+      case "ArrowLeft": next = (current + users.length - 1) % users.length; break;
+      case "ArrowRight": next = (current + 1) % users.length; break;
+      case "ArrowUp": next = (current - columns + users.length) % users.length; break;
+      case "ArrowDown": next = (current + columns) % users.length; break;
       case "Home": next = 0; break;
       case "End": next = users.length - 1; break;
       default:
         if (!/^\p{L}$/u.test(event.key)) return;
-        next = users.findIndex((user) => user.shortCode.toLocaleUpperCase("de-DE").startsWith(event.key.toLocaleUpperCase("de-DE")));
+        const letter = event.key.toLocaleUpperCase("de-DE");
+        const time = performance.now();
+        const previous = typedShortcut.current;
+        const prefix = time - previous.at < 700 ? previous.text + letter : letter;
+        next = users.findIndex((user) => user.shortCode.toLocaleUpperCase("de-DE").startsWith(prefix));
+        if (next < 0 && prefix !== letter) {
+          next = users.findIndex((user) => user.shortCode.toLocaleUpperCase("de-DE").startsWith(letter));
+          typedShortcut.current = { text: letter, at: time };
+        } else {
+          typedShortcut.current = { text: prefix, at: time };
+        }
         if (next < 0) return;
     }
     event.preventDefault();
+    setGroupAnchor(next);
     selectUser(users[next].loginHandle);
-    peopleRef.current?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+    focusPerson(next);
+  }
+
+  function moveGroup(direction: number) {
+    if (pinDisabled) return;
+    const next = groupStart + direction * groupCapacity;
+    if (next < 0 || next >= users.length) return;
+    const restoreFocus = peopleRef.current?.contains(document.activeElement);
+    setGroupAnchor(next);
+    selectUser(users[next].loginHandle);
+    if (restoreFocus) focusPerson(next);
+  }
+
+  function scrollPeople(event: ReactWheelEvent<HTMLDivElement>) {
+    const time = performance.now();
+    if (time - lastWheel.current < 220) return;
+    const amount = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!amount) return;
+    lastWheel.current = time;
+    moveGroup(Math.sign(amount));
+  }
+
+  function finishSwipe(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const moved = start.x - event.clientX;
+    if (Math.abs(moved) < 36) return;
+    ignoreClickUntil.current = performance.now() + 400;
+    moveGroup(Math.sign(moved));
   }
 
   function submitEmail(event: React.FormEvent<HTMLFormElement>) {
@@ -219,18 +310,26 @@ function StartContent({
         {loginUnavailable ? <div className={styles.error} role="alert"><p>{PIN_LOGIN_COPY.nichtVerfuegbar}</p>{safeSupportReference ? <small>Referenz: {safeSupportReference}</small> : null}</div> : null}
       </header>
       {mode === "pin" ? <>
-        {!mobile && users.length > 0 ? <div ref={peopleRef} className={styles.users} data-many={users.length > 5 || undefined}
-          role="group" aria-label={PIN_LOGIN_COPY.personenleiste} onKeyDown={navigatePeople}>
-          {users.map((user) => <Glasknopf
+        {!mobile && users.length > 0 ? <div ref={peopleRef} className={styles.users} data-many={users.length > groupCapacity || undefined}
+          role="group" aria-label={PIN_LOGIN_COPY.personenleiste} onKeyDown={navigatePeople} onWheel={scrollPeople}
+          onPointerDown={(event) => {
+            if (event.pointerType === "touch") swipeStart.current = { pointerId: event.pointerId, x: event.clientX };
+          }} onPointerUp={finishSwipe} onPointerCancel={() => { swipeStart.current = null; }}>
+          {activeGroup.map((user, index) => <Glasknopf
             key={user.loginHandle}
             className={styles.person}
             knopfform="kreis"
             bezeichnung={`${user.shortCode} ${firstName(user)}`}
             title={firstName(user)}
             data-testid={`pin-user-card-${user.loginHandle}`}
+            data-login-index={groupStart + index}
             aria-pressed={selected?.loginHandle === user.loginHandle}
-            tabIndex={selected?.loginHandle === user.loginHandle ? 0 : -1}
-            onClick={() => { selectUser(user.loginHandle); codeRef.current?.focus(); }}
+            tabIndex={groupStart + index === rovingIndex ? 0 : -1}
+            onClick={() => {
+              if (performance.now() < ignoreClickUntil.current) return;
+              selectUser(user.loginHandle);
+              codeRef.current?.focus();
+            }}
             disabled={pinDisabled}
             icon={<span className={styles.personLabel}>{user.shortCode}<small>{firstName(user)}</small></span>}
           />)}

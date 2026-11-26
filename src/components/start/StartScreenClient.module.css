@@ -19,6 +19,7 @@
   box-sizing: border-box;
   display: grid;
   grid-template-areas: 'heading' 'people' 'pin' 'keys' 'options';
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   align-items: center;
   gap: var(--login-gap);
@@ -52,19 +53,17 @@
   --gb-bewegung-knopf: 120ms;
   --gb-icon-mass: calc(var(--gb-knopf-symbolmass) - 6px);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: safe center;
+  justify-content: center;
   gap: clamp(5px, 1.2vw, 12px);
-  max-width: 100%;
+  box-sizing: border-box;
+  width: 100%;
   padding: 5px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  min-width: 0;
+  touch-action: pan-y;
 }
-.users[data-many] {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(2, auto);
-}
+.users[data-many] .personLabel small { display: none; }
 .personLabel { display: grid; align-content: center; width: 100%; font-weight: 600; }
 .personLabel small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .65rem; }
 .person[aria-pressed='true'] { border-color: var(--gold-600); box-shadow: 0 0 0 2px var(--gold-600), var(--gb-knopf-schatten); }
@@ -125,7 +124,7 @@
 @media (max-width: 380px), (max-height: 519px) {
   .personLabel small { display: none; }
 }
-@media (max-width: 600px) and (pointer: coarse) {
+@media (max-width: 600px) and (pointer: coarse), (max-height: 600px) and (pointer: coarse) {
   .users { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

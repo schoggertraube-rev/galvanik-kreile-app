@@ -164,6 +164,31 @@ describe("StartPage product actor boundary", () => {
     await waitFor(() => expect(shortCode).toHaveFocus());
   });
 
+  it('keeps one active group and focuses a person on another group by keyboard', async () => {
+    const people = Array.from({ length: 20 }, (_, index) => ({
+      ...activeUsers[0], fullName: `TEST Person ${index}`, loginHandle: `synthetic-roster-${index}`,
+      shortCode: index === 19 ? 'ZZ' : `A${index}`,
+    }));
+    ports.readActiveStartUsers.mockResolvedValue({ code: 'OK', users: people, skipped: 0 });
+    render(await StartPage());
+    const group = screen.getByRole('group', { name: 'Wähle dich aus' });
+    const first = screen.getByTestId('pin-user-card-synthetic-roster-0');
+    first.focus();
+    expect(group.querySelectorAll('button').length).toBeLessThan(people.length);
+    expect(screen.queryByTestId('pin-user-card-synthetic-roster-19')).not.toBeInTheDocument();
+    fireEvent.keyDown(first, { key: 'Z' });
+    const last = screen.getByTestId('pin-user-card-synthetic-roster-19');
+    await waitFor(() => expect(last).toHaveFocus());
+    expect(group.querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+    expect(screen.queryByTestId('pin-user-card-synthetic-roster-0')).not.toBeInTheDocument();
+    fireEvent.keyDown(last, { key: 'Home' });
+    await waitFor(() => expect(screen.getByTestId('pin-user-card-synthetic-roster-0')).toHaveFocus());
+    fireEvent.wheel(group, { deltaY: 120 });
+    expect(screen.queryByTestId('pin-user-card-synthetic-roster-0')).not.toBeInTheDocument();
+    expect(group.querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+    expect(ports.loginWithPin).not.toHaveBeenCalled();
+  });
+
   it("accepts NumLock-off numpad codes, deletes with Backspace and submits exactly once after digit four", async () => {
     ports.loginWithPin.mockReturnValue(new Promise(() => {}));
     render(await StartPage());
