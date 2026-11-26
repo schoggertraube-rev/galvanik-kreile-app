@@ -14,6 +14,7 @@ export const LAGER_BUCHUNG_COPY = {
   befehlKonflikt: "Diese Kennung gehört zu einer anderen Buchung.",
   gegenbuchungVorhanden: "Diese Bewegung ist schon zurückgenommen.",
   gegenbuchungNichtMoeglich: "Diese Bewegung lässt sich nicht zurücknehmen.",
+  rueckgabeZumAuftrag: "Gib Material zum Auftrag über ‚Zurücknehmen‘ an der Entnahme zurück.",
   zielOrtFehlt: "Wähle einen aktiven Zielort.",
   artikelFehlt: "Wähle einen vorhandenen Artikel oder leg einen Entwurf an.",
   artikelGeaendert: "Öffne den Artikel erneut, damit du mit der aktuellen Version buchst.",

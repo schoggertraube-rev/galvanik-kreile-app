@@ -3,7 +3,7 @@ import {invoiceCashDiscountDate,type InvoicePaymentTerms} from '@/lib/domain/inv
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
-import {invoiceElectronicUnitLabel,invoiceXmlWorkHours,invoiceBaseUnitPrice,type InvoiceElectronicTaxCategory,type InvoiceElectronicUnitCode} from '@/lib/domain/invoiceElectronicFields';
+import {invoiceElectronicUnitLabel,invoiceXmlWorkHours,invoiceBaseUnitPrice,type InvoiceElectronicTaxCategory,type InvoiceElectronicUnitCode,type InvoiceMaterialUnitCode} from '@/lib/domain/invoiceElectronicFields';
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import React, { type ReactElement } from "react";
@@ -52,7 +52,20 @@ export type ImmutableInvoiceExtraWorkLine = {
 };
 
 export type ImmutableInvoiceShippingLine={sourceOrderIds?:string[];unit?:InvoiceElectronicUnitCode;taxCategory?:InvoiceElectronicTaxCategory;type:'SHIPPING';shippingKind?:'fee'|'reference';shipmentGroupId:string;name:string;amountCents:number;vat_rate_basis_points:0|700|1900};
-export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine | ImmutableInvoiceShippingLine;
+export type ImmutableInvoiceMaterialLine = {
+  type: 'MATERIAL';
+  sourceOrderId: string;
+  articleId: string;
+  name: string;
+  quantity: string;
+  unit: InvoiceMaterialUnitCode;
+  unitNetAmount: string;
+  lineNetAmountCents: number;
+  vat_rate_basis_points: 0 | 700 | 1900;
+  taxCategory: InvoiceElectronicTaxCategory;
+  eventIds: string[];
+};
+export type ImmutableInvoiceLine = ImmutableInvoiceBaseLine | ImmutableInvoiceExtraWorkLine | ImmutableInvoiceMaterialLine | ImmutableInvoiceShippingLine;
 
 type InvoiceSeller = {
     companyName: string;
@@ -432,21 +445,39 @@ function lineDescription(line: ImmutableInvoiceLine): string {
 }
 
 function lineQuantity(line: ImmutableInvoiceLine): string {
+  if (line.type === 'MATERIAL') {
+    return `${line.quantity.replace('.', ',')} ${invoiceElectronicUnitLabel(line.unit)}`;
+  }
   return line.type === 'SHIPPING'?'1':line.type === "BASE" ? `${line.quantity} ${line.unit?invoiceElectronicUnitLabel(line.unit,line.unitSource):'Stk.'}` : line.unit==='HUR'?`${invoiceXmlWorkHours(line.minutes).replace('.',',')} ${invoiceElectronicUnitLabel(line.unit)}`:`${line.minutes} Min.`;
 }
 
-function preciseBaseUnitAmount(line:ImmutableInvoiceBaseLine):string{
- const [whole,fraction]=invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents).split('.');
+function formatPreciseUnitAmount(amount: string): string {
+ const [whole,fraction]=amount.split('.');
  return whole.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+fraction+'\u00a0€';
 }
+function preciseBaseUnitAmount(line:ImmutableInvoiceBaseLine):string{
+ return formatPreciseUnitAmount(invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents));
+}
 function lineUnitAmount(line: ImmutableInvoiceLine,schemaVersion:1|2|3): string {
+  if (line.type === 'MATERIAL') return formatPreciseUnitAmount(line.unitNetAmount);
   return line.type === 'SHIPPING'?formatCents(line.amountCents):line.type === "BASE"
     ? schemaVersion===3?preciseBaseUnitAmount(line):formatCents(line.unitNetAmountCents)
     : `${formatCents(line.hourlyRateCents)}/Std.`;
 }
 
 function lineTotalAmount(line: ImmutableInvoiceLine): number {
-  return line.type === "BASE" ? line.lineNetAmountCents : line.amountCents;
+  return line.type === 'BASE' || line.type === 'MATERIAL' ? line.lineNetAmountCents : line.amountCents;
+}
+
+function lineSourceKey(line: ImmutableInvoiceLine): string {
+  if (line.type === 'SHIPPING') return line.shipmentGroupId;
+  return line.type === 'MATERIAL' ? line.articleId : line.itemId;
+}
+
+function cancellationUnitAmount(line: ImmutableInvoiceLine, schemaVersion: 1 | 2 | 3): string {
+  if (line.type === 'MATERIAL' || schemaVersion === 3 && line.type === 'BASE') return lineUnitAmount(line, schemaVersion);
+  const unitCents = line.type === 'BASE' ? line.unitNetAmountCents : line.type === 'SHIPPING' ? line.amountCents : line.hourlyRateCents;
+  return formatCents((schemaVersion === 3 ? 1 : -1) * Math.abs(unitCents));
 }
 
 export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat,originalInvoiceNumber }: ImmutableInvoiceDocumentProps) {
@@ -500,7 +531,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot, vat
             <View style={[styles.colTotal, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Gesamt netto</Text></View>
           </View>
           {lines.map((line, index) => (
-            <View style={styles.tableRow} key={`${line.type}-${line.type==='SHIPPING'?line.shipmentGroupId:line.itemId}-${index}`}>
+            <View style={styles.tableRow} key={`${line.type}-${lineSourceKey(line)}-${index}`}>
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{snapshot.collection===undefined?lineDescription(line):invoiceOriginalLineMembers(snapshot,line).map(member=>E_INVOICE_COPY.collectionMember(member.orderNumber,formatCalendarDate(member.serviceDate))).join(' · ')+'\n'+lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{lineQuantity(line)}</Text></View>
@@ -618,11 +649,11 @@ export function ImmutableInvoiceCancellationDocument({
             <View style={[styles.colTotal, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Storno netto</Text></View>
           </View>
           {lines.map((line, index) => (
-            <View style={styles.tableRow} key={`cancel-${line.type}-${line.type==='SHIPPING'?line.shipmentGroupId:line.itemId}-${index}`}>
+            <View style={styles.tableRow} key={`cancel-${line.type}-${lineSourceKey(line)}-${index}`}>
               <View style={styles.colPos}><Text style={styles.cell}>{index + 1}</Text></View>
               <View style={styles.colDesc}><Text style={styles.cell}>{snapshot.collection===undefined?lineDescription(line):invoiceOriginalLineMembers(snapshot,line).map(member=>E_INVOICE_COPY.collectionMember(member.orderNumber,formatCalendarDate(member.serviceDate))).join(' · ')+'\n'+lineDescription(line)}</Text></View>
               <View style={styles.colQty}><Text style={styles.cell}>{snapshot.schemaVersion===3?'-':''}{lineQuantity(line)}</Text></View>
-              <View style={styles.colUnit}><Text style={styles.cell}>{snapshot.schemaVersion===3&&line.type==='BASE'?preciseBaseUnitAmount(line):formatCents((snapshot.schemaVersion===3?1:-1)*Math.abs(line.type==='SHIPPING'?line.amountCents:line.type === "BASE" ? line.unitNetAmountCents : line.hourlyRateCents))}</Text></View>
+              <View style={styles.colUnit}><Text style={styles.cell}>{cancellationUnitAmount(line, snapshot.schemaVersion)}</Text></View>
               <View style={styles.colTotal}><Text style={styles.cell}>{formatCents(-Math.abs(lineTotalAmount(line)))}</Text></View>
             </View>
           ))}

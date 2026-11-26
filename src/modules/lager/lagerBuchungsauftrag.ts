@@ -20,6 +20,12 @@ function passtText(wert: unknown, muster: RegExp): wert is string {
   return typeof wert === "string" && muster.test(wert);
 }
 
+export function istLagerRueckgabeZumAuftrag(input: unknown): boolean {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const { geschaeftsgrund, orderId } = input as Record<string, unknown>;
+  return geschaeftsgrund === "rueckgabe" && passtText(orderId, kennung);
+}
+
 /** Liest ausschließlich den geschlossenen Eingabevertrag für B1a-3-Buchungen. */
 export function leseLagerBuchungsauftrag(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
@@ -40,6 +46,7 @@ export function leseLagerBuchungsauftrag(input: unknown) {
 
   const art = movementType as keyof typeof gruende;
   if (typeof geschaeftsgrund !== "string" || !(gruende[art] as readonly string[]).includes(geschaeftsgrund)) return null;
+  if (istLagerRueckgabeZumAuftrag(wert)) return null;
   if (orderId != null && !passtText(orderId, kennung)
     || belegId != null && !passtText(belegId, lagerBefehlsUuid)
     || originalDateiId != null && (!passtText(originalDateiId, lagerBefehlsUuid) || belegId == null)

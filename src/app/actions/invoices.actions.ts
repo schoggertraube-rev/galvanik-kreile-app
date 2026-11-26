@@ -1,4 +1,5 @@
 "use server";
+import {leseLagerMaterialpositionenInTransaction} from '@/modules/lager/server-public';
 import {readCustomerInvoiceTerms} from '@/modules/customers/server-public';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
@@ -54,7 +55,7 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
  return observeAction('issueInvoiceAction',subjectForAction('issueInvoiceAction',input),async()=>{
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
+  const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms,leseLagerMaterialpositionenInTransaction);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");
@@ -78,7 +79,7 @@ export async function issueCollectionInvoiceAction(input:import('@/lib/domain/in
  return observeAction('issueCollectionInvoiceAction',subjectForAction('issueCollectionInvoiceAction',input),async()=>{
   const {createCollectionInvoice}=await import('@/lib/server/commands/immutableInvoiceCommand');
   const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-  const result=await createCollectionInvoice(input,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
+  const result=await createCollectionInvoice(input,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms,leseLagerMaterialpositionenInTransaction);
   if(result.code==='OK'){revalidatePath('/buchhaltung/rechnungen');revalidatePath('/warendurchlauf');}
   return result;
  },readLoggingSettings);
@@ -116,7 +117,7 @@ export async function cancelInvoiceAction(input: CancelInvoiceInput): Promise<Ca
     collectionSettled:async(tx,auth,key)=>synchronizeCancelledCollectionTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},true),
     failed:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'ensure'),
     settled:async(tx,auth,key)=>synchronizeCancellationCreditRetryTask(tx,auth,key,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)},'settle'),
-  },recognizeInvoicePdf);
+  },recognizeInvoicePdf,leseLagerMaterialpositionenInTransaction);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
     revalidatePath("/warendurchlauf");

@@ -1,3 +1,5 @@
+import { invoiceMaterialLineNetCents, isInvoiceMaterialUnitCode } from '@/lib/domain/invoiceElectronicFields';
+
 export type InvoiceVatGroup={rateBp:number;netCents:number;vatCents:number;grossCents:number};
 export type InvoiceVatRead={groups:InvoiceVatGroup[];netAmountCents:number;vatAmountCents:number;grossAmountCents:number;headRate:number|null;reverseCharge:boolean};
 export type InvoiceVatReader=(beleg:unknown)=>InvoiceVatRead;
@@ -35,13 +37,16 @@ export function readInvoiceVat(beleg:unknown):InvoiceVatRead{
   if(totals.vatRateBasisPoints!==null||!Array.isArray(totals.vatBreakdown)||!totals.vatBreakdown.length||!Array.isArray(beleg.lines)||!beleg.lines.length)throw Error('INVOICE_VAT_GROUPS_REQUIRED');
   const lineGroups=new Map<number,number>();
   for(const line of beleg.lines){
-   if(!object(line)||(line.type!=='BASE'&&line.type!=='EXTRA_WORK'&&line.type!=='SHIPPING'))throw Error('INVOICE_VAT_LINE_INVALID');
+   if(!object(line)||(line.type!=='BASE'&&line.type!=='EXTRA_WORK'&&line.type!=='SHIPPING'&&line.type!=='MATERIAL'))throw Error('INVOICE_VAT_LINE_INVALID');
+   if(line.type==='MATERIAL'&&(beleg.schemaVersion!==3||!isInvoiceMaterialUnitCode(line.unit)
+    ||invoiceMaterialLineNetCents(line.unitNetAmount,line.quantity)!==line.lineNetAmountCents))throw Error('INVOICE_VAT_MATERIAL_LINE_INVALID');
    if(line.type==='SHIPPING'&&(typeof line.shipmentGroupId!=='string'||!line.shipmentGroupId||typeof line.name!=='string'||!line.name.trim()))throw Error('INVOICE_VAT_SHIPPING_SOURCE_INVALID');
    if(line.type==='SHIPPING'&&'shippingKind'in line&&(line.shippingKind!=='fee'&&line.shippingKind!=='reference'||line.shippingKind==='reference'&&line.amountCents!==0))throw Error('INVOICE_VAT_SHIPPING_KIND_INVALID');
    const rate=line.vat_rate_basis_points;
    if(rate!==0&&rate!==700&&rate!==1900)throw Error('INVOICE_VAT_LINE_RATE_INVALID');
-   if(beleg.schemaVersion===3&&(line.taxCategory!==(rate===0?'AE':'S')||typeof line.unit!=='string'||!['C62','KGM','GRM','MTR','MTK','HUR','DMK','SET'].includes(line.unit)||line.type==='EXTRA_WORK'&&line.unit!=='HUR'||line.type==='SHIPPING'&&line.unit!=='C62'))throw Error('INVOICE_VAT_ELECTRONIC_LINE_INVALID');
-   const amount=cents(line.type==='BASE'?line.lineNetAmountCents:line.amountCents);
+   if(beleg.schemaVersion===3&&(line.taxCategory!==(rate===0?'AE':'S')||line.type!=='MATERIAL'&&
+    (typeof line.unit!=='string'||!['C62','KGM','GRM','MTR','MTK','HUR','DMK','SET'].includes(line.unit)||line.type==='EXTRA_WORK'&&line.unit!=='HUR'||line.type==='SHIPPING'&&line.unit!=='C62')))throw Error('INVOICE_VAT_ELECTRONIC_LINE_INVALID');
+   const amount=cents(line.type==='BASE'||line.type==='MATERIAL'?line.lineNetAmountCents:line.amountCents);
    lineGroups.set(rate,cents((lineGroups.get(rate)??0)+amount));
   }
   const seen=new Set<number>();

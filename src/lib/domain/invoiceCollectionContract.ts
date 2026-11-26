@@ -76,10 +76,18 @@ export function invoiceOriginalLineMembers(source:Parameters<typeof invoiceOrigi
 }
 
 /** Qualify source coverage once for both the stored reader and the XML writer. */
-export function assertInvoiceOriginalLineSources(source:Parameters<typeof invoiceOriginalMembers>[0],lines:readonly {type:string;itemId?:unknown;sourceOrderId?:unknown;sourceOrderIds?:unknown;shipmentGroupId?:unknown}[]):void{
+export function assertInvoiceOriginalLineSources(source:Parameters<typeof invoiceOriginalMembers>[0],lines:readonly {type:string;itemId?:unknown;sourceOrderId?:unknown;sourceOrderIds?:unknown;shipmentGroupId?:unknown;eventIds?:unknown}[]):void{
  const members=invoiceOriginalMembers(source),represented=new Set<string>(),goods=new Set<string>(),shipments=new Set<string>();
+ const materialEvents=new Set<string>();
  for(const line of lines){
   const origins=invoiceOriginalLineMembers(source,line);
+  if(line.type==='MATERIAL'){
+   if(line.sourceOrderId!==origins[0].orderId||!Array.isArray(line.eventIds)||line.eventIds.length===0)throw Error('INVOICE_MATERIAL_SOURCE_INVALID');
+   for(const id of line.eventIds){
+    if(typeof id!=='string'||id.length!==36||!UUID.test(id)||materialEvents.has(id))throw Error('INVOICE_MATERIAL_SOURCE_INVALID');
+    materialEvents.add(id);
+   }
+  }
   if(source.collection===undefined)continue; // Existing ordinary line checks remain in their canonical parser.
   if(line.type==='SHIPPING'){
    if(!text(line.shipmentGroupId)||shipments.has(line.shipmentGroupId))throw Error('INVOICE_COLLECTION_SHIPMENT_DUPLICATED');
