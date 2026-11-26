@@ -27,6 +27,7 @@ export interface TagesbandProps {
   markenBedienbar?: boolean;
   leermeldung?: ReactNode;
   belegung?: ReactNode;
+  zeigeZeitachse?: boolean;
 }
 
 function position(value: number): CSSProperties {
@@ -34,7 +35,7 @@ function position(value: number): CSSProperties {
 }
 
 export function Tagesband({ titel, kontext, zeitraumName, aktuellerZeitraum, zeitraeume, onZeitraum,
-  bearbeitung, termine, skala, jetzt, markenBedienbar, leermeldung, belegung }: TagesbandProps) {
+  bearbeitung, termine, skala, jetzt, markenBedienbar, leermeldung, belegung, zeigeZeitachse=true }: TagesbandProps) {
   return <section className={styles.band}>
     <header className={styles.header}>
       <div><h2>{titel}</h2>{kontext && <p>{kontext}</p>}</div>
@@ -46,7 +47,7 @@ export function Tagesband({ titel, kontext, zeitraumName, aktuellerZeitraum, zei
         {bearbeitung}
       </div>
     </header>
-    <div className={styles.track} data-markers={markenBedienbar || undefined}>
+    {zeigeZeitachse&&<div className={styles.track} data-markers={markenBedienbar || undefined}>
       <div className={styles.ruler}>
         {jetzt && <div className={styles.elapsed} style={position(jetzt.position)} />}
         {skala.map(item => <span key={item.position} className={styles.tick}
@@ -56,8 +57,8 @@ export function Tagesband({ titel, kontext, zeitraumName, aktuellerZeitraum, zei
         </span>)}
         {jetzt && <span className={styles.now} style={position(jetzt.position)}>{jetzt.label}</span>}
       </div>
-    </div>
-    <div className={styles.agenda} data-compact-only={markenBedienbar || undefined}>
+    </div>}
+    <div className={styles.agenda} data-compact-only={zeigeZeitachse&&markenBedienbar || undefined}>
       {termine.map(item => <button key={item.id} type="button" onClick={item.onOpen} data-pigment={item.pigment || 'planung'}>
         <strong>{item.uhrzeit}</strong> {item.titel}
       </button>)}
