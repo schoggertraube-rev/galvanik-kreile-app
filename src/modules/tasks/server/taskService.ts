@@ -348,7 +348,7 @@ export async function restrictCollectionTaskForAppointment(tx:PrivilegedTenantTr
 export type TaskReadContext=AuthorizedReadContext&Readonly<{canReadTaskArea:(area:AccessArea|null)=>boolean}>;
 export type TaskSourceRead=Awaited<ReturnType<typeof readTaskSourceInTransaction>>;
 export type TaskCalendarSources={code:'OK'|'SOURCE_INCOMPLETE';rows:TaskSourceRead[];missingTaskIds:string[]};
-function liveTaskReadContext(auth:AuthorizationSnapshot):TaskReadContext{
+export function liveTaskReadContext(auth:AuthorizationSnapshot):TaskReadContext{
  return {...authorizationReadContext(auth),canReadTaskArea:area=>canReadTaskArea(auth,area)};
 }
 function validateTaskRead(request:TaskOpenRequest|{calendar:true}):TaskFailure|null{

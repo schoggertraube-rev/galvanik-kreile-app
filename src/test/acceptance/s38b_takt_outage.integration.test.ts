@@ -9,7 +9,7 @@ import {sql,createFixture,withSession} from '../../../e2e/ablauf/replayHarness';
 import {berlinCalendarDay,berlinUhrzeit} from '@/lib/domain/workingDays';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {starteTaktJobNeu} from '@/app/actions/takt.actions';
-import {liesTaktAusfallZeilen} from '@/modules/takt/server-public';
+import {liesTaktAusfallZeilen,projiziereTaktAusfallZeilen} from '@/modules/takt/server-public';
 import {createTaktOutageSettingsFixture} from '@/test/fixtures/taktOutageSettingsFixture';
 
 const replayUrl=process.env.DATABASE_URL;
@@ -72,6 +72,16 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
     expect(await lies(other)).toMatchObject({code:'OK',zeilen:expect.arrayContaining([
       expect.objectContaining({key:protokollKey,befehl:null,handlung:'Nur mit Systemdiagnose'}),
     ])});
+    const modell=await liesTaktAusfallZeilen({tenantId:tenant},jetzt);
+    expect(modell).not.toHaveProperty('zeilen');
+    const modellKopie:unknown=JSON.parse(JSON.stringify(modell));
+    const mitSitzung=(fixture:typeof operator)=>withSession(fixture,async()=>{
+      const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_TAKT_AUTH_FEHLT');
+      expect(projiziereTaktAusfallZeilen(auth.data,{...modell,tenantId:fremd})).toEqual({code:'SOURCE_INCOMPLETE'});
+      return projiziereTaktAusfallZeilen(auth.data,modellKopie);
+    });
+    expect(await mitSitzung(operator)).toEqual(await lies(operator));
+    expect(await mitSitzung(other)).toEqual(await lies(other));
     await settings.setTolerance(48);
     expect(await lies(operator)).toMatchObject({code:'OK',zeilen:[{key:tagKey}]});
     await settings.setTolerance(12);

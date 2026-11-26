@@ -20,6 +20,7 @@
     "@/modules/takt/server-public#liesTaktLaeufe",
     "@/modules/takt/server-public#TaktLaufZeile",
     "@/modules/takt/server-public#liesTaktAusfallZeilen",
+    "@/modules/takt/server-public#projiziereTaktAusfallZeilen",
     "@/modules/takt/server-public#tagQuellen"
   ],
   "capabilities": [],

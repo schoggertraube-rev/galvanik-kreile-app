@@ -10,8 +10,10 @@ import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixtu
 import {completeIntakeTaskAction,getIntakeTaskAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {pageReadQueryObservation,withPageReadBudget} from '@/db/readBudget';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {canReadTaskArea} from '@/lib/auth/authorizationContract';
 import {resolveAuthorization} from '@/lib/server/authorization';
-import {liesAufgabenFuerTag} from '@/modules/tasks/server-public';
+import {authorizationReadContext} from '@/lib/server/authorizationReadContext';
+import {liesAufgabenFuerTag,projiziereAufgabenFuerTag} from '@/modules/tasks/server-public';
 import type {TaskSaveInput} from '@/modules/tasks/public';
 
 it('liest offene Aufgaben ohne Eingang, schützt Geld und Bezug und entfernt den erledigten Eintrag',async()=>{
@@ -59,6 +61,19 @@ it('liest offene Aufgaben ohne Eingang, schützt Geld und Bezug und entfernt den
  expect(JSON.stringify(mitGeld)).not.toContain(fremdAufgabe);
  expect(liste.queries).toBeGreaterThan(0);
  expect(mitGeld.queries).toBe(liste.queries);
+ const gespeichert=await withSession(ersteller,async()=>{
+  const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_AUTH_FEHLT');
+  return liesAufgabenFuerTag({...authorizationReadContext(auth.data),canReadTaskArea:area=>canReadTaskArea(auth.data,area)});
+ });
+ const kopie:unknown=JSON.parse(JSON.stringify(gespeichert));
+ const ausModell=await withSession(kunden,async()=>{
+  const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_AUTH_FEHLT');
+  expect(projiziereAufgabenFuerTag(auth.data,{...gespeichert,tenantId:fremd})).toEqual({code:'SOURCE_INCOMPLETE'});
+  return projiziereAufgabenFuerTag(auth.data,kopie);
+ });
+ expect(ausModell).toMatchObject({code:'OK',zeilen:[{key,bestand:{reference:null}}]});
+ expect(JSON.stringify(ausModell)).not.toContain('TEST Preis besprechen');
+ expect(JSON.stringify(ausModell)).not.toContain(auftrag.orderId);
  const lesen=()=>getIntakeTaskAction({taskId:zeile.bestand.arg});
  expect(await withSession(kunden,lesen)).toMatchObject({code:'OK',canComplete:false,canOpenReference:false});
  expect(await withSession(auftraege,lesen)).toMatchObject({code:'OK',canComplete:true,canOpenReference:true});

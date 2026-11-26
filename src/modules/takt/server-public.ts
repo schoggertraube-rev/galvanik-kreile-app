@@ -5,4 +5,4 @@ export type {TaktZugriff} from './server/geheimnis';
 export {fuehreTaktAus, holeTaktNach, starteTaktStoerungsjob} from './server/runner';
 export {liesTaktLaeufe} from './server/laeufe';
 export type {TaktLaufZeile} from './server/laeufe';
-export {liesTaktAusfallZeilen,tagQuellen} from './server/tagQuellen';
+export {liesTaktAusfallZeilen,projiziereTaktAusfallZeilen,tagQuellen} from './server/tagQuellen';
