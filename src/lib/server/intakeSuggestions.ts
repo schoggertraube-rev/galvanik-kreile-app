@@ -341,7 +341,7 @@ export async function readIntakeSuggestions(
         positions: input.positions.map(position=>!canReadMoney&&position.catalogServiceId?{...position,unitPriceCents:catalogById.has(position.catalogServiceId)?Number(catalogById.get(position.catalogServiceId)!.net_price_cents):null}:position),
         catalogById,
         dailyOutputEur,
-        settings:{handoverBufferDays:settings.versandpufferArbeitstage,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent},
+        settings:{handoverBufferDays:input.handoverMode==="shipping"?settings.versandpufferArbeitstage:0,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent},
         openOrders:capacityRows.map(row=>({...row,valueCents:Number(row.valueCents)})),priority:customerRows[0]?.vorrang===true,processingWeeks:input.processingWeeks,kind:input.kind,
       },eligible);
     }
