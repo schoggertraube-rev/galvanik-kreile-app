@@ -1223,7 +1223,8 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(part,{target:{value:"SYNTHETISCH Flansch"}});part.focus();
     fireEvent.click(within(dialog).getByRole("button",{name:"Schließen"}));
     const prompt=await screen.findByRole("dialog",{name:"Änderungen nicht gespeichert"});
-    expect(dialog.closest(".kr-ebene")).not.toHaveClass("kr-ebene--zu");
+    expect(dialog).toHaveAttribute("open");
+    expect(dialog).not.toHaveAttribute("data-r53-ausgang");
     fireEvent.click(within(prompt).getByRole("button",{name:"Weiter bearbeiten"}));
     await waitFor(()=>expect(part).toHaveFocus());
     expect(part).toHaveValue("SYNTHETISCH Flansch");

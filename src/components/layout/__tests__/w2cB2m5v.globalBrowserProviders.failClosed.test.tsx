@@ -65,6 +65,7 @@ function setPermissionSnapshot(role: string, permissions: string[]) {
 
 vi.mock("next/navigation", () => ({
   usePathname: () => boundary.pathname.value,
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: boundary.push }),
 }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
