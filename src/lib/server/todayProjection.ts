@@ -3,34 +3,23 @@ import {sql} from 'drizzle-orm';
 import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import {boundedTodayRefreshBudgetMs,type TodayReadSettings} from '@/modules/fundament/public';
-import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction,tagQuellen as fundamentQuellen} from '@/modules/fundament/server-public';
+import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
-import {readInvoiceVat,readCustomerCreditInTransaction,tagQuellen as accountingQuellen} from '@/modules/accounting/server-public';
-import {readManualShippingBatch,tagQuellen as ordersQuellen} from '@/modules/orders/server-public';
-import {readComplaintsForAuthorization,tagQuellen as complaintsQuellen} from '@/modules/complaints/server-public';
-import {readIntakeMessagesForAuthorization,tagQuellen as eingangQuellen} from '@/modules/eingang/server-public';
-import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors,tagQuellen as quotesQuellen} from '@/modules/quotes/server-public';
-import {readTaskForAuthorization,readQuoteFollowupTasksForToday,tagQuellen as tasksQuellen} from '@/modules/tasks/server-public';
+import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
+import {readManualShippingBatch} from '@/modules/orders/server-public';
+import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
+import {readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
+import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors} from '@/modules/quotes/server-public';
+import {readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {paymentReadAuthorization,type PaymentReadProfile,type PaymentReadAuthorization} from './paymentContract';
 import {readTodayOrderSources,type TodayOrderReadPorts} from './todayOrderRead';
 import {readLiveOrderCardSource} from './orderCardRead';
 import {getOperationalOrders} from './operationalOrders';
 import {readTodayCalendar} from '@/lib/today/todayDashboardPolicy';
-import {fuegeTagQuellenZusammen} from '@/lib/today/todaySourceRegistry';
 import {readTodayMoneySupport,todaySourceAccess} from './todayDashboard';
 import {readShippingMergeAllocation} from './commands/immutableInvoiceCommand';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
-import {TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
-
-const TAG_QUELLEN=fuegeTagQuellenZusammen([
- {modul:'orders',quellen:ordersQuellen},
- {modul:'eingang',quellen:eingangQuellen},
- {modul:'accounting',quellen:accountingQuellen},
- {modul:'complaints',quellen:complaintsQuellen},
- {modul:'quotes',quellen:quotesQuellen},
- {modul:'tasks',quellen:tasksQuellen},
- {modul:'fundament',quellen:fundamentQuellen},
-]);
+import {TAG_QUELLEN,TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
 const auftragsQuelle=TAG_QUELLEN.find(quelle=>quelle.bestand?.umfang==='auftrag'&&quelle.bestand.leser==='order');
 if(!auftragsQuelle)throw Error('TODAY_PROJECTOR_ORDER_SOURCE_MISSING');
 const AUFTRAGSQUELLE='quelle:'+auftragsQuelle.id;

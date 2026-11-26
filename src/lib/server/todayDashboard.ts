@@ -17,7 +17,7 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {hasAnyAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import {TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
+import {TAG_QUELLEN,TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -675,21 +675,32 @@ export async function saveTodayReminder(auth: AuthorizationSnapshot, input: { it
   return { code: "OK" as const, message: decision.message, data: { reminderUntil: decision.until.toISOString() } };
 }
 
-// Qualified model collection shares this one live/compose source contract.
-// These names select the existing payloads consumed by the dashboard.
-const modelInputs={
- order:{kind:'quelle:orders.auftrag'},
- orders:{kind:'quelle:orders.liste',phase:'today.orders'},
- messages:{kind:'quelle:eingang.nachrichten',phase:'today.graph'},
- money:{kind:'quelle:accounting.geld',phase:'today.support'},
- complaints:{kind:'quelle:complaints.liste',phase:'today.complaints'},
- quote_followups:{kind:'quelle:quotes.nachfassen',phase:'today.followups'},
- quotes:{kind:'quelle:quotes.liste',phase:'today.quotes'},
- tasks:{kind:'quelle:tasks.aufgabe',phase:'today.tasks'},
- company:{kind:'quelle:fundament.firma',phase:'today.company'},
+// Existing live reader metrics. The persisted kinds come from the register.
+const modelReadPhases={
+ orders:'today.orders',
+ messages:'today.graph',
+ money:'today.support',
+ complaints:'today.complaints',
+ quote_followups:'today.followups',
+ quotes:'today.quotes',
+ tasks:'today.tasks',
+ company:'today.company',
 } as const;
-type DashboardInput=keyof typeof modelInputs;
-type DashboardListInput=Exclude<DashboardInput,'order'>;
+type DashboardListInput=keyof typeof modelReadPhases;
+type DashboardInput='order'|DashboardListInput;
+
+function registeredModelKind(reader:DashboardInput,scope:'auftrag'|'mandant'){
+ const sources=TAG_QUELLEN.filter(source=>source.bestand?.leser===reader&&source.bestand.umfang===scope);
+ if(sources.length!==1)throw Error('TODAY_MODEL_READER_SOURCE_INVALID:'+reader);
+ return `quelle:${sources[0].id}`;
+}
+
+const modelInputs={
+ order:{kind:registeredModelKind('order','auftrag')},
+ ...Object.fromEntries(Object.entries(modelReadPhases).map(([reader,phase])=>[
+  reader,{kind:registeredModelKind(reader as DashboardListInput,'mandant'),phase},
+ ])) as Record<DashboardListInput,{kind:string;phase:string}>,
+};
 export const todayDashboardListKinds = Object.freeze(
  Object.values(modelInputs).flatMap(input=>'phase' in input?[input.kind]:[]),
 );

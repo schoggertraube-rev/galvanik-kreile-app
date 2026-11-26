@@ -4,6 +4,24 @@ import {withPageReadBudget} from '@/db/readBudget';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {withPrivilegedTenantTransaction} from './privilegedDb';
 import {TAKT_READ_BUDGET_MS} from '@/modules/takt/public';
+import {tagQuellen as ordersQuellen} from '@/modules/orders/server-public';
+import {tagQuellen as eingangQuellen} from '@/modules/eingang/server-public';
+import {tagQuellen as accountingQuellen} from '@/modules/accounting/server-public';
+import {tagQuellen as complaintsQuellen} from '@/modules/complaints/server-public';
+import {tagQuellen as quotesQuellen} from '@/modules/quotes/server-public';
+import {tagQuellen as tasksQuellen} from '@/modules/tasks/server-public';
+import {tagQuellen as fundamentQuellen} from '@/modules/fundament/server-public';
+import {fuegeTagQuellenZusammen} from '@/lib/today/todaySourceRegistry';
+
+export const TAG_QUELLEN = fuegeTagQuellenZusammen([
+ {modul:'orders',quellen:ordersQuellen},
+ {modul:'eingang',quellen:eingangQuellen},
+ {modul:'accounting',quellen:accountingQuellen},
+ {modul:'complaints',quellen:complaintsQuellen},
+ {modul:'quotes',quellen:quotesQuellen},
+ {modul:'tasks',quellen:tasksQuellen},
+ {modul:'fundament',quellen:fundamentQuellen},
+]);
 
 export const TODAY_PROJECTOR_VERSION=2;
 

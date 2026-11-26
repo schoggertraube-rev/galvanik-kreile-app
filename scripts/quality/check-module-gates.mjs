@@ -91,6 +91,8 @@ const SERVER_ACTION_FILE = /^src\/app\/actions\/[^/]+\.actions\.ts$/;
 const REAL_DB_TEST_FILE = /^src\/test\/.+\.integration\.test\.ts$/;
 // E2 Projektor, PL 22.11. 04:3x (Entscheid 04:25:53): exactly one named root.
 const TODAY_PROJECTOR_FILE = 'src/lib/server/todayProjection.ts';
+const TODAY_TAG_COMPOSITION_FILE = 'src/lib/server/todayProjectionSchedule.ts';
+const TODAY_TAG_SOURCE_MODULES = new Set(['orders', 'eingang', 'accounting', 'complaints', 'quotes', 'tasks', 'fundament']);
 const TODAY_PROJECTOR_READ_FACADES = new Map([
   ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction','readBetriebsruheInTransaction'])],
   ['orders',new Set(['readManualShipping','readManualShippingBatch'])],
@@ -467,19 +469,25 @@ function clientFacadeViolation(root, entryRel) {
   return null;
 }
 
-export function validTodayProjectorComposition(source) {
-  const tree=ts.createSourceFile(TODAY_PROJECTOR_FILE,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+function todayReadCompositionTree(file,source) {
+  const tree=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
   const first=tree.statements[0];
-  if(!first||!ts.isImportDeclaration(first)||first.importClause||!ts.isStringLiteral(first.moduleSpecifier)||first.moduleSpecifier.text!=='server-only')return false;
+  if(!first||!ts.isImportDeclaration(first)||first.importClause||!ts.isStringLiteral(first.moduleSpecifier)||first.moduleSpecifier.text!=='server-only')return null;
   let forbiddenDirective=false,wholeFacade=false;
-  const isServerFacade=specifier=>/\/server-public$/.test(resolveSpec(TODAY_PROJECTOR_FILE,specifier)??'');
+  const isServerFacade=specifier=>/\/server-public$/.test(resolveSpec(file,specifier)??'');
   const visit=node=>{
     if(ts.isExpressionStatement(node)&&ts.isStringLiteral(node.expression)&&node.expression.text==='use server')forbiddenDirective=true;
     if(ts.isCallExpression(node)&&node.arguments.some(argument=>ts.isStringLiteral(argument)&&isServerFacade(argument.text)))wholeFacade=true;
     if(ts.isImportTypeNode(node)&&ts.isLiteralTypeNode(node.argument)&&ts.isStringLiteral(node.argument.literal)&&isServerFacade(node.argument.literal.text))wholeFacade=true;
     ts.forEachChild(node,visit);
   };
-  visit(tree);if(forbiddenDirective||wholeFacade)return false;
+  visit(tree);
+  return forbiddenDirective||wholeFacade?null:tree;
+}
+
+export function validTodayProjectorComposition(source) {
+  const tree=todayReadCompositionTree(TODAY_PROJECTOR_FILE,source);
+  if(!tree)return false;
   const exports=analyzeFacadeExports(source,TODAY_PROJECTOR_FILE);
   if(exports.errors.length||exports.hasDefault||exports.hasExportEquals||exports.hasStarReexport||[...exports.symbols].sort().join(',')!=='ProjectorAuthorization,rebuildTodayModel,refreshTodayModel')return false;
   if(!tree.statements.some(statement=>ts.isTypeAliasDeclaration(statement)&&statement.name.text==='ProjectorAuthorization'&&hasModifier(statement,ts.SyntaxKind.ExportKeyword)))return false;
@@ -490,12 +498,33 @@ export function validTodayProjectorComposition(source) {
     if(!facade)continue;
     const allowed=TODAY_PROJECTOR_READ_FACADES.get(facade[1])??new Set(),bindings=statement.importClause?.namedBindings;
     if(!bindings||!ts.isNamedImports(bindings)||statement.importClause.name)return false;
-    if(bindings.elements.some(binding=>{const name=(binding.propertyName??binding.name).text;return name!=='tagQuellen'&&!allowed.has(name);}))return false;
+    if(bindings.elements.some(binding=>{
+      const name=(binding.propertyName??binding.name).text;
+      return name==='tagQuellen'?TODAY_TAG_SOURCE_MODULES.has(facade[1]):!allowed.has(name);
+    }))return false;
   }
   return true;
 }
+
+function validTodayTagComposition(source) {
+  const tree=todayReadCompositionTree(TODAY_TAG_COMPOSITION_FILE,source);
+  if(!tree)return false;
+  for(const statement of tree.statements){
+    if(!ts.isImportDeclaration(statement)||!ts.isStringLiteral(statement.moduleSpecifier))continue;
+    const facade=(resolveSpec(TODAY_TAG_COMPOSITION_FILE,statement.moduleSpecifier.text)??'').match(/^src\/modules\/([^/]+)\/server-public$/);
+    if(!facade)continue;
+    const clause=statement.importClause,bindings=clause?.namedBindings;
+    if(!TODAY_TAG_SOURCE_MODULES.has(facade[1])||!clause||clause.name||clause.isTypeOnly||
+        !bindings||!ts.isNamedImports(bindings)||bindings.elements.length!==1)return false;
+    const [binding]=bindings.elements;
+    if(binding.isTypeOnly||(binding.propertyName??binding.name).text!=='tagQuellen')return false;
+  }
+  return true;
+}
+
 export function allowedServerFacadeConsumer(file, source) {
   if(file===TODAY_PROJECTOR_FILE)return validTodayProjectorComposition(source);
+  if(file===TODAY_TAG_COMPOSITION_FILE)return validTodayTagComposition(source);
   const taktJobsFile = 'src/modules/takt/jobs.ts';
   const taktRoutes = new Set([
     'src/app/api/takt/route.ts',
