@@ -27,6 +27,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 
 import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
 import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {completeU2Read} from '@/lib/domain/u2ReadContract';
 
 const actionPorts = {
   savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
@@ -35,6 +36,32 @@ const actionPorts = {
   assignOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 2 } }),
   handBackOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 3 } }),
 };
+
+it('öffnet belegte Termine im vorhandenen Auftrag und zeigt keine erfundene Uhrzeit',()=>{
+ // Synthetic display boundary. The list uses matching versions from the order reader.
+ const read=(number:string)=>completeU2Read({code:'OK',erstblick:[{key:'auftrag.lage',werte:{nummer:number}}]});
+ const calendar={readStartedAt:'2026-11-25T15:00:00.000Z',today:'2026-11-25',throughDate:'2026-12-02'};
+ render(<RolfHomeClient model={{kind:'data',role:'meister',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,
+  dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],calendar,
+   orderSchedule:{code:'SOURCE_INCOMPLETE',knownCounts:{today:1,upcoming:1},missing:['TEST_INCOMPLETE_SOURCE'],sources:[
+    {id:'plan-today',version:2,dueDate:calendar.today},{id:'plan-next',version:3,dueDate:'2026-11-26'},
+   ]},
+   orderActions:{code:'SOURCE_INCOMPLETE',missingOrderIds:[],rows:[
+    {orderId:'plan-today',version:2,read:read('A-2026-3031')},{orderId:'plan-next',version:3,read:read('A-2026-3032')},
+   ]},
+  }}} ports={actionPorts}/>);
+ expect(screen.getByRole('heading',{name:'Tagesplan'})).toBeVisible();
+ expect(screen.getByText(PAGE_READ_COPY.qualificationUnknown)).toBeVisible();
+ expect(screen.queryByText(/\d\d:\d\d/)).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:/25\. Nov\. A-2026-3031/}));
+ expect(ports.openOrder).toHaveBeenLastCalledWith('plan-today');
+ fireEvent.click(screen.getByRole('button',{name:'7 Tage'}));
+ expect(screen.queryByRole('button',{name:/A-2026-3031/})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:/26\. Nov\. A-2026-3032/}));
+ expect(ports.openOrder).toHaveBeenLastCalledWith('plan-next');
+ fireEvent.click(screen.getByRole('button',{name:'Bearbeiten'}));
+ expect(ports.push).toHaveBeenCalledWith('/orders?view=woche');
+});
 
 it('shows a concrete source notice and opens the same real order path instead of hiding the missing proposal',()=>{
  const title=SHIPPING_FEE_COPY.proposalMissing('A-2026-0001',false,'freigabe');

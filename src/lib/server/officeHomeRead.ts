@@ -45,7 +45,8 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,d
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
-    const now=new Date(),modeled=await readModel(authorization,now,deferLive);
+    const now=new Date();
+    const [modeled,cacheLoginScope]=await Promise.all([readModel(authorization,now,deferLive),readCacheLoginScope()]);
     let orderSource:{code:'OK';orders:OperationalOrder[]}|{code:'SOURCE_INCOMPLETE'};
     let dashboard:Awaited<ReturnType<typeof readTodayDashboard>>;
     let modelRead:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;maxPollMs:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>};
@@ -63,7 +64,7 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,d
     }
     if(modeled.settings.page===null)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];
     const common = {
-      cacheLoginScope:await readCacheLoginScope(),
+      cacheLoginScope,
       role: authorization.role,
       canCreateOrder: hasAuthorizationArea(authorization, "eingang"),
       canWorkOrders: hasAuthorizationArea(authorization, "auftraege"),

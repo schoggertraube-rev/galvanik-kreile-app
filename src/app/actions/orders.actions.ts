@@ -23,6 +23,7 @@ async function todayModelPorts():Promise<TodayModelReadPorts>{
  return {
  liveComplaints:getComplaints,
  liveFollowups:getQuoteFollowupsForTodayAction,
+ liveCompanyLetter:readAuthorizedCompanyLetter,
  readSettings:readModelPageSettingsInTransaction,
   readTerminEinstellungen:readBetriebsruheInTransaction,
  messages:(auth,value)=>{
@@ -133,6 +134,12 @@ import {canTransportInvoiceDocument} from '@/lib/server/authorization';
 import {canReadOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 
+async function readAuthorizedCompanyLetter(auth:AuthorizationSnapshot){
+ if(!canTransportInvoiceDocument(auth))return {code:'FORBIDDEN' as const};
+ const company=await withPageReadPhase('action.company',()=>readCompanyLetterSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true}));
+ return {code:'OK' as const,...(company.code==='OK'?{companyName:company.company.companyName}:{})};
+}
+
 /** Existing settings read; invoice transport may also request its sender name. */
 export async function readPageReadSettingsAction(input?:{includeCompanyName:true}){
  if(input!==undefined&&(!input||Object.keys(input).join(',')!=='includeCompanyName'||input.includeCompanyName!==true))return {code:'SOURCE_INCOMPLETE' as const};
@@ -140,8 +147,8 @@ export async function readPageReadSettingsAction(input?:{includeCompanyName:true
  if(!authorization.ok)return {code:'FORBIDDEN' as const};
  try{
   const settings=await withPageReadPhase('action.settings',()=>readPageReadSettings(authorization.data));
-  const company=input?.includeCompanyName&&canTransportInvoiceDocument(authorization.data)?await withPageReadPhase('action.company',()=>readCompanyLetterSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true})):null;
-  return {code:'OK' as const,settings,...(company?.code==='OK'?{companyName:company.company.companyName}:{})};
+  const company=input?.includeCompanyName?await readAuthorizedCompanyLetter(authorization.data):null;
+  return {code:'OK' as const,settings,...(company?.code==='OK'&&company.companyName!==undefined?{companyName:company.companyName}:{})};
  }
  catch{return {code:'SOURCE_INCOMPLETE' as const};}
 }

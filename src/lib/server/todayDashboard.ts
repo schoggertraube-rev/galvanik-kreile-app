@@ -178,6 +178,7 @@ export function todaySourceAccess(auth:Pick<AuthorizedReadContext,'canReadArea'>
   invoiceMail,company:invoiceMail,
  };
 }
+
 /** Existing tenant-wide money facts; personal preferences and assignments stay live. */
 async function readTodayMoneySources(auth:AuthorizationSnapshot|AuthorizedReadContext,today:string,access:ReturnType<typeof todaySourceAccess>){
  const {money:moneyAllowed}=access;
@@ -779,6 +780,7 @@ export function todayModelRevisionMap(auth:AuthorizationSnapshot,rows:readonly T
 export type TodayModelReadPorts={
  liveComplaints:()=>Promise<TodayDashboardSources['complaints']>;
  liveFollowups:()=>Promise<TodayDashboardSources['quoteFollowups']>;
+ liveCompanyLetter:(auth:AuthorizationSnapshot)=>Promise<TodayDashboardSources['companyLetter']>;
  readSettings:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<{today:TodayReadSettings;page:PageReadSettings|null}>;
  readTerminEinstellungen:TerminEinstellungenLeser;
  messages:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['graph'];
@@ -834,29 +836,33 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const taskCalendar=access.messages?live('tasks',project('tasks',unknownTasks,payload=>ports.taskCalendar(auth,payload)),()=>getIntakeTaskAction({calendar:true})):null;
   const storedOrders=value('orders');
   const cachedOperationalSource:TodayDashboardSources['orderSource']=Array.isArray(storedOrders)&&storedOrders.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version))?{code:'OK',data:storedOrders as Extract<TodayDashboardSources['orderSource'],{code:'OK'}>['data']}:{code:'SOURCE_INCOMPLETE'};
-  const operationalSource=hasAnyAuthorizationArea(auth)?await live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'})})):cachedOperationalSource;
-  const orderSource:TodayDashboardSources['orderSource']=access.orders?operationalSource:{code:'OK',data:[]};
-  const orders=orderSource.code==='OK'?orderSource.data:[];
+  const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'})})):cachedOperationalSource;
   const unknownGraph:TodayDashboardSources['graph']={code:'SOURCE_INCOMPLETE',message:PAGE_READ_COPY.sourceIncomplete};
-  const graph=access.messages?await live<TodayDashboardSources['graph']>('messages',project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)),()=>getIntakeMessagesAction('offen')):{code:'FORBIDDEN' as const,message:''};
+  const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)),()=>getIntakeMessagesAction('offen')):{code:'FORBIDDEN' as const,message:''};
   const unknownMoney=unknownTodayMoneySupport();
   const cachedMoney=maskTodayMoneySupport(auth,project<Parameters<typeof maskTodayMoneySupport>[1]>('money',unknownMoney,payload=>{
    const row=modelRecord(payload);if(!row||!Array.isArray(row.supportMissing)||!Array.isArray(row.invoices)||!Array.isArray(row.prepayments)||!Array.isArray(row.collections)
     ||!modelRecord(row.invoiceSource)||!modelRecord(row.prepaymentSource)||!modelRecord(row.collectionSource)||!modelRecord(row.invoiceMailSource))throw Error('TODAY_MODEL_MONEY_INVALID');
    return row as unknown as Parameters<typeof maskTodayMoneySupport>[1];
   }));
-  const money=access.money||access.invoiceMail?await live('money',cachedMoney,()=>readTodayMoneySupport(auth,calendar.today)):cachedMoney;
+  const moneyRead=access.money||access.invoiceMail?live('money',cachedMoney,()=>readTodayMoneySupport(auth,calendar.today)):cachedMoney;
   const unknownComplaints:TodayDashboardSources['complaints']={code:'SOURCE_INCOMPLETE',message:'TODAY_COMPLAINT_SOURCE'};
-  const complaints=access.complaints?await live<TodayDashboardSources['complaints']>('complaints',project<TodayDashboardSources['complaints']>('complaints',unknownComplaints,payload=>ports.complaints(auth,payload)),ports.liveComplaints):{code:'OK' as const,complaints:[]};
+  const complaintsRead=access.complaints?live<TodayDashboardSources['complaints']>('complaints',project<TodayDashboardSources['complaints']>('complaints',unknownComplaints,payload=>ports.complaints(auth,payload)),ports.liveComplaints):{code:'OK' as const,complaints:[]};
   const unknownFollowups:TodayDashboardSources['quoteFollowups']={code:'SOURCE_INCOMPLETE',message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};
-  const quoteFollowups=access.messages?await live<TodayDashboardSources['quoteFollowups']>('quote_followups',project<TodayDashboardSources['quoteFollowups']>('quote_followups',unknownFollowups,payload=>ports.followups(auth,payload)),ports.liveFollowups):{code:'OK' as const,tasks:[]};
+  const followupRead=access.messages?live<TodayDashboardSources['quoteFollowups']>('quote_followups',project<TodayDashboardSources['quoteFollowups']>('quote_followups',unknownFollowups,payload=>ports.followups(auth,payload)),ports.liveFollowups):{code:'OK' as const,tasks:[]};
   const unknownQuotes:Pick<TodayDashboardSources,'quoteList'|'quoteReads'>={quoteList:{code:'SOURCE_INCOMPLETE'},quoteReads:[]};
-  const {quoteList,quoteReads}=access.messages?await live<Pick<TodayDashboardSources,'quoteList'|'quoteReads'>>('quotes',project('quotes',unknownQuotes,payload=>ports.quotes(auth,payload,readAt)),()=>readTodayQuoteSources(true,readAt)):{quoteList:{code:'OK' as const,quotes:[]},quoteReads:[]};
+  const quotesRead=access.messages?live<Pick<TodayDashboardSources,'quoteList'|'quoteReads'>>('quotes',project('quotes',unknownQuotes,payload=>ports.quotes(auth,payload,readAt)),()=>readTodayQuoteSources(true,readAt)):{quoteList:{code:'OK' as const,quotes:[]},quoteReads:[]};
   const company=modelRecord(value('company')),companyData=modelRecord(company?.company);
   const cachedCompanyLetter:TodayDashboardSources['companyLetter']=!access.company?{code:'FORBIDDEN'}
    :company?.code==='OK'&&typeof companyData?.companyName==='string'?{code:'OK',companyName:companyData.companyName}
    :company?.code==='VALIDATION_ERROR'?{code:'OK'}:{code:'SOURCE_INCOMPLETE'};
-  const companyLetter=access.company?await live<TodayDashboardSources['companyLetter']>('company',cachedCompanyLetter,()=>readPageReadSettingsAction({includeCompanyName:true})):cachedCompanyLetter;
+  const companyRead=access.company?live<TodayDashboardSources['companyLetter']>('company',cachedCompanyLetter,()=>ports.liveCompanyLetter(auth)):cachedCompanyLetter;
+  // Resolve independent inputs within the existing request budget before joining their versions.
+  const [operationalSource,graph,money,complaints,quoteFollowups,{quoteList,quoteReads},companyLetter,aufgaben,taktAusfall,taskRead]=await Promise.all([
+   operationalRead,graphRead,moneyRead,complaintsRead,followupRead,quotesRead,companyRead,tagTasks,tagOutages,taskCalendar,
+  ]);
+  const orderSource:TodayDashboardSources['orderSource']=access.orders?operationalSource:{code:'OK',data:[]};
+  const orders=orderSource.code==='OK'?orderSource.data:[];
   const rawRows:Parameters<typeof projectTodayOrderSources>[1]=orders.map(order=>{
    const row=model.rows.find(source=>source.kind===modelInputs.order.kind&&source.sourceId===order.id),payload=modelRecord(row?.payload),result=modelRecord(payload?.result),data=modelRecord(result?.data),card=modelRecord(data?.card);
    if(row?.fresh===true&&result?.code==='OK'&&card?.id===order.id&&card?.version===order.version&&Array.isArray(data?.records)&&Array.isArray(card?.items))return {orderId:order.id,result:result as unknown as Extract<Parameters<typeof projectTodayOrderSources>[1][number]['result'],{code:'OK'}>};
@@ -864,17 +870,15 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   });
   let batch:TodayDashboardSources['batch']=access.orders?{code:'OK',data:{rows:projectTodayOrderSources(auth,rawRows)}}:null;
   const liveOrderIds=orders.filter(order=>mustReadLive('order',order.id)).map(order=>order.id);
-  if(access.orders&&liveOrderIds.length){
-   const read=await withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:liveOrderIds}));
-   if(read.code==='OK'&&batch?.code==='OK'){
-    const liveRows=new Map(read.data.rows.map(row=>[row.orderId,row]));
-    batch={code:'OK',data:{rows:batch.data.rows.map(row=>liveRows.get(row.orderId)??row)}};
-   }
-  }
-  const [person,delegation,responsibilitySource]=await Promise.all([
+  const [liveBatch,person,delegation,responsibilitySource]=await Promise.all([
+   access.orders&&liveOrderIds.length?withPageReadPhase('today.batch',()=>getTodayOrderReadAction({orderIds:liveOrderIds})):null,
    readTodayPersonalSupportInTransaction(tx,auth),readTodayDelegationSupportInTransaction(tx,auth,access),
    readTodayResponsibilitiesInTransaction(tx,auth,todayResponsibilityIds(auth,orders,money,complaints)),
   ]);
+  if(liveBatch?.code==='OK'&&batch?.code==='OK'){
+   const liveRows=new Map(liveBatch.data.rows.map(row=>[row.orderId,row]));
+   batch={code:'OK',data:{rows:batch.data.rows.map(row=>liveRows.get(row.orderId)??row)}};
+  }
   const support={...money,...person,...delegation,supportMissing:[...money.supportMissing,...person.supportMissing,...delegation.supportMissing]};
   let versions:Array<{id:string;version:number}>|null=model.rows.flatMap(row=>row.kind===modelInputs.order.kind&&row.currentVersion!==null?[{id:row.sourceId,version:row.currentVersion}]:[]);
   if(liveOrderIds.length){
@@ -888,7 +892,6 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
    const qualified=batch?.code==='OK'?batch.data.rows.find(value=>value.orderId===order.id):null;
    return qualified?.result.code==='OK'?[]:[order.id];
   });
-  const [aufgaben,taktAusfall,taskRead]=await Promise.all([tagTasks,tagOutages,taskCalendar]);
   const sources:TodayDashboardSources={calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource,modelStaleOrderIds,tagQuellen:{aufgaben,taktAusfall}};
   const relevant=(kind:string)=>isVisibleModelInput(auth,access,kind);
   return {code:'OK' as const,sources,operationalSource,settings,sourceRevision:todayModelRevision(auth,model.rows,calendar.today),sourceRevisions:todayModelRevisionMap(auth,model.rows,calendar.today),needsRebuild:model.needsRebuild,
