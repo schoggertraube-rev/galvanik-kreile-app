@@ -57,26 +57,42 @@ export async function readCustomerDeliveryBlockInTransaction(
     return {code:'FORBIDDEN'};
   if(!ORDER_ID_PATTERN.test(customerId)||(orderId!==undefined&&!ORDER_ID_PATTERN.test(orderId)))
     return {code:'VALIDATION_ERROR'};
-  const [scope]=await tx.execute<{payment_mode:string|null;handover_mode:string|null}>(sql`
-    SELECT ${orderId===undefined?sql`NULL::text AS payment_mode,NULL::text AS handover_mode`:sql`orders.payment_mode,orders.handover_mode`}
+  const scopes=await tx.execute<{payment_mode:string|null;handover_mode:string|null;overdue_ids:string[]|null}>(sql`
+    SELECT state.payment_mode,selected.handover_mode,state.customer_overdue_invoice_ids AS overdue_ids
     FROM public.customers customer
-    ${orderId===undefined?sql``:sql`JOIN public.orders orders
-      ON orders.tenant_id=customer.tenant_id AND orders.customer_id=customer.id AND orders.id=${orderId}`}
+    JOIN LATERAL (
+      SELECT orders.id,orders.handover_mode FROM public.orders orders
+      WHERE orders.tenant_id=customer.tenant_id AND orders.customer_id=customer.id
+        ${orderId===undefined?sql``:sql`AND orders.id=${orderId}`}
+      ORDER BY orders.created_at DESC NULLS LAST,orders.id LIMIT 1
+    ) selected ON true
+    JOIN LATERAL private.read_order_payment_states_v1(customer.tenant_id,ARRAY[selected.id]::text[]) state
+      ON state.order_id=selected.id
     WHERE customer.tenant_id=${auth.tenantId} AND customer.id=${customerId}`);
-  if(!scope)return {code:'NOT_FOUND'};
-  if(orderId!==undefined&&!isOrderPaymentMode(scope.payment_mode))return {code:'UNAVAILABLE'};
-  const paymentMode=isOrderPaymentMode(scope.payment_mode)?scope.payment_mode:null;
-  const handover=scope.handover_mode==='pickup'||scope.handover_mode==='shipping'?scope.handover_mode:null;
+  if(!scopes.length)return {code:'NOT_FOUND'};
+  if(scopes.length!==1)return {code:'UNAVAILABLE'};
+  const scope=scopes[0];
+  if(!isOrderPaymentMode(scope.payment_mode)||!Array.isArray(scope.overdue_ids)||
+    scope.overdue_ids.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id))||
+    new Set(scope.overdue_ids).size!==scope.overdue_ids.length)return {code:'UNAVAILABLE'};
+  const paymentMode=orderId===undefined?null:scope.payment_mode;
+  const handover=orderId!==undefined&&(scope.handover_mode==='pickup'||scope.handover_mode==='shipping')?scope.handover_mode:null;
   if(paymentMode==='keiner')return {code:'OK',paymentMode,handover,data:customerDeliveryBlock(paymentMode,[])};
+  const data=customerDeliveryBlock(paymentMode,scope.overdue_ids);
+  if(!data.blocked)return {code:'OK',paymentMode,handover,data};
+  const visible=hasAuthorizationArea(auth,'zahlungen');
+  if(!visible&&!lockInvoices)return {code:'OK',paymentMode,handover,data:{...data,invoiceIds:[]}};
+  const ids=sql`ARRAY[${sql.join(scope.overdue_ids.map(id=>sql`${id}::uuid`),sql`, `)}]::uuid[]`;
+  // Lock or enrich the qualified IDs. A change since their read invalidates this projection.
   const invoices=await tx.execute<{id:string;number:string;open_amount:number;days_overdue:number}>(sql`
     SELECT invoice.id::text,invoice.invoice_number AS number,invoice.payment_open_amount_cents AS open_amount,
       (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-invoice.due_date::date AS days_overdue
     FROM public.invoices invoice
-    WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${classifyOverdue()}
+    WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId}
+      AND invoice.id=ANY(${ids}) AND ${classifyOverdue()}
     ORDER BY invoice.due_date,invoice.id ${lockInvoices?sql`FOR SHARE OF invoice`:sql``}`);
+  if(invoices.length!==scope.overdue_ids.length)return {code:'UNAVAILABLE'};
   const oldest=invoices[0];
-  const visible=hasAuthorizationArea(auth,'zahlungen');
-  const data=customerDeliveryBlock(paymentMode,invoices.map(row=>row.id));
   return {code:'OK',paymentMode,handover,data:visible?data:{...data,invoiceIds:[]},...(visible&&oldest&&oldest.number?{
     oldest:{number:oldest.number,openAmountCents:oldest.open_amount,daysOverdue:oldest.days_overdue},
   }:{})};

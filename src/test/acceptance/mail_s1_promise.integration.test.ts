@@ -50,6 +50,7 @@ it('reads customer-wide debt from the actual invoice source without exposing it 
 
   expect(await readCustomerDeliveryBlock(auth,customerId,orderId)).toMatchObject({code:'OK',paymentMode:'rechnung',
     data:{blocked:true,invoiceIds:[invoiceId]},oldest:{number:'R-2025-0812',openAmountCents:6000,daysOverdue:1}});
+  expect(await readCustomerDeliveryBlock(auth,customerId)).toMatchObject({code:'OK',data:{blocked:true,invoiceIds:[invoiceId]}});
   expect(await pruefeZusage(auth,input)).toMatchObject({frei:false,grund:'liefersperre',
     ausweg:{befehl:'confirmPaymentAction',text:expect.stringContaining('R-2025-0812')}});
 
@@ -89,6 +90,7 @@ it('reads customer-wide debt from the actual invoice source without exposing it 
   expect(await withSession(full,()=>confirmPaymentAction({invoiceId,amount:6000,method:'bar',
     expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await pruefeZusage(auth,input)).toEqual({frei:true});
+  expect(await readCustomerDeliveryBlock(auth,customerId)).toMatchObject({code:'OK',data:{blocked:false,invoiceIds:[]}});
   expect(await record(authorization.data,{...exception,clientEventId:randomUUID()})).toEqual({code:'CONFLICT'});
 });
 
