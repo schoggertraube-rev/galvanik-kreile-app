@@ -26,6 +26,9 @@ if(!auftragsQuelle)throw Error('TODAY_PROJECTOR_ORDER_SOURCE_MISSING');
 const AUFTRAGSQUELLE='quelle:'+auftragsQuelle.id;
 const listenQuellen=new Map<string,string>(TAG_QUELLEN.flatMap(quelle=>quelle.bestand?.umfang==='mandant'
  ? [[`quelle:${quelle.id}`,quelle.bestand.leser] as const]:[]));
+const firmenQuelle=TAG_QUELLEN.find(quelle=>quelle.bestand?.leser==='company');
+if(!firmenQuelle)throw Error('TODAY_PROJECTOR_COMPANY_SOURCE_MISSING');
+const FIRMENQUELLE=`quelle:${firmenQuelle.id}`;
 const taktAusfallQuelle=TAG_QUELLEN.find(quelle=>quelle.bestand?.leser==='takt_ausfall');
 if(!taktAusfallQuelle)throw Error('TODAY_PROJECTOR_TAKT_SOURCE_MISSING');
 const TAKT_AUSFALL_QUELLE=`quelle:${taktAusfallQuelle.id}`;
@@ -192,11 +195,12 @@ async function release(tenantId:string,lease:Lease){
 }
 async function pending(tenantId:string,lease:Lease,fullRebuild:boolean,limit?:number,kind?:string):Promise<Snapshot[]>{
  const auswahl=kind===undefined?todaySourceNeedsRebuild(lease.day,fullRebuild):sql`source.kind=${kind} AND source.source_id='*'`;
+ const vorrang=fullRebuild||kind!==undefined?sql``:sql`(source.kind=${FIRMENQUELLE}) DESC,`;
  return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<Snapshot>(sql`SELECT source.kind,source.source_id AS "sourceId",source.source_seq::text AS "sourceSeq",tenant.tenant_seq::text AS "tenantSeq",${lease.day}::text AS day
   FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant ON tenant.tenant_id=source.tenant_id
   WHERE source.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
    AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND ${auswahl}
-  ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
+  ORDER BY ${vorrang} source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
 }
 /** Same short write-phase lock order as the source invalidators. Source reads
  * have already completed; the existing lease/sequence/version CAS still wins. */
@@ -325,7 +329,8 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
 export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true;signal?:AbortSignal;taktErgebnis?:true})=>{
- const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false,options?.signal,options?.taktErgebnis?TAKT_AUSFALL_QUELLE:undefined),projectionCounts);
+ const taktErgebnis=options?.taktErgebnis===true;
+ const run=(selected=ports)=>withPageReadPhase(taktErgebnis?'today.taktAusfall':'today.refresh',()=>runProjection(tenantId,selected,false,options?.signal,taktErgebnis?TAKT_AUSFALL_QUELLE:undefined),projectionCounts);
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});
