@@ -4,9 +4,11 @@ import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { isWorkingDay, berlinCalendarDay, plusWorkingDays, previousWorkingDay, workingDaysBetween } from "@/lib/domain/workingDays";
+import { isWorkingDay, berlinCalendarDay, leseBetriebsruhetage, plusWorkingDays, previousWorkingDay, workingDaysBetween } from "@/lib/domain/workingDays";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError } from "@/lib/orderPositionContract";
-import {INTAKE_MISSING_LEAD_TIME_COPY} from '@/ui/eingangCopy';
+import { fertigtermin } from "@/modules/orders/public";
+import { INTAKE_MISSING_LEAD_TIME_COPY } from "@/ui/eingangCopy";
+import { ORDER_TERM_COPY } from "@/ui/ordersCopy";
 import type {
   IntakePriceCase,
   IntakePriceSuggestion,
@@ -177,66 +179,118 @@ export function choosePriceSuggestion(
   };
 }
 
-export type IntakeSchedulingSettings={handoverBufferDays:number;fitsPercent:number;tightPercent:number;priorityPercent:number};
+export type IntakeSchedulingSettings={
+  handoverBufferDays:number;fitsPercent:number;tightPercent:number;priorityPercent:number;
+  betriebsruhe:ReadonlySet<string>;knappAbArbeitstagen:number|null;
+};
 export type IntakeCapacityOrder={intakeDate:string;dueDate:string;valueCents:number};
+type TermSuggestionInput = {
+  today: string;
+  wishDate: string | null;
+  handoverMode: "pickup" | "shipping";
+  positions: IntakeSuggestionPositionInput[];
+  catalogById: ReadonlyMap<string, CatalogRow>;
+  dailyOutputEur: number;
+  settings: IntakeSchedulingSettings;
+  openOrders: IntakeCapacityOrder[];
+  priority: boolean;
+  processingWeeks?: number | null;
+  kind?: "ORDER" | "QUOTE";
+};
+
+function readLeadTimes(positions: IntakeSuggestionPositionInput[], catalogById: ReadonlyMap<string, CatalogRow>) {
+  const fehlt: NonNullable<IntakeSuggestions["missingLeadTimes"]> = [];
+  let laengste: { tage: number; leistung: string } | null = null;
+  for (const position of positions) {
+    if (normaliseOrderPositionSurface(position.surfaceRequested) === "offen") continue;
+    const catalog = position.catalogServiceId ? catalogById.get(position.catalogServiceId) : undefined;
+    const wert = catalog?.standard_lead_time_working_days;
+    const tage = wert == null || wert === "" ? null : Number(wert);
+    const leistung = catalog?.name ?? position.name;
+    if (tage === null || !Number.isSafeInteger(tage) || tage < 0) {
+      fehlt.push({
+        positionKey: position.key,
+        catalogServiceId: position.catalogServiceId,
+        message: INTAKE_MISSING_LEAD_TIME_COPY(leistung),
+      });
+    } else if (laengste === null || tage >= laengste.tage) {
+      laengste = { tage, leistung };
+    }
+  }
+  return { laengste, fehlt };
+}
+
 const addDays=(date:string,count:number)=>new Date(Date.parse(date+"T00:00:00Z")+count*86_400_000).toISOString().slice(0,10);
 const weekStart=(date:string)=>addDays(date,-((new Date(date+"T00:00:00Z").getUTCDay()+6)%7));
-function workdaysInclusive(from:string,to:string){const dates:string[]=[];for(let date=from;date<=to;date=addDays(date,1))if(isWorkingDay(date))dates.push(date);return dates;}
-
-function readPositionLeadTimes(positions:readonly IntakeSuggestionPositionInput[],catalogById:ReadonlyMap<string,CatalogRow>){
- return positions.filter(position=>normaliseOrderPositionSurface(position.surfaceRequested)!=='offen').map(position=>{
-  const catalog=position.catalogServiceId?catalogById.get(position.catalogServiceId):undefined;
-  const stored=catalog?.standard_lead_time_working_days;
-  const days=stored==null||stored===''?null:Number(stored);
-  return {position,leistung:catalog?.name??position.name,days:days!==null&&Number.isSafeInteger(days)&&days>=0?days:null};
- });
+function workdaysInclusive(from:string,to:string,betriebsruhe:ReadonlySet<string>){
+ const dates:string[]=[];
+ for(let date=from;date<=to;date=addDays(date,1))if(isWorkingDay(date,betriebsruhe))dates.push(date);
+ return dates;
 }
 
 /** The single scheduling kernel: calendar helpers, order load and the proposed order. */
-export function calculateTermSuggestion(input:{today:string;wishDate:string|null;positions:IntakeSuggestionPositionInput[];catalogById:ReadonlyMap<string,CatalogRow>;dailyOutputEur:number;settings:IntakeSchedulingSettings;openOrders:IntakeCapacityOrder[];priority:boolean;processingWeeks?:number|null;kind?:"ORDER"|"QUOTE"},eligible=readPositionLeadTimes(input.positions,input.catalogById)):IntakeTermSuggestion|null{
- if(!eligible.length)return null;
- let lead=0,leadSurface=eligible[0].position.surfaceRequested;
- for(const {position,days} of eligible){
-  if(days===null)return null;
-  if(days>=lead){lead=days;leadSurface=position.surfaceRequested;}
- }
+export function calculateTermSuggestion(input: TermSuggestionInput): IntakeTermSuggestion | null {
+ return calculateSchedule(input, readLeadTimes(input.positions, input.catalogById));
+}
+
+function calculateSchedule(input: TermSuggestionInput, { laengste, fehlt }: ReturnType<typeof readLeadTimes>): IntakeTermSuggestion | null {
+ if (!laengste || fehlt.length > 0) return null;
+ const { tage: lead, leistung: leadSurface } = laengste;
  const value=input.positions.reduce((sum,position)=>sum+lineAmountCents(position.unitPriceCents??0,position.quantity),0);
  const plan=input.kind==="QUOTE"?input.positions.reduce((sum,position)=>sum+(position.effortMinutes??0),0):0;
  const effort=Math.max(1,Math.ceil(Math.max(value/(input.dailyOutputEur*100),plan/420)));
  const estimatedWeeks=Math.ceil((1+lead+effort)/5),weeks=input.processingWeeks??estimatedWeeks;
- const leadDate=plusWorkingDays(input.today,1+lead),baseDate=plusWorkingDays(input.today,1+lead+effort+input.settings.handoverBufferDays),weeksDate=plusWorkingDays(input.today,weeks*5);
+ const {betriebsruhe}=input.settings;
+ const leadDate=plusWorkingDays(input.today,1+lead,betriebsruhe);
+ const baseDate=plusWorkingDays(input.today,1+lead+effort+input.settings.handoverBufferDays,betriebsruhe);
+ const weeksDate=plusWorkingDays(input.today,weeks*5,betriebsruhe);
  if(!leadDate||!baseDate||!weeksDate)throw Error("INTAKE_TERM_CALENDAR_INVALID");
  const minimum=baseDate>weeksDate?baseDate:weeksDate,horizon=addDays(input.today,26*7),limit=input.priority?input.settings.priorityPercent:input.settings.tightPercent;
  const existing=new Map<string,number>();
  const allocate=(map:Map<string,number>,start:string,end:string,amount:number)=>{
   if(end<input.today){const week=weekStart(input.today);map.set(week,(map.get(week)??0)+amount);return;}
-  const dates=workdaysInclusive(start<input.today?input.today:start,end);
+  const dates=workdaysInclusive(start<input.today?input.today:start,end,betriebsruhe);
   if(!dates.length){const week=weekStart(end);map.set(week,(map.get(week)??0)+amount);return;}
   for(const day of dates){const week=weekStart(day);map.set(week,(map.get(week)??0)+amount/dates.length);}
  };
  for(const order of input.openOrders)allocate(existing,order.intakeDate,order.dueDate,order.valueCents);
  const utilization=(date:string)=>{
-  const week=weekStart(date),days=workdaysInclusive(week,addDays(week,6)).length;
+  const week=weekStart(date),days=workdaysInclusive(week,addDays(week,6),betriebsruhe).length;
   if(!days)return null;
   const proposed=new Map<string,number>();allocate(proposed,input.today,date,value);
   return ((existing.get(week)??0)+(proposed.get(week)??0))/(input.dailyOutputEur*100*days)*100;
  };
  const find=(from:string)=>{
   for(let date=from<minimum?minimum:from;date<=horizon;date=addDays(date,1)){
-   if(!isWorkingDay(date))continue;const load=utilization(date);if(load!==null&&load<=limit)return date;
+   if(!isWorkingDay(date,betriebsruhe))continue;const load=utilization(date);if(load!==null&&load<=limit)return date;
   }return null;
  };
- const achievableDate=find(minimum),effectiveWish=input.wishDate?previousWorkingDay(input.wishDate):null;
- const bufferWorkingDays=achievableDate&&effectiveWish?workingDaysBetween(achievableDate,effectiveWish):null;
+ const achievableDate=find(minimum),effectiveWish=input.wishDate?previousWorkingDay(input.wishDate,betriebsruhe):null;
+ const kalender = {
+  betriebsruhe,
+  versandpufferArbeitstage: input.settings.handoverBufferDays,
+  knappAbArbeitstagen: input.settings.knappAbArbeitstagen,
+ };
+ const fruehesterFertigtermin = fertigtermin({dueDate:achievableDate,handoverMode:input.handoverMode},kalender,input.today)?.fertigtermin;
+ const wunsch = fertigtermin({dueDate:effectiveWish,handoverMode:input.handoverMode},kalender,fruehesterFertigtermin??input.today);
+ const wunschFertigtermin = wunsch?.fertigtermin;
+ const bufferWorkingDays=fruehesterFertigtermin&&wunschFertigtermin
+  ?workingDaysBetween(fruehesterFertigtermin,wunschFertigtermin,betriebsruhe):null;
  const wishLoad=effectiveWish?utilization(effectiveWish):null;
- const rating=!input.wishDate?null:effectiveWish&&effectiveWish<leadDate?"unmoeglich" as const:!achievableDate||!effectiveWish||effectiveWish<achievableDate||wishLoad===null||wishLoad>limit?"nicht_machbar" as const:bufferWorkingDays!==null&&(bufferWorkingDays<=2||wishLoad>input.settings.fitsPercent)?"knapp" as const:"passt" as const;
+ const rating: IntakeTermSuggestion["rating"] = !input.wishDate || wunsch?.fehlendeEinstellungen?.length ? null
+  : wunschFertigtermin && wunschFertigtermin < leadDate ? "unmoeglich"
+  : !achievableDate || !wunschFertigtermin || wunsch?.stufe === "ueberfaellig" || wishLoad === null || wishLoad > limit ? "nicht_machbar"
+  : wunsch?.stufe === "knapp" || wishLoad > input.settings.fitsPercent ? "knapp" : "passt";
+ const unavailableReason = wunsch?.fehlendeEinstellungen?.includes("terminschwelle")
+  ? ORDER_TERM_COPY.settingsMissing(ORDER_TERM_COPY.settings.terminschwelle)
+  : !achievableDate ? "Kein Termin in den nächsten 26 Wochen – Rücksprache" : undefined;
  const proposals:NonNullable<IntakeTermSuggestion["proposals"]>=[];
  if(achievableDate)for(const [id,title,offset]of [["schnell","Schnell",0],["empfohlen","Empfohlen",7],["entspannt","Entspannt",14]] as const){
   const date=find(addDays(achievableDate,offset));if(date){const load=utilization(date);if(load!==null)proposals.push({id,title,date,utilization:Math.round(load),rating:load<=input.settings.fitsPercent?"Luft":"voll"});}
  }
  return {achievableDate,wishDate:input.wishDate,rating,bufferWorkingDays,estimatedWeeks,proposals,
   offerDate:input.wishDate?find(input.wishDate):achievableDate,
-  ...(!achievableDate?{unavailableReason:"Kein Termin in den nächsten 26 Wochen – Rücksprache"}:{}),
+  ...(unavailableReason?{unavailableReason}:{}),
   reasons:[{kind:"lead",text:leadSurface+": "+lead+" Arbeitstage Durchlauf"},{kind:"effort",text:effort+" Aufwandstage"},...(effectiveWish&&wishLoad!==null?[{kind:"capacity" as const,text:"Auslastung der Woche: "+Math.round(wishLoad)+" %"}]:[])]};
 }
 
@@ -262,7 +316,9 @@ export async function readIntakeSuggestions(
   authorization: AuthorizationSnapshot,
   input: IntakeSuggestionsInput,
   readBetriebsruhe: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
+    betriebsruhe: unknown;
     versandpufferArbeitstage: number;
+    knappAbArbeitstagen: number | null;
     terminKapazitaet: { tagesleistungEur: number | string; passtProzent: number; knappProzent: number; vorrangProzent: number } | null;
   }>,
 ): Promise<IntakeSuggestions> {
@@ -313,10 +369,6 @@ export async function readIntakeSuggestions(
     ]);
 
     const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
-    const eligible=readPositionLeadTimes(input.positions,catalogById);
-    const missingLeadTimes=eligible.filter(entry=>entry.days===null).map(({position,leistung})=>({
-      positionKey:position.key,catalogServiceId:position.catalogServiceId,message:INTAKE_MISSING_LEAD_TIME_COPY(leistung),
-    }));
     const history: PriceCandidate[] = historyRows.map((row) => ({
       customerId: row.customer_id,
       customerName: row.customer_name,
@@ -329,25 +381,31 @@ export async function readIntakeSuggestions(
       invoiceDate: row.invoice_date,
     }));
 
-    let term:IntakeTermSuggestion|null=null;
-    if(input.handoverMode!==null&&eligible.length>0&&missingLeadTimes.length===0){
-      const capacity=settings.terminKapazitaet;
-      if(!capacity)throw Error('INTAKE_DAILY_OUTPUT_MISSING_OR_AMBIGUOUS');
-      const dailyOutputEur=integer(capacity.tagesleistungEur,'INTAKE_DAILY_OUTPUT_INVALID');
-      if(dailyOutputEur<1||dailyOutputEur>99_999)throw Error('INTAKE_DAILY_OUTPUT_INVALID');
-      term=calculateTermSuggestion({
+    const zeiten = readLeadTimes(input.positions, catalogById);
+    const handoverMode = input.handoverMode ?? "shipping";
+    let term: IntakeTermSuggestion | null = null;
+    if (input.handoverMode !== null && zeiten.laengste !== null && zeiten.fehlt.length === 0) {
+      const betriebsruhe = leseBetriebsruhetage(settings.betriebsruhe);
+      if (!betriebsruhe) throw new Error("BETRIEBSRUHE_FORMAT_UNGUELTIG");
+      const capacity = settings.terminKapazitaet;
+      if (!capacity) throw new Error("INTAKE_DAILY_OUTPUT_MISSING_OR_AMBIGUOUS");
+      const dailyOutputEur = integer(capacity.tagesleistungEur, "INTAKE_DAILY_OUTPUT_INVALID");
+      if (dailyOutputEur < 1 || dailyOutputEur > 99_999) throw new Error("INTAKE_DAILY_OUTPUT_INVALID");
+      term = calculateSchedule({
         today: berlinCalendarDay(),
         wishDate: input.wishDate,
+        handoverMode,
         positions: input.positions.map(position=>!canReadMoney&&position.catalogServiceId?{...position,unitPriceCents:catalogById.has(position.catalogServiceId)?Number(catalogById.get(position.catalogServiceId)!.net_price_cents):null}:position),
         catalogById,
         dailyOutputEur,
-        settings:{handoverBufferDays:settings.versandpufferArbeitstage,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent},
+        settings:{handoverBufferDays:handoverMode==="pickup"?0:settings.versandpufferArbeitstage,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent,betriebsruhe,knappAbArbeitstagen:settings.knappAbArbeitstagen},
         openOrders:capacityRows.map(row=>({...row,valueCents:Number(row.valueCents)})),priority:customerRows[0]?.vorrang===true,processingWeeks:input.processingWeeks,kind:input.kind,
-      },eligible);
+      }, zeiten);
     }
+
     return {
       term,
-      ...(missingLeadTimes.length?{missingLeadTimes}:{}),
+      ...(zeiten.fehlt.length > 0 ? { missingLeadTimes: zeiten.fehlt } : {}),
       prices: canReadMoney
         ? input.positions.flatMap((position) => {
             const suggestion = choosePriceSuggestion(

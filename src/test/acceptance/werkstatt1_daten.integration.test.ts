@@ -371,9 +371,9 @@ test("Betriebsruhe verschiebt Fertigtermin und Terminvorschlag über denselben K
   expect(fertigtermin(auftrag, { ...kalender, betriebsruhe }, "2026-11-20")?.fertigtermin)
     .toBe("2026-11-20");
 
-  const termineingabe = (ruhetage: ReadonlySet<string>) => ({
+  const vorschlag = (ruhetage: ReadonlySet<string>) => calculateTermSuggestion({
     today: "2026-11-23", wishDate: null, dailyOutputEur: 100, openOrders: [],
-    handoverMode: "shipping" as const,
+    handoverMode: "shipping",
     priority: false, processingWeeks: 1,
     positions: [{
       key: "test-teil", catalogServiceId: "test-katalog", name: "TEST Teil",
@@ -388,8 +388,7 @@ test("Betriebsruhe verschiebt Fertigtermin und Terminvorschlag über denselben K
       fitsPercent: 80, tightPercent: 100, priorityPercent: 110, betriebsruhe: ruhetage,
       knappAbArbeitstagen: kalender.knappAbArbeitstagen,
     },
-  });
-  const vorschlag = (ruhetage: ReadonlySet<string>) => calculateTermSuggestion(termineingabe(ruhetage))?.achievableDate;
+  })?.achievableDate;
   expect(vorschlag(new Set())).toBe("2026-11-30");
   expect(vorschlag(betriebsruhe)).toBe("2026-12-03");
 });
