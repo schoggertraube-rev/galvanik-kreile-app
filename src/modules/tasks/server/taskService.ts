@@ -64,7 +64,7 @@ async function find(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapsh
  return rows.length===1?rows[0]:null;
 }
 function hiddenReference(reference:TaskReference):TaskReferenceRead{return {...reference,label:null,customerId:null,customerType:null,orderId:null,channel:null,phone:null,sourceVersion:null};}
-function taskReferenceVisible(auth:AuthorizedReadContext,reference:TaskReferenceRead){
+export function taskReferenceVisible(auth:AuthorizedReadContext,reference:Pick<TaskReferenceRead,'type'|'channel'>){
  if(reference.type==='allgemein')return false;
  const requiredArea=reference.type==='eingang'&&reference.channel==='mail'?'mails':refAreas[reference.type];
  return reference.type==='eingang'&&auth.canReadArea('mails')||requiredArea!==undefined&&auth.canReadArea(requiredArea);

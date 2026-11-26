@@ -1,4 +1,3 @@
 export const TASK_TAG_COPY = {
-  erledigen: 'Aufgabe erledigen',
-  ansehen: 'Aufgabe ansehen',
+  oeffnen: 'Aufgabe öffnen',
 } as const;

@@ -5,9 +5,10 @@ import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
-import {createFixture,withSession} from '../../../e2e/ablauf/replayHarness';
+import {sql,createFixture,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
-import {completeIntakeTaskAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {completeIntakeTaskAction,getIntakeTaskAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
+import {pageReadQueryObservation,withPageReadBudget} from '@/db/readBudget';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {liesAufgabenFuerTag} from '@/modules/tasks/server-public';
@@ -20,6 +21,14 @@ it('liest offene Aufgaben ohne Eingang, schützt Geld und Bezug und entfernt den
  const kunde=await customerFixture('Tag Aufgabe');
  const {receipt:auftrag}=await intakeOrderFixture('Tag Aufgabe',kunde,'pickup',3);
  const faellig=berlinCalendarDay();
+ const fremd=tenant+'-fremd',fremdAkteur=randomUUID(),fremdAufgabe=randomUUID();
+ // Explicit synthetic data for a second TEST tenant. The own task uses the real writer below.
+ await sql`INSERT INTO public.app_users(id,tenant_id,email,full_name,role,active)
+  VALUES(${fremdAkteur}::uuid,${fremd},${'TEST-'+fremdAkteur+'@local.invalid'},'TEST Fremder Betrieb','buero',true)`;
+ await sql`INSERT INTO public.tasks(id,tenant_id,client_key,art,titel,faellig_am,vorlauf_tage,
+   fuer_bereich,bezug_typ,status,erstellt_von,version)
+  VALUES(${fremdAufgabe}::uuid,${fremd},${randomUUID()}::uuid,'aufgabe','TEST Fremde Aufgabe',
+    ${faellig}::date,0,'auftraege','allgemein','offen',${fremdAkteur}::uuid,1)`;
  const aufgabe:TaskSaveInput={clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST Ware für Abholung bereitlegen',
   dueDate:faellig,time:null,forLogin:null,forArea:'auftraege',reference:{type:'auftrag',id:auftrag.orderId},note:'TEST private Aufgabennotiz'};
  const erfasst=await withSession(ersteller,()=>saveIntakeTaskAction(aufgabe));
@@ -31,18 +40,29 @@ it('liest offene Aufgaben ohne Eingang, schützt Geld und Bezug und entfernt den
  const lies=(sitzung:typeof ersteller)=>withSession(sitzung,async()=>{
   const auth=await resolveAuthorization();
   if(!auth.ok)throw Error('TEST_AUTH_FEHLT');
-  return liesAufgabenFuerTag(auth.data);
+  return withPageReadBudget(async()=>{
+   const data=await liesAufgabenFuerTag(auth.data);
+   return {data,queries:pageReadQueryObservation().total};
+  },5000);
  });
  const key=`tasks.aufgabe:${erfasst.task.id}`;
- const zeile={key,quelleId:'tasks.aufgabe',gegenstand:aufgabe.title,faellig,ziel:auftrag.orderId,befehl:'completeTask',
-  bestand:{taskId:erfasst.task.id,version:erfasst.task.version,reference:{type:'auftrag',id:auftrag.orderId}}};
+ const zeile={key,quelleId:'tasks.aufgabe',gegenstand:aufgabe.title,faellig,
+  ziel:'aufgabe',handlung:'Aufgabe öffnen',befehl:'kreile:oeffne',
+  bestand:{taskId:erfasst.task.id,arg:erfasst.task.id,version:erfasst.task.version,reference:{type:'auftrag',id:auftrag.orderId}}};
  const liste=await lies(auftraege);
- expect(liste).toMatchObject({code:'OK',zeilen:[zeile]});
+ expect(liste.data).toMatchObject({code:'OK',zeilen:[zeile]});
  expect(JSON.stringify(liste)).not.toContain('TEST private Aufgabennotiz');
- expect(await lies(kunden)).toMatchObject({code:'OK',zeilen:[{key,ziel:null,befehl:null,bestand:{reference:null}}]});
- expect(await lies(ersteller)).toMatchObject({code:'OK',zeilen:expect.arrayContaining([
+ expect((await lies(kunden)).data).toMatchObject({code:'OK',zeilen:[{key,ziel:'aufgabe',befehl:'kreile:oeffne',bestand:{reference:null}}]});
+ const mitGeld=await lies(ersteller);
+ expect(mitGeld.data).toMatchObject({code:'OK',zeilen:expect.arrayContaining([
   expect.objectContaining(zeile),expect.objectContaining({key:`tasks.aufgabe:${geld.task.id}`,gegenstand:'TEST Preis besprechen'})])});
+ expect(JSON.stringify(mitGeld)).not.toContain(fremdAufgabe);
+ expect(liste.queries).toBeGreaterThan(0);
+ expect(mitGeld.queries).toBe(liste.queries);
+ const lesen=()=>getIntakeTaskAction({taskId:zeile.bestand.arg});
+ expect(await withSession(kunden,lesen)).toMatchObject({code:'OK',canComplete:false,canOpenReference:false});
+ expect(await withSession(auftraege,lesen)).toMatchObject({code:'OK',canComplete:true,canOpenReference:true});
  const erledigt=await withSession(auftraege,()=>completeIntakeTaskAction({taskId:erfasst.task.id,version:erfasst.task.version,note:null}));
  expect(erledigt).toMatchObject({code:'OK',task:{id:erfasst.task.id,status:'erledigt'}});
- expect(await lies(auftraege)).toEqual({code:'OK',zeilen:[]});
+ expect((await lies(auftraege)).data).toEqual({code:'OK',zeilen:[]});
 });
