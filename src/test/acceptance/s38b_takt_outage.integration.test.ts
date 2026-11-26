@@ -44,18 +44,23 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
     const original=randomUUID(),failed=randomUUID();
     await sql`INSERT INTO public.takt_job_runs(id,tenant_id,job_schluessel,faellig_fuer,
       gestartet_um,beendet_um,status,versuch,dauer_ms,fehlercode)
-      VALUES
-        (${original}::uuid,${tenant},${key},${erfolgTag},
-          ${erfolg.toISOString()}::timestamptz-interval '1 second',${erfolg.toISOString()}::timestamptz,'ok',1,1,NULL),
-        (${failed}::uuid,${tenant},${key},${jetztTag+'T'+berlinUhrzeit(fehler)},
-          ${fehler.toISOString()}::timestamptz-interval '1 second',${fehler.toISOString()}::timestamptz,'fehler',1,1,'takt_ausfuehrung')`;
+      VALUES(${original}::uuid,${tenant},${key},${erfolgTag},
+        ${erfolg.toISOString()}::timestamptz-interval '1 second',${erfolg.toISOString()}::timestamptz,'ok',1,1,NULL)`;
+
+    const protokollKey='takt.ausfall:protokoll_aufbewahrung';
+    expect(await lies(operator)).toMatchObject({code:'OK',zeilen:expect.arrayContaining([
+      expect.objectContaining({key:protokollKey,grund:'Letzter erfolgreicher Lauf liegt zu lange zurück'}),
+    ])});
+    await sql`INSERT INTO public.takt_job_runs(id,tenant_id,job_schluessel,faellig_fuer,
+      gestartet_um,beendet_um,status,versuch,dauer_ms,fehlercode)
+      VALUES(${failed}::uuid,${tenant},${key},${jetztTag+'T'+berlinUhrzeit(fehler)},
+        ${fehler.toISOString()}::timestamptz-interval '1 second',${fehler.toISOString()}::timestamptz,'fehler',1,1,'takt_ausfuehrung')`;
 
     await sql`INSERT INTO public.takt_job_runs(tenant_id,job_schluessel,faellig_fuer,
       gestartet_um,beendet_um,status,versuch,dauer_ms)
       VALUES(${fremd},'heute_neuaufbau',${jetztTag},
         ${jetzt.toISOString()}::timestamptz-interval '1 second',${jetzt.toISOString()}::timestamptz,'ok',1,1)`;
 
-    const protokollKey='takt.ausfall:protokoll_aufbewahrung';
     const tagKey='takt.ausfall:heute_neuaufbau';
     expect(await lies(operator)).toMatchObject({code:'OK',zeilen:expect.arrayContaining([
       expect.objectContaining({key:protokollKey,quelleId:'takt.ausfall',
@@ -74,7 +79,8 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
     vi.useFakeTimers({toFake:['Date']});
     vi.setSystemTime(jetzt);
     expect(await withSession(other,()=>starteTaktJobNeu(input))).toMatchObject({code:'FORBIDDEN'});
-    expect(await withSession(operator,()=>starteTaktJobNeu({...input,tenantId:'TEST-fremd'}))).toEqual({code:'VALIDATION_ERROR'});
+    expect(await withSession(operator,()=>starteTaktJobNeu({...input,tenantId:'TEST-fremd'})))
+      .toEqual({code:'VALIDATION_ERROR',message:'Wähle einen hinterlegten Dienst.'});
     const results=await Promise.all([
       withSession(operator,()=>starteTaktJobNeu(input)),
       withSession(operator,()=>starteTaktJobNeu(JSON.parse(JSON.stringify(input)))),
@@ -88,7 +94,8 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
       .toEqual([{job_schluessel:'heute_neuaufbau',status:'ok',versuch:1}]);
 
     expect(await lies(operator)).toMatchObject({code:'OK',zeilen:[{key:tagKey}]});
-    expect(await withSession(operator,()=>starteTaktJobNeu(input))).toEqual({code:'CONFLICT'});
+    expect(await withSession(operator,()=>starteTaktJobNeu(input)))
+      .toEqual({code:'CONFLICT',message:'Für diesen Dienst steht gerade kein Neustart an.'});
   }finally{
     vi.useRealTimers();
     await settings.remove();

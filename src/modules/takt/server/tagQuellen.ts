@@ -69,7 +69,7 @@ function projektiereTaktAusfallZeilen(
     const job=TAKT_AUSFALL_COPY.jobs[schluessel];
     const abschluss=laufstand.letzterAbschluss;
     const erfolg=laufstand.letzterErfolgMs;
-    const grund=abschluss==='ok'?'':TAKT_AUSFALL_COPY.gruende[abschluss??'ohneLauf'];
+    const grund=TAKT_AUSFALL_COPY.gruende[abschluss??'ohneLauf'];
     let zeit: string|null=null;
     if(erfolg!==null){
       const datum=new Date(erfolg);
