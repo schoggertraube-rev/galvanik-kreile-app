@@ -8,6 +8,24 @@ import {liesTodayModellBesetzt, liesTodayModellVeraltet} from '@/lib/server/toda
 import {fuehreHeuteAuffrischung} from '@/lib/today/taktJobs';
 import {beendeLauf, liesLetztenOk, liesOffeneWiederholungen, liesTaktMandanten, reserviereLauf, TAKT_NACHHOLEN} from './laeufe';
 import {fuehreFaelligenJobAus, liesFaelligeJobs, nachholMinuteBerlin, type FaelligerJob} from './lauf';
+import {liesTaktAusfallFakten} from './tagQuellen';
+
+/** Ein Neustart verwendet dieselbe Reservierung und ist nur für eine belegte Störung möglich. */
+export async function starteTaktStoerungsjob(tenantId: string, schluessel: string, jetzt = new Date()) {
+  const job = TAKT_JOBS.find(eintrag => eintrag.schluessel === schluessel);
+  if (!job) return null;
+  const ausfuehrung = job.schluessel === 'heute_neuaufbau' ? {...job, ausfuehren: fuehreHeuteAuffrischung} : job;
+  const ergebnis = await fuehreFaelligenJobAus(tenantId, {
+    job: ausfuehrung,
+    faelligFuer: nachholMinuteBerlin(jetzt),
+    vorReservierung: async () => {
+      const stand = await liesTaktAusfallFakten({tenantId}, jetzt);
+      if (stand.code !== 'OK') throw Error('TAKT_STOERUNGSQUELLE_FEHLT');
+      return stand.ausfaelle.some(ausfall => ausfall.laufstand.schluessel === schluessel);
+    },
+  }, baueTaktLeser(tenantId), bauePaketAktiv(tenantId));
+  return {schluessel: job.schluessel, ergebnis};
+}
 
 function zeitUebrig(start: number, budgetMs: number): number {
   return Math.max(0, budgetMs - Math.ceil(performance.now() - start));

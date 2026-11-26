@@ -3,6 +3,7 @@ import {isAccessArea,type AccessArea} from '@/lib/auth/authorizationContract';
 export const TASK_KINDS=['rueckruf','frist','aufgabe','rechnung'] as const;
 export type TaskKind=typeof TASK_KINDS[number];
 export const TASK_KIND_LABELS:Record<TaskKind,string>={rueckruf:'Rückruf',frist:'Frist',aufgabe:'Aufgabe',rechnung:'Rechnung klären'};
+export const TASK_TAG_COPY = {erledigen:'Aufgabe erledigen',ansehen:'Aufgabe ansehen'} as const;
 export type TaskReferenceType='kunde'|'auftrag'|'kv'|'eingang'|'eingangsrechnung'|'reklamation'|'lagerartikel'|'lagerbestand'|'allgemein';
 export type TaskReference={type:TaskReferenceType;id:string|null};
 export type TaskSaveInput={clientKey:string;taskId?:string;version:number;kind:TaskKind;title:string;dueDate:string;time:string|null;forLogin:string|null;forArea:AccessArea|null;reference:TaskReference;note:string|null;itemId?:string;itemVersion?:number};

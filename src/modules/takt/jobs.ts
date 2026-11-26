@@ -1,13 +1,18 @@
 import 'server-only';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
-import {readPackageSwitchValuesForTakt} from '@/modules/fundament/server-public';
+import {readBetriebswaechterEinstellungenInTransaction,readLoggingSettings,readPackageSwitchValuesForTakt} from '@/modules/fundament/server-public';
 import type {PackageSwitchId,PackageSwitchValues} from '@/modules/fundament/public';
 import {taktJobs as loggingTaktJobs} from '@/modules/logging/server-public';
 import {HEUTE_TAKT_JOBS} from '@/lib/today/taktJobs';
+import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {TaktJob, TaktLeser} from './public';
 
 /** One list for the runner; Fach modules own their individual jobs. */
 export const TAKT_JOBS = [...HEUTE_TAKT_JOBS, ...loggingTaktJobs] as const satisfies readonly TaktJob[];
+
+export async function liesTaktAusfallToleranzInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
+  const settings = await readBetriebswaechterEinstellungenInTransaction(tx, tenantId);
+  return settings.dienst_ausfall_toleranz_stunden;
+}
 
 /** One lazy read per tenant pass, shared by every package-bound job. */
 export function bauePaketAktiv(tenantId:string,read:(tenantId:string)=>Promise<PackageSwitchValues>=readPackageSwitchValuesForTakt){

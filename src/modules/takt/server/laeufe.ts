@@ -62,6 +62,8 @@ export async function liesOffeneWiederholungen(tenantId: string, schluessel: rea
       ELSE faellig_fuer::timestamptz END,job_schluessel`)]);
 }
 
+const erfolgreicherTageslauf = sql`status='ok' AND beendet_um IS NOT NULL AND length(faellig_fuer)=10`;
+
 /** Ein nach Mitternacht beendeter Tageslauf bleibt dem ursprünglichen Termin zugeordnet. */
 export async function liesLetztenOk(tenantId: string, schluessel: string): Promise<Date | null> {
   if (!tenantId || !/^[a-z][a-z0-9_.]{1,79}$/.test(schluessel)) throw Error('TAKT_LETZTER_OK_INVALID');
@@ -69,14 +71,45 @@ export async function liesLetztenOk(tenantId: string, schluessel: string): Promi
     const rows = await tx.execute<{faellig_ms: number}>(sql`
       SELECT (EXTRACT(epoch FROM (faellig_fuer::date::timestamp AT TIME ZONE 'Europe/Berlin'))*1000)::double precision AS faellig_ms
       FROM public.takt_job_runs
-      WHERE tenant_id=${tenantId} AND job_schluessel=${schluessel} AND status='ok' AND beendet_um IS NOT NULL
-        AND length(faellig_fuer)=10
+      WHERE tenant_id=${tenantId} AND job_schluessel=${schluessel} AND (${erfolgreicherTageslauf})
       ORDER BY faellig_fuer DESC LIMIT 1`);
     const row = rows[0];
     if (!row) return null;
     if (!Number.isFinite(row.faellig_ms)) throw Error('TAKT_LETZTER_OK_ZEIT_INVALID');
     return new Date(row.faellig_ms);
   });
+}
+
+export type TaktLaufstand = Readonly<{
+  schluessel: string;
+  letzterErfolgMs: number | null;
+  letzterTageserfolgMs: number | null;
+  letzterAbschluss: 'ok' | 'fehler' | 'abgebrochen' | null;
+  letzterAbschlussMs: number | null;
+}>;
+
+/** Der Kalendertag bestimmt die Fälligkeit. Für das Alter zählt der tatsächliche Abschluss. */
+export async function liesTaktLaufstaendeInTransaction(
+  tx: PrivilegedTenantTransaction, tenantId: string, schluessel: readonly string[],
+): Promise<ReadonlyArray<TaktLaufstand>> {
+  if (schluessel.length === 0) return [];
+  return tx.execute<TaktLaufstand>(sql`
+    SELECT job.schluessel,
+      (EXTRACT(epoch FROM erfolg.beendet_um)*1000)::double precision AS "letzterErfolgMs",
+      (EXTRACT(epoch FROM (erfolg.tag::date::timestamp AT TIME ZONE 'Europe/Berlin'))*1000)::double precision AS "letzterTageserfolgMs",
+      zuletzt.status AS "letzterAbschluss",
+      (EXTRACT(epoch FROM zuletzt.beendet_um)*1000)::double precision AS "letzterAbschlussMs"
+    FROM unnest(ARRAY[${sql.join(schluessel.map(key => sql`${key}`),sql`, `)}]::text[]) AS job(schluessel)
+    LEFT JOIN LATERAL (
+      SELECT MAX(beendet_um) AS beendet_um, MAX(faellig_fuer) FILTER (WHERE ${erfolgreicherTageslauf}) AS tag
+      FROM public.takt_job_runs
+      WHERE tenant_id=${tenantId} AND job_schluessel=job.schluessel AND status='ok' AND beendet_um IS NOT NULL
+    ) erfolg ON true
+    LEFT JOIN LATERAL (
+      SELECT status,beendet_um FROM public.takt_job_runs
+      WHERE tenant_id=${tenantId} AND job_schluessel=job.schluessel AND status IN ('ok','fehler','abgebrochen') AND beendet_um IS NOT NULL
+      ORDER BY beendet_um DESC,id DESC LIMIT 1
+    ) zuletzt ON true`);
 }
 
 /** S45 reads the one immutable run source; permission is checked before any SQL. */

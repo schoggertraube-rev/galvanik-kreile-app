@@ -6,7 +6,12 @@ import {type TaktJob, type TaktLeser} from '../public';
 import type {PackageSwitchId} from '@/modules/fundament/public';
 import {beendeAbgelaufenenLauf, beendeLauf, loescheAlteLaeufe, mitTaktLaufsperre, reserviereLauf, type LaufAbschluss} from './laeufe';
 
-export type FaelligerJob = Readonly<{job: TaktJob; faelligFuer: string; wiederholung?: true}>;
+export type FaelligerJob = Readonly<{
+  job: TaktJob;
+  faelligFuer: string;
+  wiederholung?: true;
+  vorReservierung?: () => Promise<boolean>;
+}>;
 export type JobErgebnis = 'nicht_reserviert' | 'ok' | 'ohne_arbeit' | 'übersprungen' | 'fehler' | 'abgebrochen' | 'besetzt';
 
 /** Preserve registration order while qualifying each job against its own success. */
@@ -51,6 +56,7 @@ export async function fuehreFaelligenJobAus(
     const deadline = AbortSignal.timeout(budget);
     const signal = abbruch ? AbortSignal.any([deadline, abbruch]) : deadline;
     const vorbereitung = await withTaktStatementTimeout(budget, async () => {
+      if (faellig.vorReservierung && !await faellig.vorReservierung()) return null;
       if (!handlauf && await beendeAbgelaufenenLauf(tenantId, job.schluessel, faelligFuer)) return 'abgebrochen' as const;
       return reserviereLauf(tenantId, job.schluessel, faelligFuer, budget);
     }, signal);

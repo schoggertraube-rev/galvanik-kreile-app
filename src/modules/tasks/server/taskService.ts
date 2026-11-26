@@ -423,7 +423,7 @@ export function projectTaskCalendarSources(auth:AuthorizationSnapshot,source:Tas
  const unknownGap=source.code==='SOURCE_INCOMPLETE'&&source.missingTaskIds.length===0;
  return {code:missingTaskIds.length||unknownGap?'SOURCE_INCOMPLETE':'OK',rows,missingTaskIds};
 }
-async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|TaskReadContext,request:TaskOpenRequest){
+export async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|TaskReadContext,request:TaskOpenRequest){
  const readAuth='canReadArea'in auth?auth:liveTaskReadContext(auth);
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
   if('taskId'in request&&!task)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
@@ -460,7 +460,7 @@ async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction,auth:A
   return {code:'OK' as const,task,reference,canceledForEdit,canceledCustomer,pricing:pricing!==null,pricingSource,collection:collection!==null,collectionSource,credit:credit===null?null:{pending:credit.pending},creditSource,reissue:reissue!==null,reissueSource,mailRemainder:mailRemainder===null?null:{pending:mailRemainder.pending},recollection:recollection!==null,invoiceFollowupSource};
 }
 /** The only personal projection still uses the actual session actor. */
-function presentTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead):Extract<TaskReadResult,{code:'OK'}>{
+export function presentTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead):Extract<TaskReadResult,{code:'OK'}>{
  const {task,reference,canceledCustomer,pricing,pricingSource,collection,collectionSource,credit,creditSource,reissue,reissueSource,mailRemainder,recollection,invoiceFollowupSource}=source;
  const mayEdit=task?task.status==='offen'&&allowed(auth,task):true;
  if(task&&mayEdit&&source.canceledForEdit.code==='SOURCE_INCOMPLETE')throw Error('TASK_CANCELLATION_READ_INCOMPLETE');

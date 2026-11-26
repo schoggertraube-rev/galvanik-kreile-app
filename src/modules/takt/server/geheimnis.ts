@@ -1,11 +1,15 @@
 import 'server-only';
-import {resolveAuthorization} from '@/lib/server/authorization';
+import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {hasValidCronCredential} from '@/lib/server/cronCredential';
 
 export type TaktZugriff =
   | Readonly<{code: 'CRON'}>
   | Readonly<{code: 'LOGIN'; tenantId: string}>
   | Readonly<{code: 'DENIED'; status: 401 | 403}>;
+
+export function darfTaktNeuStarten(auth: Pick<AuthorizationSnapshot,'permissions'>): boolean {
+  return auth.permissions.includes('perm_sys_diag');
+}
 
 /** A configured cron secret always takes precedence over the login route. */
 export async function pruefeTaktZugriff(request: Request): Promise<TaktZugriff> {
@@ -19,7 +23,7 @@ export async function pruefeTaktZugriff(request: Request): Promise<TaktZugriff> 
   try {
     const result = await resolveAuthorization();
     if (!result.ok) return {code: 'DENIED', status: 401};
-    if (!result.data.permissions.includes('perm_sys_diag')) return {code: 'DENIED', status: 403};
+    if (!darfTaktNeuStarten(result.data)) return {code: 'DENIED', status: 403};
     return {code: 'LOGIN', tenantId: result.data.tenantId};
   } catch {
     return {code: 'DENIED', status: 401};
@@ -31,7 +35,7 @@ export async function pruefeTaktHandzugriff(): Promise<Extract<TaktZugriff, {cod
   try {
     const result = await resolveAuthorization();
     if (!result.ok) return {code: 'DENIED', status: 401};
-    if (!result.data.permissions.includes('perm_sys_diag')) return {code: 'DENIED', status: 403};
+    if (!darfTaktNeuStarten(result.data)) return {code: 'DENIED', status: 403};
     return {code: 'LOGIN', tenantId: result.data.tenantId};
   } catch {
     return {code: 'DENIED', status: 401};
