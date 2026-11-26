@@ -8,12 +8,15 @@ import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {type AuthorizedReadContext} from './authorizationReadContext';
 import {
   canReadPaymentSummary,
+  classifyOverdue,
+  isOrderPaymentMode,
   paymentReadAuthorization,
   type PaymentReadAuthorization,
   mapOrderPaymentStateRow,
   mapPaymentSummaryRow,
   readOrderPaymentSummaries,
   type OrderPaymentState,
+  type OrderPaymentMode,
   type OrderPaymentStateRow,
   type PaymentSummary,
   type PaymentSummaryRow,
@@ -36,6 +39,55 @@ export type OrderPaymentStateReadResult =
   | { code: "UNAVAILABLE"; message: string };
 
 const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+type CustomerDeliveryBlock = {blocked:boolean;reason:'overdue_invoice';invoiceIds:string[]};
+type CustomerDeliveryBlockRead =
+  | {code:'OK';data:CustomerDeliveryBlock;paymentMode:OrderPaymentMode|null;handover:'pickup'|'shipping'|null;oldest?:{number:string;openAmountCents:number;daysOverdue:number}}
+  | {code:'FORBIDDEN'|'NOT_FOUND'|'VALIDATION_ERROR'|'UNAVAILABLE'};
+
+function customerDeliveryBlock(paymentMode:string|null,invoiceIds:string[]):CustomerDeliveryBlock{
+  return {blocked:paymentMode!=='keiner'&&invoiceIds.length>0,reason:'overdue_invoice',invoiceIds};
+}
+
+/** Same Berlin-day invoice predicate as the physical handover and order payment state. */
+export async function readCustomerDeliveryBlock(
+  auth:AuthorizationSnapshot,customerId:string,orderId?:string,
+):Promise<CustomerDeliveryBlockRead>{
+  if(!(['mails','kunden','auftraege'] as const).some(area=>hasAuthorizationArea(auth,area)))
+    return {code:'FORBIDDEN'};
+  if(!ORDER_ID_PATTERN.test(customerId)||(orderId!==undefined&&!ORDER_ID_PATTERN.test(orderId)))
+    return {code:'VALIDATION_ERROR'};
+  try{
+    return await withPrivilegedTenantTransaction(auth,async tx=>{
+      const [scope]=await tx.execute<{payment_mode:string|null;handover_mode:string|null}>(sql`
+        SELECT ${orderId===undefined?sql`NULL::text AS payment_mode,NULL::text AS handover_mode`:sql`orders.payment_mode,orders.handover_mode`}
+        FROM public.customers customer
+        ${orderId===undefined?sql``:sql`JOIN public.orders orders
+          ON orders.tenant_id=customer.tenant_id AND orders.customer_id=customer.id AND orders.id=${orderId}`}
+        WHERE customer.tenant_id=${auth.tenantId} AND customer.id=${customerId}`);
+      if(!scope)return {code:'NOT_FOUND'};
+      if(orderId!==undefined&&!isOrderPaymentMode(scope.payment_mode))return {code:'UNAVAILABLE'};
+      const paymentMode=isOrderPaymentMode(scope.payment_mode)?scope.payment_mode:null;
+      const handover=scope.handover_mode==='pickup'||scope.handover_mode==='shipping'?scope.handover_mode:null;
+      if(paymentMode==='keiner')return {code:'OK',paymentMode,handover,data:customerDeliveryBlock(paymentMode,[])};
+      const invoices=await tx.execute<{id:string;number:string;open_amount:number;days_overdue:number}>(sql`
+        SELECT invoice.id::text,invoice.invoice_number AS number,invoice.payment_open_amount_cents AS open_amount,
+          (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-invoice.due_date::date AS days_overdue
+        FROM public.invoices invoice
+        WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${classifyOverdue()}
+        ORDER BY invoice.due_date,invoice.id`);
+      const oldest=invoices[0];
+      const visible=hasAuthorizationArea(auth,'zahlungen');
+      const data=customerDeliveryBlock(paymentMode,invoices.map(row=>row.id));
+      return {code:'OK',paymentMode,handover,data:visible?data:{...data,invoiceIds:[]},...(visible&&oldest&&oldest.number?{
+        oldest:{number:oldest.number,openAmountCents:oldest.open_amount,daysOverdue:oldest.days_overdue},
+      }:{})};
+    });
+  }catch(error){
+    logReadFailure('readCustomerDeliveryBlock database error',error);
+    return {code:'UNAVAILABLE'};
+  }
+}
 
 /** Credit belongs only to the existing payment area. Other payment facts and
  * their physical release blocks remain exactly the already qualified result. */
@@ -131,7 +183,7 @@ async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:
           creditApplication=buildCustomerCreditApplication(source,mapped.payment);
         }catch{creditApplication={code:'SOURCE_INCOMPLETE'};}
       }
-      return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:{blocked:rows[0].payment_mode!=="keiner"&&rows[0].customer_overdue_invoice_ids.length>0,reason:'overdue_invoice' as const,invoiceIds:rows[0].customer_overdue_invoice_ids} };
+      return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:customerDeliveryBlock(rows[0].payment_mode,rows[0].customer_overdue_invoice_ids) };
 }
 async function readPaymentStateGroup(authorization:PaymentReadAuthorization,orderIds:string[],readCredit?:CreditSourceRead){
  return withPrivilegedTenantTransaction(authorization,async tx=>{
