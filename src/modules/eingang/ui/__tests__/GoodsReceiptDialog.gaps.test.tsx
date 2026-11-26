@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { GoodsReceiptDialog, type GoodsReceiptPorts } from "../GoodsReceiptDialog";
 import type { GoodsReceiptReadResult } from "../../goodsReceiptContract";
@@ -31,6 +31,32 @@ it("U242 names and focuses the first unchecked position, not the first row", asy
   if(!second)throw Error("SECOND_POSITION_MISSING");
   await waitFor(()=>expect(within(second).getByRole("button",{name:"stimmt"})).toHaveFocus());
   expect(save.mock.calls.every(([value])=>value.command!=="galvanik")).toBe(true);
+});
+
+it('W03 keeps the photo gap actionable when the background draft save completes', async () => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn()})));
+  Element.prototype.scrollIntoView = vi.fn();
+  const order = {id:'synthetic-w03-order', number:'SYNTHETISCH-W03', customerId:'synthetic-customer', customerName:'SYNTHETISCH', title:null, note:null, version:1, station:'eingang', status:'offen', ware:'erwartet', fromQuote:false, items:[]};
+  const receipt = {id:crypto.randomUUID(), client_key:crypto.randomUUID(), item_id:null, auftrag_id:order.id, modus:'erwartet' as const, status:'entwurf' as const, version:1, karte:3, packstuecke_da:1, packstuecke_gesamt:1, zustand:'unauffaellig' as const, abweichung:[], abgestellt:false, fund_zeit:null, verfahren_wie_kv:null, verfahren_abweichung:null, fotos:[], mengen:[], offen:[], bestaetigt_von:null};
+  const read: GoodsReceiptReadResult = {code:'OK', order, receipts:[receipt], canStartGalvanik:true};
+  let acknowledge!: (result: Awaited<ReturnType<GoodsReceiptPorts['save']>>) => void;
+  const save = vi.fn<GoodsReceiptPorts['save']>(() => new Promise(resolve => { acknowledge = resolve; }));
+  const ports: GoodsReceiptPorts = {read:vi.fn(async () => read), scope:vi.fn(async () => ({code:'OK' as const, scope:'synthetic-w03'})), save, prepareFile:vi.fn(), finishFile:vi.fn()};
+  const onClose = vi.fn();
+
+  render(<GoodsReceiptDialog orderId={order.id} ports={ports} onClose={onClose} onOriginal={vi.fn()} onMessage={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button', {name:'Annehmen · in Galvanik'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Noch offen: Foto Paket oder Teile');
+  const jump = screen.getByRole('button', {name:'Zur Lücke'});
+  await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({command:'draft', card:1})));
+  await act(async () => acknowledge({code:'OK', receipt:{...receipt, version:2, karte:1}, replayed:false}));
+
+  expect(screen.getByRole('button', {name:'Zur Lücke'})).toBe(jump);
+  expect(screen.getByRole('alert')).toHaveTextContent('Noch offen: Foto Paket oder Teile');
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(onClose).not.toHaveBeenCalled();
+  fireEvent.click(jump);
+  await waitFor(() => expect(screen.getByRole('button', {name:'Paket gesamt'})).toHaveFocus());
 });
 
 it('K2 retains the same real device identifier before preparing a resumed goods photo and keeps it after upload failure',async()=>{
