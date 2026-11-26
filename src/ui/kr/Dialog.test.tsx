@@ -1,6 +1,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
-import {cleanup,fireEvent,render,screen,within} from '@testing-library/react';
-import {useState} from 'react';
+import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
+import {StrictMode,useState} from 'react';
+import {KrApp} from './AppShell';
 import {Dialog} from './Dialog';
 import {Seitenblatt} from './Seitenblatt';
 
@@ -39,4 +40,47 @@ it('erhält ein Blatt mit ungespeichertem Entwurf, wenn das Schließen abgelehnt
   expect(screen.getByRole('textbox')).toHaveValue('TEST Original');
   expect(canClose).toHaveBeenCalledOnce();
   expect(close).not.toHaveBeenCalled();
+});
+
+it('schließt am Handy per Browser-Zurück jeweils ein Blatt und erhält Ort, Eingabe und Fokus',async()=>{
+  const ort=window.location.href;
+  const geschlossen=vi.fn();
+  function Karte(){
+    const [offen,setOffen]=useState(false);
+    const [karteOffen,setKarteOffen]=useState(true);
+    return karteOffen && <Seitenblatt titel="TEST Auftragskarte" onSchliessen={()=>{setKarteOffen(false);geschlossen();}}>
+      <label>TEST Notiz<input defaultValue="TEST Entwurf"/></label>
+      <button type="button" onClick={()=>setOffen(true)}>TEST Änderung öffnen</button>
+      {offen && <Dialog titel="TEST Änderung" onSchliessen={()=>setOffen(false)}><p>TEST Änderung</p></Dialog>}
+    </Seitenblatt>;
+  }
+  render(<StrictMode><KrApp geraet="handy"><Karte/></KrApp></StrictMode>);
+  const ausloeser=screen.getByRole('button',{name:'TEST Änderung öffnen'});
+  ausloeser.focus();
+  fireEvent.click(ausloeser);
+  window.history.back();
+  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'TEST Änderung'})).not.toBeInTheDocument());
+  expect(window.location.href).toBe(ort);
+  expect(screen.getByRole('dialog',{name:'TEST Auftragskarte'})).toBeInTheDocument();
+  expect(screen.getByRole('textbox',{name:'TEST Notiz'})).toHaveValue('TEST Entwurf');
+  expect(ausloeser).toHaveFocus();
+  expect(geschlossen).not.toHaveBeenCalled();
+  window.history.back();
+  await waitFor(()=>expect(geschlossen).toHaveBeenCalledOnce());
+  expect(window.location.href).toBe(ort);
+});
+
+it('behält am Handy den Rückweg, wenn das Blatt den Entwurf vor dem Schließen schützt',async()=>{
+  const close=vi.fn();
+  const canClose=vi.fn(()=>false);
+  render(<KrApp geraet="handy"><Dialog titel="TEST Eingabe" vorSchliessen={canClose} onSchliessen={close}>
+    <label>TEST Feld<input defaultValue="TEST Original"/></label>
+  </Dialog></KrApp>);
+  window.history.back();
+  await waitFor(()=>expect(canClose).toHaveBeenCalledOnce());
+  expect(close).not.toHaveBeenCalled();
+  expect(screen.getByRole('textbox')).toHaveValue('TEST Original');
+  canClose.mockReturnValue(true);
+  window.history.back();
+  await waitFor(()=>expect(close).toHaveBeenCalledOnce());
 });

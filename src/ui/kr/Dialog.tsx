@@ -28,7 +28,7 @@ export function Dialog({titel,unterzeile,icon='file',groesse='normal',onSchliess
     ansicht={geraet==='handy'?'blatt':groesse==='karte'?'objekt':'fenster'}
     schliessenText={V45_TEXT.common$close} schliessenSymbol={<Icon name="x"/>} schliessenSpecId={schliessenSpecId}
     schliesstGesperrt={beschaeftigt} beschaeftigt={beschaeftigt} dataSpecId={dataSpecId} oeffner={opener}
-    onSchliessen={()=>{if(vorSchliessen?.()!==false)setOffen(false);}} onGeschlossen={onSchliessen}
+    onSchliessen={()=>{if(vorSchliessen?.()===false)return false;setOffen(false);}} onGeschlossen={onSchliessen}
     kopfSymbol={<Icon name={icon}/>} kopfAktionen={onZurueck && <Button art="leise" icon="back"
       label={V45_TEXT.common$back} disabled={beschaeftigt} onClick={onZurueck}/>} fuss={fuss}>
     {meldung && <DialogAktionsmeldung meldung={meldung}/>}

@@ -15,7 +15,7 @@ export interface GlasDialogProps {
   schliessenStil?: 'knopf' | 'text';
   schliesstGesperrt?: boolean;
   beschaeftigt?: boolean;
-  onSchliessen: () => void;
+  onSchliessen: () => boolean | void;
   onGeschlossen?: () => void;
   fokus?: RefObject<HTMLElement | null>;
   /** Den ausgelösten Knopf als event.currentTarget übergeben. WebKit fokussiert Touch-Knöpfe nicht automatisch. */
@@ -36,6 +36,44 @@ export function isTopGlassDialog(element: HTMLElement | null) {
   return visible.at(-1) === element;
 }
 
+const blattVerlauf = 'kreileGlasblatt';
+const offeneBlaetter = new Set<string>();
+
+function useBlattZurueck(
+  offen: boolean,
+  element: RefObject<HTMLDialogElement | null>,
+  schliessen: () => boolean | void,
+) {
+  const id = useId();
+  const schliessenAktuell = useRef(schliessen);
+  useLayoutEffect(() => { schliessenAktuell.current = schliessen; }, [schliessen]);
+
+  useLayoutEffect(() => {
+    if (!offen) return;
+    const ort = window.location.href;
+    const eintrag = () => window.history.state?.[blattVerlauf] as string | undefined;
+    const vorher = eintrag();
+    const zustand = () => ({ ...window.history.state, [blattVerlauf]: id });
+    // Ein im selben Schritt ersetztes Blatt hinterlässt keinen zusätzlichen Rückweg.
+    if (vorher && !offeneBlaetter.has(vorher)) window.history.replaceState(zustand(), '');
+    else window.history.pushState(zustand(), '');
+    offeneBlaetter.add(id);
+
+    function zurueck() {
+      if (window.location.href !== ort || eintrag() === id || !isTopGlassDialog(element.current)) return;
+      if (schliessenAktuell.current() === false) window.history.pushState(zustand(), '');
+    }
+    window.addEventListener('popstate', zurueck);
+    return () => {
+      window.removeEventListener('popstate', zurueck);
+      offeneBlaetter.delete(id);
+      queueMicrotask(() => {
+        if (window.location.href === ort && eintrag() === id && !offeneBlaetter.has(id)) window.history.back();
+      });
+    };
+  }, [offen, element, id]);
+}
+
 export function GlasDialog({
   offen, titel, beschreibung, ansicht = 'fenster', groesse = 'normal', schliessenText, schliessenSymbol,
   schliessenStil = 'knopf', schliesstGesperrt, beschaeftigt, onSchliessen,
@@ -49,6 +87,8 @@ export function GlasDialog({
   const aktuell = useRef({ onGeschlossen, fokus, oeffner });
   const titelId = useId();
   const beschreibungId = useId();
+
+  useBlattZurueck(offen && ansicht === 'blatt', element, schliessen);
 
   useLayoutEffect(() => {
     aktuell.current = { onGeschlossen, fokus, oeffner };
@@ -174,7 +214,8 @@ export function GlasDialog({
   }, [offen]);
 
   function schliessen() {
-    if (offen && !schliesstGesperrt) onSchliessen();
+    if (!offen || schliesstGesperrt) return false;
+    return onSchliessen();
   }
 
   const dialog = (
