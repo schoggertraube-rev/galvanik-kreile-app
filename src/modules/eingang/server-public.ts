@@ -40,3 +40,4 @@ export {observeIntakeMailboxImport,readIntakeMailboxWatermark} from "./server/in
 
 export {parkIntakeMailImportFailure,readFailedIntakeMailImports} from './server/intakeMailImport';
 export {tagQuellen} from './server/tagQuellen';
+export {pruefeZusage,type ZusageInput,type ZusageErgebnis,type ZusageLeser} from './server/zusagePruefung';
