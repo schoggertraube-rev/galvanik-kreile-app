@@ -2,54 +2,77 @@ name: Bestandsschutz
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     branches: [main]
   push:
     branches: [main]
+  # Both UTC offsets are scheduled; the Berlin clock selects 02:30.
+  schedule:
+    - cron: '30 0,1 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: bestandsschutz-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   bestandsschutz:
     name: Bestandsschutz
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'voll-pruefen'))
     # Playwright 1.60.0 rejects Chromium installation on Ubuntu 26.04.
     # Keep the supported host also used by the existing Quality browser job.
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Select 02:30 Europe/Berlin
+        id: berlin-night
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          if [ "$(TZ=Europe/Berlin date +%H)" = 02 ]; then
+            echo "run=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=no" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
+        if: steps.berlin-night.outputs.run != 'no'
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Setup Node.js 24
+        if: steps.berlin-night.outputs.run != 'no'
         uses: actions/setup-node@v6
         with:
           node-version: '24'
       - name: Install dependencies
+        if: steps.berlin-night.outputs.run != 'no'
         run: npm ci
       - name: Both expected-red lists may only shrink
+        if: steps.berlin-night.outputs.run != 'no'
         run: npm run quality:expected-red-shrink
       - name: Replay every migration on an empty local database
+        if: steps.berlin-night.outputs.run != 'no'
         run: |
           npm run quality:supabase-cli
           ./node_modules/.bin/supabase start
           ./node_modules/.bin/supabase db reset --local --no-seed
       - name: Install Chromium
+        if: steps.berlin-night.outputs.run != 'no'
         run: npx playwright install --with-deps chromium
       - name: Build TEST app once and compare nine areas in three canonical roles
+        if: steps.berlin-night.outputs.run != 'no'
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: node scripts/testing/run-bestandsschutz.mjs
       - name: Stop local database
-        if: always()
+        if: (always()) && steps.berlin-night.outputs.run != 'no'
         run: ./node_modules/.bin/supabase stop --no-backup
       - name: Retain failing DOM evidence
-        if: failure()
+        if: (failure()) && steps.berlin-night.outputs.run != 'no'
         uses: actions/upload-artifact@v4
         with:
           name: bestandsschutz-dom-evidence
