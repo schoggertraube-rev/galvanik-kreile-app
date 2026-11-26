@@ -8,6 +8,7 @@ vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: mandant }));
 import { createFixture, full, sql, withSession } from "../../../e2e/ablauf/replayHarness";
 import { historicalCollection } from "../../../e2e/ablauf/invoiceCollectionFixture";
 import { customerFixture, intakeOrderFixture, invoiceCompanySettingsFixture, readyInvoiceOrder, readyOrderForInvoice } from "../../../e2e/ablauf/orderFixture";
+import { storeOrderPhoto } from "../../../e2e/ablauf/photoFixture";
 import { db } from "@/db";
 import { berlinCalendarDay, leseBetriebsruhetage } from "@/lib/domain/workingDays";
 import { calculateTermSuggestion } from "@/lib/server/intakeSuggestions";
@@ -48,17 +49,51 @@ function setzeWerkstattKostenstellen(zuordnungen: Record<string, string>) {
 }
 
 test("Ein Liefertermin bleibt ohne festgelegte Übergabeart lesbar", async () => {
-  const kunde = await customerFixture("Werkstatt ohne Übergabeart");
-  const { receipt: { orderId } } = await intakeOrderFixture("Werkstatt ohne Übergabeart", kunde);
-  await sql`UPDATE public.orders SET handover_mode = NULL WHERE tenant_id = ${mandant} AND id = ${orderId}`;
-
+  const liefertermin = "2027-05-18";
+  const ursprung = await readyInvoiceOrder("TEST Altbestand ohne Übergabeart", "shipping");
+  const foto = await storeOrderPhoto(ursprung.orderId);
+  const { reklamationAusfuehrenAction, nacharbeitAnlegenAction } = await import("@/app/actions/complaints.actions");
+  const reklamation = await withSession(full, () => reklamationAusfuehrenAction({
+    action: "aufnehmen", clientKey: randomUUID(), orderId: ursprung.orderId, intakeItemId: null, intakeVersion: null,
+    parts: [{ position_id: ursprung.items[0].id, menge: 1 }], defect: "Abplatzung",
+    description: "TEST Altbestand ohne Übergabeart", photoIds: [foto], goodsReturn: "ja",
+  }));
+  if (reklamation.code !== "OK") throw Error("TEST_WERKSTATT_REKLAMATION_FEHLT: " + reklamation.code);
+  const reklamationId = reklamation.receipt.complaintId;
+  const entscheidung = await createFixture(["auftraege", "entscheiden"]);
+  const nacharbeit = await withSession(entscheidung, () => nacharbeitAnlegenAction({
+    reklamationId, version: reklamation.receipt.version, bewertung: "berechtigt", massnahme: "nacharbeit",
+    liefertermin,
+  }));
+  if (nacharbeit.code !== "OK") throw Error("TEST_WERKSTATT_NACHARBEIT_FEHLT: " + nacharbeit.code);
+  const { orderId, eventId } = nacharbeit.receipt;
+  expect(await sql`SELECT event_type FROM public.events
+    WHERE tenant_id = ${mandant} AND order_id = ${orderId} AND id = ${eventId}`)
+    .toEqual([{ event_type: "ORDER_REWORK_CREATED_V1" }]);
   const { getFixedStationOrdersAction, getLiveOrderCardAction } = await import("@/app/actions/orders.actions");
+
+  const [karteMitVersand, listeMitVersand] = await Promise.all([
+    withSession(full, () => getLiveOrderCardAction({ orderId })),
+    withSession(full, () => getFixedStationOrdersAction("angenommen")),
+  ]);
+  if (karteMitVersand.code !== "OK" || !listeMitVersand.ok) throw Error("TEST_WERKSTATT_VERSAND_FEHLT");
+  expect(karteMitVersand.data.card.handoverMode).toBe("shipping");
+  const zeile = listeMitVersand.data.find(auftrag => auftrag.id === orderId);
+  if (!zeile) throw Error("TEST_WERKSTATT_STATIONSZEILE_FEHLT");
+  expect(karteMitVersand.data.card.terminAnzeige).toEqual({
+    risk: zeile.risk, statusText: zeile.statusText, dueLabel: zeile.dueLabel, dueValue: zeile.dueValue,
+  });
+
+  // Nur der isolierte TEST-Nacharbeitsauftrag bildet den Altstand ohne Übergabeart ab.
+  expect(await sql`UPDATE public.orders SET handover_mode = NULL
+    WHERE tenant_id = ${mandant} AND id = ${orderId} AND nacharbeit_zu = ${reklamationId}
+    RETURNING id`).toEqual([{ id: orderId }]);
   const ergebnis = await withSession(full, () => getLiveOrderCardAction({ orderId }));
-  if (ergebnis.code !== "OK") throw Error("TEST_WERKSTATT_AUFTRAG_FEHLT: " + ergebnis.code);
+  if (ergebnis.code !== "OK") throw Error(`TEST_WERKSTATT_AUFTRAG_FEHLT: ${ergebnis.code}: ${ergebnis.message}`);
   const { dueAt, handoverMode } = ergebnis.data.card;
   if (dueAt === null) throw Error("TEST_WERKSTATT_LIEFERTERMIN_FEHLT");
   const dueDate = berlinCalendarDay(new Date(dueAt));
-  expect(dueDate).toBe("2027-05-15");
+  expect(dueDate).toBe(liefertermin);
   expect(handoverMode).toBeNull();
   const stationsliste = await withSession(full, () => getFixedStationOrdersAction("angenommen"));
   expect(stationsliste).toMatchObject({
@@ -69,17 +104,8 @@ test("Ein Liefertermin bleibt ohne festgelegte Übergabeart lesbar", async () =>
     betriebsruhe: new Set(), versandpufferArbeitstage: 2, knappAbArbeitstagen: 2,
   }, "2027-05-10")).toEqual({ fertigtermin: null, stufe: "unbekannt" });
 
-  await sql`UPDATE public.orders SET handover_mode = 'shipping' WHERE tenant_id = ${mandant} AND id = ${orderId}`;
-  const [karteMitVersand, listeMitVersand] = await Promise.all([
-    withSession(full, () => getLiveOrderCardAction({ orderId })),
-    withSession(full, () => getFixedStationOrdersAction("angenommen")),
-  ]);
-  if (karteMitVersand.code !== "OK" || !listeMitVersand.ok) throw Error("TEST_WERKSTATT_VERSAND_FEHLT");
-  const zeile = listeMitVersand.data.find(auftrag => auftrag.id === orderId);
-  if (!zeile) throw Error("TEST_WERKSTATT_STATIONSZEILE_FEHLT");
-  expect(karteMitVersand.data.card.terminAnzeige).toEqual({
-    risk: zeile.risk, statusText: zeile.statusText, dueLabel: zeile.dueLabel, dueValue: zeile.dueValue,
-  });
+  expect(await sql`SELECT handover_mode FROM public.orders WHERE tenant_id = ${mandant} AND id = ${ursprung.orderId}`)
+    .toEqual([{ handover_mode: "shipping" }]);
 });
 
 test("Das Löschen eines Teils löst nur den Teilebezug der unveränderlichen Zeitbuchungen", async () => {
