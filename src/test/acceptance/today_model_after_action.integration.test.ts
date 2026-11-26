@@ -31,7 +31,7 @@ it('reads the committed change live and refreshes only after the actual GET resp
   AND job_schluessel='heute_neuaufbau' AND faellig_fuer=${day}`).toEqual([{status:'ok'}]);
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-19',reason:'TEST native after refresh',clientEventId:randomUUID()};
  const ausstehend=()=>sql`SELECT source_seq>built_seq AS pending FROM private.today_source_v1
-  WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
  const nachlauf=()=>sql`SELECT status FROM public.takt_job_runs WHERE tenant_id=${tenant} AND job_schluessel='takt.nachholen'`;
  const output=vi.spyOn(console,'info');
  try{
@@ -77,13 +77,13 @@ it('PL11:36 schedules nothing for a real read transaction or a rolled-back sourc
  try{
   await withSession(full,()=>observeAction('TESTTodayReadOnlyEnvelope',{type:'order',id:order.orderId},()=>withPrivilegedTenantTransaction({tenantId:tenant},tx=>tx.execute(query`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`)),readLoggingSettings),true);
   expect(phases(output.mock.calls)).toEqual([]);
-  const before=await sql`SELECT source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  const before=await sql`SELECT source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
   const abort=new Error('TEST_ROLL_BACK_OBSERVED_SOURCE_CHANGE');
   await withSession(full,()=>observeAction('TESTTodayRollbackEnvelope',{type:'order',id:order.orderId},async()=>{
    await expect(withPrivilegedTenantTransaction({tenantId:tenant},async tx=>{await tx.execute(query`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${order.orderId}`);throw abort;})).rejects.toBe(abort);
   },readLoggingSettings),true);
   expect(phases(output.mock.calls)).toEqual([]);
-  expect(await sql`SELECT source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual(before);
+  expect(await sql`SELECT source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`).toEqual(before);
  }finally{output.mockRestore();}
 });
 
@@ -91,7 +91,7 @@ it('coalesces concurrent pending conditional GET reads into one native post-resp
  const order=await readyInvoiceOrder('TEST after nested actual commands');
  const output=vi.spyOn(console,'info');
  const warten=()=>sql`SELECT source_seq>built_seq AS pending FROM private.today_source_v1
-  WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
  try{
   expect((await rebuildTodayModel(tenant)).code).toBe('OK');
   output.mockClear();

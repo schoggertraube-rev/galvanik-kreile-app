@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "Path-1 Orders (Auftragskarte V8)",
   "publicExports": [
+    "@/modules/orders/server-public#tagQuellen",
     "@/modules/orders/public#InitialDispatchReminderPlan",
     "@/modules/orders/public#PickupAppointmentProjection",
     "@/modules/orders/public#StorageEligibility",

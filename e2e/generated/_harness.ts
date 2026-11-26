@@ -371,7 +371,6 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
     parts: positions,
     intake_date: value.angenommen_am ?? new Date().toISOString(),
     due_date: dueDate,
-    promised_due_date: dueDate,
     payment_mode: value.zahlungsmodus === "bar" || value.zahlungsmodus === "bar_karte" ? "abholung" : value.zahlungsmodus,
     handover_mode: value.uebergabe === "abholung" ? "pickup" : value.uebergabe === "versand" ? "shipping" : value.uebergabe,
     intake_term_status: value.terminstatus,
