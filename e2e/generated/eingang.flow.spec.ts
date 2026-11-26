@@ -5762,7 +5762,7 @@ const cases = [
           "tabelle": "orders",
           "neu": 1,
           "werte": {
-            "liefertermin": "{arbeitstag:+6}",
+            "liefertermin": "{arbeitstag:+5}",
             "wunschtermin": "{arbeitstag:+4}",
             "terminstatus": "gegenvorschlag",
             "termin_herkunft": "gegenvorschlag",
@@ -5771,7 +5771,7 @@ const cases = [
         }
       ]
     },
-    "notiz": "Rechnung: Verzinken Durchlauf 3 (werkstattregel.durchlauf_arbeitstage), Aufwandstage 1 (ohne Preis), Übergabepuffer 1 → frühestens plus_arbeitstage(heute, 6); Bearbeitungszeit App-Schätzung aufrunden(5 ÷ 5) = 1 Woche (5 AT) → machbar = +6 AT; unmöglich unter +4 AT (1 + Durchlauf)."
+    "notiz": "Rechnung: Verzinken hat 3 Arbeitstage Durchlauf und 1 Aufwandstag. Der Schnelltermin für Abholung liegt bei +5 Arbeitstagen. Die Untergrenze von +4 Arbeitstagen bleibt. Ein Versandpuffer fällt hier nicht an."
   },
   {
     "id": "TA04",
@@ -6426,14 +6426,14 @@ const cases = [
           "tabelle": "orders",
           "neu": 1,
           "werte": {
-            "liefertermin": "{arbeitstag:+6}",
+            "liefertermin": "{arbeitstag:+5}",
             "terminstatus": "bestaetigt",
             "termin_herkunft": "vorschlag"
           }
         }
       ]
     },
-    "notiz": "Rechnung: Verzinken Durchlauf 3 (werkstattregel.durchlauf_arbeitstage), Aufwandstage 1 (ohne Preis), Übergabepuffer 1 → frühestens plus_arbeitstage(heute, 6); Bearbeitungszeit App-Schätzung aufrunden(5 ÷ 5) = 1 Woche (5 AT) → machbar = +6 AT; unmöglich unter +4 AT (1 + Durchlauf)."
+    "notiz": "Rechnung: Verzinken hat 3 Arbeitstage Durchlauf und 1 Aufwandstag. Der Schnelltermin für Abholung liegt bei +5 Arbeitstagen. Die Untergrenze von +4 Arbeitstagen bleibt. Ein Versandpuffer fällt hier nicht an."
   },
   {
     "id": "TA09",
