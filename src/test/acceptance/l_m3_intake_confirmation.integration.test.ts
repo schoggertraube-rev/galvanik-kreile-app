@@ -220,6 +220,41 @@ it("L-M3 binds a thread only to the original MIME and the saved outgoing mail", 
     });
     sentRequest = randomUUID();
     expect(await read()).toEqual({ code: "NO_BINDING" });
+
+    const { saveIntakeDraftAction } = await import("@/app/actions/eingang.actions");
+    const draftId = randomUUID();
+    const draft = {
+      id: draftId, clientEventId: randomUUID(), art: "eingang",
+      payload: { clientKey: draftId, sourceItemId: imported.itemId, customerId },
+      lastField: null, expectedVersion: null,
+    };
+    expect(await withSession(full, () => saveIntakeDraftAction(draft))).toMatchObject({ code: "CONFLICT" });
+    expect(await withSession(full, () => importOutlookMailAction(graphId))).toMatchObject({
+      code: "OK", itemId: imported.itemId, replayed: true,
+    });
+    expect(await sql`SELECT zuordnung,kunde_id FROM public.intake_item
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${imported.itemId}::uuid`).toEqual([{ zuordnung: "offen", kunde_id: null }]);
+
+    sentRequest = requestId;
+    expect(await withSession(full, () => importOutlookMailAction(graphId))).toMatchObject({
+      code: "OK", itemId: imported.itemId, replayed: true,
+    });
+    const assignment = () => sql`SELECT version,zuordnung,kunde_id FROM public.intake_item
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${imported.itemId}::uuid`;
+    const assigned = await assignment();
+    expect(assigned).toMatchObject([{ zuordnung: "automatisch", kunde_id: customerId }]);
+    expect(await sql`SELECT nachher->'mailThreadBinding' AS binding FROM public.intake_event
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND art='zugeordnet'`).toMatchObject([{
+      binding: { target: { customerId, threadId: sent.data.threadId }, proof: { itemId: imported.itemId, clientRequestId: requestId } },
+    }]);
+    // Even with no Sent-Items match on a later request, the saved original and the
+    // existing outgoing record supply the same authority to the draft writer.
+    sentRequest = randomUUID();
+    expect(await withSession(full, () => saveIntakeDraftAction(fresh(draft)))).toMatchObject({
+      code: "OK", drafts: expect.arrayContaining([expect.objectContaining({ id: draftId })]),
+    });
+    expect(await withSession(full, () => importOutlookMailAction(graphId))).toMatchObject({ code: "OK", itemId: imported.itemId });
+    expect(await assignment()).toEqual(assigned);
   } finally {
     graph.mockRestore();
   }

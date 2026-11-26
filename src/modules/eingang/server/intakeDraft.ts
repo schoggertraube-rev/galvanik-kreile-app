@@ -5,7 +5,7 @@ import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot 
 import { readIntakeDraftEvent, appendIntakeDraftEvent } from "@/lib/server/intakeDraftEvents";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { INTAKE_DRAFT_MAIL_ASSIGNMENT_COPY } from "@/ui/eingangCopy";
-import { hasConfirmedCustomerAssignment, mayUseContinuationSources, readIntakeSourceRelations } from "./intakeContinuationAccess";
+import { readIntakeAssignmentAuthority, mayUseContinuationSources, readIntakeSourceRelations } from "./intakeContinuationAccess";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type DraftRow = { id: string; art: "eingang" | "kunde" | null; payload: Record<string, unknown>; zuletzt_feld: string | null; version: number; updated_at: string };
@@ -115,8 +115,8 @@ async function draftMailFailure(
   if (!mailIds.size) return null;
   if (!hasAuthorizationArea(auth, 'mails')) return { code: 'FORBIDDEN' as const, message: copy.needsMailAccess };
 
-  const mails = await tx.execute<{ kunde_id: string | null; zuordnung: string; kennzeichen: string[] }>(sql`
-    SELECT kunde_id,zuordnung,kennzeichen FROM public.intake_item
+  const mails = await tx.execute<{ id:string;version:number;kunde_id: string | null; zuordnung: string; kennzeichen: string[] }>(sql`
+    SELECT id::text,version,kunde_id,zuordnung,kennzeichen FROM public.intake_item
     WHERE tenant_id=${auth.tenantId} AND kanal='mail'
       AND id=ANY(ARRAY[${sql.join([...mailIds].map(id => sql`${id}`), sql`, `)}]::uuid[])
     ORDER BY id FOR SHARE NOWAIT`);
@@ -124,8 +124,11 @@ async function draftMailFailure(
   const selectedCustomerId = payload.customerId ?? customer?.customerId;
   const confirmedCustomers = new Set(mails.map(mail => mail.kunde_id));
   if (mails.length !== mailIds.size || confirmedCustomers.size !== 1 || mails.some(mail =>
-    !mail.kunde_id || !hasConfirmedCustomerAssignment(mail.zuordnung) || mail.kennzeichen.includes('in_erfassung_verworfen')
+    !mail.kunde_id || mail.kennzeichen.includes('in_erfassung_verworfen')
     || selectedCustomerId != null && selectedCustomerId !== mail.kunde_id)) {
+    return { code: 'CONFLICT' as const, message: copy.needsConfirmation };
+  }
+  for(const mail of mails)if(!await readIntakeAssignmentAuthority(tx,auth.tenantId,mail)){
     return { code: 'CONFLICT' as const, message: copy.needsConfirmation };
   }
   return null;

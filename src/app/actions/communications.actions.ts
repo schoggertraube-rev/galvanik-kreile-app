@@ -334,29 +334,30 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
 
 import {importIntakeGraphMail} from '@/modules/eingang/server-public';
 import {recordDispatchReply} from '@/lib/server/dispatchReplyPort';
-import {finishDispatchCallsForReply} from '@/lib/server/dispatchCallPort';
-import {finishPostalTasksForReply} from '@/lib/server/storagePostalPort';
-import {finishFinalTasksForReply} from '@/lib/server/storageFinalStagePort';
-import {readShippingSettings} from '@/modules/fundament/server-public';
-import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
-import {completeCollectionTaskForReply,restrictCollectionTaskForReply,createOrderHandoverTask,createCanceledInvoiceMailTask} from '@/modules/tasks/server-public';
+import {assignIntakeMailThread,canAssignIntakeCustomer,recordIntakeTaskEffect} from '@/modules/eingang/server-public';
+import {createCanceledInvoiceMailTask} from '@/modules/tasks/server-public';
 import {recordImportedDispatchReplies,readImportedDispatchReplyEvidence} from '@/lib/server/dispatchReplyEffectsPort';
 import {qualifyImportedDeliveryFailure} from '@/lib/server/communicationDeliveryPort';
+import {readSavedMailReplyTarget} from '@/lib/server/dispatchResponsePort';
 async function withDeliveryFailure<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,deferReply=false){
  if(result.code!=='OK'||!result.itemId)return result;
  const qualified=await qualifyImportedDeliveryFailure(auth,result.itemId,customerId=>linkImportedMail(auth,{itemId:result.itemId!,targetType:'CUSTOMER',targetId:customerId},readCommunicationTargetInTransaction,readCustomerProfile),()=>readPageReadSettings(auth));
- return qualified.code==='OK'?(deferReply?result:withDispatchReply(auth,result)):{...qualified,itemId:result.itemId};
+ if(qualified.code!=='OK')return {...qualified,itemId:result.itemId};
+ if(deferReply)return result;
+ if(canAssignIntakeCustomer(auth)){
+  const binding=await readSavedMailReplyTarget(auth,result.itemId,()=>readPageReadSettings(auth),{onlyUnassigned:true});
+  if(binding.code==='OK')await assignIntakeMailThread(auth,binding,binding.version,readCustomerProfile);
+ }
+ return withDispatchReply(auth,result);
 }
 async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:AuthorizationSnapshot,result:T,strict=false){
  if(result.code!=='OK'||!result.itemId)return result;
  try{
- const settings=await readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true});
- if(settings.code==='UNAVAILABLE')throw Error('DISPATCH_REPLY_SETTINGS_UNAVAILABLE');
- const record=(input:Parameters<typeof recordDispatchReply>[1])=>recordDispatchReply(auth,input,{readCustomerName:async tx=>{const customer=await readCustomerProfile(tx,auth.tenantId,input.customerId);if(!customer)throw Error('DISPATCH_REPLY_CUSTOMER_MISSING');return customer.name;},afterRecord:async(tx,receipt)=>{const complete=(taskId:string,note:string)=>completeCollectionTaskForReply(tx,auth,{taskId,replyEventId:receipt.eventId,note},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});const restrict=(taskId:string)=>restrictCollectionTaskForReply(tx,auth,{taskId,replyEventId:receipt.eventId},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});await finishDispatchCallsForReply(tx,auth,receipt,complete,restrict);await finishPostalTasksForReply(tx,auth,receipt,complete,{
- settingsUpdatedAt:settings.code==='OK'?settings.settings.updatedAt:'',
- customerCurrent:async(writeTx,snapshot)=>{const customer=await readCustomerProfile(writeTx,auth.tenantId,receipt.customerId,true);const {customerCountryLabel}=await import('@/modules/customers/public');const r=snapshot.recipient;return !!customer&&customer.name===r.name&&[customer.street,customer.houseNumber].filter(Boolean).join(' ')===r.street&&customer.zipCode===r.zip&&customer.city===r.city&&customerCountryLabel(customer.country)===r.country;},
- createTask:(writeTx,value)=>createOrderHandoverTask(writeTx,auth,value,{effect:(effectTx,actor,effect)=>recordIntakeTaskEffect(effectTx,actor,effect,readCustomerProfile)})
- });await finishFinalTasksForReply(tx,auth,receipt,complete,restrict);}});
+ const record=(input:Parameters<typeof recordDispatchReply>[1])=>recordDispatchReply(auth,input,async tx=>{
+  const customer=await readCustomerProfile(tx,auth.tenantId,input.customerId);
+  if(!customer)throw Error('DISPATCH_REPLY_CUSTOMER_MISSING');
+  return customer.name;
+ });
  await recordImportedDispatchReplies(auth,result.itemId,{readLinked:readLinkedIntakeMails,record,readGraphSettings:()=>readPageReadSettings(auth)});return result;}
  catch(error){
   const reason=error instanceof Error&&/^[A-Z_]+$/.test(error.message)?error.message:'DATABASE_OR_PROVIDER_FAILURE';

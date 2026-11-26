@@ -1,9 +1,11 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
+import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {ACCESS_AREAS,canAssignIntakeCustomer} from '@/lib/auth/authorizationContract';
+import {ACCESS_AREAS,canAssignIntakeCustomer,canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
+import {qualifySavedMailReplyBinding,type SavedMailReplyBinding} from '@/lib/server/dispatchResponsePort';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {CustomerWriter} from '@/lib/server/commands/orderIntakeCommand';
 import type {CustomerCreateCommandResult} from '@/modules/customers/public';
@@ -48,7 +50,8 @@ export async function readIntakeAssignment(input:unknown,readCustomer:CustomerRe
 }
 function validIdentity(input:Record<string,unknown>){return uuid(input.itemId)&&uuid(input.clientEventId)&&Number.isSafeInteger(input.version)&&(input.version as number)>0;}
 async function event(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,key:string,art:string,intent:unknown,after:unknown){
- await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${row.id}::uuid,${art},${key}::uuid,${auth.userId},${JSON.stringify({version:row.version,kundeId:row.kunde_id,vorgangArt:row.vorgang_art,vorgangId:row.vorgang_id,zuordnung:row.zuordnung,einsatz:row.einsatz})}::jsonb,${JSON.stringify({intent,version:row.version+1,...after as object})}::jsonb)`);
+ const saved=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${row.id}::uuid,${art},${key}::uuid,${auth.userId},${JSON.stringify({version:row.version,kundeId:row.kunde_id,vorgangArt:row.vorgang_art,vorgangId:row.vorgang_id,zuordnung:row.zuordnung,einsatz:row.einsatz})}::jsonb,${JSON.stringify({intent,version:row.version+1,...after as object})}::jsonb) RETURNING id`);
+ if(saved.length!==1)throw Error('INTAKE_ASSIGNMENT_EVENT_NOT_SAVED');
 }
 /** The existing source-assignment gate, shared with read-only U2 binding.
  * Target-specific customer/supplier checks still run in the same writer. */
@@ -60,7 +63,9 @@ export async function assignIntakeCustomer(input:unknown,readCustomer:CustomerRe
   return await withPrivilegedTenantTransaction(auth,tx=>assignInTransaction(tx,auth,value,readCustomer));
  }catch(error){return failed(error);}
 }
-export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:AssignmentInput,readCustomer:CustomerReader,propagate=true):Promise<Exclude<AssignmentResult,AssignmentFailure>>{
+type ThreadAssignment=Omit<AssignmentInput,'mode'>&{mode:'thread';binding:SavedMailReplyBinding};
+
+export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:AssignmentInput|ThreadAssignment,readCustomer:CustomerReader,propagate=true):Promise<Exclude<AssignmentResult,AssignmentFailure>>{
    // Serializes group propagation before row locks; all assignment writers use this order.
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${auth.tenantId},0))`);
    const row=await source(tx,auth,value.itemId,true),target=await customer(tx,auth,value.customerId,readCustomer),intent={command:'eingang.zuordnen',customerId:value.customerId,mode:value.mode,version:value.version};
@@ -69,22 +74,40 @@ export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:Au
    if(receipts.length){const receipt=receipts[0];if(receipts.length!==1||receipt.von!==auth.userId||!isDeepStrictEqual(receipt.nachher.intent,intent)||row.kunde_id!==target.id||row.version!==receipt.nachher.version)reject('CONFLICT','Diese Anfragekennung gehört zu einem anderen Zuordnungsstand.');return {code:'OK' as const,customer:target,version:row.version,additional:receipt.nachher.additional,replayed:true};}
    if(value.mode!=='move'&&row.zuordnung!=='offen')return {code:'ALREADY_ASSIGNED' as const,customer:row.kunde_id?await customer(tx,auth,row.kunde_id,readCustomer):null};
    if(row.version!==value.version)reject('CONFLICT','Eingang wurde inzwischen geändert. Bitte neu lesen.');
+   if(value.mode==='thread'){
+    if(row.kanal!=='mail'||row.kunde_id||row.vorgang_id||row.vorgang_art||row.einsatz!=='offen'
+     ||value.binding.proof.itemId!==row.id||value.binding.target.customerId!==target.id
+     ||!await qualifySavedMailReplyBinding(tx,auth.tenantId,value.binding))reject('CONFLICT','Mailfaden konnte nicht eindeutig zugeordnet werden.');
+    const prior=await tx.execute(sql`SELECT id FROM public.intake_event
+     WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND art='zugeordnet' AND nachher ? 'mailThreadBinding' LIMIT 1`);
+    if(prior.length)reject('CONFLICT','Die frühere Mail-Zuordnung bleibt zurückgenommen.');
+   }
    const proposals=await suggestions(tx,auth,row.id);
    if(value.mode==='confirm'&&(new Set(proposals.filter(proposal=>typeof proposal.wert==='string').map(proposal=>proposal.wert)).size!==1||!proposals.some(proposal=>proposal.wert===target.id)))reject('CONFLICT','Kundenvorschlag ist nicht mehr eindeutig.');
    const additional:Source[]=[];
-   if(propagate&&value.mode!=='move'&&row.gruppe_adresse){
+   if(propagate&&value.mode!=='move'&&value.mode!=='thread'&&row.gruppe_adresse){
     const siblings=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND gruppe_adresse=${row.gruppe_adresse} AND zuordnung='offen' AND id<>${row.id}::uuid ORDER BY id`);
     for(const candidate of siblings){const sibling=await source(tx,auth,candidate.id,true);if((await suggestions(tx,auth,sibling.id)).some(proposal=>typeof proposal.wert==='string'&&proposal.wert!==target.id))continue;additional.push(sibling);}
    }
    for(const candidate of [row,...additional]){
-    const assigned=value.mode==='confirm'&&candidate.id===row.id?'bestaetigt':'hand',art=value.mode==='move'?'umgehaengt':'zugeordnet';
+    const assigned=value.mode==='thread'?'automatisch':value.mode==='confirm'&&candidate.id===row.id?'bestaetigt':'hand';
+    const art=value.mode==='move'?'umgehaengt':'zugeordnet';
     const changed=await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${target.id},vorgang_art=${value.mode==='move'?null:candidate.vorgang_art},vorgang_id=${value.mode==='move'?null:candidate.vorgang_id},zuordnung=${assigned},version=version+1,
      geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${candidate.id}::uuid AND version=${candidate.version} RETURNING id`);
     if(changed.length!==1)throw Error('INTAKE_ASSIGNMENT_WRITE_CONFLICT');
-    await tx.execute(sql`UPDATE public.intake_suggestion SET status='uebernommen',geprueft_von=${auth.userId}::uuid,geprueft_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND item_id=${candidate.id}::uuid AND feld='kunde' AND wert=${JSON.stringify(target.id)}::jsonb AND status='offen'`);
-    await event(tx,auth,candidate,value.clientEventId,art,intent,{customerId:target.id,zuordnung:assigned,additional:additional.length});
+    if(value.mode!=='thread')await tx.execute(sql`UPDATE public.intake_suggestion SET status='uebernommen',geprueft_von=${auth.userId}::uuid,geprueft_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND item_id=${candidate.id}::uuid AND feld='kunde' AND wert=${JSON.stringify(target.id)}::jsonb AND status='offen'`);
+    await event(tx,auth,candidate,value.clientEventId,art,intent,{customerId:target.id,zuordnung:assigned,additional:additional.length,
+     ...(value.mode==='thread'?{mailThreadBinding:value.binding}:{})});
    }
    return {code:'OK' as const,customer:target,version:row.version+1,additional:additional.length,replayed:false};
+}
+
+/** Only the server-side importer can supply a previously qualified provider result. */
+export async function assignIntakeMailThread(auth:AuthorizationSnapshot,binding:SavedMailReplyBinding,version:number,readCustomer:CustomerReader){
+ if(!canSynchronizeIntakeMailbox(auth)||!canAssignIntakeCustomer(auth))return {code:'FORBIDDEN' as const};
+ try{return await withPrivilegedTenantTransaction(auth,tx=>assignInTransaction(tx,auth,{
+  mode:'thread',itemId:binding.proof.itemId,customerId:binding.target.customerId,version,clientEventId:randomUUID(),binding,
+ },readCustomer,false));}catch(error){return failed(error);}
 }
 /** 3.1 from 3.4 composes the existing customer writer and the same assignment writer atomically. */
 export async function createCustomerForIntake(input:unknown,writeCustomer:CustomerWriter,readCustomer:CustomerReader):Promise<CustomerCreateCommandResult|AssignmentFailure>{

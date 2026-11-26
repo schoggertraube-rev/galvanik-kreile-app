@@ -8,7 +8,7 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {readIntakeProspectReference,type IntakeProspectReference} from './intakeProspect';
-import {hasConfirmedCustomerAssignment,mayUseContinuationSources} from "./intakeContinuationAccess";
+import {readIntakeAssignmentAuthority,mayUseContinuationSources} from "./intakeContinuationAccess";
 import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 
 export type IntakeOrderSource = { id: string; version: number };
@@ -20,7 +20,8 @@ export async function readIntakeHandoverMail(tx:PrivilegedTenantTransaction,auth
   const [row]=await tx.execute<Row&{absender_adresse:string|null;empfangen_am:Date|string|null;graph_message_id:string|null;anliegen_offen:string[];einsatz:string;zuordnung:string}>(sql`SELECT id::text,kanal,fortsetzung_von::text,kunde_id,vorgang_art,vorgang_id,version,kennzeichen,erstellt_von::text,text,absender_adresse,empfangen_am,graph_message_id,anliegen_offen,einsatz,zuordnung FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid ${input.lock===false?sql``:sql`FOR UPDATE`}`);
   if(!row)return {code:'NOT_FOUND' as const,message:'Original-Mail ist nicht verfügbar.'};
   if(row.version!==input.version||row.einsatz!=='offen'||!row.anliegen_offen.includes('abholung'))return {code:'CONFLICT' as const,message:'Mail oder Übergabe-Anliegen wurde geändert. Neu lesen.'};
-  if(row.kanal!=='mail'||!row.kunde_id||!hasConfirmedCustomerAssignment(row.zuordnung)||!row.absender_adresse||!row.empfangen_am||!row.graph_message_id||row.kennzeichen.includes('in_erfassung_verworfen'))return {code:'VALIDATION_ERROR' as const,message:'Eine gespeicherte zugeordnete Original-Mail ist erforderlich.'};
+  if(row.kanal!=='mail'||!row.kunde_id||!row.absender_adresse||!row.empfangen_am||!row.graph_message_id||row.kennzeichen.includes('in_erfassung_verworfen')||
+     !await readIntakeAssignmentAuthority(tx,auth.tenantId,row))return {code:'VALIDATION_ERROR' as const,message:'Eine gespeicherte zugeordnete Original-Mail ist erforderlich.'};
   const originals=await tx.execute<{sha256:string}>(sql`SELECT file.sha256 FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.art='mime'
     AND EXISTS(SELECT 1 FROM public.intake_event secured WHERE secured.tenant_id=file.tenant_id AND secured.item_id=file.item_id AND secured.art='original_gespeichert' AND secured.nachher->>'fileId'=file.id::text AND secured.nachher->>'sha256'=file.sha256)
     AND EXISTS(SELECT 1 FROM public.intake_event imported WHERE imported.tenant_id=file.tenant_id AND imported.item_id=file.item_id AND imported.nachher->>'action'='mail_import_complete' AND imported.nachher->'fileIds' ? file.id::text) FOR SHARE`);
@@ -69,6 +70,7 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
   let draftId=input.draftId;
   let itemId:string|null=null;
   let locked:Array<Row&{zuordnung:string}>=[];
+  const authorizedMailSources = new Set<string>();
   let replaysMailOrder=false;
   return {
     ...(sources.length||input.draftId||input.telefonNotiz?{intentKey:JSON.stringify({sources:sources.map(source=>[source.id,source.version]),draftId:input.draftId??null,...(input.telefonNotiz?{telefonNotiz:input.telefonNotiz}:{})})}:{}),
@@ -95,6 +97,7 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
       if(sources.length?locked.length!==sources.length:locked.length>1)throw Error("INTAKE_CAPTURE_NOT_FOUND");
       itemId=locked[0]?.id??null;
       replaysMailOrder=locked.some(row=>row.kanal==='mail')&&await hasOwnOrderIntakeReceipt(tx,auth,input.clientEventId);
+      authorizedMailSources.clear();
       for(const row of locked){
         if((row.kanal==="mail"||row.erstellt_von!==auth.userId)&&!hasAuthorizationArea(auth,"mails"))throw Error("INTAKE_CAPTURE_FORBIDDEN");
         if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,row.id))throw Error("INTAKE_CAPTURE_FORBIDDEN");
@@ -103,6 +106,7 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
         if(row.kunde_id&&row.kunde_id!==(prospect?.customerId??input.customerId)&&!ownNewCustomerReplay)throw Error("INTAKE_CAPTURE_CUSTOMER_CONFLICT");
         if(sources.length&&!row.vorgang_id&&row.version!==sources.find(source=>source.id===row.id)?.version)throw Error("INTAKE_CAPTURE_VERSION_CONFLICT");
         if(!sources.length&&(row.erstellt_von!==auth.userId||row.text!==(row.kanal==="telefon"?input.telefonNotiz:input.note)))throw Error("INTAKE_CAPTURE_CLIENT_KEY_CONFLICT");
+        if(!replaysMailOrder&&row.kanal==='mail'&&await readIntakeAssignmentAuthority(tx,auth.tenantId,row))authorizedMailSources.add(row.id);
       }
     },
     after:async(tx,auth,receipt)=>{
@@ -140,7 +144,7 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
       }
       // A replay uses the outbox decision made before the original was linked to the order.
       const confirmedMailSources=locked.every(row=>row.kanal!=='mail'||(
-        row.kunde_id===receipt.customerId&&hasConfirmedCustomerAssignment(row.zuordnung)
+        row.kunde_id===receipt.customerId&&authorizedMailSources.has(row.id)
       ));
       if(!replaysMailOrder&&confirmedMailSources)await queueIntakeConfirmation(tx,auth,receipt);
     },

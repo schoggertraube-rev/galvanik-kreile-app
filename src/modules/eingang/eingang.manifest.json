@@ -142,6 +142,7 @@
     "@/modules/eingang/public#IntakeMessagesPorts",
     "@/modules/eingang/server-public#readIntakeAssignment",
     "@/modules/eingang/server-public#assignIntakeCustomer",
+    "@/modules/eingang/server-public#assignIntakeMailThread",
     "@/modules/eingang/server-public#canAssignIntakeCustomer",
     "@/modules/eingang/server-public#setIntakeNoBusiness",
     "@/modules/eingang/server-public#createCustomerForIntake",

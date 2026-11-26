@@ -3,9 +3,22 @@ import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot,type AuthorizedReadContext} from "@/lib/server/authorization";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {qualifySavedMailReplyBinding,type SavedMailReplyBinding} from "@/lib/server/dispatchResponsePort";
 
-export function hasConfirmedCustomerAssignment(assignment: string): boolean {
- return assignment==='bestaetigt'||assignment==='hand';
+export async function readIntakeAssignmentAuthority(
+ tx:PrivilegedTenantTransaction,tenantId:string,row:{id:string;kunde_id:string|null;zuordnung:string;version:number},
+) {
+ if(!row.kunde_id)return false;
+ if(row.zuordnung==='bestaetigt'||row.zuordnung==='hand')return true;
+ if(row.zuordnung!=='automatisch')return false;
+ const rows=await tx.execute<{action:{customerId:string;zuordnung:string;version:number;mailThreadBinding:SavedMailReplyBinding}}>(sql`
+  SELECT nachher AS action FROM public.intake_event WHERE tenant_id=${tenantId} AND item_id=${row.id}::uuid
+   AND art='zugeordnet' AND nachher ? 'mailThreadBinding' LIMIT 2`);
+ const action=rows[0]?.action,binding=action?.mailThreadBinding;
+ return rows.length===1&&!!action&&action.zuordnung===row.zuordnung&&action.customerId===row.kunde_id
+  &&Number.isSafeInteger(action.version)&&action.version<=row.version
+  &&binding?.proof?.itemId===row.id&&binding?.target?.customerId===row.kunde_id
+  &&await qualifySavedMailReplyBinding(tx,tenantId,binding);
 }
 
 export function readIntakeSourceRelations(tx:PrivilegedTenantTransaction,tenantId:string,itemIds:readonly string[]){

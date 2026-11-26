@@ -10,25 +10,46 @@ export type DispatchResponseCheck={state:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAIL
 type Original={itemId:string;message:{senderAddress:string;receivedAt:string;replyChain?:{source?:string;status?:string;originalSha256?:string;inReplyTo?:string[]};deliveryReport?:{status:string}}};
 export type DispatchResponsePorts={readGraphSettings?:import('./microsoftGraph').GraphReadSettingsSource;readLinked:(auth:AuthorizationSnapshot,target:{targetType:'CUSTOMER';targetId:string})=>Promise<{code:string;data?:Array<{id:string;receivedAt:string|null;senderAddress?:string|null}>}>};
 
+type ReplyOriginal = {
+ customer_id: string | null;
+ graph_message_id: string;
+ received_at: Date | string | null;
+ sender: string | null;
+ reply_chain: NonNullable<Original['message']['replyChain']> | null;
+ proof_ok: boolean;
+ assignment: string;
+ version: number;
+ deliveryReport: boolean;
+};
+export type SavedMailReplyBinding = {
+ target: NonNullable<Awaited<ReturnType<typeof readSentMailThreadTarget>>>;
+ proof: { itemId: string; originalSha256: string; graphMessageId: string; originalMessageId: string; sentGraphMessageId: string; clientRequestId: string };
+};
+
+async function readReplyOriginal(tx:PrivilegedTenantTransaction,tenantId:string,itemId:string) {
+ const rows=await tx.execute<ReplyOriginal>(sql`
+   SELECT proof.customer_id,proof.graph_message_id,proof.received_at,proof.reply_chain,proof.proof_ok,
+     source.absender_adresse AS sender,source.zuordnung AS assignment,source.version,
+     EXISTS (SELECT 1 FROM private.v_intake_delivery_evidence_v1 delivery
+       WHERE delivery.tenant_id=proof.tenant_id AND delivery.graph_message_id=proof.graph_message_id AND delivery.report IS NOT NULL) AS "deliveryReport"
+   FROM private.v_intake_reply_evidence_v1 proof
+   JOIN public.intake_item source ON source.tenant_id=proof.tenant_id AND source.id::text=proof.item_id
+   WHERE proof.tenant_id=${tenantId} AND proof.item_id=${itemId} LIMIT 2`);
+ if(rows.length>1)throw Error('INTAKE_REPLY_ORIGINAL_AMBIGUOUS');
+ return rows[0]??null;
+}
+
 /** A saved original can bind only to one of this tenant's recorded outgoing messages. */
 export async function readSavedMailReplyTarget(
  auth: AuthorizationSnapshot, itemId: string, readGraphSettings?: DispatchResponsePorts['readGraphSettings'],
+ options?: { onlyUnassigned: true },
 ) {
  if (!hasAuthorizationArea(auth, 'mails')) return { code: 'FORBIDDEN' as const };
  try {
-  const rows = await withPrivilegedTenantTransaction(auth, tx => tx.execute<{
-   customer_id: string | null; graph_message_id: string; received_at: Date | string | null;
-   sender: string | null; reply_chain: NonNullable<Original['message']['replyChain']> | null; proof_ok: boolean;
-  }>(sql`
-   SELECT proof.customer_id,proof.graph_message_id,proof.received_at,proof.reply_chain,proof.proof_ok,
-     source.absender_adresse AS sender
-   FROM private.v_intake_reply_evidence_v1 proof
-   JOIN public.intake_item source ON source.tenant_id=proof.tenant_id AND source.id::text=proof.item_id
-   WHERE proof.tenant_id=${auth.tenantId} AND proof.item_id=${itemId} LIMIT 2`));
-  if (rows.length > 1) throw Error('INTAKE_REPLY_ORIGINAL_AMBIGUOUS');
-  const original = rows[0];
+  const original = await withPrivilegedTenantTransaction(auth, tx => readReplyOriginal(tx, auth.tenantId, itemId));
   const chain = original?.reply_chain;
-  if (!original || !chain || chain.status === 'missing') return { code: 'NO_BINDING' as const };
+  if (!original || original.deliveryReport || options?.onlyUnassigned && original.assignment!=='offen'
+    || !chain || chain.status === 'missing') return { code: 'NO_BINDING' as const };
   if (!original.proof_ok || chain.source !== 'original_mime' || chain.status !== 'present'
     || typeof chain.originalSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(chain.originalSha256)
     || !original.sender || !original.received_at) throw Error('INTAKE_REPLY_SOURCE_INCOMPLETE');
@@ -41,7 +62,7 @@ export async function readSavedMailReplyTarget(
   const target = await withPrivilegedTenantTransaction(auth, tx => readSentMailThreadTarget(tx, auth.tenantId, sent.data.clientRequestId!));
   if (!target || original.customer_id && original.customer_id !== target.customerId) return { code: 'NO_BINDING' as const };
   return {
-   code: 'OK' as const, target,
+   code: 'OK' as const, target, version:original.version,
    proof: { itemId, originalSha256: chain.originalSha256, graphMessageId: original.graph_message_id,
      originalMessageId: sent.data.internetMessageId, sentGraphMessageId: sent.data.graphMessageId,
      clientRequestId: sent.data.clientRequestId },
@@ -50,6 +71,20 @@ export async function readSavedMailReplyTarget(
   console.error('[INTAKE_REPLY_BINDING_FAILED]', { name:error instanceof Error ? error.name : 'UnknownError' });
   return { code: 'UNAVAILABLE' as const };
  }
+}
+
+/** Re-read the immutable original and the stored outgoing document under the caller's lock. */
+export async function qualifySavedMailReplyBinding(tx:PrivilegedTenantTransaction,tenantId:string,binding:SavedMailReplyBinding) {
+ const {target,proof}=binding;
+ if(!proof?.itemId||!target?.customerId||!target.threadId||!proof.sentGraphMessageId
+  ||!/^[a-f0-9-]{36}$/i.test(proof.clientRequestId)||!/^[a-f0-9]{64}$/.test(proof.originalSha256))return false;
+ const original=await readReplyOriginal(tx,tenantId,proof.itemId),chain=original?.reply_chain;
+ if(!original?.proof_ok||original.deliveryReport||original.graph_message_id!==proof.graphMessageId
+  ||original.customer_id!==null&&original.customer_id!==target.customerId||chain?.source!=='original_mime'
+  ||chain.status!=='present'||chain.originalSha256!==proof.originalSha256
+  ||chain.inReplyTo?.length!==1||chain.inReplyTo[0]!==proof.originalMessageId)return false;
+ const sent=await readSentMailThreadTarget(tx,tenantId,proof.clientRequestId);
+ return sent?.threadId===target.threadId&&sent.customerId===target.customerId&&sent.orderId===target.orderId;
 }
 
 /** Incoming MIME and the exact Sent-Items request header bind the reaction to the real notice. */

@@ -39,22 +39,21 @@ export async function readDispatchReplyReceipt(tx:PrivilegedTenantTransaction,au
 }
 
 /** Record the server-qualified relation to the original mail, not a second mail. */
-export async function recordDispatchReply(auth:AuthorizationSnapshot,input:{customerId:string;handover:'pickup'|'shipping';proof:Proof},ports:{readCustomerName:(tx:PrivilegedTenantTransaction)=>Promise<string>;afterRecord:(tx:PrivilegedTenantTransaction,receipt:DispatchReplyReceipt)=>Promise<void>}){
+export async function recordDispatchReply(auth:AuthorizationSnapshot,input:{customerId:string;handover:'pickup'|'shipping';proof:Proof},readCustomerName:(tx:PrivilegedTenantTransaction)=>Promise<string>){
  if(!hasAuthorizationArea(auth,'auftraege')||!hasAuthorizationArea(auth,'mails'))throw Error('DISPATCH_REPLY_FORBIDDEN');
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const key=sourceKey(input.customerId,input.handover,input.proof);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${auth.tenantId+':collection-reply:'+key},0))`);
   await tx.execute(sql`SELECT id FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=ANY(ARRAY[${sql.join(input.proof.orderIds.slice().sort().map(id=>sql`${id}`),sql`, `)}]::text[]) ORDER BY id FOR UPDATE NOWAIT`);
   const previous=await tx.execute<{id:string}>(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${key}::uuid`);
-  if(previous.length){if(previous.length!==1)throw Error('DISPATCH_REPLY_KEY_CONFLICT');const receipt=await readDispatchReplyReceipt(tx,auth,previous[0].id);await ports.afterRecord(tx,receipt);return receipt;}
-  const name=await ports.readCustomerName(tx);if(!name.trim())throw Error('DISPATCH_REPLY_CUSTOMER_MISSING');
+  if(previous.length){if(previous.length!==1)throw Error('DISPATCH_REPLY_KEY_CONFLICT');return readDispatchReplyReceipt(tx,auth,previous[0].id);}
+  const name=await readCustomerName(tx);if(!name.trim())throw Error('DISPATCH_REPLY_CUSTOMER_MISSING');
   const date=berlinCalendarDay(new Date(input.proof.receivedAt));
   const receipt:DispatchReplyReceipt={eventId:randomUUID(),...input,actorId:auth.userId,recordedAt:new Date().toISOString(),note:CUSTOMER_COLLECTION_COPY['notiz.abholung.antwort'](name,date)};
   await qualify(tx,auth,receipt);
   const saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,description,status,user_id,client_event_id,correlation_id,event_schema_version,created_at,payload)
    VALUES(${receipt.eventId},${auth.tenantId},'ORDER_COLLECTION_REPLY_RECORDED_V1',${receipt.note},'success',${auth.userId}::uuid,${key}::uuid,${key}::uuid,1,${receipt.recordedAt}::timestamptz,${JSON.stringify({receipt,sha256:hash(receipt)})}::jsonb) RETURNING id`);
   if(saved.length!==1||saved[0].id!==receipt.eventId)throw Error('DISPATCH_REPLY_RECEIPT_NOT_SAVED');
-  await ports.afterRecord(tx,receipt);
   return receipt;
  });
 }
