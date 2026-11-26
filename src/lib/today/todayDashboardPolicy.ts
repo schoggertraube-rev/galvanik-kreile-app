@@ -13,7 +13,7 @@ export type TodayProductionWeek = {
   weekEndExclusive: string;
   netCents: number;
   currentlyUnpricedItemCount: number;
-  days: ReadonlyArray<{date: string; netCents: number}>;
+  days?: ReadonlyArray<{date: string; netCents: number}>;
 };
 
 const TODAY_LAYOUT_FIELDS = new Set<TodayLayoutField>(["action", "today", "assign", "money", "bundle"]);

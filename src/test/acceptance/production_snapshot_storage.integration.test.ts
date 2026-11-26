@@ -31,8 +31,12 @@ it('K15 an already priced finished item records only its later price delta in th
  const changed=await withSession(full,()=>changeOrderContentAction(input));if(changed.code!=='OK')throw Error('K15_PRICE:'+changed.code);
  expect(await sql`SELECT net_cents::int,origin_event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${changed.receipt.eventId} AND component='pricing'`).toEqual([{net_cents:10000,origin_event_id:finished!.receipt.eventId}]);
  const viewer=await createFixture(['auftraege'],'werkstatt');
- expect(await withSession(viewer,()=>getProductionWeekAction({onDate:'2026-10-05'}))).toMatchObject({code:'OK',data:{netCents:10000,days:[{date:'2026-10-05',netCents:10000}]}});
- expect(await withSession(viewer,()=>getProductionWeekAction({onDate:'2026-10-04'}))).toMatchObject({code:'OK',data:{netCents:0,days:[]}});
+ const workshopWeek=await withSession(viewer,()=>getProductionWeekAction({onDate:'2026-10-05'}));
+ expect(workshopWeek).toMatchObject({code:'OK',data:{netCents:10000}});
+ expect(workshopWeek).not.toHaveProperty('data.days');
+ const accountant=await createFixture(['buchhaltung'],'meister');
+ expect(await withSession(accountant,()=>getProductionWeekAction({onDate:'2026-10-05'}))).toMatchObject({code:'OK',data:{netCents:10000,days:[{date:'2026-10-05',netCents:10000}]}});
+ expect(await withSession(accountant,()=>getProductionWeekAction({onDate:'2026-10-04'}))).toMatchObject({code:'OK',data:{netCents:0,days:[]}});
  expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:before.data.netCents+10000}});
  expect(await withSession(full,()=>changeOrderContentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  const lower={...input,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST Preis gesenkt',items:[{...input.items[0],unitPriceCents:5000}]};
@@ -41,10 +45,10 @@ it('K15 an already priced finished item records only its later price delta in th
  const reopen={orderId,itemId,expectedVersion:lowered.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false};
  const reopened=await withSession(full,()=>setOrderItemFinishedAction(reopen));if(reopened.code!=='OK')throw Error('K15_REOPEN:'+reopened.code);
  expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} ORDER BY component,net_cents`).toEqual([{component:'base',net_cents:10000},{component:'pricing',net_cents:-15000},{component:'pricing',net_cents:10000}]);
- const after=await withSession(viewer,()=>getProductionWeekAction());
+ const after=await withSession(accountant,()=>getProductionWeekAction());
  expect(after).toMatchObject({code:'OK',data:{netCents:before.data.netCents-10000}});
  if(after.code!=='OK')throw Error('K15_WEEK_REVERSE_READ');
- expect(after.data.days.reduce((sum,day)=>sum+day.netCents,0)).toBe(after.data.netCents);
+ expect(after.data.days?.reduce((sum,day)=>sum+day.netCents,0)).toBe(after.data.netCents);
  expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(reopen))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::int AS n FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} AND component='pricing' AND direction=-1`).toEqual([{n:2}]);
  expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
