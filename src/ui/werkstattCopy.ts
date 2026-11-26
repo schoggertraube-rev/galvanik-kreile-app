@@ -7,7 +7,6 @@ export const WORK_TIME_COPY = {
   stationMissing: "Wähle eine hinterlegte Station, damit die Arbeitszeit zugeordnet werden kann.",
   invalidDuration: "Gib ganze Minuten ungleich null ein. Minuswerte brauchen eine Korrekturbuchung.",
   costRateMissing: (person: string) => `Kostensatz für ${person} fehlt`,
-  costRateUnset: "Hinterlege unter KV und Sätze einen Standardstundensatz und buche dann erneut.",
   buendelLaufMindestdauer: (minuten: string) =>
     `Gib für den Bündel-Lauf mindestens ${minuten} Minuten ein, damit jeder Auftrag einen Zeitanteil erhält.`,
   scrapQuantityInvalid: (menge: string) => `Gib 0 bis ${menge} Teile als Ausschuss ein.`,

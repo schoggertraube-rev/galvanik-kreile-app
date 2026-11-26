@@ -50,10 +50,11 @@ describe("intake suggestions", () => {
     const eingabe = {
       today: "2026-10-26",
       wishDate: "2026-10-30",
+      handoverMode: "pickup",
       positions: [{ ...position, catalogServiceId: "TEST-Leistung", unitPriceCents: 80_000 }],
       catalogById: new Map(),
       dailyOutputEur: 800,
-      settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110,betriebsruhe:new Set()},openOrders:[],priority:false,processingWeeks:1,
+      settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110,betriebsruhe:new Set(),knappAbArbeitstagen:2},openOrders:[],priority:false,processingWeeks:1,
     } satisfies Parameters<typeof calculateTermSuggestion>[0];
     expect(calculateTermSuggestion(eingabe)).toBeNull();
     const result = calculateTermSuggestion({ ...eingabe, catalogById: new Map([["TEST-Leistung", {
@@ -67,6 +68,35 @@ describe("intake suggestions", () => {
       rating: "nicht_machbar",
       bufferWorkingDays: -2,
     });
+  });
+
+  it("uses the configured close-to-deadline threshold for a shipping proposal", () => {
+    const input = {
+      today: "2026-10-26",
+      wishDate: "2026-11-03",
+      handoverMode: "shipping",
+      positions: [{ ...position, catalogServiceId: "TEST-Leistung", unitPriceCents: 500 }],
+      catalogById: new Map([["TEST-Leistung", {
+        id: "TEST-Leistung", name: "TEST Verzinken", surface: "verzinken", unit: "Stück",
+        net_price_cents: 500, standard_lead_time_working_days: 0,
+      }]]),
+      dailyOutputEur: 800,
+      settings: {
+        handoverBufferDays: 2, fitsPercent: 80, tightPercent: 100, priorityPercent: 110,
+        betriebsruhe: new Set<string>(), knappAbArbeitstagen: 1,
+      },
+      openOrders: [],
+      priority: false,
+      processingWeeks: 1,
+    } satisfies Parameters<typeof calculateTermSuggestion>[0];
+
+    expect(calculateTermSuggestion(input)).toMatchObject({
+      achievableDate: "2026-11-02", bufferWorkingDays: 1, rating: "knapp",
+    });
+    expect(calculateTermSuggestion({ ...input, settings: { ...input.settings, knappAbArbeitstagen: 0 } }))
+      .toMatchObject({ bufferWorkingDays: 1, rating: "passt" });
+    expect(calculateTermSuggestion({ ...input, settings: { ...input.settings, knappAbArbeitstagen: null } }))
+      .toMatchObject({ rating: null, unavailableReason: expect.stringMatching(/Terminschwelle/) });
   });
 
   it("prefers the newest exact customer case", () => {

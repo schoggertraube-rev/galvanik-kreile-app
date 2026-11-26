@@ -61,7 +61,7 @@ type KostensatzLeser = Pick<ArbeitszeitLeser, "personensatz" | "standardsatz">;
 type LaufZeitLeser = KostensatzLeser & Pick<ArbeitszeitLeser, "station">;
 
 type Zeitfehler = "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "EINGABE" | "DATUM" | "GRUND" | "KORREKTUR"
-  | "STATION" | "DAUER" | "KOSTENSATZ";
+  | "STATION" | "DAUER";
 type Zeitantwort = { code: "OK"; id: string } | { code: Zeitfehler; message?: string };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -113,7 +113,7 @@ async function liesKostensatz(
   const person = await leser.personensatz(tx, auth.tenantId, auth.userId);
   if (person !== null) return { betrag: person, quelle: "person" };
   const standard = (await leser.standardsatz(tx, auth.tenantId))?.hourlyRateCents;
-  if (standard == null) return null;
+  if (standard == null) return { betrag: null, quelle: "fehlt" };
   return { betrag: (standard / 100).toFixed(2), quelle: "standard" };
 }
 
@@ -136,7 +136,7 @@ async function speichereZeitzeilen(
       ${auth.tenantId}, neu.auftrag_id, neu.item_id, ${auth.userId}::uuid, neu.station,
       (neu.tag + time '00:00') AT TIME ZONE 'Europe/Berlin', neu.minuten,
       coalesce(alt.kostenstelle_kuerzel, neu.kostenstelle),
-      coalesce(alt.kostensatz_eur_pro_stunde, neu.kostensatz),
+      CASE WHEN alt.id IS NULL THEN neu.kostensatz ELSE alt.kostensatz_eur_pro_stunde END,
       CASE WHEN alt.id IS NULL THEN neu.kostensatz_quelle ELSE alt.kostensatz_quelle END,
       CASE WHEN neu.lauf_id IS NULL THEN 'einzel' ELSE 'lauf' END,
       neu.lauf_id, neu.client_event_id, neu.korrigiert_id,
@@ -194,13 +194,12 @@ export async function bookWorkTime(
     }
 
     let kostenstelle: string | null = null;
-    let satz: Awaited<ReturnType<typeof liesKostensatz>> = null;
+    let satz: Awaited<ReturnType<typeof liesKostensatz>> | null = null;
     if (korrigiertId === null) {
       const station = await leser.station(tx, tenant, input.station);
       if (!station) return { code: "STATION", message: WORK_TIME_COPY.stationMissing };
       if (Math.abs(input.minuten) > station.maximalMinuten) return { code: "DAUER", message: WORK_TIME_COPY.invalidDuration };
       satz = await liesKostensatz(tx, auth, leser);
-      if (!satz) return { code: "KOSTENSATZ", message: WORK_TIME_COPY.costRateUnset };
       kostenstelle = station.kostenstelle;
     } else {
       const [original] = await tx.execute<{ minuten: number }>(sql`
@@ -317,7 +316,6 @@ export async function bookLaufZeit(
   if (!station) return { code: "STATION", message: WORK_TIME_COPY.stationMissing };
   if (input.minuten > station.maximalMinuten) return { code: "DAUER", message: WORK_TIME_COPY.invalidDuration };
   const satz = await liesKostensatz(tx, auth, leser);
-  if (!satz) return { code: "KOSTENSATZ", message: WORK_TIME_COPY.costRateUnset };
   const tag = berlinCalendarDay();
   const zeilen = await speichereZeitzeilen(tx, auth, stand.zuordnung.map((auftrag, index) => ({
     ...auftrag, clientEventId: ids[index], itemId: null, station: input.station, tag,

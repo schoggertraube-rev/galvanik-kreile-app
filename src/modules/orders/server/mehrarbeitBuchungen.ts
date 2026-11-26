@@ -1,11 +1,45 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { hasAuthorizationArea } from "@/lib/auth/authorizationContract";
+import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { leseMehrarbeitsfreigabe, type Auftragsmehrarbeit } from "../domain/mehrarbeitSpielraum";
+import { leseMehrarbeitsfreigabe, verteileMehrarbeit, type Auftragsmehrarbeit } from "../domain/mehrarbeitSpielraum";
 
 type Zeitposition = Auftragsmehrarbeit["positionen"][number];
 type Zusage = Auftragsmehrarbeit["zusagen"][number];
+
+type Mehrarbeitsgrenzen = {
+  spielraumBasispunkte: number;
+  stoppBasispunkte: number;
+};
+
+/** Die Auftragsprojektion liefert den belegten Netto-KV bzw. das Netto der Grundpositionen. */
+export async function mehrarbeitStand(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  nettoJeAuftrag: ReadonlyMap<string, number>,
+  leseGrenzen: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<Mehrarbeitsgrenzen | null>,
+) {
+  type Grenzstand = Pick<ReturnType<typeof verteileMehrarbeit>, "spielraumCent" | "stoppCent" | "ueberSpielraum" | "ueberStopp">;
+  const stand = new Map<string, Grenzstand>();
+  if (!auth.active || auth.packageSwitches?.p3_werkstatt !== true
+    || !hasAuthorizationArea(auth, "auftraege") || !hasAuthorizationArea(auth, "preise")) return stand;
+  if (nettoJeAuftrag.size === 0) return stand;
+
+  const grenzen = await leseGrenzen(tx, auth.tenantId);
+  if (!grenzen) return null;
+  const buchungen = await leseMehrarbeitBuchungenInTransaction(tx, auth.tenantId, [...nettoJeAuftrag.keys()]);
+  for (const [auftragId, nettoCent] of nettoJeAuftrag) {
+    const buchung = buchungen.get(auftragId);
+    if (!buchung || !Number.isSafeInteger(nettoCent) || nettoCent < 0) throw Error("ORDER_EXTRA_WORK_BASIS_INVALID");
+    const { spielraumCent, stoppCent, ueberSpielraum, ueberStopp } = verteileMehrarbeit(
+      buchung.positionen, nettoCent, grenzen.spielraumBasispunkte, grenzen.stoppBasispunkte, buchung.zusagen,
+    );
+    stand.set(auftragId, { spielraumCent, stoppCent, ueberSpielraum, ueberStopp });
+  }
+  return stand;
+}
 
 export async function leseMehrarbeitBuchungenInTransaction(
   tx: PrivilegedTenantTransaction,

@@ -50,6 +50,7 @@
     "@/modules/orders/server-public#beendeLauf",
     "@/modules/orders/server-public#leseAusschuss",
     "@/modules/orders/server-public#leseMehrarbeitBuchungenInTransaction",
+    "@/modules/orders/server-public#mehrarbeitStand",
     "@/modules/orders/public#leseMehrarbeitsfreigabe",
     "@/modules/orders/public#verteileMehrarbeit",
     "@/modules/orders/public#Auftragsmehrarbeit",

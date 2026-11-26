@@ -26,7 +26,7 @@
   "capabilities": [],
   "migrations": [
     "20260908101500_werkstatt_kpi_view.sql",
-    "b2a_werkstatt_daten.sql"
+    "20261126093909_b2a_werkstatt_daten.sql"
   ],
   "viewsFunctions": [
     "public.v_werkstatt_kpis_v1",

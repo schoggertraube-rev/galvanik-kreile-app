@@ -15,12 +15,12 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
-  readBetriebsruheInTransaction, readQuoteSettingsInTransaction, readWerkstattKostensatzInTransaction,
+  readBetriebsruheInTransaction, readQuoteSettingsInTransaction, readWerkstattKostensatzInTransaction, readWerkstattMehrarbeitInTransaction,
   readWerkstattZeitstationInTransaction,
 } from "@/modules/fundament/server-public";
 import { fertigtermin } from "@/modules/orders/public";
-import { hatArbeitszeitAuftragInTransaction, leseBuendelLaufTeile, leseOffeneLaeufe, schlageLaeufeVor } from "@/modules/orders/server-public";
-import { bookLaufZeit, bookWorkTime, readWorkMinutes } from "@/modules/werkstatt/server-public";
+import { hatArbeitszeitAuftragInTransaction, leseBuendelLaufTeile, leseOffeneLaeufe, mehrarbeitStand, schlageLaeufeVor } from "@/modules/orders/server-public";
+import { bookLaufZeit, bookWorkTime, leseArbeitszeitZumAuftrag, readWorkMinutes } from "@/modules/werkstatt/server-public";
 import { KALENDER_COPY } from "@/ui/kalenderCopy";
 import { ORDER_BUENDEL_LAUF_COPY, ORDER_CONTENT_COPY, ORDER_SCRAP_COPY } from "@/ui/ordersCopy";
 import { INVOICE_SCRAP_COPY } from "@/ui/accountingCopy";
@@ -161,31 +161,47 @@ test("Die Rechnung belegt die telefonische Zusage, der Ausgang liest den verblei
     const input = {
       orderId: auftrag.orderId, clientEventId: randomUUID(),
       positions: [{ lineId, lineVersion: 1 }], approvedNetAmountCents: 100,
-      approvedBy: "TEST Ansprechperson", approvedAt: new Date().toISOString(),
+      approvedBy: "TEST Ansprechperson", approvedAt: "2000-01-01T08:00:00.000Z",
       confirmationText: "TEST: Ich bestätige einen Euro netto.",
     };
     await expect(withSession(ohneAuftragszugriff, () => recordPhoneExtraWorkApprovalAction(input)))
       .resolves.toEqual({ code: "FORBIDDEN" });
-    await expect(withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction({
+    await expect(withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction(input)))
+      .resolves.toEqual({ code: "FORBIDDEN" });
+    await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction({
       ...input, positions: [{ lineId, lineVersion: 2 }],
     }))).resolves.toEqual({ code: "CONFLICT" });
 
-    const quittung = await withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction(input));
+    const vorher = new Date().toISOString();
+    const quittung = await withSession(full, () => recordPhoneExtraWorkApprovalAction(input));
+    const nachher = new Date().toISOString();
     if (quittung.code !== "OK") throw Error("TEST_ZUSAGE_FEHLT: " + quittung.code);
     expect(quittung.replayed).toBe(false);
-    await expect(withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction(input)))
+    await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction(input)))
       .resolves.toEqual({ ...quittung, replayed: true });
-    await expect(withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction({ ...input, approvedNetAmountCents: 101 })))
+    await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction({ ...input, approvedNetAmountCents: 101 })))
       .resolves.toEqual({ code: "CONFLICT" });
     const events = await sql`SELECT id, user_id, payload FROM public.events
       WHERE tenant_id = ${mandant} AND order_id = ${auftrag.orderId} AND event_type = 'ORDER_EXTRA_WORK_APPROVED_V1'`;
     expect(events).toEqual([{
-      id: quittung.eventId, user_id: werkstatt.actorId,
+      id: quittung.eventId, user_id: full.actorId,
       payload: {
-        channel: "telefon", positions: input.positions, approvedAt: input.approvedAt, approvedBy: input.approvedBy,
+        channel: "telefon", positions: input.positions, approvedAt: expect.any(String), approvedBy: full.actorId,
         approvedNetAmountCents: input.approvedNetAmountCents, confirmationText: input.confirmationText,
       },
     }]);
+    expect(events[0].payload.approvedAt >= vorher && events[0].payload.approvedAt <= nachher).toBe(true);
+
+    await withSession(full, async () => {
+      const login = await resolveAuthorization();
+      if (!login.ok) throw Error("TEST_MEHRARBEIT_ANMELDUNG_FEHLT");
+      const stand = await withPrivilegedTenantTransaction(login.data, tx => mehrarbeitStand(
+        tx, login.data, new Map([[auftrag.orderId, 10000]]), readWerkstattMehrarbeitInTransaction,
+      ));
+      expect(stand?.get(auftrag.orderId)).toMatchObject({
+        spielraumCent: 0, ueberSpielraum: true, ueberStopp: false,
+      });
+    });
 
     const rechnung = await withSession(full, () => issueInvoiceAction({
       orderId: auftrag.orderId, expectedVersion: auftrag.version, clientEventId: randomUUID(),
@@ -199,7 +215,7 @@ test("Die Rechnung belegt die telefonische Zusage, der Ausgang liest den verblei
         amountCents: 100, unreducedAmountCents: 101, approvalEventIds: [quittung.eventId],
       })]),
     }]);
-    await expect(withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction({ ...input, clientEventId: randomUUID() })))
+    await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction({ ...input, clientEventId: randomUUID() })))
       .resolves.toEqual({ code: "INVOICE_ISSUED", invoiceNumber: rechnung.receipt.invoiceNumber });
     const invoiceConflict = {
       code: "CONFLICT",
@@ -235,7 +251,7 @@ test("Die Rechnung belegt die telefonische Zusage, der Ausgang liest den verblei
         if (eintrag.code !== "OK") throw Error("TEST_RUECKNAHME_EINTRAG_FEHLT: " + eintrag.code);
         return eintrag.receipt.aggregateVersion;
       });
-    await expect(withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction({
+    await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction({
       ...input, orderId: vorRechnung.orderId, positions: [{ lineId: andereZeile, lineVersion: 1 }], clientEventId: randomUUID(),
     }))).resolves.toMatchObject({ code: "OK" });
     const wiederOffen = await withSession(werkstatt, () => reopenFrozenOrderAction({
@@ -296,6 +312,7 @@ test("Betriebsruhe verschiebt Fertigtermin und Terminvorschlag über denselben K
 
   const vorschlag = (ruhetage: ReadonlySet<string>) => calculateTermSuggestion({
     today: "2026-11-23", wishDate: null, dailyOutputEur: 100, openOrders: [],
+    handoverMode: "shipping",
     priority: false, processingWeeks: 1,
     positions: [{
       key: "test-teil", catalogServiceId: "test-katalog", name: "TEST Teil",
@@ -308,6 +325,7 @@ test("Betriebsruhe verschiebt Fertigtermin und Terminvorschlag über denselben K
     settings: {
       handoverBufferDays: kalender.versandpufferArbeitstage,
       fitsPercent: 80, tightPercent: 100, priorityPercent: 110, betriebsruhe: ruhetage,
+      knappAbArbeitstagen: kalender.knappAbArbeitstagen,
     },
   })?.achievableDate;
   expect(vorschlag(new Set())).toBe("2026-11-30");
@@ -610,6 +628,45 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
     expect(await sql`SELECT kostensatz_eur_pro_stunde::text AS satz, kostensatz_quelle
       FROM public.arbeitszeit_buchung WHERE tenant_id = ${mandant} AND id = ${mitStandardsatz.id}::uuid`)
       .toEqual([{ satz: "72.50", kostensatz_quelle: "standard" }]);
+
+    await withSession(ohneKostensatz, async () => {
+      const login = await resolveAuthorization();
+      if (!login.ok) throw Error("TEST_ARBEITSZEIT_ANMELDUNG_FEHLT");
+      const ohneSaetze = {
+        ...laufLeser, auftrag: hatArbeitszeitAuftragInTransaction,
+        personensatz: async () => null, standardsatz: async () => null,
+      };
+      const fehlenderSatz = await bookWorkTime(login.data, {
+        ...eingabe, minuten: 12, clientEventId: randomUUID(),
+      }, ohneSaetze);
+      if (fehlenderSatz.code !== "OK") throw Error("TEST_ARBEITSZEIT_OHNE_SATZ: " + fehlenderSatz.code);
+      const korrektur = await bookWorkTime(login.data, {
+        ...eingabe, minuten: -2, clientEventId: randomUUID(),
+        korrigiertId: fehlenderSatz.id, grund: "TEST Eingabe berichtigt",
+      }, ohneSaetze);
+      const fehlenderLaufsatz = await withPrivilegedTenantTransaction(login.data, tx => bookLaufZeit(tx, login.data, {
+        ...lauf, laufId: randomUUID(), clientEventId: randomUUID(),
+      }, ohneSaetze));
+      if (korrektur.code !== "OK" || fehlenderLaufsatz.code !== "OK") throw Error("TEST_ARBEITSZEIT_KORREKTUR_ODER_LAUF_FEHLT");
+      const ids = [fehlenderSatz.id, korrektur.id, ...fehlenderLaufsatz.buchungsIds];
+      const zeitzeilen = await sql`SELECT kostensatz_eur_pro_stunde AS satz, kostensatz_quelle
+        FROM public.arbeitszeit_buchung WHERE tenant_id = ${mandant} AND id = ANY(${ids}::uuid[])`;
+      expect(zeitzeilen).toHaveLength(ids.length);
+      expect(zeitzeilen).toEqual(ids.map(() => ({ satz: null, kostensatz_quelle: "fehlt" })));
+      const sicht = await leseArbeitszeitZumAuftrag(login.data, auftrag, [items[0].id]);
+      expect(sicht?.auftrag).not.toHaveProperty("kostenCent");
+      expect(sicht).not.toHaveProperty("fehlendeKostensaetze");
+    });
+    await withSession(full, async () => {
+      const login = await resolveAuthorization();
+      if (!login.ok) throw Error("TEST_ARBEITSZEIT_ANMELDUNG_FEHLT");
+      const sicht = await leseArbeitszeitZumAuftrag(login.data, auftrag, [items[0].id]);
+      expect(sicht?.auftrag.status).toBe("gebucht");
+      expect(sicht?.auftrag).not.toHaveProperty("kostenCent");
+      expect(sicht?.fehlendeKostensaetze).toContainEqual(expect.objectContaining({
+        id: ohneKostensatz.actorId, quelle: "fehlt", hinweis: expect.stringMatching(/^Kostensatz für .+ fehlt$/),
+      }));
+    });
 
     const korrekturen = [werkstatt, buero].map(anmeldung => ({
       anmeldung, buchung: {

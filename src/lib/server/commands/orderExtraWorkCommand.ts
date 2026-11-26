@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { hasAuthorizationArea } from "@/lib/auth/authorizationContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { canViewOrderCard } from "@/lib/server/orderCardRead";
 import { leseMehrarbeitsfreigabe, ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
@@ -56,7 +57,7 @@ export type ChangeOrderItemExtraWorkResult =
   | { code: "UNAVAILABLE"; message: string };
 
 export type RecordPhoneExtraWorkApprovalInput = Omit<
-  NonNullable<ReturnType<typeof leseMehrarbeitsfreigabe>>, "channel"
+  NonNullable<ReturnType<typeof leseMehrarbeitsfreigabe>>, "channel" | "approvedAt" | "approvedBy"
 > & {
   orderId: string;
   clientEventId: string;
@@ -65,30 +66,39 @@ export type RecordPhoneExtraWorkApprovalInput = Omit<
 export type RecordPhoneExtraWorkApprovalResult =
   | { code: "OK"; eventId: string; replayed: boolean }
   | { code: "INVOICE_ISSUED"; invoiceNumber: string }
-  | { code: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "UNAVAILABLE" };
+  | { code: "UNAVAILABLE"; message: string }
+  | { code: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" };
 
 export async function recordPhoneExtraWorkApproval(input: unknown): Promise<RecordPhoneExtraWorkApprovalResult> {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" };
-  const { orderId, clientEventId } = input as Record<string, unknown>;
-  const approval = leseMehrarbeitsfreigabe({ ...input, channel: "telefon" });
-  if (!approval || typeof clientEventId !== "string" || !UUID_PATTERN.test(clientEventId)
+  const { orderId, clientEventId, approvedNetAmountCents, positions: requestedPositions, confirmationText } =
+    input as Record<string, unknown>;
+  if (typeof clientEventId !== "string" || !UUID_PATTERN.test(clientEventId)
     || typeof orderId !== "string" || orderId !== orderId.trim() || !orderId || orderId.length > 128) {
     return { code: "VALIDATION_ERROR" };
   }
-  const payload = {
-    ...approval,
-    positions: approval.positions.map(({ lineId, lineVersion }) => ({ lineId, lineVersion }))
-      .sort((links, rechts) => links.lineId.localeCompare(rechts.lineId)),
-  };
   try {
     const authorization = await resolveAuthorization();
     if (!authorization.ok) {
-      return { code: authorization.reason === "AUTHORIZATION_UNAVAILABLE" ? "UNAVAILABLE" : "UNAUTHENTICATED" };
+      return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+        ? { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.phoneExtraWorkApprovalUnavailable }
+        : { code: "UNAUTHENTICATED" };
     }
     const auth = authorization.data;
-    if (!canViewOrderCard(auth) || auth.packageSwitches?.p3_werkstatt !== true) {
+    if (!canViewOrderCard(auth) || !hasAuthorizationArea(auth, "preise") || auth.packageSwitches?.p3_werkstatt !== true) {
       return { code: "FORBIDDEN" };
     }
+
+    const approval = leseMehrarbeitsfreigabe({
+      approvedNetAmountCents, positions: requestedPositions, confirmationText,
+      channel: "telefon", approvedBy: auth.userId, approvedAt: new Date().toISOString(),
+    });
+    if (!approval) return { code: "VALIDATION_ERROR" };
+    const payload = {
+      ...approval,
+      positions: approval.positions.map(({ lineId, lineVersion }) => ({ lineId, lineVersion }))
+        .sort((links, rechts) => links.lineId.localeCompare(rechts.lineId)),
+    };
 
     return await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`
@@ -103,9 +113,10 @@ export async function recordPhoneExtraWorkApproval(input: unknown): Promise<Reco
       `);
       if (events.length) {
         const [event] = events;
+        const recorded = leseMehrarbeitsfreigabe(event.payload);
         if (events.length === 1 && event.order_id === orderId && event.user_id === auth.userId
           && event.event_type === APPROVAL_EVENT_TYPE && event.status === "success"
-          && canonicalJson(event.payload) === canonicalJson(payload)) {
+          && recorded && canonicalJson(recorded) === canonicalJson({ ...payload, approvedAt: recorded.approvedAt })) {
           return { code: "OK", eventId: event.id, replayed: true };
         }
         return { code: "CONFLICT" };
@@ -146,8 +157,9 @@ export async function recordPhoneExtraWorkApproval(input: unknown): Promise<Reco
       if (!written) throw Error("ORDER_EXTRA_WORK_APPROVAL_WRITE_FAILED");
       return { code: "OK", eventId: written.id, replayed: false };
     });
-  } catch {
-    return { code: "UNAVAILABLE" };
+  } catch (error) {
+    console.error("[ORDER_PHONE_EXTRA_WORK_APPROVAL_FAILED]", error instanceof Error ? error.name : "UnknownError");
+    return { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.phoneExtraWorkApprovalUnavailable };
   }
 }
 

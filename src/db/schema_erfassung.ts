@@ -43,7 +43,7 @@ export const arbeitszeitBuchung = pgTable("arbeitszeit_buchung", {
   startZeit: timestamp("start_zeit", { withTimezone: true }).notNull(),
   endZeit: timestamp("end_zeit", { withTimezone: true }),
   dauerMinuten: integer("dauer_minuten").notNull(),
-  kostensatzEurProStunde: numeric("kostensatz_eur_pro_stunde", { precision: 8, scale: 2 }).notNull(),
+  kostensatzEurProStunde: numeric("kostensatz_eur_pro_stunde", { precision: 8, scale: 2 }),
   kostensatzQuelle: text("kostensatz_quelle"),
   erfasstModus: text("erfasst_modus").notNull(),
   warAusVorlage: boolean("war_aus_vorlage").default(false),
