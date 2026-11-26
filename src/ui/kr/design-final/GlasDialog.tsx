@@ -34,7 +34,7 @@ export interface GlasDialogProps {
 export function isTopGlassDialog(element: HTMLElement | null) {
   const visible = [...document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"]:not(dialog)')]
     .filter(dialog => !dialog.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(dialog).display !== 'none');
-  return visible.at(-1) === element;
+  return (visible.findLast(dialog => dialog.matches(':modal')) ?? visible.at(-1)) === element;
 }
 
 const blattVerlauf = 'kreileGlasblatt';
@@ -109,8 +109,9 @@ export function GlasDialog({
     if (offen) {
       if (!dialog.open) {
         startFokus.current = aktuell.current.oeffner ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-        if (nebenKopf && typeof dialog.show === 'function') dialog.show();
-        else if (!nebenKopf && typeof dialog.showModal === 'function') dialog.showModal();
+        const ueberDialog = nebenKopf && document.querySelector('dialog:modal') !== null;
+        if ((!nebenKopf || ueberDialog) && typeof dialog.showModal === 'function') dialog.showModal();
+        else if (nebenKopf && typeof dialog.show === 'function') dialog.show();
         else dialog.setAttribute('open', '');
         const initial = aktuell.current.fokus?.current
           ?? dialog.querySelector<HTMLElement>('[autofocus]:not(:disabled)')
@@ -149,7 +150,7 @@ export function GlasDialog({
 
   useLayoutEffect(() => {
     const dialog = element.current;
-    if (!dialog || (!nebenKopf && typeof dialog.showModal === 'function')) return;
+    if (!dialog) return;
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !offen || !isTopGlassDialog(dialog)) return;
       event.preventDefault();
@@ -158,7 +159,7 @@ export function GlasDialog({
     };
     window.addEventListener('keydown', escape);
     return () => window.removeEventListener('keydown', escape);
-  }, [nebenKopf, offen, onSchliessen, schliesstGesperrt]);
+  }, [offen, onSchliessen, schliesstGesperrt]);
 
   useLayoutEffect(() => {
     const rahmen = seitenebene.current;

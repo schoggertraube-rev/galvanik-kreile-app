@@ -302,10 +302,10 @@ it('splits a failed set-based SQL publish and marks only the affected source inc
 });
 
 it('reads the persisted single-row batch limit and skips incomplete rows until rebuild',async()=>{
- expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
  // Explicit schema configuration probe in this isolated TEST tenant.
  await sql`UPDATE public.company_settings SET today_refresh_batch_limit=1 WHERE tenant_id=${tenant}`;
  expect((await readTodayReadSettings({tenantId:tenant})).todayRefreshBatchLimit).toBe(1);
+ expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
  const visits:string[]=[];
  const bounded:TodayProjectionPorts={...ports,readSources:async(capability,keys)=>{
   expect(keys).toHaveLength(1);visits.push(todaySourceKey(keys[0]));return ports.readSources(capability,keys);

@@ -1119,6 +1119,7 @@ function choiceButton(locator: Locator, label: string): Locator {
 
 function interruptedActionId(controlId: string | undefined): string | undefined {
   const actions: Record<string, { exportedName: string; filename: string }> = {
+    "eingang.buchen": { exportedName: "erfasseAuftragAusEingangAction", filename: "src/app/actions/eingang.actions.ts" },
     "navigation.nachrichten": { exportedName: "getIntakeMessagesAction", filename: "src/app/actions/eingang.actions.ts" },
     "nachrichten.vorschlag-ja": { exportedName: "assignIntakeCustomerAction", filename: "src/app/actions/eingang.actions.ts" },
     "aufgabe.speichern": { exportedName: "saveIntakeTaskAction", filename: "src/app/actions/eingang.actions.ts" },
@@ -1212,11 +1213,16 @@ async function revealForInteraction(locator:Locator){
   if(await section.count())await section.locator('button.ev-schritt9-kopf').click({timeout:15_000});
 }
 
+function messageList(page: Page) {
+  const selector = '[data-spec-id="nachrichten"]';
+  return page.locator(new URL(page.url()).pathname === '/nachrichten' ? `main ${selector}` : selector);
+}
+
 async function waitForServerAction(page: Page, id: string) {
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
-  if(id.startsWith('nachrichten.'))await expect.poll(async()=>page.locator('[data-spec-id="nachrichten"]').getAttribute('aria-busy'),{timeout:15_000}).not.toBe('true');
+  if(id.startsWith('nachrichten.'))await expect.poll(async()=>messageList(page).getAttribute('aria-busy'),{timeout:15_000}).not.toBe('true');
   await expect.poll(async () => {
     const action = page.locator(`[data-spec-id="${id}"]`).first();
     // Recognition removes this button; inspect its state in one DOM snapshot.
@@ -1328,7 +1334,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState, next
   // The real message read finishes asynchronously after opening the route.
   // Wait for its declared loading state before locating the first action.
   if(locator&&step.id?.startsWith('nachrichten.')&&step.aktion!=='erwarten'){
-    await expect(page.locator('[data-spec-id="nachrichten"]')).toHaveAttribute('aria-busy','false',{timeout:15_000});
+    await expect(messageList(page)).toHaveAttribute('aria-busy','false',{timeout:15_000});
     await locator.waitFor({state:'attached',timeout:15_000});
   }
   if(locator&&step.aktion&&["datei","klicken","doppelklicken","tippen","waehlen","verlassen","taste"].includes(step.aktion))await revealForInteraction(locator);
