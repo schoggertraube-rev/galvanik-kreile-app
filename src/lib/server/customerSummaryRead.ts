@@ -8,7 +8,8 @@ import { classifyOverdue } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
 import {readUnsentInvoiceOriginals,readInvoiceMailCohort} from './communicationDocumentPort';
 import {berlinCalendarDay, leseBetriebsruhetage} from '@/lib/domain/workingDays';
-import {fertigtermin} from '@/modules/orders/public';
+import {fertigtermin, zeigeFertigtermin} from '@/modules/orders/public';
+import {ORDER_TERM_COPY} from '@/ui/ordersCopy';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 
@@ -61,15 +62,18 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
   if (!rows.some(row=>row.deadlines.some(order=>order.dueDate&&order.handoverMode&&order.status!=='blocked'))) return {rows,kalender:null};
   const einstellungen=await readTerminEinstellungen(tx,auth.tenantId);
   const betriebsruhe=leseBetriebsruhetage(einstellungen.betriebsruhe);
-  return {rows,kalender:betriebsruhe===null?null:{...einstellungen,betriebsruhe}};
+  return {rows,kalender:{...einstellungen,betriebsruhe}};
   });
   return new Map(rows.map(row=>{
     const hints:CustomerHint[]=[];
     if(row.overdue)hints.push({kind:'payment',text:`${row.overdue} ${row.overdue===1?'Rechnung':'Rechnungen'} überfällig`,urgent:true});
     const heute=berlinCalendarDay(new Date(row.as_of));
     for(const order of row.deadlines){
-      if(order.status==='blocked'||kalender&&fertigtermin(order,kalender,heute)?.stufe==='ueberfaellig'){
-        hints.push({kind:'deadline',text:`Termin ${order.number??'Auftragsnummer fehlt'} in Gefahr`,urgent:true});
+      const stand = zeigeFertigtermin(order, kalender, heute, order.status === 'blocked');
+      if (stand.risk === 'blocked' || stand.risk === 'red') {
+        hints.push({ kind: 'deadline', text: ORDER_TERM_COPY.danger(order.number), urgent: true });
+      } else if (order.dueDate && order.handoverMode && stand.risk === 'unknown') {
+        hints.push({ kind: 'deadline', text: stand.dueValue, urgent: false });
       }
     }
     if(row.unassigned)hints.push({kind:'message',text:`${row.unassigned} ${row.unassigned===1?'Nachricht':'Nachrichten'} zuordnen`,urgent:false});

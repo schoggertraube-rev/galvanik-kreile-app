@@ -8,7 +8,7 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { setOrderItemFinishedInTransaction } from "@/lib/server/commands/orderContentCommand";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { LaufAntwort, LaufEingabe, LaufZeitverteilung } from "@/modules/werkstatt/public";
-import { ORDER_BUENDEL_LAUF_COPY } from "@/ui/ordersCopy";
+import { ORDER_BUENDEL_LAUF_COPY, ORDER_TERM_COPY } from "@/ui/ordersCopy";
 import { WORK_TIME_COPY } from "@/ui/werkstattCopy";
 import { fertigtermin } from "../domain/termin";
 
@@ -99,10 +99,16 @@ export async function schlageLaeufeVor(
       teilezahl: string;
       termin: ReturnType<typeof fertigtermin>;
       vorausgewaehlt: boolean;
+      terminHinweis?: string;
     }[];
   }>();
   for (const zeile of zeilen) {
     const termin = fertigtermin(zeile, kalender, heute);
+    const vorausgewaehlt = termin?.stufe === "knapp" || termin?.stufe === "ueberfaellig";
+    const fehlt = termin?.fehlendeEinstellungen;
+    const terminHinweis = fehlt?.length
+      ? ORDER_TERM_COPY.settingsMissing(fehlt.length === 2 ? ORDER_TERM_COPY.settings.both : ORDER_TERM_COPY.settings[fehlt[0]])
+      : vorausgewaehlt ? ORDER_TERM_COPY.status[termin.stufe] : undefined;
     const lauf = laeufe.get(zeile.oberflaeche) ?? {
       oberflaeche: zeile.oberflaeche, teilezahl: zeile.laufmenge, auftraege: [],
     };
@@ -111,7 +117,8 @@ export async function schlageLaeufeVor(
       itemIds: zeile.itemIds,
       teilezahl: zeile.auftragsmenge,
       termin,
-      vorausgewaehlt: termin?.stufe === "knapp" || termin?.stufe === "ueberfaellig",
+      vorausgewaehlt,
+      ...(terminHinweis ? { terminHinweis } : {}),
     });
     laeufe.set(zeile.oberflaeche, lauf);
   }

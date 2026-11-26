@@ -47,6 +47,16 @@ test("Eine Mail am anderen Auftrag erhöht den abrechenbaren Betrag nicht", asyn
   expect(fixture.execute.mock.calls.some(([query]) => dialect.sqlToQuery(query).sql.includes("INSERT INTO"))).toBe(false);
 });
 
+test("Eine Mailzusage braucht zusätzlich das Nachrichtenrecht", async () => {
+  fixture.authorized.mockResolvedValue({
+    ok: true, data: { ...fixture.actor, areas: ["auftraege", "preise"] },
+  });
+  const readMail = vi.fn();
+  await expect(recordExtraWorkApproval(request, readMail)).resolves.toMatchObject({ code: "FORBIDDEN" });
+  expect(readMail).not.toHaveBeenCalled();
+  expect(fixture.execute).not.toHaveBeenCalled();
+});
+
 test("Die ausdrückliche Zusage speichert die zugeordnete Originalmail am bestehenden Auftragsbeleg", async () => {
   const readMail = vi.fn(async () => ({ id: request.intakeItemId, orderId: request.orderId, customerId }));
   fixture.execute.mockResolvedValueOnce([{ line_id: request.positions[0].lineId, line_version: 1, integrity_ok: true }])

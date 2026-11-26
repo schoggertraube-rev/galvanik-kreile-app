@@ -18,11 +18,39 @@ BEGIN
     ADD CONSTRAINT arbeitszeit_buchung_kostensatz_chk CHECK (
       (kostensatz_quelle IS NULL OR kostensatz_quelle IN ('person', 'standard', 'fehlt'))
       AND (kostensatz_eur_pro_stunde IS NULL) = (kostensatz_quelle IS NOT DISTINCT FROM 'fehlt')
-    ),
-    ADD CONSTRAINT arbeitszeit_buchung_mandant_zeile_key UNIQUE (tenant_id, id),
-    ADD CONSTRAINT arbeitszeit_buchung_mandant_befehl_key UNIQUE (tenant_id, client_event_id),
+    );
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass
+      AND conname = 'arbeitszeit_buchung_mandant_zeile_key'
+  ) THEN
+    ALTER TABLE public.arbeitszeit_buchung
+    ADD CONSTRAINT arbeitszeit_buchung_mandant_zeile_key UNIQUE (tenant_id, id);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass
+      AND conname = 'arbeitszeit_buchung_mandant_befehl_key'
+  ) THEN
+    ALTER TABLE public.arbeitszeit_buchung
+    ADD CONSTRAINT arbeitszeit_buchung_mandant_befehl_key UNIQUE (tenant_id, client_event_id);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass
+      AND conname = 'arbeitszeit_buchung_korrektur_fk'
+  ) THEN
+    ALTER TABLE public.arbeitszeit_buchung
     ADD CONSTRAINT arbeitszeit_buchung_korrektur_fk FOREIGN KEY (tenant_id, korrigiert_id)
-      REFERENCES public.arbeitszeit_buchung (tenant_id, id) NOT VALID,
+      REFERENCES public.arbeitszeit_buchung (tenant_id, id) NOT VALID;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass
+      AND conname = 'arbeitszeit_buchung_dauer_und_korrektur_chk'
+  ) THEN
+    ALTER TABLE public.arbeitszeit_buchung
     ADD CONSTRAINT arbeitszeit_buchung_dauer_und_korrektur_chk CHECK (
       dauer_minuten <> 0
       AND (dauer_minuten > 0 OR korrigiert_id IS NOT NULL)
@@ -37,6 +65,16 @@ $arbeitszeit_vertrag$;
 CREATE OR REPLACE FUNCTION private.arbeitszeit_buchung_unveraenderlich()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $funktion$
 BEGIN
+  IF TG_OP = 'UPDATE' AND pg_trigger_depth() > 1
+    AND OLD.item_id IS NOT NULL AND NEW.item_id IS NULL
+    AND (to_jsonb(NEW) - 'item_id') = (to_jsonb(OLD) - 'item_id')
+    AND NOT EXISTS (
+      SELECT 1 FROM public.items teil
+      WHERE teil.tenant_id = OLD.tenant_id AND teil.id = OLD.item_id
+    )
+  THEN
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION 'ARBEITSZEIT_BUCHUNG_UNVERAENDERLICH' USING ERRCODE = '23514';
 END;
 $funktion$;
@@ -657,14 +695,10 @@ RETURNS text LANGUAGE sql IMMUTABLE CALLED ON NULL INPUT PARALLEL SAFE SET searc
   ELSE 'tenant' END
 $scope$;
 
-DO $mehrarbeit_vertrag$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.events'::regclass
-      AND conname = 'events_extra_work_approval_v1_contract_chk'
-  ) THEN
-    ALTER TABLE public.events ADD CONSTRAINT events_extra_work_approval_v1_contract_chk
+-- Auch eine ältere Fassung muss den Originalmail-Bezug prüfen.
+ALTER TABLE public.events
+  DROP CONSTRAINT IF EXISTS events_extra_work_approval_v1_contract_chk,
+  ADD CONSTRAINT events_extra_work_approval_v1_contract_chk
   CHECK (
     CASE WHEN event_type = 'ORDER_EXTRA_WORK_APPROVED_V1' THEN
       coalesce(
@@ -702,9 +736,6 @@ BEGIN
       )
     ELSE true END
   );
-  END IF;
-END;
-$mehrarbeit_vertrag$;
 
 CREATE OR REPLACE TRIGGER events_extra_work_approval_update_immutable
 BEFORE UPDATE ON public.events FOR EACH ROW

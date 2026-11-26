@@ -22,7 +22,7 @@ import { fertigtermin } from "@/modules/orders/public";
 import { hatArbeitszeitAuftragInTransaction, leseBuendelLaufTeile, leseOffeneLaeufe, mehrarbeitStand, schlageLaeufeVor } from "@/modules/orders/server-public";
 import { bookLaufZeit, bookWorkTime, leseArbeitszeitZumAuftrag, readWorkMinutes } from "@/modules/werkstatt/server-public";
 import { KALENDER_COPY } from "@/ui/kalenderCopy";
-import { ORDER_BUENDEL_LAUF_COPY, ORDER_CONTENT_COPY, ORDER_SCRAP_COPY } from "@/ui/ordersCopy";
+import { ORDER_BUENDEL_LAUF_COPY, ORDER_CONTENT_COPY, ORDER_SCRAP_COPY, ORDER_TERM_COPY } from "@/ui/ordersCopy";
 import { INVOICE_SCRAP_COPY } from "@/ui/accountingCopy";
 import { WORK_TIME_COPY } from "@/ui/werkstattCopy";
 
@@ -81,6 +81,44 @@ test("Ein Liefertermin bleibt ohne festgelegte Übergabeart lesbar", async () =>
   });
 });
 
+test("Das Löschen eines Teils löst nur den Teilebezug der unveränderlichen Zeitbuchungen", async () => {
+  const kunde = await customerFixture("Teilebezug bei Arbeitszeit");
+  const { receipt: { orderId, items } } = await intakeOrderFixture("Teilebezug bei Arbeitszeit", kunde);
+  const itemId = items[0].id;
+  const original = randomUUID();
+  const korrektur = randomUUID();
+  const rollback = Error("TEST_ARBEITSZEIT_ROLLBACK");
+
+  await expect(sql.begin(async tx => {
+    await tx`SELECT set_config('app.tenant_id', ${mandant}, true)`;
+    await tx`INSERT INTO public.arbeitszeit_buchung (
+      id, tenant_id, auftrag_id, item_id, employee_id, station_kuerzel, start_zeit, dauer_minuten,
+      kostenstelle_kuerzel, kostensatz_eur_pro_stunde, kostensatz_quelle, erfasst_modus, korrigiert_id, korrektur_grund
+    ) VALUES
+      (${original}::uuid, ${mandant}, ${orderId}, ${itemId}, ${full.actorId}::uuid, 'galvanik', now(), 25,
+       'TEST Galvanik', NULL, 'fehlt', 'einzel', NULL, NULL),
+      (${korrektur}::uuid, ${mandant}, ${orderId}, ${itemId}, ${full.actorId}::uuid, 'galvanik', now(), -5,
+       'TEST Galvanik', NULL, 'fehlt', 'einzel', ${original}::uuid, 'TEST Fehlzeit')`;
+
+    await expect(tx.savepoint(async sp => {
+      await sp`UPDATE public.arbeitszeit_buchung SET item_id = NULL WHERE tenant_id = ${mandant} AND id = ${original}::uuid`;
+    })).rejects.toMatchObject({ code: "23514" });
+    await expect(tx.savepoint(async sp => {
+      await sp`DELETE FROM public.arbeitszeit_buchung WHERE tenant_id = ${mandant} AND id = ${korrektur}::uuid`;
+    })).rejects.toMatchObject({ code: "23514" });
+
+    const geloescht = await tx`DELETE FROM public.items WHERE tenant_id = ${mandant} AND id = ${itemId} RETURNING id`;
+    expect(geloescht).toHaveLength(1);
+    expect(await tx`SELECT id, item_id, dauer_minuten, korrigiert_id, korrektur_grund
+      FROM public.arbeitszeit_buchung WHERE tenant_id = ${mandant} AND auftrag_id = ${orderId} ORDER BY dauer_minuten DESC`)
+      .toEqual([
+        { id: original, item_id: null, dauer_minuten: 25, korrigiert_id: null, korrektur_grund: null },
+        { id: korrektur, item_id: null, dauer_minuten: -5, korrigiert_id: original, korrektur_grund: "TEST Fehlzeit" },
+      ]);
+    throw rollback;
+  })).rejects.toBe(rollback);
+});
+
 test("Mehrarbeitsfreigaben brauchen einen vollständigen, unveränderlichen Beleg", async () => {
   const kunde = await customerFixture("Mehrarbeitsfreigabe");
   const { receipt: { orderId } } = await intakeOrderFixture("Mehrarbeitsfreigabe", kunde);
@@ -124,11 +162,13 @@ test("Die Rechnung belegt die telefonische Zusage, der Ausgang liest den verblei
   const werkstatt = await createFixture(["auftraege"], "werkstatt");
   const ohneAuftragszugriff = await createFixture(["kunden"], "buero");
   const schalter = await sql<{ enabled: boolean }[]>`SELECT enabled FROM public.feature_flags WHERE id = 'p3_werkstatt'`;
-  const [firma] = await sql<{ spielraum: number }[]>`SELECT mehrarbeit_spielraum_basispunkte AS spielraum
+  const [firma] = await sql<{ spielraum: number; stopp: number }[]>`SELECT mehrarbeit_spielraum_basispunkte AS spielraum,
+      mehrarbeit_stopp_basispunkte AS stopp
     FROM public.company_settings WHERE tenant_id = ${mandant}`;
   if (!schalter[0] || !firma) throw Error("TEST_MEHRARBEIT_EINSTELLUNGEN_FEHLEN");
-  const setzeSpielraum = (spielraum: number) => sql`UPDATE public.company_settings
-    SET mehrarbeit_spielraum_basispunkte = ${spielraum} WHERE tenant_id = ${mandant}`;
+  const setzeSpielraum = (spielraum: number, stopp = firma.stopp) => sql`UPDATE public.company_settings
+    SET mehrarbeit_spielraum_basispunkte = ${spielraum}, mehrarbeit_stopp_basispunkte = ${stopp}
+    WHERE tenant_id = ${mandant}`;
   const {
     changeOrderItemExtraWorkAction, configureExtraWorkCatalogPositionAction, recordPhoneExtraWorkApprovalAction,
     getExtraWorkMasterDataAction, getOrdersDb, reopenFrozenOrderAction, setExtraWorkHourlyRateAction,
@@ -202,6 +242,14 @@ test("Die Rechnung belegt die telefonische Zusage, der Ausgang liest den verblei
       expect(stand?.get(auftrag.orderId)).toMatchObject({
         spielraumCent: 0, ueberSpielraum: true, ueberStopp: false,
       });
+      await setzeSpielraum(0, 100);
+      const standUeberStopp = await withPrivilegedTenantTransaction(login.data, tx => mehrarbeitStand(
+        tx, login.data, new Map([[auftrag.orderId, 10000]]), readWerkstattMehrarbeitInTransaction,
+      ));
+      expect(standUeberStopp?.get(auftrag.orderId)).toMatchObject({
+        stoppCent: 100, ueberSpielraum: true, ueberStopp: true,
+      });
+      await setzeSpielraum(0);
     });
 
     const rechnung = await withSession(full, () => issueInvoiceAction({
@@ -380,7 +428,7 @@ test("Bündel-Läufe schlagen ab zwei Aufträgen nur Teile der jeweiligen Oberfl
   expect(lauf?.auftraege).toHaveLength(2);
   expect(lauf?.auftraege).toEqual(expect.arrayContaining([
     { auftragId: erster.orderId, itemIds: [zinkteil], teilezahl: "2",
-      termin: { fertigtermin: "2027-05-11", stufe: "knapp" }, vorausgewaehlt: true },
+      termin: { fertigtermin: "2027-05-11", stufe: "knapp" }, vorausgewaehlt: true, terminHinweis: ORDER_TERM_COPY.status.knapp },
     { auftragId: zweiter.orderId, itemIds: [zweitesZinkteil], teilezahl: "3",
       termin: { fertigtermin: "2027-05-15", stufe: "im_plan" }, vorausgewaehlt: false },
   ]));
@@ -629,6 +677,13 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
     expect(await sql`SELECT kostensatz_eur_pro_stunde::text AS satz, kostensatz_quelle
       FROM public.arbeitszeit_buchung WHERE tenant_id = ${mandant} AND id = ${mitStandardsatz.id}::uuid`)
       .toEqual([{ satz: "72.50", kostensatz_quelle: "standard" }]);
+    await withSession(full, async () => {
+      const login = await resolveAuthorization();
+      if (!login.ok) throw Error("TEST_ARBEITSZEIT_ANMELDUNG_FEHLT");
+      const sicht = await leseArbeitszeitZumAuftrag(login.data, auftrag, [items[0].id]);
+      expect(sicht?.auftrag.kostenCent).toBeGreaterThan(0);
+      expect(sicht).not.toHaveProperty("fehlendeKostensaetze");
+    });
 
     await withSession(ohneKostensatz, async () => {
       const login = await resolveAuthorization();

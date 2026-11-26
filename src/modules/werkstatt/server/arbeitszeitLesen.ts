@@ -19,7 +19,7 @@ type ArbeitszeitSumme = Readonly<{
 export type ArbeitszeitStand = Readonly<{
   auftrag: ArbeitszeitSumme;
   zeilen: readonly (ArbeitszeitSumme & { positionId: string })[];
-  fehlendeKostensaetze?: readonly { id: string; name: string; quelle: "standard" | "fehlt"; hinweis: string }[];
+  fehlendeKostensaetze?: readonly { id: string; name: string; quelle: "fehlt"; hinweis: string }[];
 }>;
 
 type Zeitstand = {
@@ -28,7 +28,6 @@ type Zeitstand = {
   heuteMinuten: string;
   gesamtMinuten: string;
   kostenCent?: string | null;
-  personenMitStandardsatz?: string[] | null;
   personenOhneSatz?: string[] | null;
 };
 
@@ -70,9 +69,6 @@ async function leseSummen(
         THEN round(sum(zeit.dauer_minuten::numeric * zeit.kostensatz_eur_pro_stunde) * 100 / 60)::text
       END AS "kostenCent",
       array_agg(DISTINCT zeit.employee_id::text) FILTER (
-        WHERE zeit.kostensatz_quelle = 'standard' AND zeit.korrigiert_id IS NULL
-      ) AS "personenMitStandardsatz",
-      array_agg(DISTINCT zeit.employee_id::text) FILTER (
         WHERE zeit.kostensatz_quelle = 'fehlt' AND zeit.korrigiert_id IS NULL
       ) AS "personenOhneSatz"`
     : sql.empty();
@@ -90,13 +86,11 @@ async function leseSummen(
     ${gruppierung}
     `);
     const gesamt = mitKosten ? summen.find(zeile => zeile.positionId === null) : undefined;
-    const personensätze = new Map<string, "standard" | "fehlt">();
-    for (const id of gesamt?.personenMitStandardsatz ?? []) personensätze.set(id, "standard");
-    for (const id of gesamt?.personenOhneSatz ?? []) personensätze.set(id, "fehlt");
-    const namen = await readActorNames(tx, auth.tenantId, [...personensätze.keys()]);
-    const fehlendeKostensaetze = [...personensätze].map(([id, quelle]) => {
+    const personenOhneSatz = gesamt?.personenOhneSatz ?? [];
+    const namen = await readActorNames(tx, auth.tenantId, personenOhneSatz);
+    const fehlendeKostensaetze = personenOhneSatz.map(id => {
       const name = namen.get(id) ?? ACTOR_COPY.unknownLogin;
-      return { id, name, quelle, hinweis: WORK_TIME_COPY.costRateMissing(name) };
+      return { id, name, quelle: "fehlt" as const, hinweis: WORK_TIME_COPY.costRateMissing(name) };
     });
     return { summen, fehlendeKostensaetze };
   });

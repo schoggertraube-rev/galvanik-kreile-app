@@ -4,6 +4,7 @@ export const ORDER_TERM_COPY = {
   deliveryDate: "Liefertermin",
   missingLeadTime: (leistung: string) => `Durchlaufzeit für ${leistung} fehlt`,
   label: "Termin",
+  danger: (number: string | null) => `Termin ${number ?? "Auftragsnummer fehlt"} in Gefahr`,
   settings: {
     betriebsruhe: "die Betriebsruhe",
     terminschwelle: "die Terminschwelle",
