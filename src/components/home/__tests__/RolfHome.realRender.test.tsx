@@ -27,6 +27,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 
 import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
 import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {OfficeWeekControl} from '../OfficeWeekControl';
 
 const actionPorts = {
   savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
@@ -35,6 +36,31 @@ const actionPorts = {
   assignOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 2 } }),
   handBackOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 3 } }),
 };
+
+it('zeigt die freigegebene Wochensumme und schließt zum Auslöser zurück',()=>{
+ // Synthetic display boundary; the server role split is covered with real logins.
+ const week={weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:386000,currentlyUnpricedItemCount:0};
+ const withDays={...week,days:[{date:'2026-11-16',netCents:142000},{date:'2026-11-17',netCents:168000},{date:'2026-11-18',netCents:76000}]};
+ const read=vi.fn(async()=>({code:'OK' as const,data:week}));
+ const ui=(data:typeof week)=> <OfficeWeekControl initial={{code:'OK',data}} read={read} today="2026-11-18"/>;
+ const view=render(ui(withDays));
+ const opener=screen.getByRole('button',{name:'Diese Woche fertig – Liste öffnen'});
+ expect(opener).toHaveTextContent('3.860,00');
+ fireEvent.click(opener);
+ const sheet=screen.getByRole('dialog',{name:'Diese Woche fertig'});
+ expect(within(sheet).getByRole('table')).toBeVisible();
+ expect(within(sheet).getByRole('rowheader',{name:/Mittwoch/})).toHaveTextContent('bis jetzt');
+ expect(within(sheet).getByRole('row',{name:/Mittwoch/})).toHaveTextContent('3.860,00');
+ fireEvent.click(within(sheet).getByRole('button',{name:'Schließen'}));
+ expect(opener).toHaveFocus();
+ view.rerender(ui(week));
+ fireEvent.click(opener);
+ const limited=screen.getByRole('dialog',{name:'Diese Woche fertig'});
+ expect(within(limited).getByText(/3\.860,00/)).toBeVisible();
+ expect(within(limited).queryByRole('table')).not.toBeInTheDocument();
+ expect(within(limited).queryByRole('img')).not.toBeInTheDocument();
+ expect(read).not.toHaveBeenCalled();
+});
 
 it('shows a concrete source notice and opens the same real order path instead of hiding the missing proposal',()=>{
  const title=SHIPPING_FEE_COPY.proposalMissing('A-2026-0001',false,'freigabe');
@@ -266,8 +292,8 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   it("keeps the complete field layout code hidden behind the planned stage-2 connection", async () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields], layout: [...dashboard.layout], defaultLayout: [...dashboard.defaultLayout], allowedFields: [...dashboard.allowedFields] }, projection }} />);
 
-    expect(screen.getByRole("button", { name: "Anpassen · geplant" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Bündeln · geplant" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Anpassen · geplant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Bündeln · geplant" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Felder zuordnen" })).not.toBeInTheDocument();
     expect(actionPorts.savePreferences).not.toHaveBeenCalled();
   });

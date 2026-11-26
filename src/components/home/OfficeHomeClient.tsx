@@ -4,7 +4,7 @@ const CommunicationPanel=dynamic(()=>import('@/components/communication/Communic
 import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY,ORDER_STATION_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { confirmInvoiceHandoverAction,listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -56,7 +56,7 @@ function actionType(item: TodayItem): HandlungsArt { return item.urgency === "co
 function reminderLabel(value: string) { return `Aufgeschoben bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))} · zählt weiter mit`; }
 function assignmentDeadline(value?: string) { return value ? `Frist ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`))}` : "bis erledigt"; }
 
-export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
+export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { model: OfficeHomeModel; ports: OfficeHomePorts; weekControl?:ReactNode }) {
   const [polled,setPolled]=useState<{base:OfficeHomeModel;value:OfficeHomeModel}|null>(null);
   const model=polled?.base===initialModel?polled.value:initialModel;
   const openOrder = useOverlayStore((state) => state.openOrder);
@@ -149,7 +149,7 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     onHaupt: (index) => { const item = keyboardItems[index]?.item; if (item) primary(item); },
     onSpaeter: (index) => { const item = keyboardItems[index]?.item; if (item) setLater(item); },
   });
-  if (model.kind === "no_areas") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art="leer" text="Noch keine Bereiche freigegeben" /></section>;
+  if (model.kind === "no_areas") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" werkzeug={weekControl} /><Zustand art="leer" text="Noch keine Bereiche freigegeben" /></section>;
   if (model.kind === "denied" || model.kind === "error") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art={model.kind === "error" ? "fehler" : "gesperrt"} text={model.kind === "error" ? "Aufträge konnten nicht geladen werden" : "Du kannst den Tagesbestand nicht öffnen."} aktion={model.kind === "error" ? { text: "Erneut laden", onClick: () => router.refresh() } : undefined} /></section>;
 
   const canStartOrder = model.canCreateOrder && !permissionsLoading && hasArea("eingang");
@@ -228,7 +228,7 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
   return <section data-testid="rolf-v11-home" data-spec-id="tag">
     {model.kind==='partial'?<Hinweis ton="warn">{PAGE_READ_COPY.partial}<Button art="leise" icon="refresh" text={PAGE_READ_COPY.reload} onClick={()=>router.refresh()}/></Hinweis>:null}
     <IntakeDraftList readDrafts={readHomeIntakeDrafts} discardDraft={discardIntakeDraftAction} />
-    <SeitenKopf titel="Der Tag" werkzeug={<div className="kr-schnellleiste"><Button data-spec-id="tag.anpassen" art="leise" icon="grid" text="Anpassen · geplant" disabled onClick={() => { setLayout(model.dashboard.layout); setCustomize(true); setMessage(""); }} /><Button art="leise" icon="layers" text="Bündeln · geplant" disabled /></div>} />
+    <SeitenKopf titel="Der Tag" werkzeug={weekControl} />
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}

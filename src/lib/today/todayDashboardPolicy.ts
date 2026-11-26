@@ -72,6 +72,26 @@ export function readTodayCalendar(now=new Date()){
  return {readStartedAt:now.toISOString(),today:dateKey(day),throughDate:dateKey(addCalendarDays(day,7))};
 }
 
+/** Expand successful daily totals within the reported Berlin week. */
+export function projectTodayProductionWeek(week:TodayProductionWeek,today:string){
+ const first=parseDateKey(week.weekStart);
+ if(!week.days||!first||!parseDateKey(today)||dateKey(addCalendarDays(first,7))!==week.weekEndExclusive)return null;
+ const last=week.days.reduce((latest,day)=>day.date>latest?day.date:latest,today);
+ const valueByDay=new Map(week.days.map(day=>[day.date,day.netCents]));
+ const rows:Array<{date:string;netCents:number;runningCents:number}>=[];
+ let runningCents=0;
+ for(let offset=0;offset<7;offset++){
+  const date=dateKey(addCalendarDays(first,offset));
+  if(date>last)break;
+  // A successful complete aggregate has no value on days without a snapshot.
+  const netCents=valueByDay.get(date)??0;
+  runningCents+=netCents;
+  if(!Number.isSafeInteger(runningCents))return null;
+  rows.push({date,netCents,runningCents});
+ }
+ return rows;
+}
+
 function nextWorkday(day: CalendarDay): CalendarDay {
   let candidate = addCalendarDays(day, 1);
   while ([0, 6].includes(new Date(Date.UTC(candidate.year, candidate.month - 1, candidate.day)).getUTCDay())) candidate = addCalendarDays(candidate, 1);

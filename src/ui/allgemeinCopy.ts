@@ -85,6 +85,23 @@ export const DIALOG_LOAD_COPY={unavailable:'Der Dialog hat sich nicht geladen �
 /** PLAN_LADEZEIT E3: only stale model facts use these refresh messages. */
 export const TODAY_MODEL_COPY={homeTitle:'Der Tag',cardRefreshing:'Diese Karte holt sich gerade den neuesten Stand.',reload:'Jetzt laden',mainRefreshing:'Ich hole gerade den neuesten Stand – dein nächster Schritt erscheint gleich.',rebuildButton:'Startseite neu aufbauen',rebuildRunning:'Ich baue die Startseite gerade neu auf – das dauert ein paar Sekunden.',rebuildDone:'Die Startseite ist neu aufgebaut.'} as const;
 export const PAGE_READ_COPY={orderIncomplete:(number:string)=>`Auftrag ${number} ist gerade nicht lesbar · öffne den Auftrag.`,loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",qualificationUnknown:"Den Status kann ich gerade nicht laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null.",refreshLeaseInvalid:(seconds:number)=>`Du kannst die Nachlauf-Frist nur zwischen 1 und ${seconds} Sekunden speichern.`,refreshLeaseTooLong:(seconds:number)=>`Du kannst die Nachlauf-Frist auf höchstens ${seconds} Sekunden setzen.`} as const;
+export const TODAY_WEEK_COPY={
+ title:'Diese Woche fertig',
+ open:'Diese Woche fertig – Liste öffnen',
+ header:(amount:string)=>'Diese Woche fertig: '+amount,
+ close:'Schließen',
+ workshop:'Werkstatt',
+ total:'Fertig gemeldeter Auftragswert',
+ since:'seit Montag',
+ workday:'Werkstatttag',
+ daily:'Tageswert',
+ running:'Wochenstand',
+ graph:'Tagesmeldungen und kumulierter Auftragswert',
+ method:'Berechnungsgrundlage',
+ today:'bis jetzt',
+ source:'Die Summe enthält die Nettowerte der Fertigmeldungen seit Montag. Heute fertig gemeldete Aufträge fließen in den heutigen Tageswert ein.',
+ methodBody:'Die Wochenübersicht übernimmt die Tageswerte der Fertigmeldungen. Heute neu fertig gemeldete Aufträge fließen mit ihrem Nettowert in den laufenden Tag ein. Zahlungseingänge werden separat erfasst.',
+} as const;
 export const KREILE_KOPF_KUERZEL = 'GK';
 
 /** Wortlaut der Eingabewähler aus dem eingefrorenen Owner-Design. */
