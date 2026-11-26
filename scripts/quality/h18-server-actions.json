@@ -213,6 +213,9 @@
     "src/app/actions/start.actions.ts#notifyAdminPinReset": [
       "src/test/h18_settings_actions.integration.test.ts"
     ],
+    "src/app/actions/today.actions.ts#readTodayOwnNoteAction": [
+      "src/test/acceptance/a1_notiz.integration.test.ts"
+    ],
     "src/app/actions/today.actions.ts#saveTodayOwnNotesAction": [
       "src/test/acceptance/a1_notiz.integration.test.ts"
     ],

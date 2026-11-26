@@ -9,9 +9,13 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {liesAufgabenFuerTag} from '@/modules/tasks/server-public';
 import {TODAY_OWN_NOTE_COPY} from '@/ui/allgemeinCopy';
 
+const replayDb=process.env.DATABASE_URL;
+if(!replayDb||replayDb!==process.env.H18_EXPECTED_DATABASE_URL||new URL(replayDb).hostname!=='127.0.0.1')
+ throw Error('TEST_TODAY_NOTE_LOOPBACK_REPLAY_REQUIRED');
+
 it('B-20 saves one own daily task and keeps the note out of other logins and the shared Today list',async()=>{
  const owner=await createFixture(['auftraege'],'werkstatt');
- const empty=await withSession(owner,readTodayOwnNoteAction);
+ const empty=await withSession(owner,()=>readTodayOwnNoteAction());
  if(empty.code!=='OK')throw Error('TEST_TODAY_NOTE_LOAD');
  const text='TEST private Tagesnotiz '+crypto.randomUUID();
  const input={text,day:empty.note.day,version:0};
@@ -21,8 +25,8 @@ it('B-20 saves one own daily task and keeps the note out of other logins and the
  const replacement=text+' ergänzt';
  const changed=await withSession(owner,()=>saveTodayOwnNotesAction({...input,text:replacement,version:1}));
  expect(changed).toEqual({code:'OK',note:{...input,text:replacement,version:2,completed:false}});
- expect(await withSession(owner,readTodayOwnNoteAction)).toEqual(changed);
- expect(await withSession(full,readTodayOwnNoteAction)).toMatchObject({code:'OK',note:{version:0,text:''}});
+ expect(await withSession(owner,()=>readTodayOwnNoteAction())).toEqual(changed);
+ expect(await withSession(full,()=>readTodayOwnNoteAction())).toMatchObject({code:'OK',note:{version:0,text:''}});
  const rows=await sql`SELECT id::text,client_key::text,art,bezug_typ,fuer_login::text,erstellt_von::text,notiz,version
   FROM public.tasks WHERE tenant_id=${tenant} AND erstellt_von=${owner.actorId}::uuid`;
  expect(rows).toHaveLength(1);
@@ -44,7 +48,7 @@ it('B-20 saves one own daily task and keeps the note out of other logins and the
  }
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:task.id,version:2,note:null}))).toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(owner,()=>completeIntakeTaskAction({taskId:task.id,version:2,note:null}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
- expect(await withSession(owner,readTodayOwnNoteAction)).toMatchObject({code:'OK',note:{version:3,text:'',completed:true}});
+ expect(await withSession(owner,()=>readTodayOwnNoteAction())).toMatchObject({code:'OK',note:{version:3,text:'',completed:true}});
  const events=await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND payload::text LIKE ${'%'+task.id+'%'}`;
  expect(events).toHaveLength(0);
 });
