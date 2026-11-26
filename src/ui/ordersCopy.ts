@@ -45,7 +45,7 @@ export const ORDER_CONTENT_COPY = {
   catalogMissing: 'Diese Katalogleistung gibt es nicht mehr · wähl eine aus der Liste.',
   catalogInactive: (name:string)=>`Die Katalogleistung ${name} ist nicht mehr aktiv · wähl eine andere.`,
   invoiceAlreadyIssued: (nummer: string) => `Rechnung ${nummer} ist schon ausgestellt. Korrigiere zuerst die Rechnung.`,
-  phoneExtraWorkApprovalUnavailable: "Die telefonische Zusage zur Mehrarbeit konnte nicht gespeichert werden. Versuche es erneut.",
+  extraWorkApprovalUnavailable: "Die Zusage zur Mehrarbeit konnte nicht gespeichert werden. Versuche es erneut.",
   workTimeChanged: "Die Arbeitszeit wurde inzwischen schon korrigiert. Lade die Buchungen neu.",
 };
 export const ORDER_ITEM_COMPLETION_COPY = {

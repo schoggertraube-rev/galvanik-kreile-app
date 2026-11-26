@@ -156,11 +156,13 @@ type FreigabePosition = Readonly<{ lineId: string; lineVersion: number }>;
 type Mehrarbeitsfreigabe = Readonly<{
   approvedNetAmountCents: number;
   positions: readonly FreigabePosition[];
-  channel: "mail" | "telefon";
   approvedAt: string;
   approvedBy: string;
   confirmationText: string;
-}>;
+}> & (
+  | { channel: "telefon"; intakeItemId?: never }
+  | { channel: "mail"; intakeItemId: string }
+);
 
 export function freigabeDecktPosition(freigabe: Mehrarbeitsfreigabe, position: FreigabePosition): boolean {
   return freigabe.positions.some(belegt => belegt.lineId === position.lineId && belegt.lineVersion === position.lineVersion);
@@ -176,14 +178,19 @@ function istFreigabePosition(wert: unknown): wert is FreigabePosition {
 
 export function leseMehrarbeitsfreigabe(wert: unknown): Mehrarbeitsfreigabe | null {
   if (typeof wert !== "object" || wert === null || Array.isArray(wert)) return null;
-  const { approvedNetAmountCents, positions, channel, approvedAt, approvedBy, confirmationText } = wert as Record<string, unknown>;
+  const { approvedNetAmountCents, positions, channel, intakeItemId, approvedAt, approvedBy, confirmationText } = wert as Record<string, unknown>;
   if (typeof approvedNetAmountCents !== "number" || !Number.isSafeInteger(approvedNetAmountCents) || approvedNetAmountCents < 0
     || !Array.isArray(positions) || !positions.length || !positions.every(istFreigabePosition)
     || new Set(positions.map(position => position.lineId)).size !== positions.length
-    || (channel !== "mail" && channel !== "telefon")
     || typeof approvedAt !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(approvedAt)
     || Number.isNaN(Date.parse(approvedAt)) || new Date(approvedAt).toISOString() !== approvedAt
     || typeof approvedBy !== "string" || !approvedBy.trim()
     || typeof confirmationText !== "string" || !confirmationText.trim()) return null;
-  return { approvedNetAmountCents, positions, channel, approvedAt, approvedBy, confirmationText };
+  const belegdaten = { approvedNetAmountCents, positions, approvedAt, approvedBy, confirmationText };
+  if (channel === "telefon" && intakeItemId === undefined) return { ...belegdaten, channel };
+  if (channel === "mail" && typeof intakeItemId === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(intakeItemId)) {
+    return { ...belegdaten, channel, intakeItemId };
+  }
+  return null;
 }

@@ -108,7 +108,8 @@ test("Mehrarbeitsfreigaben brauchen einen vollständigen, unveränderlichen Bele
   for (const fehler of [
     { positions: [] }, { positions: [{ lineId }] }, { positions: [{ lineId, lineVersion: 1.5 }] },
     { approvedNetAmountCents: -1 }, { approvedAt: "2026-02-30T08:00:00.000Z" },
-    { approvedBy: " " }, { channel: "unbekannt" }, { confirmationText: "" },
+    { approvedBy: " " }, { channel: "unbekannt" }, { channel: "mail" },
+    { intakeItemId: randomUUID() }, { confirmationText: "" },
   ]) {
     await expect(schreibeBeleg({ ...beleg, ...fehler })).rejects.toMatchObject(constraint);
   }

@@ -685,7 +685,12 @@ BEGIN
             && @.lineVersion.floor() == @.lineVersion
             && @.lineVersion >= 1 && @.lineVersion <= 2147483647)
         $positions$) = payload->'positions'
-        AND (payload->>'channel') IN ('mail', 'telefon')
+        AND CASE payload->>'channel'
+          WHEN 'mail' THEN jsonb_typeof(payload->'intakeItemId') = 'string'
+            AND (payload->>'intakeItemId') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          WHEN 'telefon' THEN NOT (payload ? 'intakeItemId')
+          ELSE false
+        END
         AND jsonb_typeof(payload->'approvedAt') = 'string'
         AND (payload->>'approvedAt') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
         AND pg_input_is_valid(payload->>'approvedAt', 'timestamptz')

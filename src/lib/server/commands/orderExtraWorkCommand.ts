@@ -2,7 +2,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea } from "@/lib/auth/authorizationContract";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { canViewOrderCard } from "@/lib/server/orderCardRead";
 import { leseMehrarbeitsfreigabe, ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -56,22 +56,42 @@ export type ChangeOrderItemExtraWorkResult =
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
-export type RecordPhoneExtraWorkApprovalInput = Omit<
-  NonNullable<ReturnType<typeof leseMehrarbeitsfreigabe>>, "channel" | "approvedAt" | "approvedBy"
+export type RecordPhoneExtraWorkApprovalInput = Pick<
+  NonNullable<ReturnType<typeof leseMehrarbeitsfreigabe>>, "approvedNetAmountCents" | "positions" | "confirmationText"
 > & {
   orderId: string;
   clientEventId: string;
 };
 
-export type RecordPhoneExtraWorkApprovalResult =
+export type RecordExtraWorkApprovalInput = RecordPhoneExtraWorkApprovalInput & (
+  | { channel: "telefon" }
+  | { channel: "mail"; intakeItemId: string }
+);
+
+export type ReadLinkedApprovalMail = (
+  tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, intakeItemId: string,
+) => Promise<{ id: string; orderId: string; customerId: string } | null>;
+
+export type RecordExtraWorkApprovalResult =
   | { code: "OK"; eventId: string; replayed: boolean }
   | { code: "INVOICE_ISSUED"; invoiceNumber: string }
   | { code: "UNAVAILABLE"; message: string }
   | { code: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" };
 
-export async function recordPhoneExtraWorkApproval(input: unknown): Promise<RecordPhoneExtraWorkApprovalResult> {
+export type RecordPhoneExtraWorkApprovalResult = RecordExtraWorkApprovalResult;
+
+export function recordPhoneExtraWorkApproval(input: unknown): Promise<RecordExtraWorkApprovalResult> {
+  return recordExtraWorkApproval(
+    input && typeof input === "object" && !Array.isArray(input) ? { ...input, channel: "telefon", intakeItemId: undefined } : input,
+  );
+}
+
+export async function recordExtraWorkApproval(
+  input: unknown,
+  readLinkedApprovalMail?: ReadLinkedApprovalMail,
+): Promise<RecordExtraWorkApprovalResult> {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" };
-  const { orderId, clientEventId, approvedNetAmountCents, positions: requestedPositions, confirmationText } =
+  const { orderId, clientEventId, approvedNetAmountCents, positions: requestedPositions, confirmationText, channel, intakeItemId } =
     input as Record<string, unknown>;
   if (typeof clientEventId !== "string" || !UUID_PATTERN.test(clientEventId)
     || typeof orderId !== "string" || orderId !== orderId.trim() || !orderId || orderId.length > 128) {
@@ -81,17 +101,18 @@ export async function recordPhoneExtraWorkApproval(input: unknown): Promise<Reco
     const authorization = await resolveAuthorization();
     if (!authorization.ok) {
       return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-        ? { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.phoneExtraWorkApprovalUnavailable }
+        ? { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.extraWorkApprovalUnavailable }
         : { code: "UNAUTHENTICATED" };
     }
     const auth = authorization.data;
-    if (!canViewOrderCard(auth) || !hasAuthorizationArea(auth, "preise") || auth.packageSwitches?.p3_werkstatt !== true) {
+    if (!canViewOrderCard(auth) || !hasAuthorizationArea(auth, "preise") || auth.packageSwitches?.p3_werkstatt !== true
+      || (channel === "mail" && (!hasAuthorizationArea(auth, "mails") || !hasAuthorizationArea(auth, "auftraege")))) {
       return { code: "FORBIDDEN" };
     }
 
     const approval = leseMehrarbeitsfreigabe({
       approvedNetAmountCents, positions: requestedPositions, confirmationText,
-      channel: "telefon", approvedBy: auth.userId, approvedAt: new Date().toISOString(),
+      channel, intakeItemId, approvedBy: auth.userId, approvedAt: new Date().toISOString(),
     });
     if (!approval) return { code: "VALIDATION_ERROR" };
     const payload = {
@@ -122,12 +143,18 @@ export async function recordPhoneExtraWorkApproval(input: unknown): Promise<Reco
         return { code: "CONFLICT" };
       }
 
-      const [order] = await tx.execute<{ version: number; station: string }>(sql`
-        SELECT version, station FROM public.orders
+      const [order] = await tx.execute<{ version: number; station: string; customer_id: string }>(sql`
+        SELECT version, station, customer_id FROM public.orders
         WHERE tenant_id = ${auth.tenantId} AND id = ${orderId}
         FOR UPDATE
       `);
       if (!order) return { code: "NOT_FOUND" };
+      if (payload.channel === "mail") {
+        if (!readLinkedApprovalMail) throw Error("ORDER_EXTRA_WORK_APPROVAL_MAIL_PORT_MISSING");
+        const original = await readLinkedApprovalMail(tx, auth, payload.intakeItemId);
+        if (!original || original.id !== payload.intakeItemId
+          || original.orderId !== orderId || original.customerId !== order.customer_id) return { code: "CONFLICT" };
+      }
       const invoiceNumber = await readOrderScrapInvoiceNumberInTransaction(tx, auth.tenantId, orderId);
       if (invoiceNumber) return { code: "INVOICE_ISSUED", invoiceNumber };
 
@@ -158,8 +185,8 @@ export async function recordPhoneExtraWorkApproval(input: unknown): Promise<Reco
       return { code: "OK", eventId: written.id, replayed: false };
     });
   } catch (error) {
-    console.error("[ORDER_PHONE_EXTRA_WORK_APPROVAL_FAILED]", error instanceof Error ? error.name : "UnknownError");
-    return { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.phoneExtraWorkApprovalUnavailable };
+    console.error("[ORDER_EXTRA_WORK_APPROVAL_FAILED]", error instanceof Error ? error.name : "UnknownError");
+    return { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.extraWorkApprovalUnavailable };
   }
 }
 
