@@ -36,7 +36,7 @@ import {
 } from "@/modules/eingang/public";
 
 import { usePermissions } from "@/lib/auth/PermissionsContext";
-import { canCompleteTaskArea, isAppRole } from "@/lib/auth/authorizationContract";
+import { canCompleteTaskArea,canManageServiceCatalog,isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {type ComplaintPorts} from '@/modules/eingang/public';
 import {getComplaintDialogAction,reklamationAusfuehrenAction,nacharbeitAnlegenAction,sendeReklamationErgebnisAction,sendeNacharbeitBegleitscheinAction} from '@/app/actions/complaints.actions';
@@ -218,6 +218,7 @@ export function GlobalCreateAppAdapter() {
         canManageMoney: hasArea("zahlungen"),
         canManageSupplierBank: hasArea("buchhaltung"),
         canManagePrices: hasArea("preise"),
+        catalogSettingsHref:canManageServiceCatalog(hasArea)?'/settings?tab=catalog':undefined,
         canDecide:hasArea("entscheiden"),
         showPrimaryTrigger: false,
         roleLabel,

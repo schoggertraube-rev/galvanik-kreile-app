@@ -22,6 +22,7 @@ import {
   type SystemSettingsSnapshot,
 } from "@/modules/fundament/public";
 import type { CatalogService } from "@/modules/katalog/public";
+import {canManageServiceCatalog} from '@/lib/auth/authorizationContract';
 import { orderPositionSurfaceLabel, orderPositionUnitLabel } from "@/lib/orderPositionContract";
 import { runServerAction } from "@/lib/client/runServerAction";
 import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog";
@@ -71,11 +72,13 @@ export function SettingsAdminClient({
   initialServices,
   catalogLocked,
   returnTo = null,
+  openCatalog=false,
 }: {
   initialSnapshot: SystemSettingsSnapshot;
   initialServices: CatalogService[];
   catalogLocked: string | null;
   returnTo?: string | null;
+  openCatalog?:boolean;
 }) {
   const [rebuildingToday,setRebuildingToday]=useState(false);
   const { canManageCompany, canManageLogins } = initialSnapshot.capabilities ?? {
@@ -84,8 +87,10 @@ export function SettingsAdminClient({
     canManageSystem: true,
   };
   const canManageFinancial = initialSnapshot.capabilities?.canManageFinancial === true;
+  const canManageCatalog=canManageServiceCatalog(area=>area==='einstellungen'?canManageCompany:canManageFinancial);
   const [tab, setTab] = useState<Tab>(
-    canManageCompany ? "company" : canManageLogins || initialSnapshot.users.some((user) => user.isCurrent) ? "users" : "company",
+    openCatalog&&canManageCatalog ? "catalog" : canManageCompany ? "company" :
+      canManageLogins || initialSnapshot.users.some((user) => user.isCurrent) ? "users" : "company",
   );
   const [company, setCompany] = useState<CompanySettingsInput>({
     companyName: initialSnapshot.company.companyName ?? "",
@@ -368,7 +373,7 @@ export function SettingsAdminClient({
 
     {(canManageCompany || canManageLogins || currentUser) ? <nav aria-label="Einstellungsbereiche">
       {canManageCompany ? <button aria-pressed={tab === "company"} onClick={() => setTab("company")}>Firmendaten</button> : null}
-      {canManageCompany && canManageFinancial ? <button aria-pressed={tab === "catalog"} onClick={() => setTab("catalog")}>Leistungskatalog</button> : null}
+      {canManageCatalog ? <button aria-pressed={tab === "catalog"} onClick={() => setTab("catalog")}>Leistungskatalog</button> : null}
       {(canManageLogins || currentUser) ? <button aria-pressed={tab === "users"} onClick={() => setTab("users")}>Logins & Rechte</button> : null}
     </nav> : null}
     {message ? <p role="status" className={styles.message}>{message}</p> : null}
@@ -393,7 +398,7 @@ export function SettingsAdminClient({
     </section> : null}
 
     {canManageCompany?<div hidden={tab!=="company"}><EmailTemplatesEditor /></div>:null}
-    {canManageCompany && canManageFinancial && tab === "catalog" ? <section><h2>Leistungskatalog</h2><div className={styles.grid}>
+    {canManageCatalog && tab === "catalog" ? <section><h2>Leistungskatalog</h2><div className={styles.grid}>
       <label>Bezeichnung<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
       <label>Oberfläche<input value={draft.surface} onChange={(event) => setDraft({ ...draft, surface: event.target.value })} /></label>
       <label>Einheit<input value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value })} /></label>

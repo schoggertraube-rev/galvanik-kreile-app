@@ -57,4 +57,5 @@ export type IntakePriceSuggestion = {
 export type IntakeSuggestions = {
   term: IntakeTermSuggestion | null;
   prices: IntakePriceSuggestion[];
+  missingLeadTimes?: Array<{ positionKey: string; catalogServiceId: string | null; message: string }>;
 };

@@ -4,7 +4,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: vi.fn() }));
 
 import { plusWorkingDays, workingDaysBetween } from "@/lib/domain/workingDays";
-import { calculateTermSuggestion, choosePriceSuggestion } from "@/lib/server/intakeSuggestions";
+import { calculateTermSuggestion, choosePriceSuggestion, readIntakeSuggestions } from "@/lib/server/intakeSuggestions";
+import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const position = {
   key: "position-1",
@@ -15,6 +16,8 @@ const position = {
   unit: "Stück",
   unitPriceCents: null,
 };
+const catalogId='11111111-1111-4111-8111-111111111112';
+const catalog={id:catalogId,name:position.name,surface:'verzinken',unit:'Stück',net_price_cents:1200,standard_lead_time_working_days:3};
 
 const history = (overrides: Partial<{
   customerId: string;
@@ -50,8 +53,8 @@ describe("intake suggestions", () => {
     const result = calculateTermSuggestion({
       today: "2026-10-26",
       wishDate: "2026-10-30",
-      positions: [{ ...position, unitPriceCents: 80_000 }],
-      catalogById: new Map(),
+      positions: [{ ...position, catalogServiceId:catalogId, unitPriceCents: 80_000 }],
+      catalogById: new Map([[catalogId,catalog]]),
       dailyOutputEur: 800,
       settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110},openOrders:[],priority:false,processingWeeks:1,
     });
@@ -62,6 +65,22 @@ describe("intake suggestions", () => {
       rating: "nicht_machbar",
       bufferWorkingDays: -2,
     });
+  });
+
+  it('meldet beim Freitext die fehlende Durchlaufzeit und behält den belegten Preisvorschlag',async()=>{
+    // Synthetische DB-Zeilen, der vorhandene Leser und beide Ableitungen laufen echt.
+    const customerId='11111111-1111-4111-8111-111111111111';
+    const execute=vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{
+      customer_id:customerId,customer_name:'TEST Kunde GmbH',item_name:position.name,catalog_service_id:null,
+      surface_requested:position.surfaceRequested,unit:position.unit,quantity:2,unit_price_cents:1200,invoice_date:'2026-10-01',
+    }]).mockResolvedValueOnce([]).mockResolvedValueOnce([{vorrang:false}]);
+    vi.mocked(withPrivilegedTenantTransaction).mockImplementationOnce(async (_auth,work)=>work({execute,select:vi.fn(),update:vi.fn()}));
+    const result=await readIntakeSuggestions({tenantId:'TEST-Freitext',userId:customerId,active:true,role:'buero',
+      displayName:'TEST Login',areas:['preise'],permissions:['perm_view_prices']},
+      {kind:'ORDER',customerId,wishDate:null,handoverMode:'pickup',positions:[position]},
+      async()=>({versandpufferArbeitstage:0,terminKapazitaet:null}));
+    expect(result).toEqual({term:null,missingLeadTimes:[{positionKey:position.key,catalogServiceId:null,
+      message:'Durchlaufzeit für Flansch groß fehlt'}],prices:[expect.objectContaining({source:'gleich',unitPriceCents:1200,lineTotalCents:2400})]});
   });
 
   it("prefers the newest exact customer case", () => {
