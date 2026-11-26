@@ -33,7 +33,7 @@ export function OfficeInvoiceControl({sheet,money,today,onReload,onOpenInvoice}:
  const incomplete=!knownTotal||sheet.incomplete;
  return <>
   <button type="button" className={styles.tile} aria-label={TODAY_INVOICE_COPY.title} onClick={event=>setOpener(event.currentTarget)}>
-   <span className={styles.tileTitle}>{TODAY_INVOICE_COPY.title}<Icon name="file"/></span>
+   <span className={styles.tileTitle}>{TODAY_INVOICE_COPY.title}<Icon name="file" className="ic"/></span>
    {knownTotal?<><strong>{formatEuro(money.openCents)}</strong><span>{TODAY_INVOICE_COPY.openInvoices(money.openCount)}</span>
     {money.overdueCount>0&&<span className={styles.tileOverdue}>{formatEuro(money.overdueCents)} · {TODAY_INVOICE_COPY.overdueInvoices(money.overdueCount)}</span>}</>:
     <span>{PAGE_READ_COPY.qualificationUnknown}</span>}
@@ -52,7 +52,10 @@ export function OfficeInvoiceControl({sheet,money,today,onReload,onOpenInvoice}:
     {sheet.rows.length>0&&<ul className={styles.rows}>{sheet.rows.map(row=>{
      const amount=formatEuro(row.amountCents),due=invoiceDue(row,today);
      const {customerId,order}=row;
-     const line=<><strong>{row.customerName} · {amount}</strong><span>{due} · {row.number}</span></>;
+     const line=<>
+      <strong className={styles.headline}>{row.customerName} · <span>{amount}</span></strong>
+      <span className={styles.meta}><span className={styles.due}>{due}</span> · {row.number}</span>
+     </>;
      return <li key={row.id} className={styles.row} data-overdue={row.overdue===true}>
       {row.openOriginal?<button type="button" className={styles.entry} onClick={()=>onOpenInvoice(row.id)}
         aria-label={TODAY_INVOICE_COPY.open(row.number,row.customerName,amount,due)}>{line}</button>:
