@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 9,
-    "server_action_groups": 45,
+    "server_action_groups": 46,
     "kpi_definitions": 0,
     "provider_connections": 9,
     "nav_links_without_page": 3,
-    "total": 81
+    "total": 82
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1267,6 +1267,18 @@
       "open_reason": "Approved Lager P1 command composition through existing module and TaskWriter. Local native integration is in progress; no independent full-step acceptance claimed.",
       "visible": false,
       "reachable": true
+    },
+    {
+      "stable_id": "server-actions.takt",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/takt.actions.ts",
+      "exported_functions": [
+        "starteTaktJobNeu"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "S38b-1c action uses the existing Takt reservation for an authenticated diagnostic restart. Activation of its Today registry source follows the S38b-1b merge.",
+      "visible": false,
+      "reachable": false
     },
     {
       "stable_id": "server-actions.lager-material",

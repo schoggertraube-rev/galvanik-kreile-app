@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "owner": "AP-EIN Teil 4 – Aufgabe",
   "publicExports": [
+    "@/modules/tasks/server-public#liesAufgabenFuerTag",
+    "@/modules/tasks/server-public#projiziereAufgabenFuerTag",
     "@/modules/tasks/server-public#tagQuellen",
     "@/modules/tasks/server-public#synchronizeLagerEntwurfTask",
     "@/modules/tasks/server-public#synchronizeLagerBestandTask",

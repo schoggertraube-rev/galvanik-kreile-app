@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "74b13190d8822c5c736c5bac911ecae105c96c13158c1bac9cc84f636a86baee",
+  "inventorySha256": "84982025355aaacd372c8455a919971d9f11acaf71692318fecccaf422c22d9f",
   "testedWriteActions": {
     "src/app/actions/lager-material.actions.ts#leseAuftragsmaterial": [
       "src/test/acceptance/material_rechnung.integration.test.ts"
@@ -488,6 +488,9 @@
     ],
     "src/app/actions/lager.actions.ts#bestaetigeLagerEtikettZuordnungAction": [
       "src/test/acceptance/lager_stammdaten.integration.test.ts"
+    ],
+    "src/app/actions/takt.actions.ts#starteTaktJobNeu": [
+      "src/test/acceptance/s38b_takt_outage.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

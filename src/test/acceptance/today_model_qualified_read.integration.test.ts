@@ -38,7 +38,8 @@ import {APP_ROLES,ACCESS_AREAS,normalizeAccessAreasForRole,type AccessArea} from
 import {GET as getModelRoute} from '@/app/api/heute/modell/route';
 import {GET as taktGET} from '@/app/api/takt/route';
 import {GET as rebuildGET} from '@/app/api/heute/neuaufbau/route';
-import {fuehreTaktAus} from '@/modules/takt/server-public';
+import {fuehreTaktAus,liesTaktAusfallZeilen,projiziereTaktAusfallZeilen} from '@/modules/takt/server-public';
+import {liesAufgabenFuerTag,projiziereAufgabenFuerTag} from '@/modules/tasks/server-public';
 
 
 // Public Action always resolves the actual request actor and its server clock.
@@ -52,6 +53,10 @@ function withoutReadClock(dashboard:import('@/lib/server/todayDashboard').TodayD
  expect(dashboard.calendar).toBeTruthy();
  return {...dashboard,calendar:{...dashboard.calendar,readStartedAt:undefined}};
 }
+const liveTagQuellen={
+ aufgaben:{live:liesAufgabenFuerTag,ausModell:projiziereAufgabenFuerTag},
+ taktAusfall:{live:liesTaktAusfallZeilen,ausModell:projiziereTaktAusfallZeilen},
+};
 
 // This file's H18 classification is backed by an executable local-DB guard,
 // in addition to the shared harness's stricter tenant and database guard.
@@ -91,7 +96,7 @@ it('qualifies the actual source snapshot and never returns an old payload after 
  const read=()=>withPrivilegedTenantTransaction(auth,tx=>readTodayModelInTransaction(tx,auth,today));
  const initial=await read();expect(initial.code).toBe('EMPTY');
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
- const warm=await read();expect(warm.code).toBe('OK');expect(warm.rows).toHaveLength(9);
+ const warm=await read();expect(warm.code).toBe('OK');expect(warm.rows).toHaveLength(10);
  expect(warm.rows.every(row=>row.fresh===true&&row.payload!==null)).toBe(true);
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-08-04',reason:'TEST qualified model after actual command',clientEventId:globalThis.crypto.randomUUID()};
  const changed=await withSession(full,()=>changeOrderPromisedDueDateAction(input));expect(changed.code).toBe('OK');
@@ -169,12 +174,12 @@ it('E-G1 first full real profile composes the same dashboard from qualified mode
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const modeled=await withSession(full,()=>readModelForCurrentSession());
  expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_MODEL_COMPOSITION_REQUIRED');
- const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt)));
+ const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt),undefined,liveTagQuellen));
  expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  expect(modeled.pending).toBe(false);expect(modeled.incomplete).toBe(false);
 });
 
-it('E-G1 fills all eight productive source kinds and creates the real canonical role/rights profiles',async()=>{
+it('E-G1 fills all nine productive list source kinds and creates the real canonical role/rights profiles',async()=>{
  const order=await readyInvoiceOrder('TEST E-G1 pickup cohort');
  await readyInvoiceOrder('TEST E-G1 shipping cohort','shipping');
  expect(await withSession(full,()=>saveIntakeNoteAction({itemId:globalThis.crypto.randomUUID(),textstand:globalThis.crypto.randomUUID(),text:'TEST E-G1 open secured original'}))).toMatchObject({code:'OK'});
@@ -201,7 +206,7 @@ it('E-G1 fills all eight productive source kinds and creates the real canonical 
  for(const profile of customProfiles)profiles.set(profile.key,await createFixture(profile.areas,'buero'));
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const sources=await sql`SELECT kind,status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:orders.auftrag' ORDER BY kind`;
- expect(sources).toHaveLength(8);expect(sources.every(row=>row.status==='OK')).toBe(true);
+ expect(sources).toHaveLength(9);expect(sources.every(row=>row.status==='OK')).toBe(true);
  for(const row of sources)expect(row.payload).not.toBeNull();
 });
 
@@ -218,7 +223,7 @@ it.each([...APP_ROLES.map(role=>'role-'+role),...APP_ROLES.map(role=>'role-grant
   }
   const modeled=await readModelForCurrentSession();
   expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_G1_MODEL_REQUIRED');
-  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt));
+  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt),undefined,liveTagQuellen);
   expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  });
 });
@@ -303,7 +308,7 @@ it('actual GET keeps the explicit live escape independent of model reads and pro
    expect(result.model.modelRead).toMatchObject({source:'live',pending:false});
    expect(result.model.dashboard.orderActions.rows.length).toBeGreaterThan(0);
    const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_LIVE_EQUALITY_AUTH');
-   const original=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(result.model.dashboard.calendar.readStartedAt)));
+   const original=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(result.model.dashboard.calendar.readStartedAt),undefined,liveTagQuellen));
    expect(JSON.stringify(result.model.dashboard)).toBe(JSON.stringify(original));
    const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
    expect(phases).toContain('today.orders');expect(phases).not.toContain('today.model.read');expect(phases).not.toContain('today.refresh');

@@ -11,6 +11,7 @@ import {tagQuellen as complaintsQuellen} from '@/modules/complaints/server-publi
 import {tagQuellen as quotesQuellen} from '@/modules/quotes/server-public';
 import {tagQuellen as tasksQuellen} from '@/modules/tasks/server-public';
 import {tagQuellen as fundamentQuellen} from '@/modules/fundament/server-public';
+import {tagQuellen as taktQuellen} from '@/modules/takt/server-public';
 import {fuegeTagQuellenZusammen} from '@/lib/today/todaySourceRegistry';
 
 export const TAG_QUELLEN = fuegeTagQuellenZusammen([
@@ -21,6 +22,7 @@ export const TAG_QUELLEN = fuegeTagQuellenZusammen([
  {modul:'quotes',quellen:quotesQuellen},
  {modul:'tasks',quellen:tasksQuellen},
  {modul:'fundament',quellen:fundamentQuellen},
+ {modul:'takt',quellen:taktQuellen},
 ]);
 
 export const TODAY_PROJECTOR_VERSION=2;

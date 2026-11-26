@@ -14,7 +14,8 @@ async function todayModelPorts():Promise<TodayModelReadPorts>{
  const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
  const {readModelPageSettingsInTransaction}=await import('@/modules/fundament/server-public');
  const {projectIntakeMessageSources}=await import('@/modules/eingang/server-public');
- const {projectTaskCalendarSources,projectQuoteFollowupSources}=await import('@/modules/tasks/server-public');
+ const {liesAufgabenFuerTag,projiziereAufgabenFuerTag,projectTaskCalendarSources,projectQuoteFollowupSources}=await import('@/modules/tasks/server-public');
+ const {liesTaktAusfallZeilen,projiziereTaktAusfallZeilen}=await import('@/modules/takt/server-public');
  const {maskComplaintReadResult}=await import('@/modules/complaints/server-public');
  const {quoteOperationContext}=await import('@/lib/server/quoteAuthorization');
  const {quoteV45Capabilities,readV45QuoteRule,v45QuoteFacts}=await import('@/lib/server/v45QuoteRead');
@@ -30,8 +31,13 @@ async function todayModelPorts():Promise<TodayModelReadPorts>{
   }else if(!Array.isArray(source.messages)||!Array.isArray(source.captures)||!source.messages.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version)))throw Error('TODAY_MODEL_MESSAGE_ROWS_INVALID');
   return projectIntakeMessageSources(auth,source as unknown as Parameters<typeof projectIntakeMessageSources>[1]);
  },
- tasks:(auth,value)=>{
-  const source=modelRecord(value);
+ tagQuellen:{
+  aufgaben:{live:auth=>liesAufgabenFuerTag(auth),ausModell:projiziereAufgabenFuerTag},
+  taktAusfall:{live:(auth,jetzt)=>liesTaktAusfallZeilen(auth,jetzt),ausModell:projiziereTaktAusfallZeilen},
+ },
+ taskCalendar:(auth,value)=>{
+  const record=modelRecord(value);
+  const source=modelRecord(record?.kalender)??record;
   if(!source||!['OK','SOURCE_INCOMPLETE'].includes(String(source.code))||!Array.isArray(source.rows)||!Array.isArray(source.missingTaskIds)
    ||!source.rows.every(row=>modelRecord(row)&&modelRecord(row.task)&&typeof row.task.id==='string'&&modelRecord(row.reference)))throw Error('TODAY_MODEL_TASKS_INVALID');
   return projectTaskCalendarSources(auth,source as unknown as Parameters<typeof projectTaskCalendarSources>[1]);

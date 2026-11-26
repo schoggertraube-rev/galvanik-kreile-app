@@ -27,6 +27,7 @@ export {readMailboxFetchState,writeMailboxFetchState} from "./server/systemSetti
 export {
   readAusschussBerechnenInTransaction,
   readBetriebsruheInTransaction,
+  readBetriebswaechterEinstellungenInTransaction,
   readWerkstattKostensatzInTransaction,
   readWerkstattMehrarbeitInTransaction,
   readWerkstattZeitstationInTransaction,

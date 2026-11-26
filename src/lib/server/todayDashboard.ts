@@ -18,6 +18,7 @@ import {hasAnyAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/a
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import {TAG_QUELLEN,TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
+import type {HeuteZeile} from '@/lib/today/todaySourceRegistry';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -57,11 +58,19 @@ export type TodayCollectionNotice = {
 };
 
 export type TodayQuoteActionRow={quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null};
+type TagQuellenLesestand={code:'OK';zeilen:HeuteZeile[]}|{code:'SOURCE_INCOMPLETE'};
+type TodayTagQuellen={aufgaben:TagQuellenLesestand;taktAusfall:TagQuellenLesestand};
+type TodayTagQuellePort={
+ live:(auth:AuthorizationSnapshot,jetzt:Date)=>Promise<TagQuellenLesestand>;
+ ausModell:(auth:AuthorizationSnapshot,value:unknown)=>TagQuellenLesestand;
+};
+type TodayTagQuellenPorts={aufgaben:TodayTagQuellePort;taktAusfall:TodayTagQuellePort};
 export type TodayDashboard = {
   hauptaktion?:U2Read['hauptaktion'];
   hauptaktionsQuelle?:{key:string;id:string;version:number}|null;
   messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:Array<{messageId:string;version:number;read:U2Read}>;missingMessageIds:string[]};
   taskSchedule?:ReturnType<typeof projectIntakeTaskSchedule>;
+  tagQuellen?:TodayTagQuellen;
   quoteSchedule?:ReturnType<typeof projectQuoteSchedule>;
   quoteActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayQuoteActionRow[];missingQuoteIds:string[]};
   calendar?:ReturnType<typeof readTodayCalendar>;
@@ -322,13 +331,17 @@ export async function readTodayQuoteSources(graphAllowed:boolean,readAt:Date){
 function readTodayOrderVersionsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string,ids:readonly string[]){
  return tx.execute<{id:string;version:number}>(sql`SELECT id,version FROM public.orders WHERE tenant_id=${tenantId} AND id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[])`);
 }
+function readTodayTaskCalendar(){
+ return withPageReadPhase('today.tasks',()=>getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]})));
+}
+
 export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
   const diagnosticStarted=Date.now();
   const calendar=readTodayCalendar(readNow),today=calendar.today;
   const access=todaySourceAccess(authorizationReadContext(auth));
   const {orders:ordersAllowed,messages:graphAllowed}=access;
   const quotesRead=readTodayQuoteSources(graphAllowed,readNow);
-  const tasksRead=graphAllowed?withPageReadPhase('today.tasks',()=>getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]}))):null;
+  const tasksRead=graphAllowed?readTodayTaskCalendar():null;
   const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
     withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'})).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
     withPageReadPhase('today.graph',()=>graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
@@ -361,6 +374,7 @@ type CollectedTodaySources=Awaited<ReturnType<typeof collectTodaySources>>;
 /** Composition consumes facts, not the live Action's transport metadata. */
 export type TodayDashboardSources=Omit<CollectedTodaySources,'companyLetter'|'quoteList'|'graph'>&{
  modelStaleOrderIds?:readonly string[];
+ tagQuellen?:TodayTagQuellen;
  graph:Awaited<ReturnType<import('@/modules/eingang/public').IntakeMessagesPorts['list']>>|{code:'SOURCE_INCOMPLETE';message:string};
  companyLetter:{code:'OK';companyName?:string}|{code:'FORBIDDEN'|'SOURCE_INCOMPLETE'};
  quoteList:{code:'OK';quotes:readonly {quoteId:string;version:number}[]}|Exclude<CollectedTodaySources['quoteList'],{code:'OK'}>;
@@ -592,12 +606,10 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
     }
   }
 
-  if(graphAllowed)for(const task of taskSchedule.rows)if(task.state==='active')mainMissing.push('TODAY_TASK_MAIN_BINDING:'+task.id);
-
-
   return {
     hauptaktion,hauptaktionsQuelle,
     calendar,
+    ...(sources.tagQuellen?{tagQuellen:sources.tagQuellen}:{}),
     ...(graphAllowed?{quoteActions,quoteSchedule,taskSchedule,messageActions}:{}),
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
@@ -617,10 +629,13 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
   };
 }
 
-export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>): Promise<TodayDashboard> {
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>,tagQuellenPorts?:TodayTagQuellenPorts): Promise<TodayDashboard> {
   const diagnosticStarted=Date.now();
-  const sources=await collectTodaySources(auth,readComplaints,readQuoteFollowups,readNow,operationalSource);
-  const dashboard=composeTodayDashboard(auth,sources,sources.calendar);
+  const [sources,tagQuellen]=await Promise.all([
+   collectTodaySources(auth,readComplaints,readQuoteFollowups,readNow,operationalSource),
+   tagQuellenPorts&&readLiveTodayTagQuellen(auth,readNow,tagQuellenPorts),
+  ]);
+  const dashboard=composeTodayDashboard(auth,{...sources,tagQuellen},sources.calendar);
   logPageReadPhase('today.model',diagnosticStarted,{rows:dashboard.items.length,actions:dashboard.orderActions?.rows.length??0,missing:dashboard.orderActions?.missingOrderIds.length??0});
   return dashboard;
 }
@@ -684,6 +699,7 @@ const modelReadPhases={
  quote_followups:'today.followups',
  quotes:'today.quotes',
  tasks:'today.tasks',
+ takt_ausfall:'today.taktAusfall',
  company:'today.company',
 } as const;
 type DashboardListInput=keyof typeof modelReadPhases;
@@ -711,6 +727,7 @@ function isVisibleModelInput(auth:AuthorizationSnapshot,access:ReturnType<typeof
  if(kind===modelInputs.money.kind)return access.money||access.invoiceMail;
  if(kind===modelInputs.company.kind)return access.company;
  if(kind===modelInputs.complaints.kind)return access.complaints;
+ if(kind===modelInputs.tasks.kind||kind===modelInputs.takt_ausfall.kind)return hasAnyAuthorizationArea(auth);
  return access.messages && Object.values(modelInputs).some(input=>input.kind===kind);
 }
 
@@ -763,12 +780,22 @@ export type TodayModelReadPorts={
  liveFollowups:()=>Promise<TodayDashboardSources['quoteFollowups']>;
  readSettings:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<{today:TodayReadSettings;page:PageReadSettings|null}>;
  messages:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['graph'];
- tasks:(auth:AuthorizationSnapshot,value:unknown)=>NonNullable<TodayDashboardSources['taskRead']>;
+ tagQuellen:TodayTagQuellenPorts;
+ taskCalendar:(auth:AuthorizationSnapshot,value:unknown)=>NonNullable<TodayDashboardSources['taskRead']>;
  complaints:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['complaints'];
  followups:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['quoteFollowups'];
  quotes:(auth:AuthorizationSnapshot,value:unknown,readAt:Date)=>Pick<TodayDashboardSources,'quoteList'|'quoteReads'>;
 };
 export const modelRecord=(value:unknown):Record<string,unknown>|null=>value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:null;
+
+const tagQuelleUnbekannt:TagQuellenLesestand={code:'SOURCE_INCOMPLETE'};
+async function readLiveTodayTagQuellen(auth:AuthorizationSnapshot,jetzt:Date,ports:TodayTagQuellenPorts):Promise<TodayTagQuellen>{
+ const read=(phase:string,port:TodayTagQuellePort)=>withPageReadPhase(phase,()=>port.live(auth,jetzt)).catch(()=>tagQuelleUnbekannt);
+ const [aufgaben,taktAusfall]=await Promise.all([
+  read(modelInputs.tasks.phase,ports.aufgaben),read(modelInputs.takt_ausfall.phase,ports.taktAusfall),
+ ]);
+ return {aufgaben,taktAusfall};
+}
 
 /** One transaction owns settings, qualified model rows and the same live actor
  * kernels. Module masks are bound by the App, never by a second domain reader. */
@@ -777,14 +804,14 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
  return withPrivilegedTenantTransaction(auth,async tx=>{
   const settings=await ports.readSettings(tx,auth);
   if(settings.page!==null)configurePageReadBudget(settings.page.queryTimeoutMs);
-  if(settings.today.todayReadSource==='live')return {code:'LIVE' as const,settings};
+  if(settings.today.todayReadSource==='live')return {code:'LIVE' as const,settings,tagQuellenPorts:ports.tagQuellen};
   const model=await withTenantSavepoint(tx,nested=>readTodayModelInTransaction(nested,auth,calendar.today));
-  if(model.code==='EMPTY')return {code:'EMPTY' as const,settings};
+  if(model.code==='EMPTY')return {code:'EMPTY' as const,settings,tagQuellenPorts:ports.tagQuellen};
   // A command-invalidated row is never an authoritative snapshot, even when
   // its previous build had status OK. Read that source through its live port.
   const mustReadLive=(kind:DashboardInput,id='*')=>{const row=model.rows.find(source=>source.kind===modelInputs[kind].kind&&source.sourceId===id);return row?.current!==true||row.status==='SOURCE_INCOMPLETE';};
-  const live=async<T>(kind:DashboardListInput,known:T,read:()=>Promise<T>):Promise<T>=>{
-   if(!mustReadLive(kind))return known;
+  const live=async<T>(kind:DashboardListInput,known:T,read:()=>Promise<T>,unqualified=false):Promise<T>=>{
+   if(!unqualified&&!mustReadLive(kind))return known;
    try{return await withPageReadPhase(modelInputs[kind].phase,read);}
    catch{console.error('[TODAY_MODEL_LIVE_FAILED]',{kind,code:'SOURCE_INCOMPLETE'});return known;}
   };
@@ -793,6 +820,14 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
    const payload=value(kind);if(payload===null)return unknown;
    try{return work(payload);}catch{console.error('[TODAY_MODEL_SOURCE_INVALID]',{kind,code:'SOURCE_INCOMPLETE'});return unknown;}
   };
+  const readTag=(kind:'tasks'|'takt_ausfall',port:TodayTagQuellePort)=>{
+   const stored=project<TagQuellenLesestand>(kind,tagQuelleUnbekannt,payload=>port.ausModell(auth,payload));
+   return live(kind,stored,()=>port.live(auth,readAt),stored.code!=='OK');
+  };
+  const tagTasks=readTag('tasks',ports.tagQuellen.aufgaben);
+  const tagOutages=readTag('takt_ausfall',ports.tagQuellen.taktAusfall);
+  const unknownTasks:NonNullable<TodayDashboardSources['taskRead']>={code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]};
+  const taskCalendar=access.messages?live('tasks',project('tasks',unknownTasks,payload=>ports.taskCalendar(auth,payload)),()=>getIntakeTaskAction({calendar:true})):null;
   const storedOrders=value('orders');
   const cachedOperationalSource:TodayDashboardSources['orderSource']=Array.isArray(storedOrders)&&storedOrders.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version))?{code:'OK',data:storedOrders as Extract<TodayDashboardSources['orderSource'],{code:'OK'}>['data']}:{code:'SOURCE_INCOMPLETE'};
   const operationalSource=hasAnyAuthorizationArea(auth)?await live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'})})):cachedOperationalSource;
@@ -811,8 +846,6 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const complaints=access.complaints?await live<TodayDashboardSources['complaints']>('complaints',project<TodayDashboardSources['complaints']>('complaints',unknownComplaints,payload=>ports.complaints(auth,payload)),ports.liveComplaints):{code:'OK' as const,complaints:[]};
   const unknownFollowups:TodayDashboardSources['quoteFollowups']={code:'SOURCE_INCOMPLETE',message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};
   const quoteFollowups=access.messages?await live<TodayDashboardSources['quoteFollowups']>('quote_followups',project<TodayDashboardSources['quoteFollowups']>('quote_followups',unknownFollowups,payload=>ports.followups(auth,payload)),ports.liveFollowups):{code:'OK' as const,tasks:[]};
-  const unknownTasks:NonNullable<TodayDashboardSources['taskRead']>={code:'SOURCE_INCOMPLETE',rows:[],missingTaskIds:[]};
-  const taskRead=access.messages?await live<NonNullable<TodayDashboardSources['taskRead']>>('tasks',project<NonNullable<TodayDashboardSources['taskRead']>>('tasks',unknownTasks,payload=>ports.tasks(auth,payload)),()=>getIntakeTaskAction({calendar:true})):null;
   const unknownQuotes:Pick<TodayDashboardSources,'quoteList'|'quoteReads'>={quoteList:{code:'SOURCE_INCOMPLETE'},quoteReads:[]};
   const {quoteList,quoteReads}=access.messages?await live<Pick<TodayDashboardSources,'quoteList'|'quoteReads'>>('quotes',project('quotes',unknownQuotes,payload=>ports.quotes(auth,payload,readAt)),()=>readTodayQuoteSources(true,readAt)):{quoteList:{code:'OK' as const,quotes:[]},quoteReads:[]};
   const company=modelRecord(value('company')),companyData=modelRecord(company?.company);
@@ -851,7 +884,8 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
    const qualified=batch?.code==='OK'?batch.data.rows.find(value=>value.orderId===order.id):null;
    return qualified?.result.code==='OK'?[]:[order.id];
   });
-  const sources:TodayDashboardSources={calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource,modelStaleOrderIds};
+  const [aufgaben,taktAusfall,taskRead]=await Promise.all([tagTasks,tagOutages,taskCalendar]);
+  const sources:TodayDashboardSources={calendar,access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead,responsibilitySource,modelStaleOrderIds,tagQuellen:{aufgaben,taktAusfall}};
   const relevant=(kind:string)=>isVisibleModelInput(auth,access,kind);
   return {code:'OK' as const,sources,operationalSource,settings,sourceRevision:todayModelRevision(auth,model.rows,calendar.today),sourceRevisions:todayModelRevisionMap(auth,model.rows,calendar.today),needsRebuild:model.needsRebuild,
    pending:model.needsRebuild||model.rows.some(row=>relevant(row.kind)&&row.fresh!==true&&(deferLive||row.status!=='SOURCE_INCOMPLETE')),
