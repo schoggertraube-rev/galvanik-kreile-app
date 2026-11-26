@@ -108,7 +108,7 @@ export async function prepareGeneratedSeed(flowCase: FlowCase) {
   // TA09 leaves surface empty on purpose, so it must remain free text.
   const catalogId = "42000000-0000-4000-8000-000000000019";
   await sql`DELETE FROM public.catalog_services WHERE tenant_id = ${TENANT} AND id = ${catalogId}::uuid`;
-  if (/^TA(?:0[1-8]|1[0124-8])$/.test(flowCase.id)) {
+  if (/^TA(?:0[1-8]|1[0124-8]|13[ab])$/.test(flowCase.id)) {
     await upsertFixture("catalog_services", {
       id: catalogId, tenant_id: TENANT, name: "Prüfteil eins", surface: "verzinken",
       unit: "stueck", net_price_cents: 1000, vat_rate_basis_points: 1900,
