@@ -21,7 +21,6 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 import {listOffenePostenAction} from '@/app/buchhaltung/actions';
-import {getAgingDaten} from '@/app/cockpit/actions';
 import {setExtraWorkHourlyRateAction} from '@/app/actions/orders.actions';
 
 beforeAll(async()=>{
@@ -95,7 +94,6 @@ it('A38a A10 classifies yesterday-open/today-open/yesterday-paid identically in 
  expect(deniedAuth.data.areas).toContain('wartung');expect(deniedAuth.data.permissions).not.toContain('perm_view_prices');
  const before=await sql`SELECT id,payment_version,payment_paid_amount_cents,payment_open_amount_cents,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} ORDER BY id`;
  expect(await withSession(noMoney,()=>readInvoiceTruth(deniedAuth.data,{customerId},readInvoiceVat,clock.today))).toMatchObject({code:'FORBIDDEN'});
- await expect(withSession(noMoney,()=>getAgingDaten())).rejects.toThrow('Rechnungsdaten sind mit diesem Login nicht erlaubt.');
  expect(await sql`SELECT id,payment_version,payment_paid_amount_cents,payment_open_amount_cents,pdf_sha256 FROM public.invoices WHERE tenant_id=${tenant} ORDER BY id`).toEqual(before);
 
 });

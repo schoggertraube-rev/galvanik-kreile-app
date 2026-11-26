@@ -98,37 +98,37 @@ it('qualifies the actual source snapshot and never returns an old payload after 
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))))).toEqual({...changed,replayed:true});
  const invalidated=await read();
  expect(invalidated.needsRebuild).toBe(true);
- const stale=invalidated.rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId);
+ const stale=invalidated.rows.find(row=>row.kind==='quelle:orders.auftrag'&&row.sourceId===order.orderId);
  expect(stale).toMatchObject({fresh:false,payload:null,needsRebuild:true,sourceVersion:order.version,currentVersion:order.version+1});
- const saved=async()=>{const [source]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;if(!source)throw Error('TEST_CACHE_SOURCE_REQUIRED');return source.row;};
+ const saved=async()=>{const [source]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;if(!source)throw Error('TEST_CACHE_SOURCE_REQUIRED');return source.row;};
  const restore=async(original:Awaited<ReturnType<typeof saved>>)=>{
   const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_MODEL_COLUMN_INVALID');
   const names=columns.map(column=>'"'+column+'"').join(',');
-  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
  };
  await withRestoredTestSource({label:'TEST complete derived version source',read:saved,restore},async()=>{
   // Isolate the physical-order version join from the sequence guard. This is
   // explicitly a cache corruption probe, never a fabricated command receipt.
-  await sql`UPDATE private.today_source_v1 SET built_seq=source_seq WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
-  expect((await read()).rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId)).toMatchObject({fresh:false,payload:null});
+  await sql`UPDATE private.today_source_v1 SET built_seq=source_seq WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
+  expect((await read()).rows.find(row=>row.kind==='quelle:orders.auftrag'&&row.sourceId===order.orderId)).toMatchObject({fresh:false,payload:null});
  });
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
- expect((await read()).rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId)).toMatchObject({fresh:true,sourceVersion:order.version+1,currentVersion:order.version+1});
+ expect((await read()).rows.find(row=>row.kind==='quelle:orders.auftrag'&&row.sourceId===order.orderId)).toMatchObject({fresh:true,sourceVersion:order.version+1,currentVersion:order.version+1});
  await withRestoredTestSource({label:'TEST targeted invalidation of the incomplete orders list',read:async()=>{
   const [row]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source
-    WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+    WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;
   if(!row)throw Error('TEST_ORDERS_LIST_SOURCE_REQUIRED');return row.row;
  },restore:async original=>{
   const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_LIST_COLUMN_INVALID');
   const names=columns.map(column=>'"'+column+'"').join(',');
   await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb))
-    WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+    WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;
  }},async()=>{
-  const list = (result:Awaited<ReturnType<typeof read>>)=>result.rows.find(row=>row.kind==='orders'&&row.sourceId==='*');
+  const list = (result:Awaited<ReturnType<typeof read>>)=>result.rows.find(row=>row.kind==='quelle:orders.liste'&&row.sourceId==='*');
   await sql`UPDATE private.today_source_v1 SET status='SOURCE_INCOMPLETE',error_code='TEST_DERIVED_SOURCE_FAILURE'
-    WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+    WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;
   expect(list(await read())).toMatchObject({needsRebuild:false,fresh:false});
-  await sql`UPDATE private.today_source_v1 SET source_seq=source_seq+1 WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  await sql`UPDATE private.today_source_v1 SET source_seq=source_seq+1 WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;
   const invalidatedList=await read();
   expect(invalidatedList.needsRebuild).toBe(true);
   expect(list(invalidatedList)).toMatchObject({needsRebuild:true,fresh:false,payload:null});
@@ -136,9 +136,9 @@ it('qualifies the actual source snapshot and never returns an old payload after 
   expect(list(await read())).toMatchObject({needsRebuild:false,fresh:true,builtSeq:list(invalidatedList)?.sourceSeq});
  });
  await withRestoredTestSource({label:'TEST complete derived projector source',read:saved,restore},async()=>{
-  await sql`UPDATE private.today_source_v1 SET projector_version=projector_version+1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
+  await sql`UPDATE private.today_source_v1 SET projector_version=projector_version+1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
   const wrongCode=await read();expect(wrongCode.needsRebuild).toBe(true);
-  expect(wrongCode.rows.find(row=>row.kind==='order'&&row.sourceId===order.orderId)).toMatchObject({fresh:false,payload:null});
+  expect(wrongCode.rows.find(row=>row.kind==='quelle:orders.auftrag'&&row.sourceId===order.orderId)).toMatchObject({fresh:false,payload:null});
  });
  const tomorrow=new Date(today+'T12:00:00Z');tomorrow.setUTCDate(tomorrow.getUTCDate()+1);
  const wrongDay=await withPrivilegedTenantTransaction(auth,tx=>readTodayModelInTransaction(tx,auth,tomorrow.toISOString().slice(0,10)));
@@ -159,8 +159,8 @@ it('retains current partial list evidence without calling it fresh or discarding
   await sql`UPDATE public.company_settings SET street='' WHERE tenant_id=${tenant}`;
   expect((await rebuildTodayModel(tenant)).code).toBe('OK');
   const result=await withPrivilegedTenantTransaction(resolved.data,tx=>readTodayModelInTransaction(tx,resolved.data,readTodayCalendar(new Date()).today));
-  expect(result.rows.find(row=>row.kind==='company')).toMatchObject({status:'SOURCE_INCOMPLETE',current:true,fresh:false,payload:{code:'VALIDATION_ERROR',missingFields:['street']}});
-  expect(result.rows.filter(row=>row.kind==='order').every(row=>row.fresh===true&&row.payload!==null)).toBe(true);
+  expect(result.rows.find(row=>row.kind==='quelle:fundament.firma')).toMatchObject({status:'SOURCE_INCOMPLETE',current:true,fresh:false,payload:{code:'VALIDATION_ERROR',missingFields:['street']}});
+  expect(result.rows.filter(row=>row.kind==='quelle:orders.auftrag').every(row=>row.fresh===true&&row.payload!==null)).toBe(true);
  });
 });
 
@@ -200,7 +200,7 @@ it('E-G1 fills all eight productive source kinds and creates the real canonical 
  }
  for(const profile of customProfiles)profiles.set(profile.key,await createFixture(profile.areas,'buero'));
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
- const sources=await sql`SELECT kind,status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'order' ORDER BY kind`;
+ const sources=await sql`SELECT kind,status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:orders.auftrag' ORDER BY kind`;
  expect(sources).toHaveLength(8);expect(sources.every(row=>row.status==='OK')).toBe(true);
  for(const row of sources)expect(row.payload).not.toBeNull();
 });
@@ -318,16 +318,16 @@ it.each(['incomplete','tenant-epoch'] as const)('PL13:43 loads exactly the %s so
  const now=new Date();
  const baseline=await withSession(full,()=>readModelForCurrentSession());
  expect(baseline.code).toBe('OK');if(baseline.code!=='OK')throw Error('TEST_TARGETED_MODEL_REQUIRED');
- const read=async()=>{const [source]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;if(!source)throw Error('TEST_TARGETED_MODEL_SOURCE');return source.row;};
+ const read=async()=>{const [source]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='quelle:eingang.nachrichten' AND source_id='*'`;if(!source)throw Error('TEST_TARGETED_MODEL_SOURCE');return source.row;};
  await withRestoredTestSource({label:'TEST complete targeted model source '+fault,read,restore:async original=>{
   const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_TARGETED_COLUMN');
   const names=columns.map(column=> '"'+column+'"').join(',');
-  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;
+  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='quelle:eingang.nachrichten' AND source_id='*'`;
  }},async()=>{
-  if(fault==='incomplete')await sql`UPDATE private.today_source_v1 SET status='SOURCE_INCOMPLETE',payload=NULL,error_code='TEST_DERIVED_SOURCE_FAILURE' WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;
-  else await sql`UPDATE private.today_source_v1 SET built_tenant_seq=built_tenant_seq-1 WHERE tenant_id=${tenant} AND kind='messages' AND source_id='*'`;
+  if(fault==='incomplete')await sql`UPDATE private.today_source_v1 SET status='SOURCE_INCOMPLETE',payload=NULL,error_code='TEST_DERIVED_SOURCE_FAILURE' WHERE tenant_id=${tenant} AND kind='quelle:eingang.nachrichten' AND source_id='*'`;
+  else await sql`UPDATE private.today_source_v1 SET built_tenant_seq=built_tenant_seq-1 WHERE tenant_id=${tenant} AND kind='quelle:eingang.nachrichten' AND source_id='*'`;
   const qualification=await withPrivilegedTenantTransaction(resolved.data,tx=>readTodayModelInTransaction(tx,resolved.data,readTodayCalendar(now).today));
-  expect(qualification.rows.find(row=>row.kind==='messages')).toMatchObject({fresh:false});
+  expect(qualification.rows.find(row=>row.kind==='quelle:eingang.nachrichten')).toMatchObject({fresh:false});
   const output=vi.spyOn(console,'info');
   try{
    const first=await withSession(full,()=>withPageReadBudget(()=>readModelForCurrentSession(true),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
@@ -453,13 +453,13 @@ it('retains the known Today dashboard when a TEST cached order cannot form a com
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const baseline=await withSession(full,()=>readOfficeHomeModelAction());
  if(!('dashboard'in baseline))throw Error('TEST_KNOWN_HOME_REQUIRED');
- const read=async()=>{const [row]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;if(!row||!Array.isArray(row.row.payload)||!row.row.payload.length)throw Error('TEST_FULL_ORDER_SOURCE_REQUIRED');return row.row;};
+ const read=async()=>{const [row]=await sql`SELECT to_jsonb(source) AS row FROM private.today_source_v1 source WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;if(!row||!Array.isArray(row.row.payload)||!row.row.payload.length)throw Error('TEST_FULL_ORDER_SOURCE_REQUIRED');return row.row;};
  await withRestoredTestSource({label:'TEST explicit malformed derived Home order, whole-row restoration',read,restore:async original=>{
   const columns=Object.keys(original);if(columns.some(column=>!/^[a-z_][a-z0-9_]*$/.test(column)))throw Error('TEST_MODEL_COLUMN_INVALID');
   const names=columns.map(column=>'"'+column+'"').join(',');
-  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  await sql`UPDATE private.today_source_v1 SET (${sql.unsafe(names)})=(SELECT ${sql.unsafe(names)} FROM jsonb_populate_record(NULL::private.today_source_v1,${sql.json(original)}::jsonb)) WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;
  }},async()=>{
-  await sql`UPDATE private.today_source_v1 SET payload=jsonb_set(payload,'{0,dueDate}',to_jsonb(''::text)) WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+  await sql`UPDATE private.today_source_v1 SET payload=jsonb_set(payload,'{0,dueDate}',to_jsonb(''::text)) WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;
   const actual=await withSession(full,()=>readOfficeHomeModelAction());
   expect(actual.kind).toBe('partial');
   if(!('dashboard'in actual))throw Error('TEST_EXISTING_DASHBOARD_MUST_SURVIVE');
@@ -503,7 +503,7 @@ it('meldet den echten Takt ohne Sitzung bei Teilausfall als fehlgeschlagen und f
       .toEqual([{status:'fehler',fehlercode:'takt_heute_besetzt'}]);
     expect(await runs()).toEqual([{job_schluessel:'heute_neuaufbau',status:'ok',versuch:1,abgeschlossen:true}]);
     expect(await sql`SELECT source_id FROM private.today_source_v1
-      WHERE tenant_id=${testTenant} AND kind='orders' AND built_at IS NOT NULL`).toEqual([{source_id:'*'}]);
+      WHERE tenant_id=${testTenant} AND kind='quelle:orders.liste' AND built_at IS NOT NULL`).toEqual([{source_id:'*'}]);
   } finally {
     if (previous === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = previous;
@@ -531,7 +531,7 @@ it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende
       AND NOT (id::text = ANY(${vorhandeneIds}::text[])) ORDER BY gestartet_um,id`;
   const modellStand = async () => {
     const [row] = await sql<{seq:string}[]>`SELECT built_seq::text AS seq FROM private.today_source_v1
-      WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
+      WHERE tenant_id=${tenant} AND kind='quelle:orders.liste' AND source_id='*'`;
     if(!row) throw Error('TEST_HEUTE_MODELL_FEHLT');
     return BigInt(row.seq);
   };

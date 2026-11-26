@@ -40,11 +40,11 @@ const ports:TodayProjectionPorts={
   expect(capability.tenantId).toBe(tenant);expect(capability).not.toHaveProperty('userId');
   const actor=await auth(),results=new Map<string,TodayProjectionResult>();
   for(const key of keys){
-   if(key.kind==='order'){
+   if(key.kind==='quelle:orders.auftrag'){
     const source=await readLiveOrderCard(actor,{orderId:key.sourceId});
     if(source.code==='OK')results.set(todaySourceKey(key),{code:'OK',payload:{card:source.data},sourceVersion:source.data.version,listed:true});
     else results.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_REAL_CARD_SOURCE_INCOMPLETE'});
-   }else if(key.kind==='orders')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(actor,{purpose:'today'}, readBetriebsruheInTransaction)});
+   }else if(key.kind==='quelle:orders.liste')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(actor,{purpose:'today'}, readBetriebsruheInTransaction)});
    else results.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
   }
   return results;
@@ -72,7 +72,7 @@ it('cancels a stalled native projector source before the platform runtime limit 
    throw Error('TEST_STALLED_SOURCE_NOT_CANCELLED');
   }}),200)).rejects.toThrow();
   expect(Date.now()-started).toBeLessThan(3000);
-  expect(await sql`SELECT source_seq>built_seq AS pending FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{pending:true}]);
+  expect(await sql`SELECT source_seq>built_seq AS pending FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`).toEqual([{pending:true}]);
  }finally{
   // Restore only this isolated TEST tenant after a deliberately interrupted lease.
   await sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=NULL WHERE tenant_id=${tenant}`;
@@ -138,7 +138,7 @@ it('PL11:36 skips incomplete rows without a changed source key while changed sou
   WHERE tenant_id=${tenant} AND status='SOURCE_INCOMPLETE' AND source_seq=built_seq`;
  expect(unchanged.length).toBeGreaterThan(0);
  expect((await refreshTodayModel(tenant,counted)).code).toBe('OK');
- expect(visits).toContain('order:'+orderId);
+ expect(visits).toContain('quelle:orders.auftrag:'+orderId);
  expect(visits.some(key=>unchanged.some(row=>row.key===key))).toBe(false);
  visits.length=0;
  expect((await rebuildTodayModel(tenant,counted)).code).toBe('OK');
@@ -163,14 +163,14 @@ it('PL11:36 locks the tenant before source keys when rebuild and a real command 
   const order=await readyInvoiceOrder('TEST projector writer '+String(writerFirst));
   expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
   await sql`UPDATE private.today_source_v1 SET built_at=statement_timestamp() WHERE tenant_id=${tenant}`;
-  await sql`UPDATE private.today_source_v1 SET built_at='2000-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`;
-  await sql`UPDATE private.today_source_v1 SET built_at='2001-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='money' AND source_id='*'`;
+  await sql`UPDATE private.today_source_v1 SET built_at='2000-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
+  await sql`UPDATE private.today_source_v1 SET built_at='2001-01-01'::timestamptz WHERE tenant_id=${tenant} AND kind='quelle:accounting.geld' AND source_id='*'`;
   let entered!:()=>void,publish!:()=>void,probeReady!:()=>void,releaseProbe!:()=>void;
   const reading=new Promise<void>(resolve=>{entered=resolve;}),gate=new Promise<void>(resolve=>{publish=resolve;});
   const locked=new Promise<void>(resolve=>{probeReady=resolve;}),unlock=new Promise<void>(resolve=>{releaseProbe=resolve;});
   const build=rebuildTodayModel(tenant,{...ports,readSources:async(...args)=>{
    const values=await ports.readSources(...args);
-   if(args[1].some(key=>key.kind==='order'&&key.sourceId===order.orderId)){entered();await gate;}
+   if(args[1].some(key=>key.kind==='quelle:orders.auftrag'&&key.sourceId===order.orderId)){entered();await gate;}
    return values;
   }});
   await reading;
@@ -178,7 +178,7 @@ it('PL11:36 locks the tenant before source keys when rebuild and a real command 
   // Lock-only TEST probe; no business value or invalidation rule is changed.
   const probe=sql.begin(async tx=>{
    const [backend]=await tx`SELECT pg_backend_pid() AS pid`;probePid=backend.pid;
-   await tx`SELECT 1 FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='money' AND source_id='*' FOR UPDATE`;
+   await tx`SELECT 1 FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:accounting.geld' AND source_id='*' FOR UPDATE`;
    probeReady();await unlock;
   });
   await locked;
@@ -204,7 +204,7 @@ it('PL11:36 locks the tenant before source keys when rebuild and a real command 
    const [projected,written]=await Promise.all([build,command]);
    expect(projected.code).toBe('OK');expect(written.code).toBe('OK');
    expect(await sql`SELECT count(*)::integer AS count FROM public.events WHERE tenant_id=${tenant} AND client_event_id=${input.clientEventId} AND event_type='ORDER_PROMISED_DUE_DATE_CHANGED_V1'`).toEqual([{count:1}]);
-   const [state]=await sql`SELECT source.source_seq>source.built_seq AS stale,source.source_version=orders.version AS current FROM private.today_source_v1 source JOIN public.orders orders ON orders.tenant_id=source.tenant_id AND orders.id=source.source_id WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${order.orderId}`;
+   const [state]=await sql`SELECT source.source_seq>source.built_seq AS stale,source.source_version=orders.version AS current FROM private.today_source_v1 source JOIN public.orders orders ON orders.tenant_id=source.tenant_id AND orders.id=source.source_id WHERE source.tenant_id=${tenant} AND source.kind='quelle:orders.auftrag' AND source.source_id=${order.orderId}`;
    expect(state.stale||state.current).toBe(true);
    expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
   }finally{publish();releaseProbe();await Promise.allSettled([build,probe,...(command?[command]:[])]);}
@@ -219,7 +219,7 @@ it('uses read-only union capabilities and publishes actual card versions with co
  try{
   const built=await rebuildTodayModel(tenant,{...ports,readSources:async(capability,keys)=>{observed.push(capability);return ports.readSources(capability,keys);}});expect(built.code).toBe('OK');expect(built.built).toBeGreaterThanOrEqual(2);
   expect(observed[0].areas).toEqual(expect.arrayContaining(['auftraege','preise','zahlungen']));
-  const [source]=await sql`SELECT payload,source_version,status,source_seq=built_seq AS fresh,build_ms FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`;
+  const [source]=await sql`SELECT payload,source_version,status,source_seq=built_seq AS fresh,build_ms FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`;
   const live=await readLiveOrderCard(await auth(),{orderId});expect(live.code).toBe('OK');if(live.code!=='OK')throw Error('TEST_REAL_CARD_REQUIRED');
   expect(source).toMatchObject({payload:JSON.parse(JSON.stringify({card:live.data})),source_version:live.data.version,status:'OK',fresh:true,build_ms:expect.any(Number)});
   const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1]))).filter(row=>row.phase==='today.refresh');
@@ -244,7 +244,7 @@ it('does not publish an old card when a real promised-date command commits betwe
  await sql`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${orderId}`;
  const raced=await refreshTodayModel(tenant,{...ports,readSources:async(capability,keys)=>{
   const values=await ports.readSources(capability,keys);
-  const original=values.get('order:'+orderId);
+  const original=values.get('quelle:orders.auftrag:'+orderId);
   if(!changed&&original?.code==='OK'){
    changed=true;
    const result=await withSession(full,()=>changeOrderPromisedDueDateAction({orderId,expectedVersion:original.sourceVersion!,dueDate:'2027-06-15',reason:'TEST writer races projection',clientEventId:randomUUID()}));
@@ -253,20 +253,20 @@ it('does not publish an old card when a real promised-date command commits betwe
   return values;
  }});
  expect(changed).toBe(true);expect(raced.stale).toBeGreaterThanOrEqual(1);
- expect(await sql`SELECT source_seq>built_seq AS stale FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{stale:true}]);
+ expect(await sql`SELECT source_seq>built_seq AS stale FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`).toEqual([{stale:true}]);
  expect((await refreshTodayModel(tenant,ports)).code).toBe('OK');
- expect(await sql`SELECT source.source_seq=source.built_seq AND source.source_version=orders.version AS fresh FROM private.today_source_v1 source JOIN public.orders orders ON orders.tenant_id=source.tenant_id AND orders.id=source.source_id WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${orderId}`).toEqual([{fresh:true}]);
+ expect(await sql`SELECT source.source_seq=source.built_seq AND source.source_version=orders.version AS fresh FROM private.today_source_v1 source JOIN public.orders orders ON orders.tenant_id=source.tenant_id AND orders.id=source.source_id WHERE source.tenant_id=${tenant} AND source.kind='quelle:orders.auftrag' AND source.source_id=${orderId}`).toEqual([{fresh:true}]);
 });
 
 it('contains a real SQL group failure, splits it and retains the other actual reader result',async()=>{
  await sql`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${orderId}`;
  const result=await rebuildTodayModel(tenant,{...ports,readSources:async(capability,keys)=>{
-  if(keys.some(key=>key.kind==='money'))await sql`SELECT 1/0 AS test_strict_source_failure`;
+  if(keys.some(key=>key.kind==='quelle:accounting.geld'))await sql`SELECT 1/0 AS test_strict_source_failure`;
   return ports.readSources(capability,keys);
  }});
  expect(result.code).toBe('OK');
- expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='money'`).toEqual([{status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_SOURCE_FAILED'}]);
- expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
+ expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:accounting.geld'`).toEqual([{status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_SOURCE_FAILED'}]);
+ expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
 });
 
 it('does not let an expired worker publish or clear the replacement worker lease',async()=>{
@@ -291,14 +291,14 @@ it('splits a failed set-based SQL publish and marks only the affected source inc
  await sql`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${orderId}`;
  try{
   // TEST-only stricter cache write fault; no business guard or reader is bypassed.
-  await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.kind='orders' AND NEW.status='OK' THEN RAISE EXCEPTION 'TEST strict source publish fault' USING ERRCODE='22000'; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE FUNCTION private.${guard}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.kind='quelle:orders.liste' AND NEW.status='OK' THEN RAISE EXCEPTION 'TEST strict source publish fault' USING ERRCODE='22000'; END IF; RETURN NEW; END $$`);
   await sql.unsafe(`CREATE TRIGGER ${guard} BEFORE UPDATE ON private.today_source_v1 FOR EACH ROW EXECUTE FUNCTION private.${guard}()`);
   expect((await refreshTodayModel(tenant,ports)).code).toBe('OK');
-  expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='orders'`).toEqual([{status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ROW_FAILED'}]);
-  expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
+  expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.liste'`).toEqual([{status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ROW_FAILED'}]);
+  expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
  }finally{await sql.unsafe(`DROP TRIGGER IF EXISTS ${guard} ON private.today_source_v1`);await sql.unsafe(`DROP FUNCTION IF EXISTS private.${guard}()`);}
  expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
- expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='orders'`).toEqual([{status:'OK',error_code:null}]);
+ expect(await sql`SELECT status,error_code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.liste'`).toEqual([{status:'OK',error_code:null}]);
 });
 
 it('reads the persisted single-row batch limit and skips incomplete rows until rebuild',async()=>{
@@ -317,12 +317,12 @@ it('reads the persisted single-row batch limit and skips incomplete rows until r
  const pending=await sql`SELECT kind||':'||source_id AS key FROM private.today_source_v1
   WHERE tenant_id=${tenant} AND source_seq>built_seq`;
  const pendingKeys=new Set(pending.map(row=>row.key));
- expect([...pendingKeys]).toEqual(expect.arrayContaining(['order:'+orderId,'orders:*']));
+ expect([...pendingKeys]).toEqual(expect.arrayContaining(['quelle:orders.auftrag:'+orderId,'quelle:orders.liste:*']));
  for(let attempt=0;attempt<pendingKeys.size;attempt++)expect(await refreshTodayModel(tenant,bounded)).toMatchObject({code:'OK',built:1});
  expect(new Set(visits)).toEqual(pendingKeys);
  expect(await refreshTodayModel(tenant,bounded)).toMatchObject({code:'OK',built:0,stale:0});
  expect(visits).toHaveLength(pending.length);
- expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
+ expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
 });
 
 
@@ -336,11 +336,11 @@ it('feeds the identical Today card/list kernels with the real actor-free capabil
   listOrderIds:async capability=>(await getOperationalOrders(capability,{purpose:'today'}, readBetriebsruheInTransaction)).map(row=>row.id),
   readSources:async(capability,keys)=>{
    actualCapability=capability;
-   const cards=await readTodayOrderCards(capability,keys.filter(key=>key.kind==='order').map(key=>key.sourceId));
+   const cards=await readTodayOrderCards(capability,keys.filter(key=>key.kind==='quelle:orders.auftrag').map(key=>key.sourceId));
    const results=new Map<string,TodayProjectionResult>();
    for(const key of keys){
-    if(key.kind==='orders')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(capability,{purpose:'today'}, readBetriebsruheInTransaction)});
-    else if(key.kind==='order'){
+    if(key.kind==='quelle:orders.liste')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(capability,{purpose:'today'}, readBetriebsruheInTransaction)});
+    else if(key.kind==='quelle:orders.auftrag'){
      const card=cards.get(key.sourceId);
      if(card?.code==='OK')results.set(todaySourceKey(key),{code:'OK',payload:{card:card.data},sourceVersion:card.data.version,listed:true});
      else results.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_REAL_TODAY_CARD_INCOMPLETE'});
@@ -352,7 +352,7 @@ it('feeds the identical Today card/list kernels with the real actor-free capabil
  expect((await rebuildTodayModel(tenant,readOnly)).code).toBe('OK');
  expect(actualCapability).toBeDefined();if(!actualCapability)throw Error('TEST_PROJECTOR_CAPABILITY_REQUIRED');
  expect(actualCapability).not.toHaveProperty('userId');expect(actualCapability).not.toHaveProperty('role');expect(actualCapability).not.toHaveProperty('active');
- const [saved]=await sql`SELECT payload,source_version,status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`;
+ const [saved]=await sql`SELECT payload,source_version,status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`;
  expect(saved).toEqual({payload:JSON.parse(JSON.stringify({card:expected.data})),source_version:expected.data.version,status:'OK',fresh:true});
  const denied=await readTodayOrderCards({...actualCapability,permissions:[]},[orderId]);
  expect(denied.get(orderId)).toMatchObject({code:'FORBIDDEN'});
@@ -367,19 +367,19 @@ it('projects the same secured order-photo evidence without an actor and retains 
  let used:ProjectorAuthorization|undefined;
  const readOnly:TodayProjectionPorts={...ports,readSources:async(capability,keys)=>{
   used=capability;
-  const ids=keys.filter(key=>key.kind==='order').map(key=>key.sourceId);
+  const ids=keys.filter(key=>key.kind==='quelle:orders.auftrag').map(key=>key.sourceId);
   const [cards,evidence]=await Promise.all([readTodayOrderCards(capability,ids),readOrderEvidenceBatch(capability,ids)]);
   const result=new Map<string,TodayProjectionResult>();
   for(const key of keys){
    const card=cards.get(key.sourceId),proof=evidence.get(key.sourceId);
-   if(key.kind==='order'&&card?.code==='OK'&&proof?.code==='OK')result.set(todaySourceKey(key),{code:'OK',payload:{evidence:proof.data},sourceVersion:card.data.version,listed:true});
+   if(key.kind==='quelle:orders.auftrag'&&card?.code==='OK'&&proof?.code==='OK')result.set(todaySourceKey(key),{code:'OK',payload:{evidence:proof.data},sourceVersion:card.data.version,listed:true});
    else result.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
   }
   return result;
  }};
  expect((await rebuildTodayModel(tenant,readOnly)).code).toBe('OK');
  expect(used).toBeDefined();if(!used)throw Error('TEST_READONLY_EVIDENCE_CAPABILITY_REQUIRED');
- const [saved]=await sql`SELECT payload,status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`;
+ const [saved]=await sql`SELECT payload,status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${orderId}`;
  expect(saved).toEqual({payload:JSON.parse(JSON.stringify({evidence:expected.data})),status:'OK',fresh:true});
  expect((await readOrderEvidenceBatch({...used,permissions:[]},[orderId])).get(orderId)).toMatchObject({code:'FORBIDDEN'});
  expect((await readOrderEvidenceBatch(used,[orderId])).get(orderId)).toEqual(expected);
@@ -431,16 +431,16 @@ it('does not publish the old active-role union as fresh when the tenant epoch ch
    },
    readSources:async(capability,keys)=>{
     sourceReads++;
-    const ids=keys.filter(key=>key.kind==='order').map(key=>key.sourceId),cards=await readTodayOrderCards(capability,ids);
+    const ids=keys.filter(key=>key.kind==='quelle:orders.auftrag').map(key=>key.sourceId),cards=await readTodayOrderCards(capability,ids);
     const result=new Map<string,TodayProjectionResult>();
     for(const key of keys){
      const card=cards.get(key.sourceId);
-     result.set(todaySourceKey(key),key.kind==='order'&&card?.code==='OK'?{code:'OK',payload:{card:card.data},sourceVersion:card.data.version,listed:true}:{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
+     result.set(todaySourceKey(key),key.kind==='quelle:orders.auftrag'&&card?.code==='OK'?{code:'OK',payload:{card:card.data},sourceVersion:card.data.version,listed:true}:{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
     }
     return result;
    },
   });
   expect(sourceReads).toBe(0);
-  expect(await sql`SELECT source.built_tenant_seq=tenant.tenant_seq AS fresh FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant USING(tenant_id) WHERE source.tenant_id=${tenant} AND source.kind='order' AND source.source_id=${orderId}`).toEqual([{fresh:false}]);
+  expect(await sql`SELECT source.built_tenant_seq=tenant.tenant_seq AS fresh FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant USING(tenant_id) WHERE source.tenant_id=${tenant} AND source.kind='quelle:orders.auftrag' AND source.source_id=${orderId}`).toEqual([{fresh:false}]);
  });
 });

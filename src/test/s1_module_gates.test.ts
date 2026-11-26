@@ -789,6 +789,20 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     for (const candidate of invalid) expect(validTodayProjectorComposition(candidate), candidate).toBe(false);
   });
 
+  it("S38b keeps the seven named register imports at the one shared server composition", () => {
+    const file = "src/lib/server/todayProjectionSchedule.ts";
+    const projector = "src/lib/server/todayProjection.ts";
+    const registerImport = `${IMP} { tagQuellen as onlyOrders } from '@/modules/orders/server-public';\n`;
+    const source = `${IMP} 'server-only';\n${registerImport}`;
+    expect(allowedServerFacadeConsumer(file, source)).toBe(true);
+    expect(allowedServerFacadeConsumer(file, source.replace("tagQuellen", "readManualShippingBatch"))).toBe(false);
+    expect(allowedServerFacadeConsumer(file, source.replace("/orders/", "/lager/"))).toBe(false);
+    expect(allowedServerFacadeConsumer(file, source.replace("{ tagQuellen as onlyOrders }", "* as onlyOrders"))).toBe(false);
+    expect(allowedServerFacadeConsumer(file, source.replace(registerImport, `const all = ${IMP}('@/modules/orders/server-public');\n`))).toBe(false);
+    expect(allowedServerFacadeConsumer(projector, source +
+      `${EXP} type ProjectorAuthorization=Readonly<{tenantId:string}>;\n${EXP} function rebuildTodayModel(){}\n${EXP} function refreshTodayModel(){}\n`)).toBe(false);
+  });
+
   it("E2 erlaubt tagQuellen aus lager nur mit dem festen Exportnamen", () => {
       const source = `${IMP} 'server-only';\n${IMP} { tagQuellen as lagerTagQuellen } from '@/modules/lager/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return lagerTagQuellen;}\n${EXP} async function rebuildTodayModel(){return lagerTagQuellen;}\n`;
       expect(validTodayProjectorComposition(source)).toBe(true);

@@ -75,8 +75,10 @@ export type ReadLinkedApprovalMail = (
 export type RecordExtraWorkApprovalResult =
   | { code: "OK"; eventId: string; replayed: boolean }
   | { code: "INVOICE_ISSUED"; invoiceNumber: string }
-  | { code: "UNAVAILABLE"; message: string }
-  | { code: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" };
+  | { code: "UNAVAILABLE"; message: string; next: { label: string; kind: "retry" } }
+  | { code: "FORBIDDEN"; message: string }
+  | { code: "NOT_FOUND" | "CONFLICT"; message: string; next: { label: string; href: string } }
+  | { code: "VALIDATION_ERROR" | "UNAUTHENTICATED" };
 
 export type RecordPhoneExtraWorkApprovalResult = RecordExtraWorkApprovalResult;
 
@@ -97,17 +99,25 @@ export async function recordExtraWorkApproval(
     || typeof orderId !== "string" || orderId !== orderId.trim() || !orderId || orderId.length > 128) {
     return { code: "VALIDATION_ERROR" };
   }
+  const nichtVerfuegbar = {
+    code: "UNAVAILABLE" as const, message: ORDER_CONTENT_COPY.extraWorkApprovalUnavailable,
+    next: { kind: "retry" as const, label: ORDER_CONTENT_COPY.extraWorkApprovalRetry },
+  };
   try {
+    const konflikt = {
+      code: "CONFLICT" as const, message: ORDER_CONTENT_COPY.extraWorkApprovalConflict,
+      next: { label: ORDER_CONTENT_COPY.extraWorkApprovalReopen, href: `/orders/${encodeURIComponent(orderId)}` },
+    };
     const authorization = await resolveAuthorization();
     if (!authorization.ok) {
       return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-        ? { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.extraWorkApprovalUnavailable }
+        ? nichtVerfuegbar
         : { code: "UNAUTHENTICATED" };
     }
     const auth = authorization.data;
     if (!canViewOrderCard(auth) || !hasAuthorizationArea(auth, "preise") || auth.packageSwitches?.p3_werkstatt !== true
       || (channel === "mail" && (!hasAuthorizationArea(auth, "mails") || !hasAuthorizationArea(auth, "auftraege")))) {
-      return { code: "FORBIDDEN" };
+      return { code: "FORBIDDEN", message: ORDER_CONTENT_COPY.extraWorkApprovalForbidden };
     }
 
     const approval = leseMehrarbeitsfreigabe({
@@ -140,7 +150,7 @@ export async function recordExtraWorkApproval(
           && recorded && canonicalJson(recorded) === canonicalJson({ ...payload, approvedAt: recorded.approvedAt })) {
           return { code: "OK", eventId: event.id, replayed: true };
         }
-        return { code: "CONFLICT" };
+        return konflikt;
       }
 
       const [order] = await tx.execute<{ version: number; station: string; customer_id: string }>(sql`
@@ -148,12 +158,15 @@ export async function recordExtraWorkApproval(
         WHERE tenant_id = ${auth.tenantId} AND id = ${orderId}
         FOR UPDATE
       `);
-      if (!order) return { code: "NOT_FOUND" };
+      if (!order) return {
+        code: "NOT_FOUND", message: ORDER_CONTENT_COPY.extraWorkApprovalNotFound,
+        next: { label: ORDER_CONTENT_COPY.extraWorkApprovalOpenList, href: "/orders" },
+      };
       if (payload.channel === "mail") {
         if (!readLinkedApprovalMail) throw Error("ORDER_EXTRA_WORK_APPROVAL_MAIL_PORT_MISSING");
         const original = await readLinkedApprovalMail(tx, auth, payload.intakeItemId);
         if (!original || original.id !== payload.intakeItemId
-          || original.orderId !== orderId || original.customerId !== order.customer_id) return { code: "CONFLICT" };
+          || original.orderId !== orderId || original.customerId !== order.customer_id) return konflikt;
       }
       const invoiceNumber = await readOrderScrapInvoiceNumberInTransaction(tx, auth.tenantId, orderId);
       if (invoiceNumber) return { code: "INVOICE_ISSUED", invoiceNumber };
@@ -167,7 +180,7 @@ export async function recordExtraWorkApproval(
         .map(position => [position.line_id, position.line_version]));
       if (positions.length !== payload.positions.length
         || payload.positions.some(position => versions.get(position.lineId) !== position.lineVersion)) {
-        return { code: "CONFLICT" };
+        return konflikt;
       }
 
       const [written] = await tx.execute<{ id: string }>(sql`
@@ -186,7 +199,7 @@ export async function recordExtraWorkApproval(
     });
   } catch (error) {
     console.error("[ORDER_EXTRA_WORK_APPROVAL_FAILED]", error instanceof Error ? error.name : "UnknownError");
-    return { code: "UNAVAILABLE", message: ORDER_CONTENT_COPY.extraWorkApprovalUnavailable };
+    return nichtVerfuegbar;
   }
 }
 

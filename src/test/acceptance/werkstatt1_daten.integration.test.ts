@@ -206,12 +206,16 @@ test("Die Rechnung belegt die telefonische Zusage, der Ausgang liest den verblei
       confirmationText: "TEST: Ich bestätige einen Euro netto.",
     };
     await expect(withSession(ohneAuftragszugriff, () => recordPhoneExtraWorkApprovalAction(input)))
-      .resolves.toEqual({ code: "FORBIDDEN" });
+      .resolves.toEqual({ code: "FORBIDDEN", message: ORDER_CONTENT_COPY.extraWorkApprovalForbidden });
     await expect(withSession(werkstatt, () => recordPhoneExtraWorkApprovalAction(input)))
-      .resolves.toEqual({ code: "FORBIDDEN" });
+      .resolves.toEqual({ code: "FORBIDDEN", message: ORDER_CONTENT_COPY.extraWorkApprovalForbidden });
+    const zusageKonflikt = {
+      code: "CONFLICT", message: ORDER_CONTENT_COPY.extraWorkApprovalConflict,
+      next: { label: ORDER_CONTENT_COPY.extraWorkApprovalReopen, href: `/orders/${encodeURIComponent(auftrag.orderId)}` },
+    };
     await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction({
       ...input, positions: [{ lineId, lineVersion: 2 }],
-    }))).resolves.toEqual({ code: "CONFLICT" });
+    }))).resolves.toEqual(zusageKonflikt);
 
     const vorher = new Date().toISOString();
     const quittung = await withSession(full, () => recordPhoneExtraWorkApprovalAction(input));
@@ -221,7 +225,7 @@ test("Die Rechnung belegt die telefonische Zusage, der Ausgang liest den verblei
     await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction(input)))
       .resolves.toEqual({ ...quittung, replayed: true });
     await expect(withSession(full, () => recordPhoneExtraWorkApprovalAction({ ...input, approvedNetAmountCents: 101 })))
-      .resolves.toEqual({ code: "CONFLICT" });
+      .resolves.toEqual(zusageKonflikt);
     const events = await sql`SELECT id, user_id, payload FROM public.events
       WHERE tenant_id = ${mandant} AND order_id = ${auftrag.orderId} AND event_type = 'ORDER_EXTRA_WORK_APPROVED_V1'`;
     expect(events).toEqual([{

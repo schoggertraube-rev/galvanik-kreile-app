@@ -34,27 +34,27 @@ it('creates only private tenant-keyed derived sources with no public read or del
 
 it('marks actual intake, completion, freeze, invoice and settings writes in the same tenant without caching invented payloads',async()=>{
  const result=await readyInvoiceOrder('TEST Today actual invalidation');
- const [source]=await sql`SELECT source_seq::integer,built_seq::integer,status,payload,source_version FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${result.orderId}`;
+ const [source]=await sql`SELECT source_seq::integer,built_seq::integer,status,payload,source_version FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${result.orderId}`;
  expect(source).toMatchObject({built_seq:0,status:'PENDING',payload:null,source_version:null});
  expect(source.source_seq).toBeGreaterThan(1);
- const lists=await sql`SELECT kind,source_id FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'order' ORDER BY kind`;
- expect(lists).toEqual(expect.arrayContaining([{kind:'orders',source_id:'*'},{kind:'money',source_id:'*'}]));
+ const lists=await sql`SELECT kind,source_id FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:orders.auftrag' ORDER BY kind`;
+ expect(lists).toEqual(expect.arrayContaining([{kind:'quelle:orders.liste',source_id:'*'},{kind:'quelle:accounting.geld',source_id:'*'}]));
  const [settings]=await sql`SELECT today_read_source,today_refresh_batch_limit,today_refresh_lease_seconds,today_stale_poll_ms,nav_prefetch_max_age_seconds FROM public.company_settings WHERE tenant_id=${tenant}`;
  expect(settings).toEqual({today_read_source:'modell',today_refresh_batch_limit:20,today_refresh_lease_seconds:30,today_stale_poll_ms:1500,nav_prefetch_max_age_seconds:60});
  expect(await sql`SELECT tenant_seq::integer FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{tenant_seq:expect.any(Number)}]);
 });
 
 it('rolls source marks back with the original write and deduplicates old/new statement keys',async()=>{
- const [source]=await sql`SELECT source_id,source_seq::integer FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' ORDER BY source_id LIMIT 1`;
+ const [source]=await sql`SELECT source_id,source_seq::integer FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' ORDER BY source_id LIMIT 1`;
  expect(source).toBeDefined();
  const original=await sql`SELECT to_jsonb(o) AS row FROM public.orders o WHERE tenant_id=${tenant} AND id=${source.source_id}`;
  const rollback=new Error('TEST_ABORT_TODAY_SOURCE_AND_BUSINESS_WRITE');
  await expect(sql.begin(async tx=>{
   await tx`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=${source.source_id}`;
-  expect(await tx`SELECT source_seq::integer FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${source.source_id}`).toEqual([{source_seq:source.source_seq+1}]);
+  expect(await tx`SELECT source_seq::integer FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${source.source_id}`).toEqual([{source_seq:source.source_seq+1}]);
   throw rollback;
  })).rejects.toBe(rollback);
- expect(await sql`SELECT source_seq::integer FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${source.source_id}`).toEqual([{source_seq:source.source_seq}]);
+ expect(await sql`SELECT source_seq::integer FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${source.source_id}`).toEqual([{source_seq:source.source_seq}]);
  expect(await sql`SELECT to_jsonb(o) AS row FROM public.orders o WHERE tenant_id=${tenant} AND id=${source.source_id}`).toEqual(original);
 });
 
@@ -135,10 +135,10 @@ it('marks two actual order sources in a fixed order under concurrent reversed in
  const rollback=Symbol('TEST rollback concurrent invalidation probe');
  const probe=async(orderIds:string[])=>{
   try{await sql.begin(async tx=>{
-   const before=await tx`SELECT source_id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id IN (${orderIds[0]},${orderIds[1]}) ORDER BY source_id`;
+   const before=await tx`SELECT source_id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id IN (${orderIds[0]},${orderIds[1]}) ORDER BY source_id`;
    await tx`UPDATE public.orders SET title=title WHERE tenant_id=${tenant} AND id=ANY(ARRAY[${orderIds[0]},${orderIds[1]}]::text[])`;
    await tx`SELECT pg_sleep(0.03)`;
-   const marked=await tx`SELECT source_id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id IN (${orderIds[0]},${orderIds[1]}) ORDER BY source_id`;
+   const marked=await tx`SELECT source_id,source_seq::text AS seq FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id IN (${orderIds[0]},${orderIds[1]}) ORDER BY source_id`;
    expect(marked).toHaveLength(2);
    expect(marked.map(row=>({id:row.source_id,seq:BigInt(row.seq)}))).toEqual(before.map(row=>({id:row.source_id,seq:BigInt(row.seq)+BigInt(1)})));
    throw rollback;

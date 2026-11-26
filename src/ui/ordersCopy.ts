@@ -47,6 +47,12 @@ export const ORDER_CONTENT_COPY = {
   catalogInactive: (name:string)=>`Die Katalogleistung ${name} ist nicht mehr aktiv · wähl eine andere.`,
   invoiceAlreadyIssued: (nummer: string) => `Rechnung ${nummer} ist schon ausgestellt. Korrigiere zuerst die Rechnung.`,
   extraWorkApprovalUnavailable: "Die Zusage zur Mehrarbeit konnte nicht gespeichert werden. Versuche es erneut.",
+  extraWorkApprovalRetry: "Erneut versuchen",
+  extraWorkApprovalConflict: "Der Auftrag wurde inzwischen geändert. Bitte neu öffnen.",
+  extraWorkApprovalReopen: "Auftrag neu öffnen",
+  extraWorkApprovalForbidden: "Dafür fehlt dir das Recht. Bitte das Büro um Freigabe.",
+  extraWorkApprovalNotFound: "Diesen Auftrag gibt es nicht mehr.",
+  extraWorkApprovalOpenList: "Auftragsliste öffnen",
   workTimeChanged: "Die Arbeitszeit wurde inzwischen schon korrigiert. Lade die Buchungen neu.",
 };
 export const ORDER_ITEM_COMPLETION_COPY = {

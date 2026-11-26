@@ -212,7 +212,7 @@ const eslintConfig = defineConfig([
   // E2 Projektor, PL 22.11. 04:3x (Entscheid 04:25:53); no glob or other root.
   // E2 Batchleser, PL 22.11. 08:1x: named readCustomerProfiles stays pinned by the module contract.
   {
-    files: ["src/lib/server/todayProjection.ts"],
+    files: ["src/lib/server/todayProjection.ts", "src/lib/server/todayProjectionSchedule.ts"],
     rules: {
       "no-restricted-imports": ["error", { patterns: [modulesServerConsumerFacadePattern, nonExecutableReferencePattern] }],
     },

@@ -8,7 +8,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {createCustomerAction,updateCustomerAction} from '@/app/actions/customers.actions';
-import {prepareIntakeFileAction,finishIntakeFileAction,getIncomingInvoiceAction,saveIncomingInvoiceAction,assignIntakeCustomerAction,getIntakeAssignmentAction} from '@/app/actions/eingang.actions';
+import {prepareIntakeFileAction,finishIntakeFileAction,getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,assignIntakeCustomerAction,getIntakeAssignmentAction} from '@/app/actions/eingang.actions';
 
 const replayUrl=process.env.DATABASE_URL;
 if(!replayUrl||replayUrl!==process.env.H18_EXPECTED_DATABASE_URL||new URL(replayUrl).hostname!=='127.0.0.1')throw Error('TEST_S21_FINANCIAL_DEDICATED_LOOPBACK_REQUIRED');
@@ -40,6 +40,20 @@ it('bookkeeping-only adopts the real supplier invoice IBAN atomically; customer 
  expect(await withSession(bookkeeping,()=>saveIncomingInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true,invoice:{id:saved.invoice.id}});
  expect(await withSession(bookkeeping,()=>getIncomingInvoiceAction({id:itemId}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id,iban:input.fields.iban},supplier:{iban:input.fields.iban}}});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${tenant} AND user_id=${bookkeeping.actorId}::uuid AND client_event_id=${input.clientKey}::uuid AND event_type='CUSTOMER_UPDATED_V1'`).toEqual([{n:1}]);
+ const readMoneyRevision = async () => {
+  const [source] = await sql<{revision:string}[]>`SELECT source_seq::text AS revision FROM private.today_source_v1
+    WHERE tenant_id=${tenant} AND kind='quelle:accounting.geld' AND source_id='*'`;
+  if (!source) throw Error('TEST_TODAY_MONEY_SOURCE_REQUIRED');
+  return BigInt(source.revision);
+ };
+ const beforePayment = await readMoneyRevision();
+ const statusChange = {invoiceId:saved.invoice.id,version:saved.invoice.version,clientKey:randomUUID(),
+  result:'bezahlt',paidDate:'2026-11-17',proofFileId:fileId,duplicateId:null,reason:null,fields:null};
+ const paid = await withSession(bookkeeping,()=>changeIncomingInvoiceStatusAction(statusChange));
+ expect(paid).toMatchObject({code:'OK',invoice:{id:saved.invoice.id,zahlstatus:'bezahlt'}});
+ expect(await readMoneyRevision()).toBe(beforePayment + BigInt(1));
+ expect(await withSession(bookkeeping,()=>changeIncomingInvoiceStatusAction(JSON.parse(JSON.stringify(statusChange))))).toMatchObject({code:'OK',replayed:true});
+ expect(await readMoneyRevision()).toBe(beforePayment + BigInt(1));
  // Explicit SQL boundary probe: even a delegated server context cannot use
  // the supplier-bank scope to change an unrelated customer field.
  const forged={iban:'DE89370400440532013000',company_name:'TEST forbidden unrelated supplier rename'};

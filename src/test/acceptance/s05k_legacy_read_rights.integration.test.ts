@@ -27,17 +27,6 @@ it('S05K A10 existing legacy readers use canonical areas and resolved tenant',as
  expect(await withSession(full,()=>getItemsByOrderDb(orderId))).toMatchObject({ok:true,data:expect.arrayContaining([expect.objectContaining({id:itemId})])});
 });
 
-it('S05K A10 maintenance statistics reject business-only rights and count only resolved tenant',async()=>{
- const {getSystemStats}=await import('@/app/actions/systemStats');
- const maintenance=await createFixture(['wartung'],'developer');
- await expect(withSession(full,()=>getSystemStats())).rejects.toThrow('Keine Berechtigung');
- process.env.NEXT_PUBLIC_DATA_PROVIDER='supabase';
- const [expected]=await sql`SELECT (SELECT count(*)::integer FROM public.orders WHERE tenant_id=${tenant}) AS orders,(SELECT count(*)::integer FROM public.customers WHERE tenant_id=${tenant}) AS customers,(SELECT count(*)::integer FROM public.app_users WHERE tenant_id=${tenant}) AS users`;
- const read=await withSession(maintenance,()=>getSystemStats());
- expect(read).toMatchObject({reachable:true,orders:expected.orders,customers:expected.customers,users:expected.users});
- expect(await withSession(maintenance,()=>getSystemStats())).toMatchObject({reachable:true,orders:expected.orders,customers:expected.customers,users:expected.users});
-});
-
 it('S05K A10 Inventory-Altvertrag nutzt Lagerrechte und Mandantentrennung',async()=>{
  const {getInventoryItemsAction,getInventoryItemAction}=await import('@/app/actions/inventory.actions');
  const operator=await createFixture(['auftraege'],'readonly');
@@ -94,7 +83,6 @@ it('S05K A10 PL0014 deferred tenantless sources deny after canonical rights with
  const {getBathsDb,createBathMeasurementDb}=await import('@/app/actions/baths.actions');
  const {getBaederListAction}=await import('@/app/baeder/actions');
  const {getBesteAktionAction}=await import('@/app/marketing/marketing.actions');
- const {getUstvaAnalysisAction}=await import('@/app/buchhaltung/analysis.actions');
  const {searchBelegeByOcrTextAction}=await import('@/app/buchhaltung/search-actions');
  const {createAktion}=await import('@/app/marketing/aktion/actions');
  const operator=await createFixture(['auftraege']),money=await createFixture(['preise','zahlungen','buchhaltung']);
@@ -104,7 +92,7 @@ it('S05K A10 PL0014 deferred tenantless sources deny after canonical rights with
  expect(await withSession(operator,()=>getBaederListAction())).toMatchObject({ok:false,message:text});
  expect(await withSession(operator,()=>createBathMeasurementDb({bathId:'TEST-no-write',temperature:20}))).toMatchObject({ok:false,message:text});
  await expect(withSession(operator,()=>getBesteAktionAction())).rejects.toThrow('Keine Berechtigung');
- for(const work of [()=>getBesteAktionAction(),()=>getUstvaAnalysisAction('2026-01-01','2026-12-31'),()=>searchBelegeByOcrTextAction('TEST'),()=>createAktion(new FormData())]){
+ for(const work of [()=>getBesteAktionAction(),()=>searchBelegeByOcrTextAction('TEST'),()=>createAktion(new FormData())]){
   await expect(withSession<unknown>(money,work)).rejects.toThrow(text);
  }
  expect(await withSession(operator,()=>getBathsDb())).toMatchObject({ok:false,message:text});

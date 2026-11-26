@@ -43,7 +43,10 @@ beforeEach(() => {
 
 test("Eine Mail am anderen Auftrag erhöht den abrechenbaren Betrag nicht", async () => {
   const readMail = vi.fn(async () => ({ id: request.intakeItemId, orderId: "TEST-Anderer-Auftrag", customerId }));
-  await expect(recordExtraWorkApproval(request, readMail)).resolves.toEqual({ code: "CONFLICT" });
+  await expect(recordExtraWorkApproval(request, readMail)).resolves.toEqual({
+    code: "CONFLICT", message: "Der Auftrag wurde inzwischen geändert. Bitte neu öffnen.",
+    next: { label: "Auftrag neu öffnen", href: "/orders/TEST-Auftrag" },
+  });
   expect(fixture.execute.mock.calls.some(([query]) => dialect.sqlToQuery(query).sql.includes("INSERT INTO"))).toBe(false);
 });
 
@@ -52,9 +55,21 @@ test("Eine Mailzusage braucht zusätzlich das Nachrichtenrecht", async () => {
     ok: true, data: { ...fixture.actor, areas: ["auftraege", "preise"] },
   });
   const readMail = vi.fn();
-  await expect(recordExtraWorkApproval(request, readMail)).resolves.toMatchObject({ code: "FORBIDDEN" });
+  await expect(recordExtraWorkApproval(request, readMail)).resolves.toEqual({
+    code: "FORBIDDEN", message: "Dafür fehlt dir das Recht. Bitte das Büro um Freigabe.",
+  });
   expect(readMail).not.toHaveBeenCalled();
   expect(fixture.execute).not.toHaveBeenCalled();
+});
+
+test("Ein nicht verfügbarer Auftrag führt zur Auftragsliste zurück", async () => {
+  fixture.execute.mockReset().mockResolvedValue([]);
+  const readMail = vi.fn();
+  await expect(recordExtraWorkApproval(request, readMail)).resolves.toEqual({
+    code: "NOT_FOUND", message: "Diesen Auftrag gibt es nicht mehr.",
+    next: { label: "Auftragsliste öffnen", href: "/orders" },
+  });
+  expect(readMail).not.toHaveBeenCalled();
 });
 
 test("Die ausdrückliche Zusage speichert die zugeordnete Originalmail am bestehenden Auftragsbeleg", async () => {
