@@ -6,7 +6,7 @@ export const generatedFlowRuntime = {
       "columns": {
         "kunde": "customer_id",
         "art": "is_quote",
-        "liefertermin": "promised_due_date",
+        "liefertermin": "due_date",
         "terminstatus": "intake_term_status",
         "uebergabe": "handover_mode",
         "zahlungsmodus": "payment_mode",
