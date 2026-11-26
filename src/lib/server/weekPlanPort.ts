@@ -3,6 +3,7 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 import {isWorkingDay} from '@/lib/domain/workingDays';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 
 const isoWocheMuster = /^([1-9]\d{3})-W(0[1-9]|[1-4]\d|5[0-3])$/u;
 
@@ -36,17 +37,9 @@ function tageDerWoche(isoWoche: string): string[] {
 export async function readWeekPlan(tenantId: string, isoWeek: string): Promise<Wochenplan> {
   const kalenderwoche = tageDerWoche(isoWeek);
   return withPrivilegedTenantTransaction({tenantId}, async tx => {
-    const kalender = await tx.execute<{betriebsruhe: string[]}>(sql`
-      SELECT CASE WHEN firma.id IS NULL THEN private.s16d_spur_d_standardwerte()->'betriebsruhe'
-        ELSE firma.betriebsruhe END AS betriebsruhe
-      FROM (VALUES (1)) AS start(zeile)
-      LEFT JOIN public.company_settings firma ON firma.tenant_id=${tenantId}
-      WHERE current_setting('app.tenant_id',true)=${tenantId}
-      LIMIT 2`);
-    if (kalender.length !== 1 || !Array.isArray(kalender[0].betriebsruhe)) {
-      throw Error('WEEK_PLAN_CLOSURES_UNAVAILABLE');
-    }
-    const geschlossen = new Set(kalender[0].betriebsruhe);
+    const {betriebsruhe} = await readBetriebsruheInTransaction(tx, tenantId);
+    if (!Array.isArray(betriebsruhe)) throw Error('WEEK_PLAN_CLOSURES_UNAVAILABLE');
+    const geschlossen = new Set(betriebsruhe);
     const arbeitstage = kalenderwoche.filter(datum => isWorkingDay(datum) && !geschlossen.has(datum));
     const personen = await tx.execute<{id: string; rolle: string}>(sql`
       SELECT id::text,role AS rolle FROM public.app_users
