@@ -50,39 +50,41 @@ function customerDeliveryBlock(paymentMode:string|null,invoiceIds:string[]):Cust
 }
 
 /** Same Berlin-day invoice predicate as the physical handover and order payment state. */
-export async function readCustomerDeliveryBlock(
-  auth:AuthorizationSnapshot,customerId:string,orderId?:string,
+export async function readCustomerDeliveryBlockInTransaction(
+  tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,customerId:string,orderId?:string,lockInvoices=false,
 ):Promise<CustomerDeliveryBlockRead>{
   if(!(['mails','kunden','auftraege'] as const).some(area=>hasAuthorizationArea(auth,area)))
     return {code:'FORBIDDEN'};
   if(!ORDER_ID_PATTERN.test(customerId)||(orderId!==undefined&&!ORDER_ID_PATTERN.test(orderId)))
     return {code:'VALIDATION_ERROR'};
+  const [scope]=await tx.execute<{payment_mode:string|null;handover_mode:string|null}>(sql`
+    SELECT ${orderId===undefined?sql`NULL::text AS payment_mode,NULL::text AS handover_mode`:sql`orders.payment_mode,orders.handover_mode`}
+    FROM public.customers customer
+    ${orderId===undefined?sql``:sql`JOIN public.orders orders
+      ON orders.tenant_id=customer.tenant_id AND orders.customer_id=customer.id AND orders.id=${orderId}`}
+    WHERE customer.tenant_id=${auth.tenantId} AND customer.id=${customerId}`);
+  if(!scope)return {code:'NOT_FOUND'};
+  if(orderId!==undefined&&!isOrderPaymentMode(scope.payment_mode))return {code:'UNAVAILABLE'};
+  const paymentMode=isOrderPaymentMode(scope.payment_mode)?scope.payment_mode:null;
+  const handover=scope.handover_mode==='pickup'||scope.handover_mode==='shipping'?scope.handover_mode:null;
+  if(paymentMode==='keiner')return {code:'OK',paymentMode,handover,data:customerDeliveryBlock(paymentMode,[])};
+  const invoices=await tx.execute<{id:string;number:string;open_amount:number;days_overdue:number}>(sql`
+    SELECT invoice.id::text,invoice.invoice_number AS number,invoice.payment_open_amount_cents AS open_amount,
+      (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-invoice.due_date::date AS days_overdue
+    FROM public.invoices invoice
+    WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${classifyOverdue()}
+    ORDER BY invoice.due_date,invoice.id ${lockInvoices?sql`FOR SHARE OF invoice`:sql``}`);
+  const oldest=invoices[0];
+  const visible=hasAuthorizationArea(auth,'zahlungen');
+  const data=customerDeliveryBlock(paymentMode,invoices.map(row=>row.id));
+  return {code:'OK',paymentMode,handover,data:visible?data:{...data,invoiceIds:[]},...(visible&&oldest&&oldest.number?{
+    oldest:{number:oldest.number,openAmountCents:oldest.open_amount,daysOverdue:oldest.days_overdue},
+  }:{})};
+}
+
+export async function readCustomerDeliveryBlock(auth:AuthorizationSnapshot,customerId:string,orderId?:string):Promise<CustomerDeliveryBlockRead>{
   try{
-    return await withPrivilegedTenantTransaction(auth,async tx=>{
-      const [scope]=await tx.execute<{payment_mode:string|null;handover_mode:string|null}>(sql`
-        SELECT ${orderId===undefined?sql`NULL::text AS payment_mode,NULL::text AS handover_mode`:sql`orders.payment_mode,orders.handover_mode`}
-        FROM public.customers customer
-        ${orderId===undefined?sql``:sql`JOIN public.orders orders
-          ON orders.tenant_id=customer.tenant_id AND orders.customer_id=customer.id AND orders.id=${orderId}`}
-        WHERE customer.tenant_id=${auth.tenantId} AND customer.id=${customerId}`);
-      if(!scope)return {code:'NOT_FOUND'};
-      if(orderId!==undefined&&!isOrderPaymentMode(scope.payment_mode))return {code:'UNAVAILABLE'};
-      const paymentMode=isOrderPaymentMode(scope.payment_mode)?scope.payment_mode:null;
-      const handover=scope.handover_mode==='pickup'||scope.handover_mode==='shipping'?scope.handover_mode:null;
-      if(paymentMode==='keiner')return {code:'OK',paymentMode,handover,data:customerDeliveryBlock(paymentMode,[])};
-      const invoices=await tx.execute<{id:string;number:string;open_amount:number;days_overdue:number}>(sql`
-        SELECT invoice.id::text,invoice.invoice_number AS number,invoice.payment_open_amount_cents AS open_amount,
-          (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-invoice.due_date::date AS days_overdue
-        FROM public.invoices invoice
-        WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId} AND ${classifyOverdue()}
-        ORDER BY invoice.due_date,invoice.id`);
-      const oldest=invoices[0];
-      const visible=hasAuthorizationArea(auth,'zahlungen');
-      const data=customerDeliveryBlock(paymentMode,invoices.map(row=>row.id));
-      return {code:'OK',paymentMode,handover,data:visible?data:{...data,invoiceIds:[]},...(visible&&oldest&&oldest.number?{
-        oldest:{number:oldest.number,openAmountCents:oldest.open_amount,daysOverdue:oldest.days_overdue},
-      }:{})};
-    });
+    return await withPrivilegedTenantTransaction(auth,tx=>readCustomerDeliveryBlockInTransaction(tx,auth,customerId,orderId));
   }catch(error){
     logReadFailure('readCustomerDeliveryBlock database error',error);
     return {code:'UNAVAILABLE'};
@@ -185,8 +187,7 @@ async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:
       }
       return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:customerDeliveryBlock(rows[0].payment_mode,rows[0].customer_overdue_invoice_ids) };
 }
-async function readPaymentStateGroup(authorization:PaymentReadAuthorization,orderIds:string[],readCredit?:CreditSourceRead){
- return withPrivilegedTenantTransaction(authorization,async tx=>{
+async function readPaymentStateGroupInTransaction(tx:PrivilegedTenantTransaction,authorization:PaymentReadAuthorization,orderIds:string[],readCredit?:CreditSourceRead){
   const grouped=new Map<string,PaymentStateSourceRow[]>(orderIds.map(orderId=>[orderId,[]]));
   {
    const requested=sql`ARRAY[${sql.join(orderIds.map(orderId=>sql`${orderId}`),sql`, `)}]::text[]`;
@@ -218,7 +219,6 @@ async function readPaymentStateGroup(authorization:PaymentReadAuthorization,orde
    result.set(orderId,data&&"code" in data?{code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."}:data?{code:"OK",data}:{code:"NOT_FOUND",message:"Zahlungs- und Warenausgangsdaten sind nicht verfügbar."});
   }
   return result;
- });
 }
 export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot|PaymentReadAuthorization,orderIds:readonly string[],readCredit?:CreditSourceRead):Promise<Map<string,OrderPaymentStateReadResult>>{
  const readAuth='canReadSummary'in authorization?authorization:paymentReadAuthorization(authorization);
@@ -230,7 +230,7 @@ export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot|
  }
  const read=async(ids:string[]):Promise<void>=>{
   if(!ids.length)return;
-  try{const rows=await readPaymentStateGroup(readAuth,ids,readCredit);for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");result.set(orderId,value);}}
+  try{const rows=await withPrivilegedTenantTransaction(readAuth,tx=>readPaymentStateGroupInTransaction(tx,readAuth,ids,readCredit));for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");result.set(orderId,value);}}
   catch(error){
    if(ids.length>1){const middle=Math.floor(ids.length/2);await read(ids.slice(0,middle));await read(ids.slice(middle));return;}
    logReadFailure("getPaymentState database error",error);result.set(ids[0],{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."});
@@ -242,4 +242,14 @@ export async function getPaymentState(authorization:AuthorizationSnapshot|Paymen
  if(typeof orderId!=="string"||!ORDER_ID_PATTERN.test(orderId))return {code:"VALIDATION_ERROR",message:"Ungültige Zahlungsabfrage."};
  const rows=await getPaymentStatesBatch(authorization,[orderId],readCredit);
  return rows.get(orderId)??{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."};
+}
+
+export async function getPaymentStateInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string):Promise<OrderPaymentStateReadResult>{
+ if(!ORDER_ID_PATTERN.test(orderId))return {code:'VALIDATION_ERROR',message:'Ungültige Zahlungsabfrage.'};
+ const readAuth=paymentReadAuthorization(auth);
+ if(!readAuth.canReadOrderStates)return {code:'FORBIDDEN',message:'Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt.'};
+ const rows=await readPaymentStateGroupInTransaction(tx,readAuth,[orderId]);
+ const state=rows.get(orderId);
+ if(!state)throw Error('ORDER_PAYMENT_STATE_AMBIGUOUS');
+ return state;
 }

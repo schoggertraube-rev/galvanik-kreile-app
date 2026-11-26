@@ -11,11 +11,12 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {readIntakeSuggestions} from '@/lib/server/intakeSuggestions';
 import {readCustomerDeliveryBlock} from '@/lib/server/paymentSummaryRead';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
-import {pruefeZusage as zusage, type ZusageLeser} from '@/modules/eingang/server-public';
+import {pruefeZusage as zusage,recordZusageAusnahmeInTransaction,type ZusageLeser} from '@/modules/eingang/server-public';
 
 const leser:ZusageLeser={
   termin:(auth,input)=>readIntakeSuggestions(auth,input,readBetriebsruheInTransaction),
@@ -59,6 +60,29 @@ it('reads customer-wide debt from the actual invoice source without exposing it 
   expect(await pruefeZusage(limited.data,input)).toMatchObject({frei:false,grund:'liefersperre',text:'Abholung erst nach Zahlung.'});
   expect(await pruefeZusage(limited.data,{art:'preis_im_text'})).toMatchObject({frei:false,grund:'preisrecht'});
   expect(await pruefeZusage(auth,{...input,orderId:randomUUID()})).toMatchObject({frei:false,grund:'unbekannt'});
+
+  const approver=await createFixture(['mails','auftraege','entscheiden']);
+  const authorization=await withSession(approver,()=>resolveAuthorization());
+  if(!authorization.ok)throw Error('TEST_S1_APPROVER_AUTH_REQUIRED');
+  const exception={customerId,orderId,expectedVersion:affected.receipt.orderVersion,
+    clientEventId:randomUUID(),reason:'TEST S-1 Verbindliche Ausnahme durch den Meister'};
+  const record=(actor:typeof auth,command:Parameters<typeof recordZusageAusnahmeInTransaction>[2])=>withPrivilegedTenantTransaction(actor,
+    tx=>recordZusageAusnahmeInTransaction(tx,actor,command));
+  expect(await record(limited.data,exception)).toEqual({code:'FORBIDDEN'});
+  expect(await record(authorization.data,{...exception,reason:''})).toEqual({code:'VALIDATION_ERROR'});
+  expect(await record(authorization.data,{...exception,expectedVersion:exception.expectedVersion+1})).toEqual({code:'CONFLICT'});
+  expect(await pruefeZusage(authorization.data,input)).toMatchObject({frei:false,ausnahme:{recht:'entscheiden'}});
+  const saved=await record(authorization.data,exception);
+  if(saved.code!=='OK')throw Error('TEST_S1_EXCEPTION_NOT_RECORDED:'+saved.code);
+  expect(saved.replayed).toBe(false);
+  expect(await record(authorization.data,structuredClone(exception))).toEqual({...saved,replayed:true});
+  expect(await record(authorization.data,{...exception,reason:'Anderer Grund'})).toEqual({code:'CONFLICT'});
+  expect(await sql`SELECT id,user_id,order_id,notes,payload FROM public.events
+    WHERE tenant_id=${tenant} AND client_event_id=${exception.clientEventId}::uuid`).toEqual([{
+    id:saved.eventId,user_id:authorization.data.userId,order_id:orderId,notes:exception.reason,
+    payload:{customerId,grund:'liefersperre'},
+  }]);
+  expect(await pruefeZusage(auth,input)).toMatchObject({frei:false,grund:'liefersperre'});
 });
 
 it('uses the actual order and planning sources to return the earliest possible appointment',async()=>{

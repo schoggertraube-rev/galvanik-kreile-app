@@ -5,6 +5,7 @@
   "publicExports": [
     "@/modules/eingang/server-public#tagQuellen",
     "@/modules/eingang/server-public#pruefeZusage",
+    "@/modules/eingang/server-public#recordZusageAusnahmeInTransaction",
     "@/modules/eingang/server-public#ZusageInput",
     "@/modules/eingang/server-public#ZusageErgebnis",
     "@/modules/eingang/server-public#ZusageLeser",
