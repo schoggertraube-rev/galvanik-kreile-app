@@ -9,7 +9,7 @@ import {useKrGeraet} from './AppShell';
 import {GlasDialog,isTopGlassDialog,type GlasDialogProps} from './design-final/GlasDialog';
 
 export type DialogMeldung = { text: string; ton: 'fehler' | 'erfolg'; specId?:string };
-export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; vorfinalForm?:'overlay'; beschaeftigt?:boolean; dataSpecId?:string; oeffner?:HTMLElement|null; }
+export interface DialogProps { titel: string; unterzeile?: ReactNode; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte' | 'werkbank'; onSchliessen: () => void; vorSchliessen?: () => boolean; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; vorfinalForm?:'overlay'; beschaeftigt?:boolean; dataSpecId?:string; oeffner?:HTMLElement|null; amDock?:boolean; }
 
 export const isTopDialog = isTopGlassDialog;
 
@@ -18,14 +18,14 @@ const groessen = {
 } satisfies Record<NonNullable<DialogProps['groesse']>, GlasDialogProps['groesse']>;
 
 export function Dialog({titel,unterzeile,icon='file',groesse='normal',onSchliessen,vorSchliessen,onZurueck,
-  schliessenSpecId,fuss,meldung,children,beschaeftigt=false,dataSpecId,oeffner}:DialogProps) {
+  schliessenSpecId,fuss,meldung,children,beschaeftigt=false,dataSpecId,oeffner,amDock}:DialogProps) {
   const [offen,setOffen]=useState(true);
   const geraet=useKrGeraet();
   const [opener]=useState(()=>oeffner===undefined
     ? typeof document!=='undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null
     : oeffner);
   return <GlasDialog offen={offen} titel={titel} beschreibung={unterzeile} groesse={groessen[groesse]}
-    ansicht={geraet==='handy'?'blatt':groesse==='karte'?'objekt':'fenster'}
+    ansicht={amDock?'dock':geraet==='handy'?'blatt':groesse==='karte'?'objekt':'fenster'} kopfVerborgen={amDock}
     schliessenText={V45_TEXT.common$close} schliessenSymbol={<Icon name="x"/>} schliessenSpecId={schliessenSpecId}
     schliesstGesperrt={beschaeftigt} beschaeftigt={beschaeftigt} dataSpecId={dataSpecId} oeffner={opener}
     onSchliessen={()=>{if(vorSchliessen?.()===false)return false;setOffen(false);}} onGeschlossen={onSchliessen}

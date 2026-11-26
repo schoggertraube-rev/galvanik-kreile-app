@@ -1,5 +1,6 @@
 // Einbau in src/app/HomeAppAdapter.tsx und src/components/home/OfficeHome.tsx.
 // Erweitert src/ui/kr/Lage.tsx und src/ui/kr/Kachel.tsx.
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 import styles from './Tagescockpit.module.css';
 
@@ -25,7 +26,7 @@ export interface PrioritaetskarteProps {
 
 export function Prioritaetskarte({ kategorie, titel, begruendung, zusatz, frist, pigment, symbol,
   foto, hauptaktion, nebenaktion, verweise, stapel, wechselSchluessel }: PrioritaetskarteProps) {
-  const plate = foto ? <img className={styles.photo} src={foto.src} alt={foto.alt} /> : null;
+  const plate = foto ? <Image className={styles.photo} src={foto.src} alt={foto.alt} width={192} height={126} unoptimized /> : null;
   return <div className={styles.deck} data-stack={stapel || undefined}>
     <article className={styles.priority} key={wechselSchluessel} data-next={wechselSchluessel !== undefined || undefined} data-pigment={pigment} data-photo={Boolean(foto) || undefined}>
       <header className={styles.priorityHeader}>

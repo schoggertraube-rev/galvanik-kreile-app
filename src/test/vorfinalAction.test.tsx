@@ -5,21 +5,26 @@ import {afterEach,expect,it,vi} from 'vitest';
 import {Button} from '@/ui/kr/Button';
 import {weiterMitEnter} from '@/ui/kr/tastatur';
 afterEach(()=>{cleanup();delete document.documentElement.dataset.ui;vi.restoreAllMocks();});
-it('keeps the existing primary markup off and copies the source act default when on',()=>{
+it('shows the same primary glass button for both entry modes',()=>{
  const command=vi.fn();const view=render(<Button art="primaer" text="TEST save" onClick={command}/>);
- expect(screen.getByRole('button').className).toBe('kr-btn kr-btn--primaer');
+ expect(screen.getByRole('button').dataset).toMatchObject({form:'text',ton:'haupt',glasknopfZustand:'normal'});
  document.documentElement.dataset.ui='v45';view.rerender(<Button art="primaer" text="TEST save" onClick={command}/>);
  const button=screen.getByRole('button',{name:'TEST save'});
- expect(button.className).toBe('act');expect(button.dataset).toMatchObject({glass:'act',tint:'go'});
- expect(button.querySelector('.lbl')?.textContent).toBe('TEST save');
- expect(button.querySelector('.nub .ic path')?.getAttribute('d')).toBe('M5 12h14M13 6l6 6-6 6');
- expect(button.querySelector('.okmark path')?.getAttribute('d')).toBe('m5 12.5 4.5 4.5L19 7.5');
+ expect(button.dataset).toMatchObject({form:'text',ton:'haupt',glasknopfZustand:'normal'});
+ expect(button).toHaveTextContent('TEST save');
+ expect(button.querySelector('svg path')?.getAttribute('d')).toBe('M5 12h14M13 6l6 6-6 6');
  fireEvent.click(button);expect(command).toHaveBeenCalledTimes(1);expect(button.classList.contains('done')).toBe(false);
 });
 it('retains the existing disabled state and escapes actual flow text',()=>{
  document.documentElement.dataset.ui='v45';const command=vi.fn();render(<Button art="erledigen" text={'TEST <img src=x>'} disabled onClick={command}/>);
  const button=screen.getByRole('button');fireEvent.click(button);expect(command).not.toHaveBeenCalled();
  expect(button.querySelector('img')).toBeNull();expect(button.textContent).toBe('TEST <img src=x>');
+});
+it('submits the existing form from a glass action outside the form',()=>{
+ const submit=vi.fn((event:{preventDefault:()=>void})=>event.preventDefault());
+ render(<><form id="test-save" onSubmit={submit}/><Button type="submit" form="test-save" art="primaer" text="TEST save"/></>);
+ fireEvent.click(screen.getByRole('button',{name:'TEST save'}));
+ expect(submit).toHaveBeenCalledOnce();
 });
 it('feeds the same primary command from the existing form Enter handler',()=>{
  document.documentElement.dataset.ui='v45';const command=vi.fn();

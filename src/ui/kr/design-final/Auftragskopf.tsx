@@ -1,6 +1,7 @@
 'use client';
 
 /** Erweitert die Darstellung um src/ui/kr/Auftragszeile.tsx. Der Detailadapter liefert die Props. */
+import Image from 'next/image';
 import type { KeyboardEvent, ReactNode } from 'react';
 import styles from './Auftragskopf.module.css';
 
@@ -16,7 +17,7 @@ export interface AuftragskopfProps {
 }
 
 export function Auftragskopf({ titelId, titel, bild, termin, verweise, hinweis, fortschritt, schliessen }: AuftragskopfProps) {
-  const auftragsbild = bild && <img src={bild.src} alt={bild.alt} />;
+  const auftragsbild = bild && <Image src={bild.src} alt={bild.alt} width={82} height={82} unoptimized />;
   return <header className={styles.kopf}>
     <div className={styles.identitaet}>
       {bild && (bild.onOeffnen ? <button type="button" className={styles.bild} aria-label={bild.label} onClick={bild.onOeffnen}>{auftragsbild}</button>

@@ -21,8 +21,8 @@ export function Button({ art = 'standard', icon, text, label, block, className, 
   const symbol = icon && (vorfinal && vorfinalForm === 'icon'
     ? <Icon name={icon} variant="vorfinal" /> : <Icon name={icon} />);
   const beschriftung = text
-    ? { form: 'text' as const, text, bezeichnung: ariaLabel }
-    : { form: 'quadrat' as const, bezeichnung: ariaLabel ?? label ?? '' };
+    ? { knopfform: 'text' as const, text, bezeichnung: ariaLabel }
+    : { knopfform: 'quadrat' as const, bezeichnung: ariaLabel ?? label ?? '' };
   return <Glasknopf {...rest} {...beschriftung} type={type} ton={toene[art]} icon={symbol}
     endIcon={text && art === 'primaer' ? <Icon name="arrow" /> : undefined}
     title={rest.title ?? (text ? undefined : label)} volleBreite={block}

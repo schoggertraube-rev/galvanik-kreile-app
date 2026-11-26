@@ -5,6 +5,19 @@ import { useEffect, useId, useLayoutEffect, useRef, type ReactNode } from 'react
 import { Glasknopf } from './Glasknopf';
 import styles from './Glasnavigation.module.css';
 
+const vorlagenSymbole: Readonly<Record<string, string>> = {
+  tag: 'app-dein-tag', werkstatt: 'app-werkstatt', planung: 'app-planung',
+  nachrichten: 'app-nachrichten', auftraege: 'app-auftraege', kunden: 'app-auftraege', lager: 'app-lager',
+  geld: 'app-zahlungen', einstellungen: 'app-einstellungen', eingang: 'app-hinzufuegen', mehr: 'hauptmenue-weitere',
+};
+
+export function GlasNavigationsSymbol({ bereich, ersatz }: { bereich: string; ersatz?: ReactNode }) {
+  const datei = vorlagenSymbole[bereich];
+  if (!datei) return ersatz ?? null;
+  const quelle = `url('/design/icons/${datei}.svg')`;
+  return <span aria-hidden="true" className={styles.vorlagenSymbol} style={{ maskImage: quelle, WebkitMaskImage: quelle }} />;
+}
+
 export type Glaseintrag = {
   id: string;
   text: string;
@@ -34,7 +47,11 @@ type Dock = {
   art: 'dock';
   kompakt?: boolean;
   erfassung?: Symbolaktion;
-  weitere?: Pick<Symbolaktion, 'icon' | 'text'> & { zielbezeichnung?: string; eintraege: readonly Glaseintrag[]; aufrufen?: () => void };
+  weitere?: Pick<Symbolaktion, 'icon' | 'text'> & {
+    zielbezeichnung?: string;
+    eintraege: readonly Glaseintrag[];
+    aufrufen?: (oeffner: HTMLButtonElement) => void;
+  };
 };
 
 export type GlasnavigationProps = (Leiste | Dock) & {
@@ -48,15 +65,17 @@ export type GlasnavigationProps = (Leiste | Dock) & {
 function GlasnavigationEintrag({ eintrag, aktiv, aufrufen, deaktiviert, panel = false }: {
   eintrag: Glaseintrag; aktiv: boolean; aufrufen?: () => void; deaktiviert?: boolean; panel?: boolean;
 }) {
+  const beschreibungId = useId();
   return (
     <button type="button" className={styles.eintrag} aria-label={eintrag.text} title={eintrag.text}
-      aria-description={eintrag.zaehlerBeschreibung}
+      aria-describedby={eintrag.zaehlerBeschreibung ? beschreibungId : undefined}
       data-spec-id={eintrag.specId} data-dock-spalte={eintrag.dockSpalte} disabled={deaktiviert}
       data-nav-active={!panel && aktiv || undefined} aria-current={aktiv ? 'page' : undefined}
       data-nav-unten={eintrag.gruppe === 'unten' || undefined} onClick={aufrufen ?? eintrag.aufrufen}>
       <span className={styles.icon} aria-hidden="true">{eintrag.icon}</span>
       <span className={styles.text}>{eintrag.text}</span>
       {eintrag.zaehler != null && <span className={styles.zaehler}>{eintrag.zaehler}</span>}
+      {eintrag.zaehlerBeschreibung && <span id={beschreibungId} hidden>{eintrag.zaehlerBeschreibung}</span>}
     </button>
   );
 }
@@ -72,6 +91,7 @@ export function Glasnavigation(p: GlasnavigationProps) {
   const mehrSchalter = useRef<HTMLButtonElement>(null);
   const leisteId = useId();
   const mehrId = useId();
+  const mehrBeschreibungId = useId();
   const eintraege = p.eintraege;
   const leiste = p.art === 'leiste';
   const offen = leiste && p.offen;
@@ -188,7 +208,7 @@ export function Glasnavigation(p: GlasnavigationProps) {
           {eintraege.map((eintrag) => <GlasnavigationEintrag key={eintrag.id} eintrag={eintrag} aktiv={aktiv === eintrag.id} deaktiviert={p.deaktiviert} />)}
         </div>
         {hatWerkzeuge && <div role="group" aria-label={p.werkzeugeLabel} className={styles.werkzeuge} hidden={!offen}>
-          {p.werkzeuge?.map((werkzeug) => <Glasknopf key={werkzeug.text} form="quadrat" bezeichnung={werkzeug.text}
+          {p.werkzeuge?.map((werkzeug) => <Glasknopf key={werkzeug.text} knopfform="quadrat" bezeichnung={werkzeug.text}
             icon={werkzeug.icon} onClick={werkzeug.ausloesen} disabled={p.deaktiviert} />)}
         </div>}
       </nav>
@@ -201,15 +221,17 @@ export function Glasnavigation(p: GlasnavigationProps) {
         {markierung}
         {(p.kompakt ? eintraege.filter(eintrag => eintrag.dockSpalte !== 4) : eintraege)
           .map((eintrag) => <GlasnavigationEintrag key={eintrag.id} eintrag={eintrag} aktiv={aktiv === eintrag.id} deaktiviert={p.deaktiviert} />)}
-        {p.erfassung && <Glasknopf form="dock" className={styles.erfassung} ton="erfassung" text={p.erfassung.text}
+        {p.erfassung && <Glasknopf knopfform="dock" className={styles.erfassung} ton="erfassung" text={p.erfassung.text}
           data-spec-id="navigation.plus" icon={p.erfassung.icon} onClick={p.erfassung.ausloesen} disabled={p.deaktiviert} />}
         {p.kompakt && eintraege.filter(eintrag => eintrag.dockSpalte === 4)
           .map((eintrag) => <GlasnavigationEintrag key={eintrag.id} eintrag={eintrag} aktiv={aktiv === eintrag.id} deaktiviert={p.deaktiviert} />)}
         {p.weitere && <button ref={mehrSchalter} type="button" className={styles.eintrag} popoverTarget={p.weitere.aufrufen ? undefined : mehrId}
-          data-dock-spalte="5" onClick={p.weitere.aufrufen} disabled={p.deaktiviert} aria-haspopup={p.weitere.aufrufen ? 'dialog' : undefined}
-          data-nav-active={weiteresAktiv || undefined} aria-description={weiteresAktiv ? p.weitere.zielbezeichnung : undefined}>
+          data-dock-spalte="5" onClick={p.weitere.aufrufen && (event => p.weitere?.aufrufen?.(event.currentTarget))}
+          disabled={p.deaktiviert} aria-haspopup={p.weitere.aufrufen ? 'dialog' : undefined}
+          data-nav-active={weiteresAktiv || undefined} aria-describedby={weiteresAktiv && p.weitere.zielbezeichnung ? mehrBeschreibungId : undefined}>
           <span className={styles.icon} aria-hidden="true">{p.weitere.icon}</span>
           <span className={styles.text}>{p.weitere.text}</span>
+          {weiteresAktiv && p.weitere.zielbezeichnung && <span id={mehrBeschreibungId} hidden>{p.weitere.zielbezeichnung}</span>}
         </button>}
       </div>
       {p.weitere && !p.weitere.aufrufen && <div id={mehrId} popover="auto" ref={mehr} role="group" aria-label={p.weitere.text} className={styles.mehr}>

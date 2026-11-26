@@ -19,7 +19,7 @@ import { requestGlobalCreate } from "./GlobalCreateFlow";
 import styles from "./TargetShell.module.css";
 import {WasIstNeu} from './WasIstNeu';
 import {DeviceStandStatus} from '@/lib/offline/DeviceStandStatus';
-import {NAVIGATION} from '@/ui/navigation/register';
+import {NAVIGATION,sichtbareNavigation} from '@/ui/navigation/register';
 import {ORDER_WEEK_ROUTE} from '@/ui/navigation/orders';
 
 function readDevice(): Geraet {
@@ -62,7 +62,7 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   const device = useSyncExternalStore(subscribeDevice, readDevice, readServerDevice);
   const navigationRail = useSyncExternalStore(subscribeDevice, readNavigationRail, readServerNavigationRail);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreMenu, setMoreMenu] = useState<{oeffner?: HTMLButtonElement} | null>(null);
   const loginOnly = pathname === "/start" || pathname === "/login";
   const sessionInvalid = !permissions.loading && permissions.status !== "authenticated";
 
@@ -82,9 +82,9 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   if (!permissions.hasPermission("perm_view_prices")) hidden.push("geld");
   if (!permissions.hasPermission("perm_sys_toggles") && !permissions.hasPermission("perm_sys_users") && !permissions.hasPermission("perm_sys_diag")) hidden.push("einstellungen");
 
-  const go = (target: Bereich | "mehr") => {
+  const go = (target: Bereich | "mehr", oeffner?: HTMLButtonElement) => {
     if (target === "mehr") {
-      setMoreOpen(true);
+      setMoreMenu({oeffner});
       return;
     }
     // Enter messages/settings as a complete document. WebKit can receive Flight
@@ -101,15 +101,15 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
     if(path==='/nachrichten'){const event=new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'nachrichten'}});return !window.dispatchEvent(event);}
     router.push(path);return true;
   }}/> : null;
-  const menuTargets = NAVIGATION.filter(entry => !hidden.includes(entry.id)
-    && !['tag', 'werkstatt', 'nachrichten', 'einstellungen'].includes(entry.id));
+  const menuTargets = sichtbareNavigation(hidden).filter(entry =>
+    !['tag', 'werkstatt', 'nachrichten', 'einstellungen'].includes(entry.id));
   const schliesseUndOeffne = (aktion: () => void) => () => {
-    setMoreOpen(false);
+    setMoreMenu(null);
     aktion();
   };
   const overlay = (werkstattWerkzeuge: ReactNode) => (
     <>
-      <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} ziele={menuTargets}
+      <MoreMenu open={moreMenu !== null} oeffner={moreMenu?.oeffner} onClose={() => setMoreMenu(null)} ziele={menuTargets} amDock={device === 'handy'}
         werkzeuge={device === 'handy' ? <>{workshop && werkstattWerkzeuge}{news}</> : null} />
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </>
@@ -138,11 +138,11 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
           ) : <span />}
           onNav={go}
           onStart={() => router.push("/")}
-          onKonto={() => setMoreOpen(true)}
+          onKonto={oeffner => setMoreMenu({oeffner})}
           onNeuerEingang={permissions.hasArea("eingang") ? () => requestGlobalCreate() : undefined}
           onWareRaus={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/orders?station=fertig")) : undefined}
           onAuftragOeffnen={permissions.hasPermission("perm_view_leitstand") ? () => router.push("/orders") : undefined}
-          onPlanung={permissions.hasPermission("perm_view_leitstand") ? () => router.push(ORDER_WEEK_ROUTE) : undefined}
+          onPlanung={permissions.hasPermission("perm_view_leitstand") ? () => window.location.assign(ORDER_WEEK_ROUTE) : undefined}
           onMehrarbeit={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/warendurchlauf")) : undefined}
           onFertigMelden={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/warendurchlauf")) : undefined}
           ebene={overlay}

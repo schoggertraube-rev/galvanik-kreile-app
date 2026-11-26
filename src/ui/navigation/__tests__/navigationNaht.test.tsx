@@ -3,11 +3,11 @@ import {renderToStaticMarkup} from 'react-dom/server';
 import {cleanup,fireEvent,render,screen,within} from '@testing-library/react';
 import {AppShell,type Bereich} from '../../kr/AppShell';
 import type {Geraet} from '../../kr/typen';
-import {NAVIGATION} from '../register';
+import {NAVIGATION,sichtbareNavigation} from '../register';
 
 const expected=[
- ['tag','/',null],['nachrichten','/nachrichten','/nachrichten'],
- ['werkstatt','/warendurchlauf','/warendurchlauf'],['auftraege','/orders','/orders'],
+ ['tag','/',null],['werkstatt','/warendurchlauf','/warendurchlauf'],
+ ['nachrichten','/nachrichten','/nachrichten'],['auftraege','/orders','/orders'],
  ['kunden','/customers','/customers'],['geld','/buchhaltung/rechnungen','/buchhaltung/rechnungen'],
  ['einstellungen','/settings','/settings'],
 ] as const;
@@ -18,6 +18,20 @@ describe('Nähte-b: neues Menü mit den bestehenden Zielen',()=>{
  it('bindet jede Kennung an genau ihre bisherige Route und ihren Pfad',()=>{
   expect(NAVIGATION.map(({id,route,pfad})=>[id,route,pfad])).toEqual(expected);
   expect(NAVIGATION.filter(entry=>entry.pfad===null).map(entry=>entry.id)).toEqual(['tag']);
+ });
+ it('zeigt eine Kachel mit der jeweils berechtigten Auftrags- oder Kundenroute',()=>{
+  const ziele=(ausgeblendet:Bereich[])=>sichtbareNavigation(ausgeblendet)
+    .filter(ziel=>ziel.id==='auftraege'||ziel.id==='kunden').map(ziel=>ziel.route);
+  expect(ziele([])).toEqual(['/orders']);
+  expect(ziele(['auftraege'])).toEqual(['/customers']);
+  expect(ziele(['auftraege','kunden'])).toEqual([]);
+  const onNav=vi.fn();
+  render(<AppShell geraet="desktop" variante="buero" aktiv="kunden" kuerzel="GK" suche={null} plus={null}
+    onNav={onNav} onStart={()=>{}} onKonto={()=>{}}><section>TEST Kunden</section></AppShell>);
+  const ziel=screen.getByRole('button',{name:'Aufträge und Kunden'});
+  expect(ziel).toHaveAttribute('aria-current','page');
+  fireEvent.click(ziel);
+  expect(onNav).toHaveBeenCalledExactlyOnceWith('auftraege');
  });
  for(const geraet of ['desktop','tablet','handy'] as const satisfies readonly Geraet[]){
   for(const verborgen of [false,true]){
@@ -46,10 +60,11 @@ describe('Nähte-b: neues Menü mit den bestehenden Zielen',()=>{
   expect(nav.getByRole('button',{name:'Dein Tag'})).toHaveAttribute('aria-current','page');
   fireEvent.click(targets[2]);
   fireEvent.click(nav.getByRole('button',{name:'Planung'}));
-  fireEvent.click(nav.getByRole('button',{name:'Mehr'}));
+  const mehr=nav.getByRole('button',{name:'Mehr'});
+  fireEvent.click(mehr);
   expect(onNeuerEingang).toHaveBeenCalledOnce();
   expect(onPlanung).toHaveBeenCalledOnce();
-  expect(onNav).toHaveBeenCalledExactlyOnceWith('mehr');
+  expect(onNav).toHaveBeenCalledExactlyOnceWith('mehr',mehr);
  });
  it('öffnet dieselbe Planung auch aus dem Desktop-Menü',()=>{
   const onPlanung=vi.fn();
@@ -73,13 +88,14 @@ describe('Nähte-b: neues Menü mit den bestehenden Zielen',()=>{
   expect(leiste.getAllByRole('button')).toHaveLength(1);
   fireEvent.click(leiste.getByRole('button',{name:'Auftrag öffnen / scannen'}));
   fireEvent.click(navigation.getByRole('button',{name:'Eingang'}));
-  fireEvent.click(navigation.getByRole('button',{name:'Mehr'}));
+  const mehr=navigation.getByRole('button',{name:'Mehr'});
+  fireEvent.click(mehr);
   const weitere=within(screen.getByRole('group',{name:'Weitere Werkstatt-Aktionen'}));
   expect(weitere.queryByRole('button',{name:'Mehrarbeit'})).toBeNull();
   fireEvent.click(weitere.getByRole('button',{name:'Fertig melden'}));
   expect(onAuftragOeffnen).toHaveBeenCalledOnce();
   expect(onFertigMelden).toHaveBeenCalledOnce();
   expect(onNeuerEingang).toHaveBeenCalledOnce();
-  expect(onNav).toHaveBeenCalledExactlyOnceWith('mehr');
+  expect(onNav).toHaveBeenCalledExactlyOnceWith('mehr',mehr);
  });
 });

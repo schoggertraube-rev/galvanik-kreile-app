@@ -4,13 +4,12 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import styles from './Glasknopf.module.css';
 
-type Form = 'text' | 'kreis' | 'quadrat' | 'dock';
 type Ton = 'haupt' | 'sekundaer' | 'erfassung' | 'kritisch' | 'leise';
 type Zustand = 'normal' | 'gedrueckt' | 'deaktiviert' | 'laedt' | 'fehler';
 
 type Beschriftung =
-  | { form?: 'text' | 'dock'; text: string; bezeichnung?: string }
-  | { form: 'kreis' | 'quadrat'; text?: never; bezeichnung: string };
+  | { knopfform?: 'text' | 'dock'; text: string; bezeichnung?: string }
+  | { knopfform: 'kreis' | 'quadrat'; text?: never; bezeichnung: string };
 
 export type GlasknopfProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'aria-label'> & Beschriftung & {
   ton?: Ton;
@@ -23,14 +22,14 @@ export type GlasknopfProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'chil
   fehlerId?: string;
 };
 
-export function Glasknopf({ form = 'text', text, bezeichnung, ton = 'sekundaer', zustand = 'normal', volleBreite,
+export function Glasknopf({ knopfform = 'text', text, bezeichnung, ton = 'sekundaer', zustand = 'normal', volleBreite,
   icon, endIcon, ladeIcon, fehlerIcon, fehlerId, className, type = 'button', disabled, onClick,
   'aria-describedby': beschriebenDurch, ...native }: GlasknopfProps) {
   const laedt = zustand === 'laedt';
   const fehler = zustand === 'fehler';
   const endSymbol = (laedt && ladeIcon) || (fehler && fehlerIcon) || endIcon;
-  const zeigeEndSymbol = form === 'text' && endSymbol != null;
-  const vorn = form === 'text' ? icon : (laedt && ladeIcon) || (fehler && fehlerIcon) || icon;
+  const zeigeEndSymbol = knopfform === 'text' && endSymbol != null;
+  const vorn = knopfform === 'text' ? icon : (laedt && ladeIcon) || (fehler && fehlerIcon) || icon;
   const beschreibung = [beschriebenDurch, fehler && fehlerId].filter(Boolean).join(' ');
 
   return (
@@ -38,7 +37,7 @@ export function Glasknopf({ form = 'text', text, bezeichnung, ton = 'sekundaer',
       {...native}
       type={type}
       className={className ? `${styles.knopf} ${className}` : styles.knopf}
-      data-form={form satisfies Form}
+      data-form={knopfform}
       data-ton={ton}
       data-glasknopf-zustand={zustand}
       data-volle-breite={volleBreite || undefined}

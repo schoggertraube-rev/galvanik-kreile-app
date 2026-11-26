@@ -3,12 +3,13 @@
 // Ersetzt/erweitert src/ui/kr/Dialog.tsx und src/ui/kr/Seitenblatt.tsx.
 import { useId, useLayoutEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import styles from './GlasDialog.module.css';
+import navigationStyles from './Glasnavigation.module.css';
 
 export interface GlasDialogProps {
   offen: boolean;
   titel: string;
   beschreibung?: ReactNode;
-  ansicht?: 'fenster' | 'blatt' | 'objekt' | 'zeitwahl' | 'zahlwahl';
+  ansicht?: 'fenster' | 'blatt' | 'dock' | 'objekt' | 'zeitwahl' | 'zahlwahl';
   groesse?: 'kompakt' | 'normal' | 'antwort' | 'akte' | 'breit';
   schliessenText: string;
   schliessenSymbol?: ReactNode;
@@ -85,10 +86,9 @@ export function GlasDialog({
   const ziehStart = useRef<number | null>(null);
   const seitenebene = useRef<HTMLDivElement>(null);
   const aktuell = useRef({ onGeschlossen, fokus, oeffner });
-  const titelId = useId();
   const beschreibungId = useId();
 
-  useBlattZurueck(offen && ansicht === 'blatt', element, schliessen);
+  useBlattZurueck(offen && (ansicht === 'blatt' || ansicht === 'dock'), element, schliessen);
 
   useLayoutEffect(() => {
     aktuell.current = { onGeschlossen, fokus, oeffner };
@@ -221,10 +221,10 @@ export function GlasDialog({
   const dialog = (
     <dialog
       ref={element}
-      className={styles.dialog}
+      className={ansicht === 'dock' ? `${styles.dialog} ${navigationStyles.mehr}` : styles.dialog}
       role="dialog"
       aria-modal={!nebenKopf}
-      aria-labelledby={titelId}
+      aria-label={titel}
       aria-describedby={beschreibung ? beschreibungId : undefined}
       aria-busy={beschaeftigt || undefined}
       data-r53-form={ansicht}
@@ -258,7 +258,7 @@ export function GlasDialog({
       <header className={kopfVerborgen ? 'kr-sr' : styles.kopf}>
         {kopfSymbol}
         <div className={styles.titelgruppe}>
-          <h2 id={titelId} className={styles.titel}>{titel}</h2>
+          <h2 className={styles.titel}>{titel}</h2>
           {beschreibung && <div id={beschreibungId}>{beschreibung}</div>}
           {kopfAktionen}
         </div>

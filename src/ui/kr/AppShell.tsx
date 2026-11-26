@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { weiterMitEnter } from './tastatur';
 import { Icon, type IconName } from './Icon';
@@ -8,8 +9,8 @@ import { useHydrated } from '@/hooks/useHydrated';
 import type { Geraet } from './typen';
 import { cx } from './typen';
 import styles from './AppShell.module.css';
-import {NAVIGATION,type Bereich} from '../navigation/register';
-import { Glasnavigation, type Glaseintrag } from './design-final/Glasnavigation';
+import {sichtbareNavigation,type Bereich} from '../navigation/register';
+import { Glasnavigation, GlasNavigationsSymbol, type Glaseintrag } from './design-final/Glasnavigation';
 import { KREILE_KOPF_KUERZEL } from '@/ui/allgemeinCopy';
 export type {Bereich} from '../navigation/register';
 export interface NavEintrag { id: Bereich; text: string; icon: IconName; badge?: { n: number; rot?: boolean }; }
@@ -21,7 +22,8 @@ export interface AppShellProps {
   /** vom Admin je Person gesperrte Bereiche (OE-2609-09) werden nicht angezeigt */
   ausgeblendet?: Bereich[]; badges?: Partial<Record<Bereich, { n: number; rot?: boolean }>>;
   suche: ReactNode; plus: ReactNode; neuigkeiten?:ReactNode;
-  onNav: (b: Bereich | 'mehr') => void; onStart: () => void; onKonto: () => void;
+  onNav: (b: Bereich | 'mehr', oeffner?: HTMLButtonElement) => void;
+  onStart: () => void; onKonto: (oeffner: HTMLButtonElement) => void;
   onNeuerEingang?: () => void; onWareRaus?: () => void;
   onPlanung?: () => void;
   navigationsleiste?: boolean;
@@ -43,7 +45,7 @@ export function AppShell(p: AppShellProps) {
       {!klein && p.neuigkeiten}
       {p.datum && p.geraet === 'desktop' && <span className="kr-datum">{p.datum}</span>}
       {!klein && p.plus}
-      {!klein && <button type="button" className="kr-avatar" aria-label="Konto" disabled={!interactive} onClick={p.onKonto}>{p.kuerzel}</button>}
+      {!klein && <button type="button" className="kr-avatar" aria-label="Konto" disabled={!interactive} onClick={event => p.onKonto(event.currentTarget)}>{p.kuerzel}</button>}
     </header>
   );
   const aus = p.ausgeblendet ?? [];
@@ -63,13 +65,17 @@ export function AppShell(p: AppShellProps) {
   const ebene = typeof p.ebene === 'function' ? p.ebene(werkstattWeitere.length > 0
     ? <div className={styles.werkstattWerkzeuge}>{werkstattWeitere.map(werkstattKnopf)}</div> : null)
     : p.ebene;
-  const sichtbareZiele: Glaseintrag[] = NAVIGATION.filter(entry => !aus.includes(entry.id)).map(entry => ({
-    id: entry.id, text: entry.text, icon: <Icon name={entry.icon} />,
+  const navigation = sichtbareNavigation(aus);
+  const aktiv = p.aktiv === 'kunden' && navigation.some(entry => entry.id === 'auftraege') ? 'auftraege' : p.aktiv;
+  const sichtbareZiele: Glaseintrag[] = navigation.map(entry => ({
+    id: entry.id,
+    text: leiste && (entry.id === 'auftraege' || entry.id === 'kunden') ? 'Aufträge und Kunden' : entry.text,
+    icon: <GlasNavigationsSymbol bereich={entry.id} ersatz={<Icon name={entry.icon}/>} />,
     specId: `navigation.${entry.id}`, gruppe: entry.platz === 'unten' ? 'unten' : 'haupt',
     zaehler: p.badges?.[entry.id]?.n, aufrufen: () => p.onNav(entry.id),
   }));
   const planung: Glaseintrag | null = p.onPlanung
-    ? {id: 'planung', text: 'Planung', icon: <Icon name="list" />, dockSpalte: 4,
+    ? {id: 'planung', text: 'Planung', icon: <GlasNavigationsSymbol bereich="planung" />, dockSpalte: 4,
       specId: 'navigation.planung', aufrufen: p.onPlanung}
     : null;
   if (planung) {
@@ -77,27 +83,27 @@ export function AppShell(p: AppShellProps) {
     sichtbareZiele.splice(werkstattIndex + 1, 0, planung);
   }
   const dockEintraege = sichtbareZiele.flatMap<Glaseintrag>(entry => {
-    if (entry.id === 'tag') return [{...entry, text: 'Dein Tag', dockSpalte: 1}];
+    if (entry.id === 'tag') return [{...entry, dockSpalte: 1}];
     if (entry.id === 'werkstatt') return [{...entry, dockSpalte: 2}];
     if (entry.id === 'planung') return [entry];
     return [];
   });
   const weitereZiele = sichtbareZiele.filter(entry => !dockEintraege.some(dock => dock.id === entry.id));
-  const erfassung = p.onNeuerEingang && {text: 'Eingang', icon: <Icon name="plus" />, ausloesen: p.onNeuerEingang};
+  const erfassung = p.onNeuerEingang && {text: 'Eingang', icon: <GlasNavigationsSymbol bereich="eingang" />, ausloesen: p.onNeuerEingang};
   const werkzeuge = werkstatt ? [] : [
     ...(p.onNeuerEingang ? [{text: 'Neu erfassen', icon: <Icon name="inbox" />, ausloesen: p.onNeuerEingang}] : []),
     ...(p.onWareRaus ? [{text: 'Ware raus', icon: <Icon name="truck" />, ausloesen: p.onWareRaus}] : []),
   ];
   const nav = leiste
     ? <Glasnavigation art="leiste" klasse={styles.leiste} kompakt={p.geraet === 'tablet'} label="Hauptnavigation"
-        aktiv={p.aktiv} eintraege={sichtbareZiele} deaktiviert={!interactive} offen={menuOffen}
-        marke={{text: 'KREILE', icon: <span className="kr-logo">{KREILE_KOPF_KUERZEL}</span>}}
+        aktiv={aktiv} eintraege={sichtbareZiele} deaktiviert={!interactive} offen={menuOffen}
+        marke={{text: 'Galvanik Kreile', icon: <Image src="/design/bild-cb9d2615.png" alt="" width={36} height={36} unoptimized />}}
         werkzeuge={werkzeuge} werkzeugeLabel="Werkzeuge"
         oeffnen={{text: 'Menü öffnen', icon: <Icon name="grid" />, ausloesen: () => setMenuOffen(true)}}
         schliessen={{text: 'Menü schließen', icon: <Icon name="x" />, ausloesen: () => setMenuOffen(false)}} />
-    : <Glasnavigation art="dock" kompakt={handy} label="Hauptnavigation" aktiv={p.aktiv}
+    : <Glasnavigation art="dock" kompakt={handy} label="Hauptnavigation" aktiv={aktiv}
         eintraege={dockEintraege} deaktiviert={!interactive} erfassung={erfassung}
-        weitere={{text: 'Mehr', icon: <Icon name="grid" />, eintraege: weitereZiele, aufrufen: () => p.onNav('mehr')}} />;
+        weitere={{text: 'Mehr', icon: <GlasNavigationsSymbol bereich="mehr" />, eintraege: weitereZiele, aufrufen: oeffner => p.onNav('mehr', oeffner)}} />;
   return <><div className="kr-streifen" /><div className={cx('kr-tshell', styles.rahmen, leiste ? styles.mitLeiste : styles.mitDock)}>
     {kopf}{p.zustand}<main className="kr-inhalt">{p.children}</main>
     {werkstattLeiste.length > 0 ? <>

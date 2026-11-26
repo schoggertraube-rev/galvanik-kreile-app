@@ -1,6 +1,7 @@
 'use client';
 
 /** Neu in src/ui/kr. Darstellung für Materialauswahl und Entnahme. */
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 import styles from './Lagerkarte.module.css';
 
@@ -23,7 +24,7 @@ export function Lagerkarte({ titel, masse, ort, bild, ausgewaehlt, onWaehlen, be
   return <li className={styles.karte} data-aktiv={ausgewaehlt || undefined} data-knapp={bestand.knapp || undefined}
     data-bild={bild ? 'an' : undefined}>
     <div className={styles.bezeichnung}>
-      {bild && <img className={styles.bild} src={bild.src} alt={bild.alt} />}
+      {bild && <Image className={styles.bild} src={bild.src} alt={bild.alt} width={48} height={48} unoptimized />}
       <div className={styles.titelblock}>
         <h3 className={styles.titel}>
           {onWaehlen ? <button type="button" className={styles.wahl} aria-pressed={ausgewaehlt} onClick={onWaehlen}>{titel}</button> : titel}

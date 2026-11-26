@@ -1,6 +1,7 @@
 'use client';
 
 /** Erweitert src/ui/kr/Auftragszeile.tsx und src/ui/kr/Zeile.tsx. */
+import Image from 'next/image';
 import { useEffect, useRef } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
 import styles from './Arbeitsliste.module.css';
@@ -95,7 +96,9 @@ export function Fallzeile({ modell }: { modell: FallzeileModel }) {
   const { titel, bild, ersatzsymbol, meta, detail, zeit, status, marken, hinweis, aktiv, onOeffnen, menue } = modell;
   const zeilengesten = useZeilengesten(modell);
   const zeilenInhalt = <>
-    {(bild || ersatzsymbol) && <span className={styles.bild}>{bild ? <img src={bild.src} alt={bild.alt} /> : ersatzsymbol}</span>}
+    {(bild || ersatzsymbol) && <span className={styles.bild}>{bild
+      ? <Image src={bild.src} alt={bild.alt} width={65} height={65} unoptimized />
+      : ersatzsymbol}</span>}
     <span className={styles.titel}>{titel}</span>
     {(marken?.length || meta || status || zeit) ? <span className={styles.metaZeile}>
       {(marken?.length || meta || status) ? <span className={styles.meta}>

@@ -8,6 +8,6 @@ export interface GlobalesPlusProps { onOeffnen: () => void; }
 export function GlobalesPlus({ onOeffnen }: GlobalesPlusProps) {
   const vorfinal=useVorfinalStyle();
   const label=vorfinal ? VORFINAL_COPY['vorfinal.kopf.plus.label'] : 'Neu erfassen';
-  return <Glasknopf form="quadrat" ton="erfassung" icon={<Icon name="plus"/>} bezeichnung={label} title={label}
+  return <Glasknopf knopfform="quadrat" ton="erfassung" icon={<Icon name="plus"/>} bezeichnung={label} title={label}
     data-open="plus" data-spec-id={vorfinal ? 'kopf.plus' : 'navigation.plus'} onClick={onOeffnen}/>;
 }

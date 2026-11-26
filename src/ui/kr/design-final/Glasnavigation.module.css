@@ -151,6 +151,15 @@
   block-size: var(--gb-icon-mass);
 }
 .icon > * { inline-size: var(--gb-voll); block-size: var(--gb-voll); }
+.vorlagenSymbol {
+  display: block;
+  inline-size: var(--gb-icon-mass);
+  block-size: var(--gb-icon-mass);
+  background: currentColor;
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+}
 .navigation[data-layout='leiste'] .icon {
   inline-size: var(--gb-leiste-iconmass);
   block-size: var(--gb-leiste-iconmass);
@@ -308,7 +317,7 @@
   inset: var(--gb-leiste-werkzeug-aussen) var(--gb-null) auto auto;
 }
 
-.mehr {
+.mehr, .mehr[data-r53-form='dock'] {
   position: fixed;
   box-sizing: border-box;
   inset: auto max(var(--gb-dock-mehr-aussen), calc(var(--gb-halbes-fenster) - var(--gb-dock-mehr-start))) calc(var(--gb-dock-mehr-unten) + env(safe-area-inset-bottom)) auto;
