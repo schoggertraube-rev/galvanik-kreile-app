@@ -124,7 +124,7 @@ it('PL11:36 renews a real short lease across a longer native source read and ret
  });
 });
 
-it('PL11:36 reads incomplete rows again only on rebuild while changed known sources still refresh',async()=>{
+it('PL11:36 skips incomplete rows without a changed source key while changed sources still refresh',async()=>{
  expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
  const incomplete=await sql`SELECT kind||':'||source_id AS key FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='SOURCE_INCOMPLETE'`;
  expect(incomplete.length).toBeGreaterThan(0);
@@ -134,9 +134,12 @@ it('PL11:36 reads incomplete rows again only on rebuild while changed known sour
  expect(visits).toEqual([]);
  const source=await readLiveOrderCard(await auth(),{orderId});if(source.code!=='OK')throw Error('TEST_KNOWN_CARD_REQUIRED');
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId,expectedVersion:source.data.version,dueDate:'2027-08-02',reason:'TEST incomplete rows stay for rebuild',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const unchanged=await sql`SELECT kind||':'||source_id AS key FROM private.today_source_v1
+  WHERE tenant_id=${tenant} AND status='SOURCE_INCOMPLETE' AND source_seq=built_seq`;
+ expect(unchanged.length).toBeGreaterThan(0);
  expect((await refreshTodayModel(tenant,counted)).code).toBe('OK');
  expect(visits).toContain('order:'+orderId);
- expect(visits.some(key=>incomplete.some(row=>row.key===key))).toBe(false);
+ expect(visits.some(key=>unchanged.some(row=>row.key===key))).toBe(false);
  visits.length=0;
  expect((await rebuildTodayModel(tenant,counted)).code).toBe('OK');
  expect(visits).toEqual(expect.arrayContaining(incomplete.map(row=>row.key)));
@@ -299,6 +302,7 @@ it('splits a failed set-based SQL publish and marks only the affected source inc
 });
 
 it('reads the persisted single-row batch limit and skips incomplete rows until rebuild',async()=>{
+ expect((await rebuildTodayModel(tenant,ports)).code).toBe('OK');
  // Explicit schema configuration probe in this isolated TEST tenant.
  await sql`UPDATE public.company_settings SET today_refresh_batch_limit=1 WHERE tenant_id=${tenant}`;
  expect((await readTodayReadSettings({tenantId:tenant})).todayRefreshBatchLimit).toBe(1);
@@ -306,12 +310,18 @@ it('reads the persisted single-row batch limit and skips incomplete rows until r
  const bounded:TodayProjectionPorts={...ports,readSources:async(capability,keys)=>{
   expect(keys).toHaveLength(1);visits.push(todaySourceKey(keys[0]));return ports.readSources(capability,keys);
  }};
- const [pending]=await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status<>'SOURCE_INCOMPLETE'`;
- expect(pending.count).toBeGreaterThan(1);
- for(let attempt=0;attempt<pending.count;attempt++)expect((await refreshTodayModel(tenant,bounded)).code).toBe('OK');
- expect(new Set(visits).size).toBe(pending.count);
+ const source=await readLiveOrderCard(await auth(),{orderId});if(source.code!=='OK')throw Error('TEST_KNOWN_CARD_REQUIRED');
+ expect(await withSession(full,()=>changeOrderPromisedDueDateAction({
+  orderId,expectedVersion:source.data.version,dueDate:'2027-08-05',reason:'TEST bounded Today refresh',clientEventId:randomUUID(),
+ }))).toMatchObject({code:'OK'});
+ const pending=await sql`SELECT kind||':'||source_id AS key FROM private.today_source_v1
+  WHERE tenant_id=${tenant} AND source_seq>built_seq`;
+ const pendingKeys=new Set(pending.map(row=>row.key));
+ expect([...pendingKeys]).toEqual(expect.arrayContaining(['order:'+orderId,'orders:*']));
+ for(let attempt=0;attempt<pendingKeys.size;attempt++)expect(await refreshTodayModel(tenant,bounded)).toMatchObject({code:'OK',built:1});
+ expect(new Set(visits)).toEqual(pendingKeys);
  expect(await refreshTodayModel(tenant,bounded)).toMatchObject({code:'OK',built:0,stale:0});
- expect(visits).toHaveLength(pending.count);
+ expect(visits).toHaveLength(pending.length);
  expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
 });
 
