@@ -11,6 +11,7 @@ import {
   type Geraet,
 } from "@/ui/kr";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { useSessionInactivity } from '@/lib/auth/useSessionInactivity';
 import { SessionWarningBanner } from "./SessionWarningBanner";
 import { EntityOverlayStack } from "./EntityOverlayStack";
 import { GlobalSearch } from "./GlobalSearch";
@@ -66,8 +67,10 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   const [moreMenu, setMoreMenu] = useState<{oeffner?: HTMLButtonElement} | null>(null);
   const loginOnly = pathname === "/start" || pathname === "/login";
   const sessionInvalid = !permissions.loading && permissions.status !== "authenticated";
+  const inactive = useSessionInactivity(loginOnly ? undefined : permissions.inactivity);
 
   if (loginOnly) return <div className={styles.loginRoot}>{children}</div>;
+  if (inactive) return null;
 
   const financial=(['preise','zahlungen','buchhaltung'] as const).some(area=>permissions.hasArea(area));
   const workshop = permissions.hasArea("auftraege")

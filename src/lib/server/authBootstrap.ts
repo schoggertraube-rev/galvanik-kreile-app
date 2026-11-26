@@ -3,7 +3,8 @@ import "server-only";
 import {offlinePartition} from "./offlinePartition";
 import {createPinLoginHandle} from './pinLoginHandle';
 import {cookies} from 'next/headers';
-import {COOKIE_NAME,cacheScopeFromCredential} from './appSession';
+import {COOKIE_NAME,appSessionReadScope,getSecretKey,verifyAppSessionToken} from './appSession';
+import type { SessionInactivity } from '@/lib/auth/sessionInactivity';
 
 import type {
   AccessArea,
@@ -25,6 +26,7 @@ export type AuthBootstrapUser = {
   /** Read-only feature setting; grants no server permission. Default is off. */
   offline24h?: boolean;
   packageSwitches?: Readonly<PackageSwitchValues>;
+  inactivity?: SessionInactivity;
   role: AppRole;
   displayName: string;
   areas: readonly AccessArea[];
@@ -56,6 +58,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
 
   if (result.ok) {
     const offlineLoginScope=await readCacheLoginScope();
+    const inactivity=result.data.sessionInactivity;
     return {
       status: "authenticated",
       user: {
@@ -64,6 +67,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
         offline24h:result.data.offline24h===true,
         ...(result.data.packageSwitches?{packageSwitches:{...result.data.packageSwitches}}:{}),
         ...(offlineLoginScope?{offlineLoginScope}:{}),
+        ...(inactivity?{inactivity:{lastSeen:inactivity.lastSeen,expiresAt:inactivity.expiresAt,minutes:inactivity.minutes,serverAt:inactivity.serverAt}}:{}),
         role: result.data.role,
         displayName: result.data.displayName,
         areas: [...(result.data.areas ?? [])],
@@ -95,7 +99,10 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
 export async function readCacheLoginScope():Promise<string|undefined>{
     try{
       const credential=(await cookies()).get(COOKIE_NAME)?.value;
-      if(credential)return cacheScopeFromCredential(credential);
+      if(credential){
+        const result=verifyAppSessionToken(credential,getSecretKey());
+        if(result.ok)return appSessionReadScope(credential,result.session);
+      }
     }catch(error){
       // No cookie/token details in diagnostics. Missing cache identity never
       // changes the independently resolved authorization or enables a cache.

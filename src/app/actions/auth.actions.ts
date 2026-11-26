@@ -18,9 +18,11 @@ import type {
   PermissionKey,
 } from "@/lib/auth/authorizationContract";
 import { canUsePinLogin } from "@/lib/auth/authorizationContract";
+import type { SessionActivityResult, SessionInactivity } from '@/lib/auth/sessionInactivity';
 import {
   APP_TENANT_ID,
   clearAppSession,
+  renewAppSessionActivity,
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
@@ -44,6 +46,7 @@ export type ClientAuthorizationResult =
         offlineScope?: string;
         offline24h?:boolean;
         packageSwitches?:Readonly<PackageSwitchValues>;
+        inactivity?: SessionInactivity;
         role: AppRole;
         areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
@@ -66,6 +69,17 @@ export async function getAuthBootstrapAction():Promise<AuthBootstrapState>{
 export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizationResult> {
  return actionObservationActive()?readClientAuthorizationSnapshot():withActionObservation(readClientAuthorizationSnapshot,logTechnical);
 }
+
+/** Only the currently authorized signed session can acknowledge an interaction. */
+export async function recordAppSessionActivity(): Promise<SessionActivityResult> {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) return { code: authorization.reason === 'AUTHORIZATION_UNAVAILABLE' ? 'UNAVAILABLE' : 'EXPIRED' };
+  const current = authorization.data.sessionInactivity;
+  if (!current) return { code: 'UNAVAILABLE' };
+  const now = await renewAppSessionActivity({ userId: authorization.data.userId, issuedAt: current.issuedAt }, current);
+  return now ? { code: 'OK', inactivity: now } : { code: 'EXPIRED' };
+}
+
 async function readClientAuthorizationSnapshot():Promise<ClientAuthorizationResult>{
   const result = await resolveAuthorization();
   if (!result.ok) {
@@ -80,10 +94,12 @@ async function readClientAuthorizationSnapshot():Promise<ClientAuthorizationResu
     };
   }
 
+  const inactivity = result.data.sessionInactivity;
   return {
     ok: true,
     data: {
       displayName: result.data.displayName,
+      ...(inactivity ? { inactivity: { lastSeen: inactivity.lastSeen, expiresAt: inactivity.expiresAt, minutes: inactivity.minutes, serverAt: inactivity.serverAt } } : {}),
       // Local partition only, never a credential; preserves existing intake originals.
       offlineScope: offlinePartition(result.data),
       offline24h: result.data.offline24h===true,

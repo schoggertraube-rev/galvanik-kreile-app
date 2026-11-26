@@ -5,6 +5,7 @@ import {PACKAGE_SWITCHES,mapPackageSwitchRows} from '@/modules/fundament/public'
 import type {PackageSwitchValues} from '@/modules/fundament/public';
 import {observeResolvedAuthorization,observeAuthorizationAttempt,reportObservedTechnical} from './actionObservation';
 import { readAppSession } from "@/lib/server/appSession";
+import { readSessionInactivity, type SessionInactivity, type SessionInactivitySettings } from '@/lib/auth/sessionInactivity';
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -25,6 +26,7 @@ export type AuthorizationSnapshot = {
   offline24h?: boolean;
   /** Visibility only; domain commands continue to use their existing rights. */
   packageSwitches?: Readonly<PackageSwitchValues>;
+  sessionInactivity?: SessionInactivity & { issuedAt: number };
   userId: string;
   tenantId: string;
   displayName: string;
@@ -99,6 +101,13 @@ const readAuthorizationRow = cache(async (userId:string,sessionTenantId:string) 
           ELSE flag.enabled END,'roles',flag.roles_allowed))
           FROM public.feature_flags flag WHERE flag.id IN (${sql.join(PACKAGE_SWITCHES.map(({id})=>sql`${id}`),sql`,`)}))`,
         updatedAt: appUsers.updatedAt,
+        inactivitySettings: sql<SessionInactivitySettings | null>`(
+          SELECT jsonb_build_object(
+            'minutes', to_jsonb(settings)->'inaktivitaet_abmelden_minuten',
+            'devices', to_jsonb(settings)->'inaktivitaet_abmelden_geraete',
+            'roles', to_jsonb(settings)->'inaktivitaet_abmelden_rollen'
+          ) FROM public.company_settings settings WHERE settings.tenant_id = ${sessionTenantId}
+        )`,
         areas: sql<string[]>`(
           SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
           FROM public.app_user_rights rights
@@ -235,6 +244,12 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     };
   }
 
+  const sessionInactivity = readSessionInactivity({ ...sessionResult.session, role: dbRole }, dbUser.inactivitySettings);
+  const serverAt = Date.now();
+  if (serverAt >= sessionInactivity.expiresAt) {
+    return { ok: false, reason: 'INVALID_SESSION', message: 'AUTH_SESSION_INACTIVE' };
+  }
+
   // 6. Berechtigungen ableiten
   const permissions = getPermissionsForAreas(areas);
   let visibility:PackageSwitchValues;
@@ -255,6 +270,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       active: true,
       offline24h: visibility.offline_24h,
       packageSwitches: visibility,
+      sessionInactivity: { ...sessionInactivity, serverAt, issuedAt: sessionResult.session.issuedAt },
   };
   observeResolvedAuthorization(snapshot);
   if(visibilityFailed)await reportObservedTechnical({type:'server_error',command:'PACKAGE_SWITCH_VISIBILITY_FAILED',subject:{type:'action',id:'resolveAuthorization'},reason:'UNAVAILABLE'});

@@ -1,7 +1,9 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import crypto from "crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import {CACHE_SCOPE_COOKIE} from '@/lib/offline/cacheScopeMarker';
+import { readSessionInactivity, type SessionInactivity } from '@/lib/auth/sessionInactivity';
+import type { Geraet } from '@/ui/kr/typen';
 
 // ─── Konstanten ─────────────────────────────────────────────────────────────
 export const COOKIE_NAME = "kreile_app_session";
@@ -24,7 +26,20 @@ export type AppSession = {
   displayName: string;
   issuedAt: number;
   expiresAt: number;
+  lastSeen?: number;
+  device?: Geraet;
+  readScope?: string;
 };
+
+export function appSessionReadScope(token: string, session: AppSession): string {
+  return session.readScope ?? cacheScopeFromCredential(token);
+}
+
+export function detectSessionDevice(agent: string): Geraet {
+  if (/iPad|Tablet|Android(?!.*Mobile)/i.test(agent)) return 'tablet';
+  if (/Android|iPhone|iPod|Mobile/i.test(agent)) return 'handy';
+  return 'desktop';
+}
 
 // Rückwärtskompatibles Alias
 export type AppSessionPayload = AppSession;
@@ -140,6 +155,17 @@ export function verifyAppSessionToken(
     return { ok: false, reason: "INVALID_TENANT" };
   }
 
+  if (session.lastSeen !== undefined && (!Number.isSafeInteger(session.lastSeen)
+    || session.lastSeen < session.issuedAt || session.lastSeen > session.expiresAt)) {
+    return { ok: false, reason: "MALFORMED" };
+  }
+  if (session.device !== undefined && !['desktop', 'tablet', 'handy'].includes(session.device)) {
+    return { ok: false, reason: "MALFORMED" };
+  }
+  if (session.readScope !== undefined && (typeof session.readScope !== 'string' || !/^[0-9a-f]{64}$/.test(session.readScope))) {
+    return { ok: false, reason: "MALFORMED" };
+  }
+
   if (now > session.expiresAt) {
     return { ok: false, reason: "EXPIRED" };
   }
@@ -161,12 +187,47 @@ export async function readAppSession(): Promise<SessionReadResult> {
 
 // ─── Cookie I/O: Setzen ──────────────────────────────────────────────────────
 export async function setAppSession(session: AppSession): Promise<void> {
-  const token = signAppSession(session, getSecretKey());
+  let device = session.device;
+  if (!device) {
+    try {
+      const agent = (await headers()).get('user-agent');
+      if (agent) device = detectSessionDevice(agent);
+    } catch {
+      console.error('[APP_SESSION_DEVICE_UNAVAILABLE]');
+    }
+  }
+  const initialized = { ...session, device, lastSeen: session.lastSeen ?? session.issuedAt };
+  const token = signAppSession(initialized, getSecretKey());
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, getCookieOptions(new Date(session.expiresAt)));
   // Persistent reading fence, not a session lease. Offline contact age and
   // online authorization remain independently checked at their existing ports.
-  cookieStore.set(CACHE_SCOPE_COOKIE,cacheScopeFromCredential(token),{...getCookieOptions(),httpOnly:false,maxAge:365*24*60*60});
+  cookieStore.set(CACHE_SCOPE_COOKIE,appSessionReadScope(token, initialized),{...getCookieOptions(),httpOnly:false,maxAge:365*24*60*60});
+}
+
+/** Updates only this signed session. The fixed end and its offline reading partition stay the same. */
+export async function renewAppSessionActivity(
+  identity: { userId: string; issuedAt: number },
+  inactivity: SessionInactivity,
+): Promise<SessionInactivity | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  const now = Date.now();
+  const secret = getSecretKey();
+  const result = verifyAppSessionToken(token, secret, now);
+  if (!result.ok || result.session.userId !== identity.userId
+    || result.session.issuedAt !== identity.issuedAt) return null;
+
+  const session = result.session;
+  const allowed = readSessionInactivity(session, { minutes: inactivity.minutes });
+  if (now >= allowed.expiresAt || now >= inactivity.expiresAt) return null;
+  const minimumInterval = Math.min(30_000, inactivity.minutes * 10_000);
+  if (now - allowed.lastSeen < minimumInterval) return { ...allowed, serverAt: now };
+
+  const renewed = { ...session, lastSeen: now, readScope: appSessionReadScope(token, session) };
+  cookieStore.set(COOKIE_NAME, signAppSession(renewed, secret), getCookieOptions(new Date(session.expiresAt)));
+  return { ...readSessionInactivity(renewed, { minutes: inactivity.minutes }), serverAt: now };
 }
 
 // ─── Cookie I/O: Löschen ────────────────────────────────────────────────────
