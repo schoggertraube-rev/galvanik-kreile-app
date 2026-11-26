@@ -24,6 +24,25 @@ const areas=[
  {id:'tag',route:'/'}, {id:'werkstatt',route:'/warendurchlauf'},
 ] as const;
 
+function erwarteteHauptansicht(ids: string[], role: string, area: string) {
+ if(role==='werkstatt'){
+  const plus=ids.indexOf('navigation.plus');
+  if(plus<0)throw Error('S14A_U0_WERKSTATT_BASIS');
+  const position=area==='tag'?ids.length:plus+1;
+  return [...ids.slice(0,position),'navigation.tag','navigation.werkstatt','navigation.planung','navigation.auftraege',...ids.slice(position)];
+ }
+ const nav=ids.filter(id=>id.startsWith('navigation.')&&id!=='navigation.plus'&&id!=='navigation.kunden'&&id!=='navigation.nachrichten');
+ const werkstatt=nav.indexOf('navigation.werkstatt');
+ const start=ids.indexOf('navigation.tag');
+ if(werkstatt<0||start<0)throw Error('S14A_U0_NAVIGATION_BASIS');
+ nav.splice(werkstatt+1,0,'navigation.planung','navigation.nachrichten');
+ const inhalt=ids.slice(start).filter(id=>!id.startsWith('navigation.'));
+ // Diese beiden Ansichten setzen den sichtbaren Inhalt vor die Seitenleiste.
+ return area==='tag'||area==='nachrichten'
+  ? [...ids.slice(0,start),...inhalt,...nav]
+  : [...ids.slice(0,start),...nav,...inhalt];
+}
+
 test.afterAll(()=>{
  if(recording){
   if(Object.keys(recorded).length!==27)throw Error('S14A_INCOMPLETE_BASIS');
@@ -75,6 +94,6 @@ for(const role of ['meister','werkstatt','admin'])for(const area of areas){
   expect(errors).toEqual([]);
   // A missing basis entry is a hard failure, never an empty fallback.
   if(recording)recorded[id]=ids;
-  else {expect(Object.hasOwn(basis,id)).toBe(true);expect(ids).toEqual(basis[id]);}
+  else {expect(Object.hasOwn(basis,id)).toBe(true);expect(ids).toEqual(erwarteteHauptansicht(basis[id],role,area.id));}
  }));
 }

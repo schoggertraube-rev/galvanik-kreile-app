@@ -24,18 +24,26 @@ const ACTORS = [
 const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
 const FIXTURE_ACTORS = [...ACTORS, { id: GREGOR_ACTOR_ID, role: "admin" as const }];
 const NAVIGATION_TIMEOUT = 30_000;
-const DESKTOP_NAVIGATION = [
-  { label: "Der Tag", href: "/" },
+const DOCK_ZIELE = [
+  { label: "Dein Tag", href: "/" },
   { label: "Werkstatt", href: "/warendurchlauf" },
-  { label: "Aufträge", href: "/orders" },
-  { label: "Kunden & Kontakt", href: "/customers" },
-  { label: "Geld & Rechnungen", href: "/buchhaltung/rechnungen" },
+  { label: "Planung", href: "/orders?view=woche" },
+] as const;
+const AUFTRAEGE_LEISTE = { label: "Aufträge und Kunden", href: "/orders" } as const;
+const AUFTRAEGE_MEHR = { label: "Aufträge", href: "/orders" } as const;
+const MEISTER_LEISTE = [
+  ...DOCK_ZIELE,
+  { label: "Nachrichten", href: "/nachrichten" },
+  AUFTRAEGE_LEISTE,
+  { label: "Zahlungen", href: "/buchhaltung/rechnungen" },
   { label: "Einstellungen", href: "/settings" },
 ] as const;
-
-function renderedPathFor(requestedPath: string): string {
-  return requestedPath;
-}
+const MEISTER_MEHR = [
+  { label: "Nachrichten", href: "/nachrichten" },
+  AUFTRAEGE_MEHR,
+  { label: "Zahlungen", href: "/buchhaltung/rechnungen" },
+  { label: "Einstellungen", href: "/settings" },
+] as const;
 
 function expectedHeading(pagePath: string): string {
   if (pagePath === "/") return "Der Tag";
@@ -143,42 +151,41 @@ async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS
 }
 
 async function navigateAndWaitForContent(page: Page, target: ReturnType<Page["locator"]>, href: string): Promise<string> {
-  const requestedPath = new URL(href, ORIGIN).pathname;
-  const renderedPath = renderedPathFor(requestedPath);
+  const requested = new URL(href, ORIGIN);
+  const angekommen = (url: URL) => url.pathname === requested.pathname && url.search === requested.search;
 
-  if (new URL(page.url()).pathname === requestedPath) {
+  if (angekommen(new URL(page.url()))) {
     await target.click({ timeout: NAVIGATION_TIMEOUT });
-    await expect(page).toHaveURL((url) => url.pathname === requestedPath, { timeout: NAVIGATION_TIMEOUT });
+    await expect(page).toHaveURL(angekommen, { timeout: NAVIGATION_TIMEOUT });
   } else {
-    const reached = page.waitForURL((url) => url.pathname === requestedPath, { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT });
+    const reached = page.waitForURL(angekommen, { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT });
     await target.click({ timeout: NAVIGATION_TIMEOUT });
     try {
       await reached;
     } catch (error) {
-      throw new Error(`PATH1_V5_NAVIGATION_FAILED: expected=${requestedPath} actual=${new URL(page.url()).pathname}`, { cause: error });
+      throw new Error(`PATH1_V5_NAVIGATION_FAILED: expected=${requested.pathname}${requested.search} actual=${new URL(page.url()).pathname}`, { cause: error });
     }
   }
 
-  if (renderedPath !== requestedPath) {
-    await expect.poll(() => new URL(page.url()).pathname, { timeout: NAVIGATION_TIMEOUT }).toBe(renderedPath);
-  }
-  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(renderedPath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
-  return renderedPath;
+  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(requested.pathname), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  return requested.pathname;
 }
 
-async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
+async function visitRail(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
   const navigation = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
-  await expect(navigation).toBeVisible();
-  const visibleTargets = [];
-  for (const item of DESKTOP_NAVIGATION) {
-    const target = navigation.getByRole("button", { name: new RegExp(`^${item.label}(?:\\s+\\d+)?$`) });
-    if (await target.count()) visibleTargets.push(item);
+  const ziele = actor === "phillip" ? [...DOCK_ZIELE, AUFTRAEGE_LEISTE] : MEISTER_LEISTE;
+  await expect(navigation).toHaveAttribute("data-layout", "leiste");
+  await expect.poll(() => navigation.locator('button[data-spec-id^="navigation."]:visible')
+    .evaluateAll(nodes => nodes.map(node => node.getAttribute("aria-label"))))
+    .toEqual(ziele.map(({ label }) => label));
+  if (actor === "phillip") {
+    for (const name of ["Nachrichten", "Zahlungen", "Einstellungen"]) {
+      await expect(navigation.getByRole("button", { name, exact: true })).toHaveCount(0);
+    }
   }
-  expect(visibleTargets.length).toBeGreaterThan(0);
-  for (const { label, href } of visibleTargets) {
+  for (const { label, href } of ziele) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true })
-      .getByRole("button", { name: new RegExp(`^${label}(?:\\s+\\d+)?$`) });
+    const target = navigation.getByRole("button", { name: label, exact: true });
     const renderedPath = await navigateAndWaitForContent(page, target, href);
     await assertPage(page, actor, viewport, renderedPath, problems, screens);
     if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${renderedPath === "/" ? "root" : renderedPath.slice(1).replace(/\//g, "-")}`)) {
@@ -189,19 +196,32 @@ async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VI
 
 async function visitMore(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
   const dock = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
-  await expect(dock).toBeVisible();
-  await expect(dock.locator(":scope > *")).toHaveCount(5);
+  const ziele = actor === "phillip" ? [AUFTRAEGE_MEHR] : MEISTER_MEHR;
+  await expect(dock).toHaveAttribute("data-layout", "dock");
+  await expect.poll(() => dock.getByRole("button").evaluateAll(nodes =>
+    nodes.map(node => node.getAttribute("aria-label") ?? node.textContent?.trim())))
+    .toEqual(["Dein Tag", "Werkstatt", "Eingang", "Planung", "Mehr"]);
+  for (const { label, href } of DOCK_ZIELE) {
+    const renderedPath = await navigateAndWaitForContent(page, dock.getByRole("button", { name: label, exact: true }), href);
+    await assertPage(page, actor, viewport, renderedPath, problems, screens);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+  }
   await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
   const menu = page.getByRole("dialog", { name: "Mehr", exact: true });
   await expect(menu).toBeVisible();
-  const hrefs = await menu.locator("a[href]").evaluateAll((items) => items.map((item) => item.getAttribute("href")).filter((href): href is string => Boolean(href)));
+  await expect.poll(() => menu.getByRole("link").evaluateAll(nodes => nodes.map(node => node.getAttribute("href"))))
+    .toEqual(ziele.map(({ href }) => href));
+  if (actor === "phillip") {
+    for (const name of ["Nachrichten", "Zahlungen", "Einstellungen"]) {
+      await expect(menu.getByRole("link", { name, exact: true })).toHaveCount(0);
+    }
+  }
   await menu.getByRole("button", { name: "Schließen", exact: true }).click();
-  expect(hrefs.length).toBeGreaterThan(0);
-  for (const href of hrefs) {
+  for (const { label, href } of ziele) {
     await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
     const more = page.getByRole("dialog", { name: "Mehr", exact: true });
     await expect(more).toBeVisible();
-    const renderedPath = await navigateAndWaitForContent(page, more.locator(`a[href="${href}"]`), href);
+    const renderedPath = await navigateAndWaitForContent(page, more.getByRole("link", { name: label, exact: true }), href);
     await assertPage(page, actor, viewport, renderedPath, problems, screens);
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading("/"), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
@@ -267,11 +287,8 @@ test.describe("PATH1 V5 Shell Smoke", () => {
           await loginPin(page, actor, sessionSecret);
           await assertPage(page, actor.key, viewport, "/", problems, screens);
           screens.push(await capture(page, actor.key, viewport));
-          if (actor.key === "phillip") {
-            await expect(page.getByRole("navigation", { name: "Hauptnavigation", exact: true })).toHaveCount(0);
-            await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })).toHaveCount(0);
-          } else if (viewport.width >= 1300) {
-            await visitDesktopLinks(page, actor.key, viewport, problems, screens);
+          if (viewport.name !== "mobile") {
+            await visitRail(page, actor.key, viewport, problems, screens);
           } else {
             await visitMore(page, actor.key, viewport, problems, screens);
           }
