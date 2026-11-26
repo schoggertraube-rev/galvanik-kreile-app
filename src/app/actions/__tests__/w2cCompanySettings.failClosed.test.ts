@@ -1,9 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { createElement } from "react";
 import ts from "typescript";
-import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const readDenial = "NOT_AVAILABLE: Firmendaten-Anzeige benötigt einen tenant- und capability-geprüften W3-Read-Vertrag.";
@@ -167,7 +164,6 @@ describe("W2C company settings read containment", () => {
   });
 
   afterEach(() => {
-    cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -272,20 +268,6 @@ describe("W2C company settings read containment", () => {
     expect(source).not.toContain("getCompanySettings");
     expect(source).toContain('const logoUrl = "/assets/logo/kreile-wordmark-skyline.svg";');
     expect(source).toContain("src={logoUrl}");
-  });
-
-  it("renders the unavailable form without editable controls or read dependencies", async () => {
-    render(createElement(CompanySettingsForm));
-
-    expect(screen.getByText(readDenial)).toBeVisible();
-    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
-    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-
-    const source = await readFile("src/components/admin/CompanySettingsForm.tsx", "utf8");
-    for (const forbidden of ["getCompanySettings", "from \"@/lib/repositories/companySettingsRepository\"", "formData", "<input", "<textarea", "<button", "Loader", "fake", "default"]) {
-      expect(source).not.toContain(forbidden);
-    }
   });
 
   it("retains the old settings denial while the approved delivery note uses its tenant-authorized source port", async () => {

@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 9,
-    "server_action_groups": 50,
-    "kpi_definitions": 7,
-    "provider_connections": 15,
+    "server_action_groups": 45,
+    "kpi_definitions": 0,
+    "provider_connections": 9,
     "nav_links_without_page": 3,
-    "total": 99
+    "total": 81
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -293,26 +293,6 @@
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY"
       ]
-    },
-    {
-      "stable_id": "server-actions.admin",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/admin.actions.ts",
-      "exported_functions": [
-        "getUsers",
-        "createUser",
-        "updateUserRole",
-        "updateUserPin",
-        "toggleUserStatus",
-        "getFeatureFlags",
-        "toggleFeatureFlag",
-        "updateFeatureFlagRoles",
-        "initializeDefaultFlags"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Admin user/feature-flag management. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
     },
     {
       "stable_id": "server-actions.ai-search",
@@ -915,50 +895,6 @@
       "reachable": false
     },
     {
-      "stable_id": "server-actions.buchhaltung-periodenabschluss",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/buchhaltung/periodenabschluss/actions.ts",
-      "exported_functions": [
-        "getPeriodenabschlussStatusAction",
-        "runEnergieVerteilungAction",
-        "schliessePeriodeAction",
-        "finalSchliessePeriodeAction"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Period closing workflow. Supabase-connected, no verified E2E.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "server-actions.cockpit",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/cockpit/actions.ts",
-      "exported_functions": [
-        "getCockpitKpis",
-        "getTopKunden",
-        "getInaktiveKunden",
-        "getEngpassDaten",
-        "getAgingDaten",
-        "getAuftragDbRanking",
-        "getWhatIfKontext",
-        "getEngpassDetails",
-        "getAuftragDbDetails",
-        "getForecastDaten",
-        "getKundenDetails",
-        "getAgingRechnungen",
-        "getAktiveWarnungen",
-        "dismissWarnung",
-        "refreshWarnungen",
-        "getAktiverJahresplan",
-        "speichereJahresplan",
-        "savePhoneNote"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Owner cockpit KPI and scenario actions. Supabase read-models, no independent E2E evidence.",
-      "visible": false,
-      "reachable": true
-    },
-    {
       "stable_id": "server-actions.global-search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/global-search-actions.ts",
@@ -1103,90 +1039,6 @@
       "reachable": true
     },
     {
-      "stable_id": "kpi.energie",
-      "kind": "KPI_DEFINITION",
-      "kpi_id": "energie",
-      "source_file": "src/lib/analytics/kpiRegistry.ts",
-      "label": "Energie",
-      "source_domain": "accounting",
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KPI metadata defined. Runtime data from getBuchhaltungProvider() via SupabaseBuchhaltungProvider (not mock). No independent E2E evidence for energy cost KPI.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "kpi.kosten_kategorien",
-      "kind": "KPI_DEFINITION",
-      "kpi_id": "kosten_kategorien",
-      "source_file": "src/lib/analytics/kpiRegistry.ts",
-      "label": "Ausgaben & Kosten",
-      "source_domain": "accounting",
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "kpi.bwa_ergebnis",
-      "kind": "KPI_DEFINITION",
-      "kpi_id": "bwa_ergebnis",
-      "source_file": "src/lib/analytics/kpiRegistry.ts",
-      "label": "BWA / Betriebsergebnis",
-      "source_domain": "accounting",
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "kpi.offene_posten",
-      "kind": "KPI_DEFINITION",
-      "kpi_id": "offene_posten",
-      "source_file": "src/lib/analytics/kpiRegistry.ts",
-      "label": "Offene Posten",
-      "source_domain": "accounting",
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "kpi.on_time_rate",
-      "kind": "KPI_DEFINITION",
-      "kpi_id": "on_time_rate",
-      "source_file": "src/lib/analytics/kpiRegistry.ts",
-      "label": "Termintreue",
-      "source_domain": "performance",
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KPI metadata defined. Runtime data from operations Supabase views. No independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "kpi.reklamationen",
-      "kind": "KPI_DEFINITION",
-      "kpi_id": "reklamationen",
-      "source_file": "src/lib/analytics/kpiRegistry.ts",
-      "label": "Reklamationen",
-      "source_domain": "operations",
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KPI metadata defined. Runtime data from Supabase. No independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "kpi.kraftstoff",
-      "kind": "KPI_DEFINITION",
-      "kpi_id": "kraftstoff",
-      "source_file": "src/lib/analytics/kpiRegistry.ts",
-      "label": "Kraftstoff & Kfz",
-      "source_domain": "accounting",
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "provider.supabase-postgres",
       "kind": "PROVIDER_CONNECTION",
       "provider": "Supabase/Postgres",
@@ -1245,37 +1097,6 @@
       "reachable": true
     },
     {
-      "stable_id": "provider.gemini",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "Gemini/Google GenAI",
-      "adapter_file": "src/lib/ai/geminiClient.ts",
-      "env_vars": [
-        "GEMINI_API_KEY",
-        "GEMINI_MODEL_PRIMARY",
-        "GEMINI_MODEL_FALLBACK"
-      ],
-      "classification": "LEGACY_REMOVE",
-      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter remains inventory-only, invisible and unreachable; a secret must not activate it and there is no runtime fallback.",
-      "visible": false,
-      "reachable": false,
-      "evidence_files": [
-        "src/lib/ocr/GeminiProvider.ts"
-      ]
-    },
-    {
-      "stable_id": "provider.klippa",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "Klippa/OCR",
-      "adapter_file": "src/lib/ocr/KlippaProvider.ts",
-      "env_vars": [
-        "KLIPPA_API_KEY"
-      ],
-      "classification": "LEGACY_REMOVE",
-      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter and scan route remain quarantined, invisible and unreachable; a secret must not activate them.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "provider.mail-smtp",
       "kind": "PROVIDER_CONNECTION",
       "provider": "Mail/SMTP",
@@ -1315,17 +1136,6 @@
       "reachable": false
     },
     {
-      "stable_id": "provider.datev-lexware",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "DATEV/Lexware Export",
-      "adapter_file": "src/lib/buchhaltung/export/ExportAdapter.ts",
-      "env_vars": [],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "generateDatevExportAction and generateLexwareExportAction exist in buchhaltung/actions.ts. Export file format logic present but no verified E2E delivery to DATEV/Lexware system.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "provider.meta-marketing",
       "kind": "PROVIDER_CONNECTION",
       "provider": "Meta/Advertising (Facebook/Instagram Ads)",
@@ -1348,37 +1158,6 @@
       "reachable": true
     },
     {
-      "stable_id": "server-actions.system-stats",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/systemStats.ts",
-      "exported_functions": [
-        "getSystemStats",
-        "runSupabaseWriteTest"
-      ],
-      "visible": false,
-      "reachable": false,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "System diagnostics and write-test actions. Supabase-connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "server-actions.buchhaltung-analysis",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/buchhaltung/analysis.actions.ts",
-      "exported_functions": [
-        "getUstvaAnalysisAction",
-        "getKraftstoffAnalysisAction",
-        "getOffenePostenAnalysisAction",
-        "getBwaAnalysisAction",
-        "getAusgabenAnalysisAction",
-        "getSparzaehlerAnalysisAction",
-        "getAusgabenKategorien"
-      ],
-      "visible": false,
-      "reachable": false,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Accounting period-analysis actions. Supabase-connected via SupabaseBuchhaltungProvider. No independent E2E evidence."
-    },
-    {
       "stable_id": "nav.orders-new",
       "kind": "NAV_LINK_NO_PAGE",
       "entry_point": "src/app/station/[slug]/page.tsx",
@@ -1387,39 +1166,6 @@
       "reachable": false,
       "classification": "LEGACY_REMOVE",
       "open_reason": "Link /orders/new in station/[slug]/page.tsx replaced with /warendurchlauf/wareneingang in F1-R0. No longer a phantom link."
-    },
-    {
-      "stable_id": "provider.ocr-buchhaltung-abstract",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "OCR/Buchhaltung-Abstract",
-      "adapter_file": "src/lib/buchhaltung/ocr/OcrProvider.ts",
-      "env_vars": [],
-      "visible": false,
-      "reachable": false,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Abstract OCR interface for accounting document processing. No external API dependency. Contract layer for future provider activation."
-    },
-    {
-      "stable_id": "provider.ocr-manual",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "OCR/Manual",
-      "adapter_file": "src/lib/ocr/ManualProvider.ts",
-      "env_vars": [],
-      "visible": false,
-      "reachable": false,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Manual OCR data-entry provider. No external API dependency. Honest OCR contract capability without automation. No verified E2E evidence."
-    },
-    {
-      "stable_id": "provider.mock-ocr-buchhaltung",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "Mock/OCR-Buchhaltung",
-      "adapter_file": "src/lib/buchhaltung/ocr/MockOcrProvider.ts",
-      "env_vars": [],
-      "visible": false,
-      "reachable": false,
-      "classification": "LEGACY_REMOVE",
-      "open_reason": "MockOcrProvider in src/lib is not an isolated test fixture it is a production-path mock in the provider layer. Scheduled for removal before F1.2."
     },
     {
       "stable_id": "provider.mock-marketing",
