@@ -3,7 +3,7 @@ import {sql} from 'drizzle-orm';
 import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import {boundedTodayRefreshBudgetMs,type TodayReadSettings} from '@/modules/fundament/public';
-import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
+import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
@@ -88,7 +88,7 @@ async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthoriz
  * personal rules, assignment ownership and command grants stay on the live path. */
 function productivePorts():TodayProjectionPorts{
  const orderLists=new WeakMap<ProjectorAuthorization,ReturnType<typeof getOperationalOrders>>();
- const orders=(auth:ProjectorAuthorization)=>{let value=orderLists.get(auth);if(!value){value=getOperationalOrders(auth,{purpose:'today'},readBetriebsruheInTransaction);orderLists.set(auth,value);}return value;};
+ const orders=(auth:ProjectorAuthorization)=>{let value=orderLists.get(auth);if(!value){value=getOperationalOrders(auth,{purpose:'today'});orderLists.set(auth,value);}return value;};
  const orderPorts:TodayOrderReadPorts={readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
   readCredit:(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),
   readShipments:(auth,ids,readSettings)=>readManualShippingBatch(auth,ids,{readSettings,readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,
