@@ -1285,8 +1285,13 @@ export async function leseBerechneteMehrarbeitInTransaction(
   const ergebnis = new Map<string, ImmutableInvoiceExtraWorkLine[]>();
   if (!auftragIds.length) return ergebnis;
   const ids = sql.join(auftragIds.map(id => sql`${id}`), sql`, `);
-  const belege = await tx.execute<{ auftrag_id: string; invoice_id: string; order_id: string | null; snapshot: unknown }>(sql`
-    SELECT mitglied.order_id AS auftrag_id, original.id::text AS invoice_id, original.order_id, original.snapshot
+  const belege = await tx.execute<{
+    auftrag_id: string; invoice_id: string; order_id: string | null; snapshot: unknown;
+    net_amount_cents: number | string; vat_amount_cents: number | string;
+    gross_amount_cents: number | string; vat_rate_basis_points: number | null;
+  }>(sql`
+    SELECT mitglied.order_id AS auftrag_id, original.id::text AS invoice_id, original.order_id, original.snapshot,
+      original.net_amount_cents, original.vat_amount_cents, original.gross_amount_cents, original.vat_rate_basis_points
     FROM private.v_invoice_order_members_v1 mitglied
     JOIN public.invoices original ON original.tenant_id = mitglied.tenant_id AND original.id = mitglied.invoice_id
     WHERE mitglied.tenant_id = ${tenantId} AND mitglied.order_id IN (${ids})

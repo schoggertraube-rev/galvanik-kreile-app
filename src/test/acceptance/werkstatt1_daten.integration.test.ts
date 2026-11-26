@@ -14,8 +14,9 @@ import { calculateTermSuggestion } from "@/lib/server/intakeSuggestions";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { readQuoteCurrentRate } from "@/lib/server/quoteJournalPort";
 import {
-  readBetriebsruheInTransaction, readQuoteSettingsInTransaction, readWerkstattKostensatzInTransaction, readWerkstattMehrarbeitInTransaction,
+  readBetriebsruheInTransaction, readWerkstattKostensatzInTransaction, readWerkstattMehrarbeitInTransaction,
   readWerkstattZeitstationInTransaction,
 } from "@/modules/fundament/server-public";
 import { fertigtermin } from "@/modules/orders/public";
@@ -132,13 +133,13 @@ test("Mehrarbeitsfreigaben brauchen einen vollständigen, unveränderlichen Bele
     approvedBy: "TEST Kunde",
     confirmationText: "TEST: Ich bestätige den Betrag.",
   };
-  const schreibeBeleg = async (payload: object) => {
+  const schreibeBeleg = async (payload: Parameters<typeof sql.json>[0]) => {
     const id = randomUUID();
     await sql`INSERT INTO public.events (
         id, tenant_id, order_id, event_type, description, user_id, client_event_id, correlation_id,
         event_schema_version, aggregate_version, station, payload, status, created_at
       ) VALUES (${id}, ${mandant}, ${orderId}, ${eventType}, 'TEST Mehrarbeitsfreigabe', ${full.actorId}::uuid,
-        ${id}::uuid, ${id}::uuid, 1, 2, 'angenommen', ${JSON.stringify(payload)}::jsonb,
+        ${id}::uuid, ${id}::uuid, 1, 2, 'angenommen', ${sql.json(payload)}::jsonb,
         'success', statement_timestamp() AT TIME ZONE 'UTC')`;
     return id;
   };
@@ -152,7 +153,7 @@ test("Mehrarbeitsfreigaben brauchen einen vollständigen, unveränderlichen Bele
     await expect(schreibeBeleg({ ...beleg, ...fehler })).rejects.toMatchObject(constraint);
   }
   const id = await schreibeBeleg(beleg);
-  await expect(sql`UPDATE public.events SET payload = ${JSON.stringify({ ...beleg, approvedNetAmountCents: 1 })}::jsonb
+  await expect(sql`UPDATE public.events SET payload = ${sql.json({ ...beleg, approvedNetAmountCents: 1 })}::jsonb
     WHERE tenant_id = ${mandant} AND id = ${id}`).rejects.toMatchObject({ code: "P0001" });
   await expect(sql`DELETE FROM public.events WHERE tenant_id = ${mandant} AND id = ${id}`)
     .rejects.toMatchObject({ code: "P0001" });
@@ -531,7 +532,7 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
   const laufLeser = {
     station: readWerkstattZeitstationInTransaction,
     personensatz: readWerkstattKostensatzInTransaction,
-    standardsatz: readQuoteSettingsInTransaction,
+    standardsatz: readQuoteCurrentRate,
   };
   const { bookWorkTimeAction, getExtraWorkMasterDataAction, setExtraWorkHourlyRateAction } = await import("@/app/actions/orders.actions");
   const buchen = (anmeldung: typeof werkstatt, input: unknown) =>

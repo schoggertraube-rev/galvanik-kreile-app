@@ -416,15 +416,15 @@ export async function bookWorkTimeAction(input: unknown) {
   return observeAction("bookWorkTimeAction", subjectForAction("bookWorkTimeAction", input), async () => {
     const auth = await resolveAuthorization();
     if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
-    const [{ hatArbeitszeitAuftragInTransaction }, { bookWorkTime }, settings] = await Promise.all([
+    const [{ hatArbeitszeitAuftragInTransaction }, { bookWorkTime }, settings, { readQuoteCurrentRate }] = await Promise.all([
       import("@/modules/orders/server-public"), import("@/modules/werkstatt/server-public"),
-      import("@/modules/fundament/server-public"),
+      import("@/modules/fundament/server-public"), import("@/lib/server/quoteJournalPort"),
     ]);
     return bookWorkTime(auth.data, input, {
       auftrag: hatArbeitszeitAuftragInTransaction,
       station: settings.readWerkstattZeitstationInTransaction,
       personensatz: settings.readWerkstattKostensatzInTransaction,
-      standardsatz: settings.readQuoteSettingsInTransaction,
+      standardsatz: readQuoteCurrentRate,
     });
   }, readLoggingSettings);
 }
@@ -433,17 +433,18 @@ export async function beendeBuendelLaufAction(input: Parameters<typeof import("@
   return observeAction("beendeBuendelLaufAction", subjectForAction("beendeBuendelLaufAction", input), async () => {
     const auth = await resolveAuthorization();
     if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
-    const [{ beendeLauf }, { bookLaufZeit, verteileLaufMinuten }, settings, { setOrderItemFinishedInTransaction }, pricing] = await Promise.all([
+    const [{ beendeLauf }, { bookLaufZeit, verteileLaufMinuten }, settings, { setOrderItemFinishedInTransaction }, pricing, { readQuoteCurrentRate }] = await Promise.all([
       import("@/modules/orders/server-public"), import("@/modules/werkstatt/server-public"),
       import("@/modules/fundament/server-public"), import("@/lib/server/commands/orderContentCommand"),
       productionPricingComposition(),
+      import("@/lib/server/quoteJournalPort"),
     ]);
     return beendeLauf(auth.data, input, {
       verteileMinuten: verteileLaufMinuten,
       zeitBuchen: (tx, login, zeit) => bookLaufZeit(tx, login, zeit, {
         station: settings.readWerkstattZeitstationInTransaction,
         personensatz: settings.readWerkstattKostensatzInTransaction,
-        standardsatz: settings.readQuoteSettingsInTransaction,
+        standardsatz: readQuoteCurrentRate,
       }),
       teilFertigMelden: (tx, login, teil) => setOrderItemFinishedInTransaction(tx, login, teil, pricing),
     });

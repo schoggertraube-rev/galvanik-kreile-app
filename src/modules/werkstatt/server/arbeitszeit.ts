@@ -54,7 +54,7 @@ export type ArbeitszeitLeser = {
   station: (tx: PrivilegedTenantTransaction, tenantId: string, station: string) =>
     Promise<{ kostenstelle: string; maximalMinuten: number } | null>;
   personensatz: (tx: PrivilegedTenantTransaction, tenantId: string, personId: string) => Promise<string | null>;
-  standardsatz: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{ hourlyRateCents: number | null } | null>;
+  standardsatz: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<number | null>;
 };
 
 type KostensatzLeser = Pick<ArbeitszeitLeser, "personensatz" | "standardsatz">;
@@ -112,8 +112,8 @@ async function liesKostensatz(
 ) {
   const person = await leser.personensatz(tx, auth.tenantId, auth.userId);
   if (person !== null) return { betrag: person, quelle: "person" };
-  const standard = (await leser.standardsatz(tx, auth.tenantId))?.hourlyRateCents;
-  if (standard == null) return { betrag: null, quelle: "fehlt" };
+  const standard = await leser.standardsatz(tx, auth.tenantId);
+  if (standard === null) return { betrag: null, quelle: "fehlt" };
   return { betrag: (standard / 100).toFixed(2), quelle: "standard" };
 }
 
