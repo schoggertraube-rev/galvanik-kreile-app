@@ -35,7 +35,7 @@ function WeekChart({rows}: {rows:NonNullable<ReturnType<typeof projectTodayProdu
   const ticks = [...new Set([lower,(lower+upper)/2,upper])];
   return <div className={styles.figure}>
     <div className={styles.legend}><span>{TODAY_WEEK_COPY.daily}</span><span>{TODAY_WEEK_COPY.running}</span></div>
-    <svg className={styles.plot} viewBox="0 0 437 145" role="img" aria-label={TODAY_WEEK_COPY.graph}>
+    <svg className={styles.plot} viewBox="-54 0 479 150" role="img" aria-label={TODAY_WEEK_COPY.graph}>
       {ticks.map(value => <g key={value}>
         <line className={styles.axis} x1={38} x2={414} y1={y(value)} y2={y(value)} />
         <text x={30} y={y(value)+4} textAnchor="end">{axisValue.format(value/100)}</text>
@@ -65,20 +65,20 @@ function WeekValues({week,today,openPositions}: {week:TodayProductionWeek;today:
       {rows?.length ? <WeekChart rows={rows}/> : null}
     </section>
     {rows?.length ? <div className={styles.ledger}>
-      <table>
-        <thead><tr><th scope="col">{TODAY_WEEK_COPY.workday}</th><th scope="col">{TODAY_WEEK_COPY.daily}</th><th scope="col">{TODAY_WEEK_COPY.running}</th></tr></thead>
-        <tbody>{rows.map(row => <tr key={row.date} className={row.date===today?styles.current:undefined}>
-          <th scope="row">{openPositions ? <button type="button" className={styles.valueButton}
+      <table role="table">
+        <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">{TODAY_WEEK_COPY.workday}</th><th role="columnheader" scope="col">{TODAY_WEEK_COPY.daily}</th><th role="columnheader" scope="col">{TODAY_WEEK_COPY.running}</th></tr></thead>
+        <tbody role="rowgroup">{rows.map(row => <tr role="row" key={row.date} className={row.date===today?styles.current:undefined}>
+          <th role="rowheader" scope="row">{openPositions ? <button type="button" className={styles.valueButton}
             onClick={event=>openPositions({kind:'day',date:row.date},event.currentTarget)}>
             {weekday.format(atNoon(row.date))}
             <small>{shortDay.format(atNoon(row.date))}{row.date===today?' · '+TODAY_WEEK_COPY.today:''}</small>
           </button> : <>{weekday.format(atNoon(row.date))}
             <small>{shortDay.format(atNoon(row.date))}{row.date===today?' · '+TODAY_WEEK_COPY.today:''}</small></>}
           </th>
-          <td>{openPositions ? <button type="button" className={styles.valueButton}
+          <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">{TODAY_WEEK_COPY.daily}</span>{openPositions ? <button type="button" className={styles.valueButton}
             aria-label={TODAY_WEEK_COPY.dayPositions(weekday.format(atNoon(row.date)))}
             onClick={event=>openPositions({kind:'day',date:row.date},event.currentTarget)}>{formatEuro(row.netCents)}</button> : formatEuro(row.netCents)}</td>
-          <td>{openPositions ? <button type="button" className={styles.valueButton}
+          <td role="cell"><span className={styles.mobileLabel} aria-hidden="true">{TODAY_WEEK_COPY.running}</span>{openPositions ? <button type="button" className={styles.valueButton}
             aria-label={TODAY_WEEK_COPY.throughPositions(weekday.format(atNoon(row.date)))}
             onClick={event=>openPositions({kind:'through',date:row.date},event.currentTarget)}>{formatEuro(row.runningCents)}</button> : formatEuro(row.runningCents)}</td>
         </tr>)}</tbody>
