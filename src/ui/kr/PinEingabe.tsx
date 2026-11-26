@@ -1,23 +1,50 @@
 'use client';
-import { Button } from './Button';
-export interface PinEingabeProps { laenge: number; meldung?: string; onZiffer: (z: string) => void; onLoeschen: () => void; onNeu: () => void; onEmailAnmeldung?: () => void; }
-/** Login /start: PIN, ohne Slogan/Wetter/Provider-Platzhalter (D-UI-CORE-002 A). Wartung: E-Mail-Einstieg. */
-export function PinEingabe({ laenge, meldung, onZiffer, onLoeschen, onNeu, onEmailAnmeldung }: PinEingabeProps) {
-  return (
-    <div className="kr-login"><div className="kr-login-karte">
-      <div className="kr-login-marke"><div className="kr-marke"><span className="kr-logo">GK</span><span className="kr-marke-name">KREILE</span></div></div>
-      <div className="kr-login-pin">
-        <h1 className="kr-login-titel">Code eingeben</h1>
-        <div className="kr-pin-punkte" aria-label={laenge + ' von 4 Ziffern'}>{[0, 1, 2, 3].map(n => <span key={n} className={laenge > n ? 'kr-pin-punkt kr-pin-punkt--an' : 'kr-pin-punkt'} />)}</div>
-        <div className="kr-pin-meldung" role="alert">{meldung}</div>
-        <div className="kr-tastatur">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(z => <button key={z} type="button" className="kr-taste" onClick={() => onZiffer(z)}>{z}</button>)}
-          <button type="button" className="kr-taste kr-taste--klein" onClick={onLoeschen}>Löschen</button>
-          <button type="button" className="kr-taste" onClick={() => onZiffer('0')}>0</button>
-          <button type="button" className="kr-taste kr-taste--klein" onClick={onNeu}>Neu</button>
-        </div>
-        {onEmailAnmeldung && <Button art="leise" text="Admin-Anmeldung per E-Mail" onClick={onEmailAnmeldung} />}
-      </div>
-    </div></div>
+
+import { useId, type Ref } from 'react';
+import { Delete } from 'lucide-react';
+import { PIN_LOGIN_COPY } from '@/ui/allgemeinCopy';
+import { Glasknopf } from './design-final/Glasknopf';
+import styles from './PinEingabe.module.css';
+
+export interface PinEingabeProps {
+  laenge: number;
+  meldung?: string | null;
+  gesperrt?: boolean;
+  schuetteln?: boolean;
+  punktRef?: Ref<HTMLDivElement>;
+  tastaturTabIndex?: number;
+  onZiffer: (ziffer: string) => void;
+  onLoeschen: () => void;
+  onNeu?: () => void;
+  onEmailAnmeldung?: () => void;
+}
+
+const ziffern = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
+export function PinEingabe({ laenge, meldung, gesperrt, schuetteln, punktRef, tastaturTabIndex, onZiffer, onLoeschen, onNeu, onEmailAnmeldung }: PinEingabeProps) {
+  const meldungsId = useId();
+  const ziffer = (wert: string) => (
+    <Glasknopf key={wert} knopfform="kreis" bezeichnung={wert} icon={<span>{wert}</span>}
+      disabled={gesperrt} tabIndex={tastaturTabIndex} onClick={() => onZiffer(wert)} />
   );
+
+  return <>
+    <div className={styles.status}>
+      <div ref={punktRef} className={styles.punkte} data-schuetteln={schuetteln || undefined}
+        data-error={Boolean(meldung)} data-spec-id="login.pin" role="group" tabIndex={0}
+        aria-label={PIN_LOGIN_COPY.pinStellen(laenge)} aria-describedby={meldungsId}>
+        {[0, 1, 2, 3].map(n => <span key={n} data-filled={laenge > n} aria-hidden="true" />)}
+      </div>
+      <p id={meldungsId} className={styles.meldung} role={meldung ? 'alert' : undefined} aria-live="polite">{meldung}</p>
+    </div>
+    <div className={styles.tasten} data-spec-id="login.anmelden" aria-label={PIN_LOGIN_COPY.ziffernblock}>
+      {ziffern.map(ziffer)}
+      {onNeu ? <Glasknopf knopfform="kreis" bezeichnung="Neu" icon={<span>Neu</span>}
+        disabled={gesperrt} tabIndex={tastaturTabIndex} onClick={onNeu} /> : <span aria-hidden="true" />}
+      {ziffer('0')}
+      <Glasknopf knopfform="kreis" bezeichnung="Löschen" icon={<Delete aria-hidden="true" />}
+        disabled={gesperrt} tabIndex={tastaturTabIndex} onClick={onLoeschen} />
+    </div>
+    {onEmailAnmeldung ? <Glasknopf text={PIN_LOGIN_COPY.mitEmail} ton="leise" disabled={gesperrt} onClick={onEmailAnmeldung} /> : null}
+  </>;
 }
