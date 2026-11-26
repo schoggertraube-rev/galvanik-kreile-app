@@ -544,7 +544,9 @@
       "exported_functions": [
         "getTodayDeviceAction",
         "saveTodayPreferencesAction",
-        "saveTodayReminderAction"
+        "saveTodayReminderAction",
+        "readTodayOwnNoteAction",
+        "saveTodayOwnNotesAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F2 tenant- and login-bound Der-Tag field preferences and reminders. Owner verification remains pending.",

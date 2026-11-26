@@ -88,6 +88,40 @@ it('B-20 Tagesnotiz keeps the typed text visible and only confirms the matching 
  expect(await screen.findByText('Automatisch gespeichert')).toBeVisible();
 });
 
+it('B-20 Tagesnotiz retains the newest edit across navigation while the previous save is in flight',async()=>{
+ const empty={day:'2026-11-26',version:0,text:'',completed:false};
+ const first={...empty,version:1,text:'TEST erster Entwurf'};
+ const newest={...empty,version:2,text:'TEST neuerer Entwurf'};
+ let acknowledgeFirst!:(result:{code:'OK';note:typeof empty})=>void;
+ let acknowledgeNewest!:(result:{code:'OK';note:typeof empty})=>void;
+ ports.readNote.mockResolvedValueOnce({code:'OK',note:empty}).mockResolvedValueOnce({code:'OK',note:first});
+ ports.saveNote.mockImplementationOnce(()=>new Promise(done=>{acknowledgeFirst=done;}))
+  .mockImplementationOnce(()=>new Promise(done=>{acknowledgeNewest=done;}));
+ const opened=render(<OfficeOwnNotes loginScope="TEST-note-navigation-login"/>);
+ const before=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ await waitFor(()=>expect(before).toBeEnabled());
+ fireEvent.change(before,{target:{value:first.text}});fireEvent.blur(before);
+ await waitFor(()=>expect(ports.saveNote).toHaveBeenCalledWith({day:empty.day,version:0,text:first.text}));
+ fireEvent.change(before,{target:{value:newest.text}});
+ opened.unmount();
+ const returned=render(<OfficeOwnNotes loginScope="TEST-note-navigation-login"/>);
+ const after=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ expect(after).toHaveValue(newest.text);
+ expect(screen.queryByText('Automatisch gespeichert')).not.toBeInTheDocument();
+ acknowledgeFirst({code:'OK',note:first});
+ await waitFor(()=>expect(ports.saveNote).toHaveBeenCalledWith({day:empty.day,version:1,text:newest.text}));
+ expect(after).toHaveValue(newest.text);
+ expect(screen.queryByText('Automatisch gespeichert')).not.toBeInTheDocument();
+ acknowledgeNewest({code:'OK',note:newest});
+ expect(await screen.findByText('Automatisch gespeichert')).toBeVisible();
+ returned.unmount();
+ ports.readNote.mockResolvedValueOnce({code:'OK',note:empty});
+ render(<OfficeOwnNotes loginScope="TEST-note-other-login"/>);
+ const other=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ await waitFor(()=>expect(other).toBeEnabled());
+ expect(other).toHaveValue('');
+});
+
 it('zeigt die freigegebene Wochensumme und schließt zum Auslöser zurück',()=>{
  // Synthetic display boundary; the server role split is covered with real logins.
  const week={weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:386000,currentlyUnpricedItemCount:0};
@@ -456,7 +490,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
     const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
     const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
+    expect(screen.getByText("Noch keine Aufträge erfasst.").closest('[role="status"]')).toBeVisible();
     expect(screen.getByRole("button", { name: "Neu erfassen" })).toBeInTheDocument();
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
@@ -470,7 +504,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
 
   it("unterscheidet vorhandene Aufträge ohne heutige Handlung vom leeren Auftragsbestand", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "werkstatt", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] }, projection }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Nichts offen");
+    expect(screen.getByText("Nichts offen").closest('[role="status"]')).toBeVisible();
     expect(screen.queryByText("Noch keine Aufträge erfasst.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Neu erfassen" })).not.toBeInTheDocument();
   });
