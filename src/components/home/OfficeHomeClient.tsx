@@ -1,7 +1,6 @@
 "use client";
 import dynamic from 'next/dynamic';
-const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
-import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY,ORDER_STATION_COPY} from '@/ui/situationCatalog';
+import {V45_TEXT,INVOICE_DELIVERY_COPY,PAGE_READ_COPY,TODAY_MODEL_COPY,ORDER_STATION_COPY,TODAY_PLAN_COPY} from '@/ui/situationCatalog';
 import {MAIL_IMPORT_COPY,INTAKE_MAIL_ADDRESS_MISSING_COPY} from "@/ui/situationCatalog";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -17,7 +16,14 @@ import { OfficeDaySchedule } from "./OfficeDaySchedule";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { IntakeDraftList, type IntakeDraftResult } from "@/modules/eingang/public";
 import { discardIntakeDraftAction } from "@/app/actions/eingang.actions";
-import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
+import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Icon, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
+import { GlasDialog } from '@/ui/kr/design-final/GlasDialog';
+
+const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
+const CalendarOrders=dynamic(()=>import('@/app/orders/OrdersAppAdapter').then(module=>module.OrdersAppAdapter),{
+  ssr:false,
+  loading:()=> <p role="status">{PAGE_READ_COPY.loading}</p>,
+});
 
 type OfficeIdentity = { cacheLoginScope?:string; role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard;modelRead?:{source:'modell'|'live';pending:boolean;incomplete:boolean;pollMs:number;maxPollMs?:number;rebuild:boolean;revision?:string;revisions?:Record<string,string>} };
 export type OfficeHomeModel =
@@ -80,6 +86,17 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
   const [mailId, setMailId] = useState<string | null>(null);
   const [mailPreview, setMailPreview] = useState<MailPreview | null>(null);
   const [mailMessage, setMailMessage] = useState("");
+  const [schedulePeriod,setSchedulePeriod]=useState('today');
+  const [calendarOpen,setCalendarOpen]=useState(false);
+  const [calendarOpener,setCalendarOpener]=useState<HTMLButtonElement|null>(null);
+  const calendarChanged=useRef(false);
+  const calendarMounted=calendarOpener!==null;
+  useEffect(()=>{
+    if(!calendarMounted)return;
+    const recordChange=()=>{calendarChanged.current=true;};
+    window.addEventListener('kreile-sync-orders',recordChange);
+    return ()=>window.removeEventListener('kreile-sync-orders',recordChange);
+  },[calendarMounted]);
   const modelPoll=useRef<((changed?:boolean)=>Promise<void>)|null>(null);
   useEffect(()=>{
     if(!('dashboard'in initialModel)||!initialModel.modelRead||!initialModel.cacheLoginScope)return;
@@ -120,6 +137,14 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
     return ()=>{window.removeEventListener('focus',resume);document.removeEventListener('visibilitychange',resume);stopped=true;controller.abort();if(timer)clearTimeout(timer);if(modelPoll.current===poll)modelPoll.current=null;};
   },[initialModel]);
   const refreshToday=()=>{if(modelPoll.current)void modelPoll.current(true);else router.refresh();};
+  function finishCalendar() {
+    setCalendarOpen(false);
+    setCalendarOpener(null);
+    if(calendarChanged.current){
+      calendarChanged.current=false;
+      refreshToday();
+    }
+  }
   const openMail = async (graphMessageId: string) => {
     setMailId(graphMessageId);
     setMailPreview(null);
@@ -146,7 +171,7 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
   const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({
     anzahl: keyboardItems.length,
-    aktiv: device === "desktop" && !later && !more && !customize && (model.kind === "data" || model.kind === "empty" || model.kind==='partial'),
+    aktiv: device === "desktop" && !calendarMounted && !later && !more && !customize && (model.kind === "data" || model.kind === "empty" || model.kind==='partial'),
     onHaupt: (index) => { const item = keyboardItems[index]?.item; if (item) primary(item); },
     onSpaeter: (index) => { const item = keyboardItems[index]?.item; if (item) setLater(item); },
   });
@@ -228,7 +253,8 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
 
   const daySchedule = canWorkOrders && model.dashboard.calendar && model.dashboard.orderSchedule ? <OfficeDaySchedule
     calendar={model.dashboard.calendar} schedule={model.dashboard.orderSchedule} orders={model.dashboard.orderActions?.rows ?? []}
-    onOpen={orderId => openOrder(orderId)} onEdit={() => router.push('/orders?view=woche')} /> : null;
+    period={schedulePeriod} onPeriod={setSchedulePeriod}
+    onOpen={orderId=>openOrder(orderId)} onEdit={opener=>{setCalendarOpener(opener);setCalendarOpen(true);}} /> : null;
   const visibleLayout = activeLayout.filter(item => customize || fieldHasContent(item.field) || (item.field === 'assign' && model.dashboard.outlookMessage));
   const [firstMobileField, ...remainingMobileFields] = visibleLayout;
 
@@ -256,6 +282,12 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
     {invoiceMail?<Dialog titel={V45_TEXT.out$action$unsent({invoice:invoiceMail.number,name:invoiceMail.customerName})} icon="mail" groesse="breit" onSchliessen={()=>setInvoiceMail(null)}><CommunicationPanel key={invoiceMail.documentId} targetType="CUSTOMER" targetId={invoiceMail.customerId} invoiceOriginal={invoiceMail}/></Dialog>:null}
+    {calendarMounted ? <GlasDialog offen={calendarOpen&&canWorkOrders} titel={TODAY_PLAN_COPY.calendarTitle}
+      ansicht="blatt" groesse="breit" oeffner={calendarOpener} dataSpecId="kalender"
+      schliessenText={TODAY_PLAN_COPY.closeCalendar} schliessenSymbol={<Icon name="x" />}
+      onSchliessen={()=>setCalendarOpen(false)} onGeschlossen={finishCalendar}>
+      {canWorkOrders?<CalendarOrders initialView="woche" />:null}
+    </GlasDialog> : null}
     {mailId ? <Dialog titel="Mail" icon="mail" groesse="breit" onSchliessen={() => setMailId(null)}><div className="kr-stapel">
       {!mailPreview && !mailMessage ? <Hinweis>Mail wird gelesen …</Hinweis> : null}
       {mailMessage ? <Hinweis ton="warn">{mailMessage}</Hinweis> : null}

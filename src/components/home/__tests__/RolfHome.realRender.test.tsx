@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
@@ -8,6 +8,7 @@ const ports = vi.hoisted(() => ({
   requestCreate: vi.fn(),
   listInbox: vi.fn(),
   confirmHandover:vi.fn(),
+  readWeekOrders:vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
   permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
@@ -16,11 +17,16 @@ vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { ope
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
 vi.mock('@/components/communication/CommunicationPanel',()=>({CommunicationPanel:({targetId,invoiceOriginal}:{targetId:string;invoiceOriginal?:{documentId:string}})=><div data-testid="TEST-canonical-composer" data-customer={targetId} data-original={invoiceOriginal?.documentId}/> }));
 vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox,confirmInvoiceHandoverAction:ports.confirmHandover }));
+vi.mock("@/app/actions/orders.actions", () => ({
+  getOrdersBaseDb: () => ports.readWeekOrders(),
+  getOrdersDb: () => ports.readWeekOrders(),
+}));
 vi.mock("@/app/actions/eingang.actions",()=>({getIntakeDraftsAction:vi.fn(async()=>({code:"OK",drafts:[]})),discardIntakeDraftAction:vi.fn(async()=>({code:"OK",drafts:[]}))}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     loading: ports.permissions.loading,
+    hasPermission: () => false,
     hasArea: (area: string) => (area === "eingang" && ports.permissions.canCreateOrder) || (area === "auftraege" && ports.permissions.canWorkOrders),
   }),
 }));
@@ -92,10 +98,14 @@ it('öffnet Tages- und Wochenpositionen erst auf Anforderung und kehrt zur Auswa
  expect(within(through).getByText(/TEST Teil B/)).toBeVisible();
 });
 
-it('öffnet belegte Termine im vorhandenen Auftrag und zeigt keine erfundene Uhrzeit',()=>{
+it('öffnet belegte Termine und kehrt aus dem Kalenderblatt zum gewählten Tagesplan zurück',async()=>{
  // Synthetic display boundary. The list uses matching versions from the order reader.
  const read=(number:string)=>completeU2Read({code:'OK',erstblick:[{key:'auftrag.lage',werte:{nummer:number}}]});
  const calendar={readStartedAt:'2026-11-25T15:00:00.000Z',today:'2026-11-25',throughDate:'2026-12-02'};
+ ports.readWeekOrders.mockResolvedValue({ok:true,serverReadAt:calendar.readStartedAt,data:[
+  {id:'TEST-week-order',orderNumber:'TEST-WOCHE-1',customerId:'TEST-customer',customerName:'TEST Kalender',
+   title:'TEST Wochenauftrag',dueDate:calendar.today,station:'angenommen',status:'angenommen',risk:'green',parts:[]},
+ ]});
  render(<RolfHomeClient model={{kind:'data',role:'meister',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,
   dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],calendar,
    orderSchedule:{code:'SOURCE_INCOMPLETE',knownCounts:{today:1,upcoming:1},missing:['TEST_INCOMPLETE_SOURCE'],sources:[
@@ -114,8 +124,27 @@ it('öffnet belegte Termine im vorhandenen Auftrag und zeigt keine erfundene Uhr
  expect(screen.queryByRole('button',{name:/A-2026-3031/})).not.toBeInTheDocument();
  fireEvent.click(screen.getByRole('button',{name:/26\. Nov\. A-2026-3032/}));
  expect(ports.openOrder).toHaveBeenLastCalledWith('plan-next');
- fireEvent.click(screen.getByRole('button',{name:'Bearbeiten'}));
- expect(ports.push).toHaveBeenCalledWith('/orders?view=woche');
+ const opener=screen.getByRole('button',{name:'Bearbeiten'});
+ const locationBefore=window.location.href;
+ fireEvent.click(opener);
+ let sheet=screen.getByRole('dialog',{name:'Kalender bearbeiten'});
+ expect(await within(sheet).findByRole('button',{name:/TEST-WOCHE-1/})).toBeVisible();
+ fireEvent.click(within(sheet).getByRole('button',{name:'Kalender schließen'}));
+ await waitFor(()=>expect(opener).toHaveFocus());
+ expect(ports.refresh).not.toHaveBeenCalled();
+ expect(ports.push).not.toHaveBeenCalled();
+ fireEvent.click(opener);
+ sheet=screen.getByRole('dialog',{name:'Kalender bearbeiten'});
+ // Synthetic boundary for the confirmed change signal from the existing order sheet.
+ fireEvent(window,new Event('kreile-sync-orders'));
+ expect(ports.refresh).not.toHaveBeenCalled();
+ fireEvent.click(within(sheet).getByRole('button',{name:'Kalender schließen'}));
+ await waitFor(()=>expect(opener).toHaveFocus());
+ expect(screen.queryByRole('dialog',{name:'Kalender bearbeiten'})).not.toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'7 Tage'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('button',{name:/26\. Nov\. A-2026-3032/})).toBeVisible();
+ expect(window.location.href).toBe(locationBefore);
+ expect(ports.refresh).toHaveBeenCalledTimes(1);
 });
 
 it('shows a concrete source notice and opens the same real order path instead of hiding the missing proposal',()=>{
@@ -140,10 +169,19 @@ it('retains a known task when the order list is unknown and offers a fresh read 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // JSDOM can deliver history.back() after an open sheet has been unmounted.
+  // Keep that browser boundary isolated between display cases.
+  vi.spyOn(window.history,"back").mockImplementation(()=>{});
   ports.permissions.loading = false;
   ports.permissions.canCreateOrder = true;
   ports.permissions.canWorkOrders = true;
   ports.listInbox.mockResolvedValue({ code: "OK", data: [] });
+});
+
+afterEach(async()=>{
+  cleanup();
+  await Promise.resolve();
+  vi.mocked(window.history.back).mockRestore();
 });
 
 const projection: OrdersHomeProjection = {
