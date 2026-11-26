@@ -145,14 +145,14 @@ export async function readPageReadSettingsAction(input?:{includeCompanyName:true
  catch{return {code:'SOURCE_INCOMPLETE' as const};}
 }
 
-export async function getProductionWeekAction(input?:{onDate?:string}){
+export async function getProductionWeekAction(input?:{onDate?:string;includePositions?:boolean}){
  return observeAction('getProductionWeekAction',subjectForAction('getProductionWeekAction',input),async()=>{
  noStore();
  const authorization=await resolveAuthorization();
  if(!authorization.ok)return {code:authorization.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE' as const:'UNAUTHENTICATED' as const};
- if(input!==undefined&&(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>key!=='onDate')||input.onDate!==undefined&&typeof input.onDate!=='string'))return {code:'VALIDATION_ERROR' as const};
+ if(input!==undefined&&(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>key!=='onDate'&&key!=='includePositions')||input.onDate!==undefined&&typeof input.onDate!=='string'||input.includePositions!==undefined&&typeof input.includePositions!=='boolean'))return {code:'VALIDATION_ERROR' as const};
  const {readProductionWeek}=await import('@/lib/server/productionSnapshotPort');
- return readProductionWeek(authorization.data,input?.onDate);
+ return readProductionWeek(authorization.data,input?.onDate,input?.includePositions);
 
  },readLoggingSettings);
 }
