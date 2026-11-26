@@ -11,7 +11,8 @@ import {synchronizeCancelledCollectionTask,synchronizeCancellationCreditRetryTas
 import {recordIntakeTaskEffect,recognizeInvoicePdf} from '@/modules/eingang/server-public';
 
 import { revalidatePath } from "next/cache";
-import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { readObservedAuthorization } from "@/lib/server/actionObservation";
 import type {
   CancelInvoiceInput,
   CancelInvoiceResult,
@@ -51,16 +52,33 @@ async function resolveActionAuthorization(): Promise<ActionAuthorizationResult> 
   return { ok: true, data: authorization.data };
 }
 
-export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<CreateInvoiceResult> {
+type InvoiceReceipt=Extract<CreateInvoiceResult,{code:'OK'}>['receipt'];
+type InvoiceAmountField='netAmountCents'|'vatAmountCents'|'grossAmountCents';
+type VisibleInvoiceReceipt<T extends InvoiceReceipt=InvoiceReceipt>=T extends InvoiceReceipt
+ ? Omit<T,InvoiceAmountField>&Partial<Pick<T,InvoiceAmountField>>
+ : never;
+type IssueInvoiceActionResult=Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'OK';receipt:VisibleInvoiceReceipt;replayed:boolean};
+
+// The issuer requires price rights for every success without an agreement.
+export async function issueInvoiceAction(input:CreateInvoiceInput&{agreement?:undefined}):Promise<CreateInvoiceResult>;
+export async function issueInvoiceAction(input:CreateInvoiceInput):Promise<IssueInvoiceActionResult>;
+export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<IssueInvoiceActionResult> {
  return observeAction('issueInvoiceAction',subjectForAction('issueInvoiceAction',input),async()=>{
   const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
   const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
   const result = await createInvoice(input,undefined,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms,leseLagerMaterialpositionenInTransaction);
-  if (result.code === "OK") {
-    revalidatePath("/buchhaltung/rechnungen");
-    revalidatePath("/warendurchlauf");
-  }
-  return result;
+  if (result.code !== "OK") return result;
+  revalidatePath("/buchhaltung/rechnungen");
+  revalidatePath("/warendurchlauf");
+
+  // Use the authorization that the existing issuer resolved for this request.
+  const authorization=readObservedAuthorization();
+  if(authorization&&hasAuthorizationArea(authorization,'preise'))return result;
+  const receipt:VisibleInvoiceReceipt={...result.receipt};
+  delete receipt.netAmountCents;
+  delete receipt.vatAmountCents;
+  delete receipt.grossAmountCents;
+  return {...result,receipt};
 
  },readLoggingSettings);
 }
