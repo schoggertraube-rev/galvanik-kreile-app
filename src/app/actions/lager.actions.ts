@@ -12,9 +12,18 @@ import {
   leseLagerBewegungenAltvertrag,
   speichereLagerStammdaten,
   type LagerBewegungssuche,
+  type LagerPreisAufgabe,
   type LagerTaskPorts,
 } from "@/modules/lager/server-public";
-import { synchronizeLagerBestandTask, synchronizeLagerEntwurfTask } from "@/modules/tasks/server-public";
+import { readCustomerProfile } from "@/modules/customers/server-public";
+import { recordIntakeTaskEffect } from "@/modules/eingang/server-public";
+import { synchronizeLagerBestandTask, synchronizeLagerEntwurfTask, synchronizeLagerPreisTask } from "@/modules/tasks/server-public";
+
+const synchronisierePreisaufgabe: LagerPreisAufgabe = (tx, auth, artikelId, einheit, lesePreisstand) =>
+  synchronizeLagerPreisTask(tx, auth, artikelId, einheit, {
+    lesePreisstand,
+    effect: (effectTx, akteur, aufgabe) => recordIntakeTaskEffect(effectTx, akteur, aufgabe, readCustomerProfile),
+  });
 
 const taskPorts: LagerTaskPorts = {
   synchronize: (tx, auth, sourceId, effect) =>
@@ -33,7 +42,8 @@ export async function bestaetigeLagerEtikettZuordnungAction(input: unknown) {
 
 export async function bucheLagerAction(input: unknown) {
   return observeAction("bucheLagerAction", subjectForAction("bucheLagerAction", input),
-    () => bucheLagerEinzeln(input, readLagerEinstellungen, synchronizeLagerBestandTask), readLoggingSettings);
+    () => bucheLagerEinzeln(input, readLagerEinstellungen, synchronizeLagerBestandTask, synchronisierePreisaufgabe),
+    readLoggingSettings);
 }
 
 export async function bucheLagerGegenbuchungAction(input: unknown) {
@@ -43,7 +53,8 @@ export async function bucheLagerGegenbuchungAction(input: unknown) {
 
 export async function bucheAuftragsverbrauchAction(input: unknown) {
   return observeAction("bucheAuftragsverbrauchAction", subjectForAction("bucheAuftragsverbrauchAction", input),
-    () => bucheAuftragsverbrauch(input, readLagerEinstellungen, synchronizeLagerBestandTask), readLoggingSettings);
+    () => bucheAuftragsverbrauch(input, readLagerEinstellungen, synchronizeLagerBestandTask, synchronisierePreisaufgabe),
+    readLoggingSettings);
 }
 
 export async function leseLagerBestandAction(artikelId?: string) {
