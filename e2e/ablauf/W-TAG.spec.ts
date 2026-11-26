@@ -1,3 +1,4 @@
+import { plusWorkingDays } from "@/lib/domain/workingDays";
 import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
@@ -66,15 +67,17 @@ it('W-TAG ranks the first five actual values by existing U3 urgency and deadline
  await sql`UPDATE public.company_settings SET betriebsruhe='[]'::jsonb,termin_knapp_arbeitstage=2
   WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const customerId=await customerFixture('S13 T concrete first-five rank');
- // Deliberately not inserted in deadline/urgency order. The two next-day orders
+ const [heute]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS day`;
+ // Deliberately not inserted in deadline/urgency order. The two next-workday orders
  // remain below the five overdue ones, independent of their earlier creation.
  const offsets=[1,-6,-8,1,-5,-9,-7],ids:string[]=[],dates:string[]=[];
  const {changeOrderPromisedDueDateAction}=await import('@/app/actions/orders.actions');
  for(const [index,offset]of offsets.entries()){
   const order=await intakeOrderFixture('S13 rank '+index,customerId);ids.push(order.receipt.orderId);
-  const [date]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+${offset}::int)::text AS day`;
-  dates.push(date.day);
-  expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:order.receipt.orderId,expectedVersion:1,dueDate:date.day,reason:'TEST S13 eindeutige U3 Rangfolge',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const date=plusWorkingDays(heute.day,offset);
+  if(!date)throw Error("TEST_ARBEITSTAG_FEHLT");
+  dates.push(date);
+  expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:order.receipt.orderId,expectedVersion:1,dueDate:date,reason:'TEST S13 eindeutige U3 Rangfolge',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  }
  const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RANK_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const operational=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RISK_AUTH');const {getOperationalOrders}=await import('@/lib/server/operationalOrders');return getOperationalOrders(auth.data, undefined, readBetriebsruheInTransaction);});

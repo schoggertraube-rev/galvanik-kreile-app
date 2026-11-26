@@ -800,8 +800,10 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
         korrigiertId: fehlenderSatz.id, grund: "TEST Eingabe berichtigt",
       }, ohneSaetze);
       const fehlenderLaufsatz = await withPrivilegedTenantTransaction(login.data, tx => bookLaufZeit(tx, login.data, {
-        ...lauf, laufId: randomUUID(), clientEventId: randomUUID(),
+        ...lauf, laufId: randomUUID(), clientEventId: randomUUID(), minuten: 10,
       }, ohneSaetze));
+      expect(korrektur).toMatchObject({ code: "OK" });
+      expect(fehlenderLaufsatz).toMatchObject({ code: "OK" });
       if (korrektur.code !== "OK" || fehlenderLaufsatz.code !== "OK") throw Error("TEST_ARBEITSZEIT_KORREKTUR_ODER_LAUF_FEHLT");
       const ids = [fehlenderSatz.id, korrektur.id, ...fehlenderLaufsatz.buchungsIds];
       const zeitzeilen = await sql`SELECT kostensatz_eur_pro_stunde AS satz, kostensatz_quelle
