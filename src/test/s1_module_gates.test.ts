@@ -789,18 +789,35 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     for (const candidate of invalid) expect(validTodayProjectorComposition(candidate), candidate).toBe(false);
   });
 
-  it("S38b keeps the seven named register imports at the one shared server composition", () => {
+  it("S38b keeps the named register imports at the one shared server composition", () => {
     const file = "src/lib/server/todayProjectionSchedule.ts";
     const projector = "src/lib/server/todayProjection.ts";
     const registerImport = `${IMP} { tagQuellen as onlyOrders } from '@/modules/orders/server-public';\n`;
     const source = `${IMP} 'server-only';\n${registerImport}`;
     expect(allowedServerFacadeConsumer(file, source)).toBe(true);
+    expect(allowedServerFacadeConsumer(file, source.replace("/orders/", "/takt/"))).toBe(true);
+    expect(allowedServerFacadeConsumer(file, source.replace("/orders/", "/takt/").replace("tagQuellen", "liesTaktAusfallZeilen"))).toBe(false);
     expect(allowedServerFacadeConsumer(file, source.replace("tagQuellen", "readManualShippingBatch"))).toBe(false);
     expect(allowedServerFacadeConsumer(file, source.replace("/orders/", "/lager/"))).toBe(false);
     expect(allowedServerFacadeConsumer(file, source.replace("{ tagQuellen as onlyOrders }", "* as onlyOrders"))).toBe(false);
     expect(allowedServerFacadeConsumer(file, source.replace(registerImport, `const all = ${IMP}('@/modules/orders/server-public');\n`))).toBe(false);
     expect(allowedServerFacadeConsumer(projector, source +
       `${EXP} type ProjectorAuthorization=Readonly<{tenantId:string}>;\n${EXP} function rebuildTodayModel(){}\n${EXP} function refreshTodayModel(){}\n`)).toBe(false);
+  });
+
+  it("S38b permits the two named task and outage readers only at the projector", () => {
+    const source = `${IMP} 'server-only';\n` +
+      `${IMP} { liesAufgabenFuerTag } from '@/modules/tasks/server-public';\n` +
+      `${IMP} { liesTaktAusfallZeilen } from '@/modules/takt/server-public';\n` +
+      `${EXP} type ProjectorAuthorization=Readonly<{tenantId:string}>;\n` +
+      `${EXP} async function rebuildTodayModel(){return liesAufgabenFuerTag();}\n` +
+      `${EXP} async function refreshTodayModel(){return liesTaktAusfallZeilen();}\n`;
+    expect(validTodayProjectorComposition(source)).toBe(true);
+    expect(validTodayProjectorComposition(source.replace("{ liesAufgabenFuerTag }", "{ completeTaskCommand }"))).toBe(false);
+    expect(validTodayProjectorComposition(source.replace("{ liesTaktAusfallZeilen }", "{ starteTaktJobNeu }"))).toBe(false);
+    expect(validTodayProjectorComposition(source.replace("{ liesTaktAusfallZeilen }", "{ tagQuellen }"))).toBe(false);
+    expect(validTodayProjectorComposition(source.replace("{ liesTaktAusfallZeilen }", "* as takt"))).toBe(false);
+    expect(validTodayProjectorComposition(source + `const takt = ${IMP}('@/modules/takt/server-public');\n`)).toBe(false);
   });
 
   it("E2 erlaubt tagQuellen aus lager nur mit dem festen Exportnamen", () => {
