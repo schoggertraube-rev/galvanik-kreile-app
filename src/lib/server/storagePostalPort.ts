@@ -3,7 +3,7 @@ import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 import {readPickupCustomerName} from './pickupAppointmentPort';
 import {restrictStorageLetterSnapshot} from './storageDeadline';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
-import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,postalReplyReplacementProved,postalAppointmentReplacementProved,qualifyReplyRestriction,type DispatchReplyReceipt} from './dispatchReplyPort';
+import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,replyMatchesTaskScope,postalReplyReplacementProved,postalAppointmentReplacementProved,qualifyReplyRestriction,type DispatchReplyReceipt} from './dispatchReplyPort';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
@@ -120,13 +120,18 @@ export async function readStoragePostalReceipt(auth:AuthorizationSnapshot,input:
   return {code:'OK' as const,taskId:row.payload.taskId,document:row.payload.document,replayed:true};
  });}catch(error){console.error('[POSTAL_LETTER_RECEIPT_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:copy.proofUnavailable};}
 }
+export async function readOpenStoragePostalForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,letterKey:string){
+ const original=await source(tx,auth,letterKey);if(!original)throw Error('REPLY_POSTAL_SOURCE_MISSING');
+ const meta=original.payload.meta;
+ if(!replyMatchesTaskScope(reply,meta,meta.storageOrigin!.freezes))return null;
+ if(original.outcome||original.appointmentEnd||original.replyEnd)throw Error('REPLY_POSTAL_NOT_OPEN');
+ return original;
+}
 export async function finishPostalTasksForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,taskId:string,complete:(taskId:string,note:string)=>Promise<void>,replacement:PostalTaskReplacement){
  const rows=await tx.execute<{key:string}>(sql`SELECT event.client_event_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.id=${taskId}::uuid AND task.status='offen' AND event.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND event.payload->>'channel'='post' AND event.payload->'meta'->>'customerId'=${reply.customerId} AND event.payload->'meta'->>'handover'=${reply.handover} ORDER BY task.id FOR UPDATE OF task NOWAIT`);
  for(const row of rows){
-  const original=await source(tx,auth,row.key);if(!original)throw Error('REPLY_POSTAL_SOURCE_MISSING');
+  const original=await readOpenStoragePostalForReply(tx,auth,reply,row.key);if(!original)continue;
   const freezes=original.payload.meta.storageOrigin!.freezes;
-  if(!freezes.some(proof=>reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId)))continue;
-  if(original.outcome||original.appointmentEnd||original.replyEnd)throw Error('REPLY_POSTAL_NOT_OPEN');
   if(!replyCoversFreezes(reply,freezes)){
    const remaining=freezes.filter(proof=>!reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId));
    const orders=original.payload.meta.orders.filter(order=>remaining.some(proof=>proof.orderId===order.id));

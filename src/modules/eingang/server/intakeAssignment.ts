@@ -114,6 +114,9 @@ export async function assignIntakeMailThread(auth:AuthorizationSnapshot,binding:
 
 type SelectedReplyEnd=NonNullable<Awaited<ReturnType<typeof readSelectedReplyTaskEnd>>>;
 type RestoreReplyTask=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,source:SelectedReplyEnd)=>Promise<string>;
+export function canUndoIntakeCustomerAssignment(auth:AuthorizationSnapshot){
+ return canAssignIntakeCustomer(auth)&&hasAuthorizationArea(auth,'mails');
+}
 export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTask:RestoreReplyTask){
  if(!object(input)||Object.keys(input).sort().join(',')!=='clientEventId,itemId,mode,version'||
     input.mode!=='undo'||!validIdentity(input))
@@ -121,7 +124,7 @@ export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTas
  const value=input as {itemId:string;clientEventId:string;version:number};
  try{
   const auth=await session();
-  if(!canAssignIntakeCustomer(auth)||!hasAuthorizationArea(auth,'mails'))reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
+  if(!canUndoIntakeCustomerAssignment(auth))reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
   return await withPrivilegedTenantTransaction(auth,async tx=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${auth.tenantId},0))`);
    const row=await source(tx,auth,value.itemId,true);

@@ -6,6 +6,8 @@ export type AssignmentFailure={code:'UNAUTHENTICATED'|'FORBIDDEN'|'NOT_FOUND'|'V
 export type AssignmentReadResult={code:'OK';view:AssignmentView}|AssignmentFailure;
 export type AssignmentInput={itemId:string;version:number;clientEventId:string;customerId:string;mode:'confirm'|'manual'|'move'};
 export type AssignmentResult={code:'OK';customer:AssignmentCustomer;version:number;additional:number;replayed:boolean}|{code:'ALREADY_ASSIGNED';customer:AssignmentCustomer|null}|AssignmentFailure;
+export type UndoAssignmentInput={mode:'undo';itemId:string;version:number;clientEventId:string};
+export type UndoAssignmentResult={code:'OK';version:number;restoredTaskId:string|null;replayed:boolean}|AssignmentFailure;
 export type NoBusinessInput={itemId:string;version:number;clientEventId:string;reason:'werbung'|'privat'|'fehlzustellung'|'doppelt'|'info';originalId?:string};
 export type NoBusinessResult={code:'OK'}|{code:'INVOICE_REVIEW_REQUIRED';itemId:string;message:string}|AssignmentFailure;
 export type AssignmentPorts={read:(input:{itemId:string;mode:AssignmentMode})=>Promise<AssignmentReadResult>;assign:(input:AssignmentInput)=>Promise<AssignmentResult>;noBusiness:(input:NoBusinessInput)=>Promise<NoBusinessResult>;search:(query:string)=>Promise<{code:'OK';customers:Array<{id:string;name:string}>}|{code:'UNAVAILABLE'|'FORBIDDEN'|'VALIDATION_ERROR';message:string}>;openCustomer:(id:string)=>void;openCapture:(view:AssignmentView)=>void;openNewCustomer:(view:AssignmentView,supplier:boolean)=>void;openConversation:(id:string)=>void};

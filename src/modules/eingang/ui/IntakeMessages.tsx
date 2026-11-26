@@ -2,6 +2,8 @@
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
 import {ACTOR_COPY} from '@/ui/situationCatalog';
 import {ORDER_HANDOVER_COPY} from '@/ui/situationCatalog';
+import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
+import {PACKAGE_ASSIGN_COPY} from '@/ui/eingangCopy';
 import {useCallback,useEffect,useMemo,useRef,useState,type MouseEvent,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {Button,Dialog,Hinweis,Icon,KrApp,useKrGeraet} from '@/ui/kr';
@@ -64,6 +66,27 @@ export function IntakeMessages({ports,initialGroup,onClose}:{ports:IntakeMessage
   finally{inFlight.current=false;setBusy(false);}
  };
  const differentAssignment=(row:IntakeMessage)=>{if(open('mailein',row.id,{sourceChannel:row.channel}))fail('Zuordnung konnte nicht geöffnet werden · Nachricht bleibt unverändert. Code: INTAKE_ASSIGNMENT_TARGET_NOT_MOUNTED.');};
+ const completePickup=async(row:IntakeMessage)=>{
+  if(inFlight.current||!ports.completePickup||!row.pickupProposal)return;
+  const {replyEventId,taskId,version}=row.pickupProposal;
+  inFlight.current=true;setBusy(true);setError(null);setWriteError(null);setRetry(null);
+  try{
+   const saved=await ports.completePickup({replyEventId,taskId,version});
+   if(saved.code!=='OK'){fail(saved.message,saved.code==='UNAVAILABLE'?()=>void completePickup(row):undefined);return;}
+   await load();
+  }catch(failure){console.error('[INTAKE_PICKUP_REPLY_FAILED]',failure);fail(DISPATCH_CALL_COPY.unavailable,()=>void completePickup(row));}
+  finally{inFlight.current=false;setBusy(false);}
+ };
+ const undoAssignment=async(row:IntakeMessage)=>{
+  if(inFlight.current||!ports.undoAssignment||!row.canUndoAssignment)return;
+  inFlight.current=true;setBusy(true);setError(null);setWriteError(null);setRetry(null);
+  try{
+   const saved=await ports.undoAssignment({mode:'undo',itemId:row.id,version:row.version,clientEventId:key('assignment:undo',row)});
+   if(saved.code!=='OK'){fail(saved.message,saved.code==='UNAVAILABLE'?()=>void undoAssignment(row):undefined);return;}
+   setMenu(null);setSelected(row.id);await load();
+  }catch(failure){console.error('[INTAKE_ASSIGNMENT_UNDO_FAILED]',failure);fail(PACKAGE_ASSIGN_COPY.failed,()=>void undoAssignment(row));}
+  finally{inFlight.current=false;setBusy(false);}
+ };
  const finish=async(row:IntakeMessage,kind:'info'|'erledigt')=>{
   if(inFlight.current)return;inFlight.current=true;setBusy(true);setError(null);setWriteError(null);setRetry(null);
   try{const saved=await ports.finish({items:[{itemId:row.id,version:row.version}],kind,note:null,clientEventId:key(kind,row)});if(saved.code!=='OK'){fail(saved.message,()=>void finish(row,kind));return;}setMenu(null);setToast(kind==='info'?'Als Info vermerkt':'Erledigt');await load();}
@@ -119,7 +142,9 @@ export function IntakeMessages({ports,initialGroup,onClose}:{ports:IntakeMessage
      <Button data-spec-id="nachrichten.vorschlag-anders" art="leise" text="Anders zuordnen" disabled={busy} onClick={()=>differentAssignment(row)}/>
     </>}
    </div>:null}
-   {own&&row.usage==='offen'?<div className="ev-g-anliegen"><div className="ev-g-a-kopf">{row.openConcerns.map(value=><span key={value} className="kr-chip">{value==='lesen'?'Lesen und zuordnen':options.find(option=>option.concern===value)?.text??value}</span>)}</div><div className="ev-g-knoepfe">{main?<Button art="primaer" text={main.text} disabled={busy} onClick={()=>void choose(row,main)}/>:<Button data-spec-id="nachrichten.entscheiden" art="primaer" text={intakeRequiredEffect(row.openConcerns)??"Anliegen wählen"} disabled={busy} onClick={event=>showMenu(row,event)}/>}<Button data-spec-id="nachrichten.anliegen-waehlen" art="leise" text="Anderes Anliegen" disabled={busy} onClick={event=>showMenu(row,event)}/>{!intakeRequiredEffect(row.openConcerns)?<><Button data-spec-id="nachrichten.nur-info" art="leise" text="Nur Info" disabled={busy} onClick={()=>void finish(row,'info')}/><Button data-spec-id="nachrichten.erledigt" art="leise" text="Erledigt" disabled={busy} onClick={()=>void finish(row,'erledigt')}/></>:null}</div></div>:<div className="ev-g-erledigt">{row.usage==='offen'?'Offen':row.usage==='info'?'Als Info vermerkt':row.usage==='erledigt'?'Erledigt':row.usage}{own&&result?.areas.includes('mails')&&row.usage!=='offen'?<Button data-spec-id="nachrichten.wieder-oeffnen" art="leise" text="Wieder öffnen" onClick={()=>{setReopening(row);setReason('');setReopenInvalid(false);setError(null);}}/>:null}</div>}
+   {own&&row.usage==='offen'?<div className="ev-g-anliegen"><div className="ev-g-a-kopf">{row.openConcerns.map(value=><span key={value} className="kr-chip">{value==='lesen'?'Lesen und zuordnen':options.find(option=>option.concern===value)?.text??value}</span>)}</div><div className="ev-g-knoepfe">
+    {row.pickupProposal&&ports.completePickup?<Button data-spec-id="nachricht.schritt" art="primaer" text={row.pickupProposal.label} disabled={busy} onClick={()=>void completePickup(row)}/>:main?<Button art="primaer" text={main.text} disabled={busy} onClick={()=>void choose(row,main)}/>:<Button data-spec-id="nachrichten.entscheiden" art="primaer" text={intakeRequiredEffect(row.openConcerns)??"Anliegen wählen"} disabled={busy} onClick={event=>showMenu(row,event)}/>}
+    <Button data-spec-id="nachrichten.anliegen-waehlen" art="leise" text="Anderes Anliegen" disabled={busy} onClick={event=>showMenu(row,event)}/>{!intakeRequiredEffect(row.openConcerns)?<><Button data-spec-id="nachrichten.nur-info" art="leise" text="Nur Info" disabled={busy} onClick={()=>void finish(row,'info')}/><Button data-spec-id="nachrichten.erledigt" art="leise" text="Erledigt" disabled={busy} onClick={()=>void finish(row,'erledigt')}/></>:null}</div></div>:<div className="ev-g-erledigt">{row.usage==='offen'?'Offen':row.usage==='info'?'Als Info vermerkt':row.usage==='erledigt'?'Erledigt':row.usage}{own&&result?.areas.includes('mails')&&row.usage!=='offen'?<Button data-spec-id="nachrichten.wieder-oeffnen" art="leise" text="Wieder öffnen" onClick={()=>{setReopening(row);setReason('');setReopenInvalid(false);setError(null);}}/>:null}</div>}
   </article>;
  })}</div><div className="ev-g-knoepfe"><Button data-spec-id="nachrichten.aufgabe-anlegen" icon="check" text="Aufgabe" onClick={()=>{const row=group.rows.at(-1);if(row)taskFromConversation(row);}}/></div></div>;
  const visibleError=writeError??error;
@@ -132,7 +157,7 @@ export function IntakeMessages({ports,initialGroup,onClose}:{ports:IntakeMessage
   {visibleError?<div role="status" aria-live="polite" data-spec-id="nachrichten.zustand.fehler"><Hinweis ton="warn">{visibleError}</Hinweis><Button data-spec-id="nachrichten.erneut" text={retry?'Erneut':'Erneut laden'} disabled={busy} onClick={()=>{setWriteError(null);if(retry)retry();else void load();}}/>{writeError?<Button text="Schließen" disabled={busy} onClick={()=>{setWriteError(null);setRetry(null);}}/>:null}</div>:null}
   {tab==='mail'&&!loading&&!visibleError&&!visible.length?<div data-spec-id="nachrichten.zustand.leer"><p>Alles erledigt · keine offenen Nachrichten</p><Button data-spec-id="nachrichten.alle-zeigen" text="Alle zeigen" onClick={()=>{setFilter('alle');setConcernFilter(null);}}/></div>:null}
   {tab==='mail'?<div className="ev-nachrichten"><div className="ev-nlinks ev-nliste">{visible.map(group=><button type="button" key={group.id} data-spec-id="nachrichten.gruppe" className={'ev-ngruppe ev-ngruppe--'+group.tone+(current?.id===group.id?' ev-ngruppe--an':'')} onClick={()=>setSelected(group.id)}><span className="kr-avatar">{group.name.trim().slice(0,2).toUpperCase()}</span><span className="ev-ngruppe-t"><b>{group.name}</b><span className="ev-ngruppe-l">{group.rows.at(-1)?.subject??group.rows.at(-1)?.text??'Inhalt fehlt'}</span></span><span className="ev-ngruppe-r">{time(group.rows.at(-1)!.at)}<i className="ev-ngruppe-n">{group.open}</i></span></button>)}</div>{current&&(device!=='handy'||selected!==null)?<div className="ev-nrechts">{renderRows(current)}</div>:null}</div>:null}
-  {menu&&menuMessage&&result?createPortal(<KrApp geraet={device} portal><ConcernMenu message={menuMessage} areas={result.areas} anchor={menu} busy={busy} error={visibleError} onSelect={option=>void choose(menuMessage,option)} onInfo={()=>void finish(menuMessage,'info')} onNoBusiness={()=>noBusiness(menuMessage)} onClose={()=>{setMenu(null);setError(null);setWriteError(null);setRetry(null);}}/></KrApp>,document.body):null}
+  {menu&&menuMessage&&result?createPortal(<KrApp geraet={device} portal><ConcernMenu message={menuMessage} areas={result.areas} anchor={menu} busy={busy} error={visibleError} onSelect={option=>void choose(menuMessage,option)} onInfo={()=>void finish(menuMessage,'info')} onNoBusiness={()=>noBusiness(menuMessage)} onUndoAssignment={ports.undoAssignment&&menuMessage.canUndoAssignment?()=>void undoAssignment(menuMessage):undefined} onClose={()=>{setMenu(null);setError(null);setWriteError(null);setRetry(null);}}/></KrApp>,document.body):null}
   {handoverChoice?<Dialog titel={ORDER_HANDOVER_COPY.chooseOrder} onSchliessen={()=>{if(!busy)setHandoverChoice(null);}} meldung={visibleError?{ton:'fehler',text:visibleError}:null}>{handoverChoice.choices.map(choice=><Button key={choice.id} text={ORDER_HANDOVER_COPY.choose(choice.number??choice.id)} disabled={busy} onClick={()=>void runHandover({...handoverChoice.request,orderId:choice.id,expectedVersion:choice.version})}/>)}</Dialog>:null}
   {reopening?<Dialog titel="Wieder öffnen" onSchliessen={()=>{if(!busy){setReopening(null);setWriteError(null);setRetry(null);}}} meldung={visibleError?{ton:'fehler',text:visibleError}:null} fuss={<><Button text="Zurück" disabled={busy} onClick={()=>{setReopening(null);setWriteError(null);setRetry(null);}}/><Button data-spec-id="nachrichten.wieder-speichern" art="primaer" text={busy?'Wird gespeichert …':'Wieder öffnen'} disabled={busy} onClick={()=>{setWriteError(null);void reopen();}}/></>}><div data-spec-id="nachrichten.zustand.wieder"><label>Grund<input className="kr-input" data-spec-id="nachrichten.grund" aria-invalid={reopenInvalid} aria-describedby={reopenInvalid?'nachrichten.grund.fehler':undefined} minLength={3} maxLength={200} value={reason} onChange={event=>{setReason(event.target.value);setReopenInvalid(false);setError(null);}}/></label>{reopenInvalid?<span id="nachrichten.grund.fehler" data-spec-id="nachrichten.grund.fehler" role="alert">{visibleError}</span>:null}</div></Dialog>:null}
  </section>;

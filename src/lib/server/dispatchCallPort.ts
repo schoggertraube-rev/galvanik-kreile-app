@@ -11,7 +11,7 @@ import type {InitialDispatchReminderPlan} from '@/modules/orders/public';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {appendOrderInformed} from './orderReleaseRead';
 import {readOrderPickupAppointmentInTransaction,readPickupAppointmentReceiptInTransaction,qualifyAppointmentRestriction} from './pickupAppointmentPort';
-import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,qualifyReplyRestriction,readLatestReplyForFreeze,type DispatchReplyReceipt} from './dispatchReplyPort';
+import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,replyMatchesTaskScope,qualifyReplyRestriction,readLatestReplyForFreeze,type DispatchReplyReceipt} from './dispatchReplyPort';
 
 type CallMeta={customerId:string;handover:'pickup'|'shipping';due:string;stageKey:string;orderIds:string[];orderNumbers:string[];freezes:Array<{orderId:string;freezeId:string}>};
 type Created={payload:{meta:CallMeta;taskId:string};user_id:string;correlation_id:string;originalOrderIds?:string[]};
@@ -104,17 +104,21 @@ export async function finishDispatchCallsForAppointment(tx:PrivilegedTenantTrans
   if(saved.length!==1||saved[0].id!==id)throw Error('APPOINTMENT_CALL_CLOSE_RECEIPT_NOT_SAVED');
  }
 }
+export async function readOpenDispatchCallForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,taskId:string){
+ const created=await source(tx,auth,taskId);if(!created)throw Error('DISPATCH_REPLY_CALL_SOURCE_MISSING');
+ if(!replyMatchesTaskScope(reply,created.payload.meta,created.payload.meta.freezes))return null;
+ if((await qualifiedTaskState(tx,auth,created)).result!==null)throw Error('DISPATCH_REPLY_CALL_NOT_OPEN');
+ return created;
+}
 export async function finishDispatchCallsForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,taskId:string,complete:(taskId:string,note:string)=>Promise<void>,restrict:(taskId:string)=>Promise<{version:number;note:string;freezes:CallMeta['freezes']}>){
  const rows=await tx.execute<{id:string}>(sql`SELECT task.id::text FROM public.tasks task WHERE task.tenant_id=${auth.tenantId} AND task.id=${taskId}::uuid AND task.status='offen' AND EXISTS(SELECT 1 FROM public.events source WHERE source.tenant_id=task.tenant_id AND source.event_type='ORDER_COLLECTION_CALL_CREATED_V1' AND source.payload->>'taskId'=task.id::text AND source.payload->'meta'->>'customerId'=${reply.customerId} AND source.payload->'meta'->>'handover'=${reply.handover}) ORDER BY task.id FOR UPDATE NOWAIT`);
  for(const row of rows){
-  const created=await source(tx,auth,row.id);if(!created)throw Error('DISPATCH_REPLY_CALL_SOURCE_MISSING');
-  if(!created.payload.meta.freezes.some(proof=>reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId)))continue;
+  const created=await readOpenDispatchCallForReply(tx,auth,reply,row.id);if(!created)continue;
   if(!replyCoversFreezes(reply,created.payload.meta.freezes)){
    const changed=await restrict(row.id),before=created.payload.meta,indexes=before.orderIds.map((id,index)=>changed.freezes.some(proof=>proof.orderId===id)?index:-1).filter(index=>index>=0);
    const meta={...before,freezes:changed.freezes,orderIds:indexes.map(index=>before.orderIds[index]),orderNumbers:indexes.map(index=>before.orderNumbers[index])};
    const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,status,user_id,correlation_id,event_schema_version,payload) VALUES(${id},${auth.tenantId},'ORDER_COLLECTION_CALL_UPDATED_V1','success',${auth.userId}::uuid,${created.correlation_id}::uuid,1,${JSON.stringify({taskId:row.id,meta,replyEventId:reply.eventId,version:changed.version})}::jsonb) RETURNING id`);if(saved.length!==1||saved[0].id!==id)throw Error('REPLY_CALL_RESTRICTION_NOT_SAVED');continue;
   }
-  if((await qualifiedTaskState(tx,auth,created)).result!==null)throw Error('DISPATCH_REPLY_CALL_NOT_OPEN');
   await complete(row.id,reply.note);await recordReplyTaskEnd(tx,auth,reply,{taskId:row.id,meta:created.payload.meta});
  }
 }

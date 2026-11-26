@@ -4,6 +4,7 @@ import {IntakeMessages} from '../ui/IntakeMessages';
 import type {IntakeMessagesPorts} from '../messageContract';
 import {IntakeConcernsPanel} from '../ui/IntakeConcernsPanel';
 import type {IntakeMessage} from '../messageContract';
+import {INTAKE_PICKUP_REPLY_COPY} from '@/ui/eingangCopy';
 
 afterEach(cleanup);
 function row(id:string,changes:Partial<IntakeMessage>={}):IntakeMessage{return {id,version:1,channel:'mail',direction:'rein',assignment:'hand',usage:'offen',senderName:'TEST Schmidt',senderAddress:'test@example.invalid',groupAddress:'test@example.invalid',subject:'TEST KV-Anfrage',text:'TEST Originalnachricht',at:'2026-11-08T10:00:00Z',customerId:'TEST-customer',customerName:'TEST Schmidt',customerType:'firma',orderId:null,orderKind:null,orderNumber:null,orderStation:null,goods:null,concerns:['kv_anfrage'],openConcerns:['kv_anfrage'],discardReason:null,createdBy:'TEST-actor',fileIds:[],...changes};}
@@ -35,4 +36,43 @@ it('AF19 selects the mail concern, never guesses between orders and retries the 
  await waitFor(()=>expect(handover).toHaveBeenCalledTimes(2));expect(handover.mock.calls[1][0]).toEqual({...first,orderId:'TEST-order-b',expectedVersion:9});
  await waitFor(()=>expect(opened).toHaveBeenCalled());expect(opened.mock.calls.at(-1)?.[0]).toMatchObject({detail:{ziel:'auftrag',arg:'TEST-order-b'}});
  }finally{window.removeEventListener('kreile:oeffne',opened);}
+});
+
+it('uses the existing lead action to complete only the proposed pickup task',async()=>{
+ const binding={replyEventId:'TEST-original-reply',taskId:'TEST-pickup-task',version:4};
+ const label=INTAKE_PICKUP_REPLY_COPY.proposal('TEST Schmidt','Ich kann erst nächste Woche.');
+ const message=row('TEST-pickup-mail',{concerns:['abholung'],openConcerns:['abholung']});
+ const result={code:'OK' as const,areas:['mails','auftraege'] as ('mails'|'auftraege')[],currentLogin:'TEST-actor'};
+ const list=vi.fn<IntakeMessagesPorts['list']>()
+  .mockResolvedValueOnce({...result,messages:[{...message,pickupProposal:{...binding,label}}]})
+  .mockResolvedValueOnce({...result,messages:[message]});
+ const completePickup=vi.fn<NonNullable<IntakeMessagesPorts['completePickup']>>().mockResolvedValue({code:'OK',replayed:false});
+ const handover=vi.fn();
+ render(<IntakeMessages ports={{completePickup,list,handover,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}}}/>);
+ const action=await screen.findByRole('button',{name:label});
+ expect(action).toHaveAttribute('data-spec-id','nachricht.schritt');
+ fireEvent.click(action);
+ await waitFor(()=>expect(screen.queryByRole('button',{name:label})).toBeNull());
+ expect(completePickup).toHaveBeenCalledExactlyOnceWith(binding);
+ expect(handover).not.toHaveBeenCalled();
+});
+
+it('offers assignment withdrawal in the existing More menu and retries the same command key',async()=>{
+ const message=row('TEST-withdraw',{canUndoAssignment:true,orderId:'TEST-order',orderKind:'auftrag'});
+ const list=vi.fn<IntakeMessagesPorts['list']>()
+  .mockResolvedValueOnce({code:'OK',areas:['eingang','kunden','mails'],currentLogin:'TEST-actor',messages:[message]})
+  .mockResolvedValueOnce({code:'OK',areas:['eingang','kunden','mails'],currentLogin:'TEST-actor',messages:[]});
+ const undoAssignment=vi.fn<NonNullable<IntakeMessagesPorts['undoAssignment']>>()
+  .mockResolvedValueOnce({code:'UNAVAILABLE',message:'TEST Antwort fehlt'})
+  .mockResolvedValueOnce({code:'OK',version:2,restoredTaskId:'TEST-successor',replayed:true});
+ render(<IntakeMessages ports={{undoAssignment,list,select:vi.fn(),finish:vi.fn(),reopen:vi.fn(),assignment:{read:vi.fn(),assign:vi.fn()}}}/>);
+ fireEvent.click(await screen.findByRole('button',{name:'Anderes Anliegen'}));
+ fireEvent.click(screen.getByRole('button',{name:/Anderes Anliegen wählen/}));
+ fireEvent.click(screen.getByRole('button',{name:INTAKE_PICKUP_REPLY_COPY.undoAssignment}));
+ fireEvent.click(await screen.findByRole('button',{name:'Erneut'}));
+ await waitFor(()=>expect(screen.queryByRole('dialog')).toBeNull());
+ expect(undoAssignment).toHaveBeenCalledTimes(2);
+ const request=undoAssignment.mock.calls[0][0];
+ expect(request).toMatchObject({itemId:message.id,version:message.version,mode:'undo',clientEventId:expect.any(String)});
+ expect(undoAssignment.mock.calls[1][0]).toEqual(request);
 });

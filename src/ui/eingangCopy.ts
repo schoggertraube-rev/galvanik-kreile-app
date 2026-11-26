@@ -48,6 +48,10 @@ export const QUOTE_POSITION_COPY={title:'Positionen',position:(n:number)=>'Posit
 export const PACKAGE_ASSIGN_COPY={notConnected:'Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.',changed:'Kunde wurde inzwischen zugeordnet · neu lesen.',failed:'Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.',unavailable:PACKAGE_UNAVAILABLE_COPY} as const;
 export const INTAKE_MAIL_ADDRESS_MISSING_COPY='Adresse fehlt';
 export const INTAKE_CONFIRMATION_WITHDRAWN_COPY='Auftragsbestätigung nicht gesendet';
+export const INTAKE_PICKUP_REPLY_COPY={
+ proposal:(customer:string,firstSentence:string)=>`${customer} hat geantwortet: ${firstSentence} – Abholung als erledigt buchen`,
+ undoAssignment:'Zuordnung zurücknehmen',
+} as const;
 // TODO_PL: Text für einen Entwurf mit ungeklärter Original-Mail.
 export const INTAKE_DRAFT_MAIL_ASSIGNMENT_COPY = {
  sourceMissing: "Das Original zum Entwurf ist nicht verfügbar. Deine Eingaben bleiben erhalten.",

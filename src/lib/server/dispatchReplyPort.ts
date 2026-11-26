@@ -6,10 +6,12 @@ import {sql,type SQL} from 'drizzle-orm';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from './authorization';
-import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
+import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readDispatchResponseScope,type DispatchResponseCheck} from './dispatchResponsePort';
 import {COLLECTION_REMINDER_COPY,DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {INTAKE_PICKUP_REPLY_COPY} from '@/ui/eingangCopy';
+import type {IntakePickupProposal} from '@/modules/eingang/public';
 
 type Proof=DispatchResponseCheck['proofs'][number];
 export type DispatchReplyReceipt={eventId:string;customerId:string;handover:'pickup'|'shipping';proof:Proof;actorId:string;recordedAt:string;note:string};
@@ -73,6 +75,77 @@ export async function recordDispatchReply(auth:AuthorizationSnapshot,input:{cust
 
 export function replyCoversFreezes(reply:DispatchReplyReceipt,freezes:Proof['freezes']){
  return freezes.length>0&&freezes.every(proof=>reply.proof.freezes.some(source=>source.orderId===proof.orderId&&source.freezeId===proof.freezeId));
+}
+export function replyMatchesTaskScope(reply:DispatchReplyReceipt,scope:{customerId:string;handover:string},freezes:Proof['freezes']){
+ return scope.customerId===reply.customerId&&scope.handover===reply.handover&&
+  freezes.some(freeze=>reply.proof.freezes.some(source=>source.orderId===freeze.orderId&&source.freezeId===freeze.freezeId));
+}
+
+/** Only a stored original reply and an exact open task yield a clickable proposal. */
+export async function readIntakePickupReplyProposals(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,messages:readonly {id:string;version:number;customerName:string|null}[],
+){
+ const proposals=new Map<string,IntakePickupProposal>();
+ const incomplete=new Set<string>();
+ if(!messages.length||!hasAuthorizationArea(auth,'mails')||!hasAuthorizationArea(auth,'auftraege'))return {proposals,incomplete};
+ const byId=new Map(messages.map(message=>[message.id,message]));
+ const replies=await tx.execute<{id:string;itemId:string;sourceVersion:number;text:string|null}>(sql`
+  SELECT reply.id,source.id::text AS "itemId",source.version AS "sourceVersion",original.nachher->>'text' AS text
+  FROM public.events reply JOIN public.intake_item source
+   ON source.tenant_id=reply.tenant_id AND source.id::text=reply.payload->'receipt'->'proof'->>'itemId'
+   AND source.kunde_id=reply.payload->'receipt'->>'customerId'
+  LEFT JOIN public.intake_event original ON original.tenant_id=source.tenant_id AND original.item_id=source.id
+   AND original.art='angelegt' AND original.nachher->'replyChain'->>'originalSha256'=reply.payload->'receipt'->'proof'->>'originalSha256'
+  WHERE reply.tenant_id=${auth.tenantId} AND reply.event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' AND reply.status='success'
+   AND source.kanal='mail' AND source.richtung='rein' AND source.einsatz='offen' AND source.aussortiert IS NULL
+   AND source.id::text=ANY(ARRAY[${sql.join(messages.map(message=>sql`${message.id}`),sql`, `)}]::text[])
+   AND NOT ${replyAssignmentWithdrawn(auth.tenantId,sql`reply.id`,sql`source.id::text`,sql`source.kunde_id`)}
+   AND NOT EXISTS(SELECT 1 FROM public.events effect WHERE effect.tenant_id=reply.tenant_id AND effect.status='success'
+    AND effect.event_type IN ('ORDER_COLLECTION_TASK_ENDED_FOR_REPLY_V1','ORDER_COLLECTION_CALL_UPDATED_V1','ORDER_STORAGE_FINAL_TASK_UPDATED_V1')
+    AND effect.payload->>'replyEventId'=reply.id)`);
+ if(!replies.length)return {proposals,incomplete};
+ const grouped=new Map<string,typeof replies[number][]>();
+ for(const reply of replies){
+  const entries=grouped.get(reply.itemId);
+  if(entries)entries.push(reply);else grouped.set(reply.itemId,[reply]);
+ }
+ const [{readOpenDispatchCallForReply},{readOpenStorageFinalForReply},{readOpenStoragePostalForReply}]=await Promise.all([
+  import('./dispatchCallPort'),import('./storageFinalStagePort'),import('./storagePostalPort'),
+ ]);
+ const sentences=new Intl.Segmenter('de',{granularity:'sentence'});
+ for(const [itemId,entries] of grouped){
+  const message=byId.get(itemId),customerName=message?.customerName?.trim();
+  const entry=entries[0];
+  const firstSentence=entry.text&&sentences.segment(entry.text.trim())[Symbol.iterator]().next().value?.segment.trim();
+  if(entries.length!==1||entry.sourceVersion!==message?.version||!customerName||!firstSentence){incomplete.add(itemId);continue;}
+  try{await withTenantSavepoint(tx,async nested=>{
+  const reply=await readDispatchReplyReceipt(nested,auth,entry.id);
+  const tasks=await nested.execute<{id:string;version:number;kind:string;key:string}>(sql`
+   SELECT task.id::text,task.version,source.event_type AS kind,
+    (CASE WHEN source.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' THEN source.client_event_id ELSE source.correlation_id END)::text AS key
+   FROM public.tasks task JOIN public.events source
+    ON source.tenant_id=task.tenant_id AND source.payload->>'taskId'=task.id::text
+   WHERE task.tenant_id=${auth.tenantId} AND task.status='offen' AND source.status='success'
+    AND source.payload->'meta'->>'customerId'=${reply.customerId} AND source.payload->'meta'->>'handover'=${reply.handover}
+    AND (source.event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_STORAGE_FINAL_TASK_CREATED_V1')
+      OR source.event_type='ORDER_COLLECTION_REMINDER_PREPARED_V1' AND source.payload->>'channel'='post')`);
+  const eligible=[];
+  for(const task of tasks){
+   const source=task.kind==='ORDER_COLLECTION_CALL_CREATED_V1'?await readOpenDispatchCallForReply(nested,auth,reply,task.id)
+    :task.kind==='ORDER_STORAGE_FINAL_TASK_CREATED_V1'?await readOpenStorageFinalForReply(nested,auth,reply,task.key)
+    :await readOpenStoragePostalForReply(nested,auth,reply,task.key);
+   if(source)eligible.push(task);
+  }
+  if(eligible.length>1){incomplete.add(itemId);return;}
+  if(!eligible.length)return;
+  const {id:taskId,version}=eligible[0];
+  proposals.set(itemId,{replyEventId:reply.eventId,taskId,version,label:INTAKE_PICKUP_REPLY_COPY.proposal(customerName,firstSentence)});
+  });}catch(error){
+   console.error('[INTAKE_PICKUP_REPLY_SOURCE_INCOMPLETE]',error instanceof Error?error.name:'UnknownError');
+   incomplete.add(itemId);
+  }
+ }
+ return {proposals,incomplete};
 }
 export async function recordReplyTaskEnd(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,context:{taskId:string;meta?:unknown;documentId?:string;documentSha256?:string;letterKey?:string}){
  const tasks=await tx.execute<{version:number}>(sql`SELECT version FROM public.tasks WHERE tenant_id=${auth.tenantId} AND id=${context.taskId}::uuid AND status='erledigt' AND erledigt_am IS NOT NULL AND erledigt_von=${auth.userId}::uuid AND erledigt_notiz=${reply.note}`);

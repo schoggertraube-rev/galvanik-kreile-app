@@ -9,7 +9,9 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
-import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,withTenantSavepoint} from '@/lib/server/privilegedDb';
+import {readIntakePickupReplyProposals} from '@/lib/server/dispatchReplyPort';
+import {canUndoIntakeCustomerAssignment} from './intakeAssignment';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
 import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult,type IntakeMessageSourcesResult} from '../messageContract';
 
@@ -76,7 +78,24 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
     return {...row,fallbackPriority:priority,actorTrace:actors.get(row.id)};
    });
    const source={code:'OK' as const,messages:messageFacts,priceProtectedMessageIds,captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}])};
-   return 'canReadArea'in auth?source:projectIntakeMessageSources(auth,source);
+   if('canReadArea'in auth)return source;
+   const projected=projectIntakeMessageSources(auth,source);
+   if(projected.code!=='OK'||changedSince!==undefined)return projected;
+   if(canUndoIntakeCustomerAssignment(auth))for(const message of projected.messages){
+    if(message.channel==='mail'&&message.direction==='rein'&&message.assignment!=='offen'&&message.customerId)message.canUndoAssignment=true;
+   }
+   const candidates=projected.messages.filter(row=>row.channel==='mail'&&row.direction==='rein'&&row.usage==='offen');
+   const markIncomplete=(message:IntakeMessage)=>{
+    if(message.nextActionRule)message.nextActionRule={...message.nextActionRule,datenluecken:[...message.nextActionRule.datenluecken,'PICKUP_REPLY_SOURCE']};
+   };
+   try{
+    const {proposals,incomplete}=await withTenantSavepoint(tx,nested=>readIntakePickupReplyProposals(nested,auth,candidates));
+    for(const message of candidates){
+     const proposal=proposals.get(message.id);if(proposal)message.pickupProposal=proposal;
+     if(incomplete.has(message.id))markIncomplete(message);
+    }
+   }catch(error){console.error('[INTAKE_PICKUP_REPLIES_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');candidates.forEach(markIncomplete);}
+   return projected;
   });
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }

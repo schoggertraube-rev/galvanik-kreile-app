@@ -3,26 +3,30 @@ import type {CaseActorTrace} from "@/lib/domain/caseActorContract";
 import type {AccessArea} from '@/lib/auth/authorizationContract';
 import type {IntakeCaptureResult} from './captureContract';
 import type {IntakeSelectionInput,IntakeUseInput,IntakeUseResult,IntakeReopenInput} from './intakeLifecycleContract';
-import type {AssignmentPorts} from './assignmentContract';
+import type {AssignmentPorts,UndoAssignmentInput,UndoAssignmentResult} from './assignmentContract';
 
 export const MESSAGE_FILTERS=['offen','zuordnen','alle','erledigt','aussortiert'] as const;
 export const INTAKE_CHANGED_EVENT='kreile:intake-changed';
 export type MessageFilter=typeof MESSAGE_FILTERS[number];
+export type IntakePickupProposal={replyEventId:string;taskId:string;version:number;label:string};
+export type CompleteIntakePickup=(input:Omit<IntakePickupProposal,'label'>)=>Promise<{code:'OK';replayed:boolean}|{code:'UNAUTHENTICATED'|'FORBIDDEN'|'VALIDATION_ERROR'|'CONFLICT'|'UNAVAILABLE';message:string}>;
 export type IntakeMessage={
  serverChangedAt?:string|null;
  importFailure?:import('./mailSelectionContract').MailImportFailure|null;
  fallbackPriority?:ReturnType<typeof readFallbackMessagePriority>;
  nextActionRule?:MessageNextActionRead;
+ pickupProposal?:IntakePickupProposal;
+ canUndoAssignment?:boolean;
  sendState?:'entwurf'|'sendet'|'gesendet'|'fehler'|'unklar'|'verworfen'|null;
  graphMessageId?:string|null;actorTrace?:CaseActorTrace;id:string;version:number;channel:string;direction:string;assignment:string;usage:string;senderName:string|null;senderAddress:string|null;groupAddress:string|null;subject:string|null;text:string|null;at:string;customerId:string|null;customerName:string|null;customerType:string|null;orderId:string|null;orderKind:string|null;orderNumber:string|null;orderStation:string|null;goods:string|null;concerns:string[];openConcerns:string[];discardReason:string|null;createdBy:string;fileIds:string[];files?:Array<{id:string;name:string}>};
 /** Browser-safe read contract; no server implementation import enters the client facade. */
 export type MessageNextActionRead=import('@/lib/domain/u2ReadContract').U2Read & {nutzung:string;zuordnung:string;prioritaet?:number|null;source:{kind:'intake';id:string;version:number}};
 export type IntakeMessagesResult={code:'OK';serverReadAt?:string;cacheLoginScope?:string;messages:IntakeMessage[];areas:AccessArea[];currentLogin:string}|{code:'UNAUTHENTICATED'|'FORBIDDEN'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string};
 /** Shared stored facts, without a fabricated current login or live U2 buttons. */
-export type IntakeMessageSourcesResult={code:'OK';messages:Array<Omit<IntakeMessage,'nextActionRule'>>;priceProtectedMessageIds?:string[];captures:Array<{itemId:string;value:IntakeCaptureResult}>}|Exclude<IntakeMessagesResult,{code:'OK'}>;
+export type IntakeMessageSourcesResult={code:'OK';messages:Array<Omit<IntakeMessage,'nextActionRule'|'pickupProposal'|'canUndoAssignment'>>;priceProtectedMessageIds?:string[];captures:Array<{itemId:string;value:IntakeCaptureResult}>}|Exclude<IntakeMessagesResult,{code:'OK'}>;
 export type IntakeHandoverRequest={command:"handover_from_mail";sourceItemId:string;sourceVersion:number;clientEventId:string;orderId?:string;expectedVersion?:number};
 export type IntakeHandoverResult={code:"OK";receipt:unknown;replayed:boolean}|{code:"UNAUTHENTICATED"|"FORBIDDEN"|"VALIDATION_ERROR"|"NOT_FOUND"|"CONFLICT"|"UNAVAILABLE";message:string;choices?:Array<{id:string;number:string|null;version:number}>};
-export type IntakeMessagesPorts={handover?:(input:IntakeHandoverRequest)=>Promise<IntakeHandoverResult>;list:(filter:MessageFilter)=>Promise<IntakeMessagesResult>;select:(input:IntakeSelectionInput)=>Promise<IntakeCaptureResult>;finish:(input:IntakeUseInput)=>Promise<IntakeUseResult>;reopen:(input:IntakeReopenInput)=>Promise<IntakeCaptureResult>;assignment:Pick<AssignmentPorts,'read'|'assign'>};
+export type IntakeMessagesPorts={completePickup?:CompleteIntakePickup;undoAssignment?:(input:UndoAssignmentInput)=>Promise<UndoAssignmentResult>;handover?:(input:IntakeHandoverRequest)=>Promise<IntakeHandoverResult>;list:(filter:MessageFilter)=>Promise<IntakeMessagesResult>;select:(input:IntakeSelectionInput)=>Promise<IntakeCaptureResult>;finish:(input:IntakeUseInput)=>Promise<IntakeUseResult>;reopen:(input:IntakeReopenInput)=>Promise<IntakeCaptureResult>;assignment:Pick<AssignmentPorts,'read'|'assign'>};
 export function messageGroupId(row:IntakeMessage){return row.customerId?'kunde:'+row.customerId:row.groupAddress?'adresse:'+row.groupAddress:'eingang:'+row.id;}
 export function messageTone(row:Pick<IntakeMessage,'usage'|'openConcerns'|'assignment'|'direction'|'importFailure'>):'rot'|'orange'|'navy'|'gruen'{
  if(row.usage!=='offen')return 'gruen';

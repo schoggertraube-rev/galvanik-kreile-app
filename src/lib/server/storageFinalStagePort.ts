@@ -1,7 +1,7 @@
 import 'server-only';
 import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 import {readPickupCustomerName} from './pickupAppointmentPort';
-import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,qualifyReplyRestriction,type DispatchReplyReceipt} from './dispatchReplyPort';
+import {readReplyTaskEnd,recordReplyTaskEnd,replyCoversFreezes,replyMatchesTaskScope,qualifyReplyRestriction,type DispatchReplyReceipt} from './dispatchReplyPort';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
@@ -83,12 +83,15 @@ export async function finishFinalTasksForAppointment(tx:PrivilegedTenantTransact
   if(saved.length!==1||saved[0].id!==id)throw Error('FINAL_APPOINTMENT_END_NOT_SAVED');
  }
 }
+export async function readOpenStorageFinalForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,letterKey:string){
+ const original=await receipt(tx,auth,letterKey);if(!original)throw Error('FINAL_REPLY_SOURCE_MISSING');
+ return replyMatchesTaskScope(reply,original.payload.meta,original.payload.meta.freezes)?original:null;
+}
 export async function finishFinalTasksForReply(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,reply:DispatchReplyReceipt,taskId:string,complete:(taskId:string,note:string)=>Promise<void>,restrict:(taskId:string)=>Promise<{version:number;note:string;freezes:Letter['freezes']}>){
  const rows=await tx.execute<{key:string}>(sql`SELECT event.correlation_id::text AS key FROM public.tasks task JOIN public.events event ON event.tenant_id=task.tenant_id AND event.payload->>'taskId'=task.id::text WHERE task.tenant_id=${auth.tenantId} AND task.id=${taskId}::uuid AND task.status='offen' AND event.event_type='ORDER_STORAGE_FINAL_TASK_CREATED_V1' AND event.payload->'meta'->>'customerId'=${reply.customerId} AND event.payload->'meta'->>'handover'=${reply.handover} ORDER BY task.id FOR UPDATE OF task NOWAIT`);
  for(const row of rows){
-  const original=await receipt(tx,auth,row.key);if(!original)throw Error('FINAL_REPLY_SOURCE_MISSING');
+  const original=await readOpenStorageFinalForReply(tx,auth,reply,row.key);if(!original)continue;
   const freezes=original.payload.meta.freezes;
-  if(!freezes.some(proof=>reply.proof.freezes.some(item=>item.orderId===proof.orderId&&item.freezeId===proof.freezeId)))continue;
   if(!replyCoversFreezes(reply,freezes)){
    const changed=await restrict(original.payload.taskId),meta={...original.payload.meta,freezes:changed.freezes,orders:original.payload.meta.orders.filter(order=>changed.freezes.some(proof=>proof.orderId===order.id))};
    const id=randomUUID(),saved=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,event_type,status,user_id,correlation_id,event_schema_version,payload) VALUES(${id},${auth.tenantId},'ORDER_STORAGE_FINAL_TASK_UPDATED_V1','success',${auth.userId}::uuid,${row.key}::uuid,1,${JSON.stringify({taskId:original.payload.taskId,meta,replyEventId:reply.eventId,version:changed.version})}::jsonb) RETURNING id`);if(saved.length!==1||saved[0].id!==id)throw Error('FINAL_REPLY_RESTRICTION_NOT_SAVED');continue;
