@@ -1,6 +1,6 @@
 
 import {reportProtocolClientError} from '@/modules/logging/public';
-import {readPendingEntries,retainQuarantinedPending,retainRejectedWorkshopOriginal,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,claimPendingWorkshop,isPendingWorkshopAcknowledgement} from './pendingStore';
+import {readPendingEntries,retainQuarantinedPending,retainRejectedWorkshopOriginal,acknowledgePendingOriginal,acknowledgePendingWorkshopOriginal,acknowledgePendingMailOriginal,claimPendingWorkshop,isPendingWorkshopAcknowledgement} from './pendingStore';
 import {isWorkshopRejectionReceipt} from './workshopRejectionContract';
 import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
@@ -12,7 +12,7 @@ type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;workshop
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
-export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean;offline24h?:boolean;followUp?:boolean}={}):Promise<Outcome>{
+export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?:boolean;workshopOnly?:boolean;offline24h?:boolean;followUp?:boolean;mailHandedOff?:boolean}={}):Promise<Outcome>{
  // A caller may have retained an original after the active run's inventory.
  // Await that run, then read the same queue again for this caller's original.
  const existing=running.get(scope);if(existing)return options.flushDelayed||options.followUp?existing.then(()=>syncPendingFiles(scope,ports,options)):existing;
@@ -37,7 +37,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
   // historical sequence. Newly captured originals retain their actual order.
   for(const entry of ordered.map(entry=>hasSequence(entry)?sequenced[sequenceCursor++]:entry)){
    if(ports.currentScope()!==scope)break;
-   if(entry.kind==='workshop'&&entry.rejection)continue;
+   if(entry.kind==='workshop'&&(entry.rejection||entry.command==='mail.send'&&options.mailHandedOff))continue;
    // Dependent originals must not create the intake before its earlier note.
    // Other intake groups keep their existing independent recovery path.
    if(blockedItems.has(entry.itemId)){outcome.blocked++;continue;}
@@ -59,7 +59,10 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
      if(!isPendingWorkshopAcknowledgement(scope,entry,result)||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);if(workshopProof&&ports.currentScope()===scope)ports.workshopRejected?.(workshopProof);continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
-     if(await acknowledgePendingWorkshopOriginal(scope,entry,result.offlineReceipt)){outcome.acknowledged++;if(workshopProof&&ports.currentScope()===scope)ports.workshopAcknowledged?.(workshopProof);}
+     const acknowledged=entry.command==='mail.send'
+      ?await acknowledgePendingMailOriginal(scope,claimed,result)
+      :await acknowledgePendingWorkshopOriginal(scope,entry,result.offlineReceipt);
+     if(acknowledged){outcome.acknowledged++;if(workshopProof&&ports.currentScope()===scope)ports.workshopAcknowledged?.(workshopProof);}
     }catch{outcome.blocked++;blockedItems.add(entry.itemId);reportProtocolClientError('OFFLINE_WORKSHOP_SYNC_FAILED');}
     continue;
    }

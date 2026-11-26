@@ -14,6 +14,7 @@ import {isCreateInvoiceInput,isCancelInvoiceInput} from '@/lib/domain/invoiceInt
 import {isManualHandoverInput,isManualHandoverCommandReceipt,type ManualHandoverInput} from '@/lib/domain/orderHandoverContract';
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput} from '@/lib/domain/shipmentGroupContract';
 import {isDeliveryNoteInput,isDeliveryNoteReceipt,type DeliveryNoteInput} from '@/lib/domain/deliveryNoteContract';
+import '../../../public/kreile-offline-queue.js';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
 export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; customerVisible?:boolean; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
@@ -36,11 +37,23 @@ export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:str
 export type PendingPhysicalWorkshopOriginal=Extract<PendingWorkshopOriginal,{command:'item.finished'|'item.extraWork'}>;
 export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
 export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
-const mailKey=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
-const mailInputKeys=new Set(['targetType','targetId','clientEventId','subject','body','attachment','expectedInvoiceIds','singleInvoice','confirmedResend','collectionReminder']);
+type SharedQueue = {
+ storeName: string;
+ databaseVersion: number;
+ databasePrefix: string;
+ isMailOriginal: (row: unknown) => boolean;
+ isMailAcknowledgement: (scope: string, row: PendingWorkshopOriginal, result: unknown) => boolean;
+ claimOrWithdraw: (db: IDBDatabase, id: string, mode: 'claim'|'withdraw', flush: boolean,
+  validate: typeof isPendingWorkshopOriginal) => Promise<PendingWorkshopOriginal|null|boolean>;
+ acknowledgeMail: (db: IDBDatabase, row: PendingWorkshopOriginal) => Promise<boolean>;
+ requestReplay: (scope: string, row: PendingWorkshopOriginal, keepalive: boolean) => Promise<Response>;
+};
+const sharedQueue = (globalThis as typeof globalThis & { KreileOfflineQueue: SharedQueue }).KreileOfflineQueue;
+export const requestPendingReplay = sharedQueue.requestReplay;
 export function isPendingWorkshopOriginal(value:unknown):value is PendingWorkshopOriginal{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,input=row.input;
+ if(row.command==='mail.send')return sharedQueue.isMailOriginal(row);
  if(row.kind!=='workshop'||!input||typeof input!=='object'||Array.isArray(input))return false;
  if(Object.keys(row).some(key=>!['id','itemId','kind','command','input','deviceCapturedAt','queueSequence','notBefore','dispatchStartedAt','rejection'].includes(key)))return false;
  if(row.rejection!==undefined&&(!row.rejection||typeof row.rejection!=='object'||!('scope'in row.rejection)||typeof row.rejection.scope!=='string'||!isWorkshopRejectionReceipt(row.rejection.scope,row as unknown as PendingWorkshopOriginal,row.rejection)))return false;
@@ -51,12 +64,6 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.command==='order.handover')return isManualHandoverInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='shipment.handover')return isShipmentGroupInput(input)&&!Object.hasOwn(input,'offlineOriginal')&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='document.deliveryNote')return isDeliveryNoteInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderIds[0];
- if(row.command==='mail.send')return (data.targetType==='CUSTOMER'||data.targetType==='ORDER')
-  &&typeof data.targetId==='string'&&data.targetId.length>0&&data.targetId.length<=128&&row.itemId===data.targetId
-  &&Object.keys(data).every(key=>mailInputKeys.has(key))
-  &&typeof data.subject==='string'&&typeof data.body==='string'&&uuid(data.clientEventId)&&row.id===data.clientEventId
-  &&typeof row.notBefore==='string'&&typeof row.deviceCapturedAt==='string'
-  &&Date.parse(row.notBefore)>Date.parse(row.deviceCapturedAt);
  if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
  // Historical zero-fee originals stay readable; only the real writer decides
  // acceptance and now rejects zero without creating another invoice.
@@ -78,14 +85,14 @@ export function isPendingFinancialOriginal(entry:PendingWorkshopOriginal):entry 
 export function isPendingConfirmedOriginal(entry:PendingWorkshopOriginal):entry is PendingWorkshopOriginal&PendingConfirmedCommand{
  return isPendingFinancialOriginal(entry)||entry.command==='order.handover'||entry.command==='document.deliveryNote'||entry.command==='shipment.handover'||entry.command==='mail.send';
 }
-const STORE = "originals";
+const STORE = sharedQueue.storeName;
 const SHELL_STORE = "shellMetadata";
 const DEVICE_STORE = "deviceReads";
 async function database(scope: string): Promise<IDBDatabase> {
   if (!/^[0-9a-f]{64}$/.test(scope)) throw new Error("INTAKE_PENDING_SCOPE_REQUIRED");
   return new Promise((resolve, reject) => {
     let abandoned=false;
-    const request = indexedDB.open(`kreile-pending-originals-v1-${scope}`, 3);
+    const request = indexedDB.open(sharedQueue.databasePrefix + scope, sharedQueue.databaseVersion);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE, { keyPath: "id" });
       if (!request.result.objectStoreNames.contains(SHELL_STORE)) request.result.createObjectStore(SHELL_STORE);
@@ -338,22 +345,9 @@ export async function withdrawPendingWorkshop(scope:string,id:string):Promise<bo
 }
 async function changeDelayedWorkshop(scope:string,id:string,mode:'claim'|'withdraw',flush:boolean):Promise<PendingWorkshopOriginal|null|boolean>{
  const db=await database(scope);
- return new Promise((resolve,reject)=>{
-  const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.get(id);let result:PendingWorkshopOriginal|null|boolean=mode==='claim'?null:false;
-  read.onsuccess=()=>{
-   const row:unknown=read.result;if(!isPendingWorkshopOriginal(row)||row.rejection)return;
-   const now=new Date(),due=row.notBefore===undefined||Date.parse(row.notBefore)<=now.getTime();
-   if(mode==='withdraw'){
-    if(row.notBefore===undefined||row.dispatchStartedAt!==undefined||due)return;
-    store.delete(id);result=true;return;
-   }
-   if(!flush&&!due&&row.dispatchStartedAt===undefined)return;
-   const claimed=row.notBefore!==undefined&&row.dispatchStartedAt===undefined?{...row,dispatchStartedAt:now.toISOString()}:row;
-   if(claimed!==row)store.put(claimed);result=claimed;
-  };
-  tx.oncomplete=()=>{db.close();if(mode==='withdraw'&&result===true)window.dispatchEvent(new Event('kreile-pending-changed'));resolve(result);};
-  tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_QUEUE_ABORTED'));};
- });
+ const result=await sharedQueue.claimOrWithdraw(db,id,mode,flush,isPendingWorkshopOriginal);
+ if(mode==='withdraw'&&result===true)window.dispatchEvent(new Event('kreile-pending-changed'));
+ return result;
 }
 type RequiredDeviceStand={loginScope:string;cacheGeneration:number;serverReadAt:string};
 async function retainOriginal(scope:string,original:PendingOriginal|PendingWorkshopOriginal,requiredStand?:RequiredDeviceStand):Promise<void>{
@@ -514,16 +508,8 @@ export function isPendingWorkshopReceipt(scope:string,entry:PendingWorkshopOrigi
 export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorkshopOriginal,value:unknown):boolean{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const result=value as Record<string,unknown>;
- if(entry.command==='mail.send'){
-  const receipt=result.mailReceipt,ack=result.offlineReceipt,data=result.data;
-  if(result.code!=='OK'||result.mailCommand!==entry.command||!receipt||typeof receipt!=='object'||Array.isArray(receipt)
-   ||!ack||typeof ack!=='object'||Array.isArray(ack)||!data||typeof data!=='object'||Array.isArray(data))return false;
-  const mail=receipt as Record<string,unknown>,proof=ack as Record<string,unknown>;
-  const sent=data as Record<string,unknown>;
-  if(mail.clientRequestId!==entry.id||mail.eventId!==proof.eventId||mail.actorId!==proof.actorId
-   ||mail.threadId!==sent.threadId||mail.messageId!==sent.messageId
-   ||typeof mail.threadId!=='string'||typeof mail.messageId!=='string'||!mailKey.test(mail.threadId)||!mailKey.test(mail.messageId))return false;
- }else if(entry.command==='shipment.handover'){
+ if(entry.command==='mail.send')return sharedQueue.isMailAcknowledgement(scope,entry,result);
+ if(entry.command==='shipment.handover'){
   const ack=result.offlineReceipt;
   if(result.code!=='OK'||result.shipmentCommand!==entry.command||!ack||typeof ack!=='object'||Array.isArray(ack)
    ||!isShipmentGroupReceipt(result.receipt,entry.input,(ack as Record<string,unknown>).actorId)
@@ -571,6 +557,7 @@ export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorks
 }
 /** A command cannot be erased by the legacy file/note acknowledgement. */
 export async function acknowledgePendingWorkshopOriginal(scope:string,entry:PendingWorkshopOriginal,receipt:PendingWorkshopReceipt):Promise<boolean>{
+ if(entry.command==='mail.send')throw Error('OFFLINE_MAIL_ACKNOWLEDGEMENT_REQUIRED');
  if(!isPendingWorkshopReceipt(scope,entry,receipt))throw Error('OFFLINE_WORKSHOP_RECEIPT_REQUIRED');
  const db=await database(scope);
  return new Promise((resolve,reject)=>{
@@ -579,6 +566,13 @@ export async function acknowledgePendingWorkshopOriginal(scope:string,entry:Pend
   tx.oncomplete=()=>{db.close();if(removed)window.dispatchEvent(new Event('kreile-pending-changed'));resolve(removed);};
   tx.onabort=()=>{db.close();reject(Error('OFFLINE_WORKSHOP_ACK_ABORTED'));};
  });
+}
+
+export async function acknowledgePendingMailOriginal(scope:string,entry:PendingWorkshopOriginal,result:unknown):Promise<boolean>{
+ if(!sharedQueue.isMailAcknowledgement(scope,entry,result))return false;
+ const removed=await sharedQueue.acknowledgeMail(await database(scope),entry);
+ if(removed)window.dispatchEvent(new Event('kreile-pending-changed'));
+ return removed;
 }
 
 /** PL14Nov10:20: retain the same original, mark a separately proved non-effect.

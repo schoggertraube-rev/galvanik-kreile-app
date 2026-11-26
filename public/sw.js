@@ -1,3 +1,5 @@
+importScripts('/kreile-offline-queue.js');
+
 const STATIC_CACHE_NAME = "kreile-static-assets-v1";
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
@@ -15,6 +17,42 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", () => {
   self.clients.claim();
 });
+
+const pendingMailSends = new Map();
+self.addEventListener('message', event => {
+  const input = event.data;
+  if (event.origin !== self.location.origin || !input || input.type !== 'kreile-flush-pending-mail'
+    || typeof input.scope !== 'string' || !/^[a-f0-9]{64}$/.test(input.scope) || !Array.isArray(input.keys)) return;
+  const keys = new Set(input.keys.filter(id => typeof id === 'string'
+    && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(id)));
+  event.waitUntil(flushClosingMail(input.scope, keys));
+});
+
+async function flushClosingMail(scope, keys) {
+  for (const id of keys) {
+    const pendingKey = scope + ':' + id;
+    if (!pendingMailSends.has(pendingKey)) {
+      const send = sendClosingMail(scope, id).catch(() => {
+        console.error('[OFFLINE_MAIL_WORKER_UNAVAILABLE]');
+      }).finally(() => pendingMailSends.delete(pendingKey));
+      pendingMailSends.set(pendingKey, send);
+    }
+    await pendingMailSends.get(pendingKey);
+  }
+}
+
+async function sendClosingMail(scope, id) {
+  const queue = globalThis.KreileOfflineQueue;
+  const database = await queue.openExisting(scope);
+  const original = await queue.claimOrWithdraw(database, id, 'claim', true, queue.isMailOriginal);
+  if (!original) return;
+  const response = await queue.requestReplay(scope, original, true);
+  if (!response.ok) return;
+  const result = await response.json();
+  if (queue.isMailAcknowledgement(scope, original, result)) {
+    await queue.acknowledgeMail(await queue.openExisting(scope), original);
+  }
+}
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
