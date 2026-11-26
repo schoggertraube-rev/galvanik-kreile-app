@@ -2,7 +2,7 @@ import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {customerFixture,intakeOrderFixture} from './orderFixture';
+import {customerFixture,intakeOrderFixture,invoiceCompanySettingsFixture} from './orderFixture';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
@@ -62,6 +62,9 @@ it('W-TAG T H14/H16 keeps zero, one and several actual order sources in U3 with 
 });
 
 it('W-TAG ranks the first five actual values by existing U3 urgency and deadline, across different real risks',async()=>{
+ await invoiceCompanySettingsFixture();
+ await sql`UPDATE public.company_settings SET betriebsruhe='[]'::jsonb,termin_knapp_arbeitstage=2
+  WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const customerId=await customerFixture('S13 T concrete first-five rank');
  // Deliberately not inserted in deadline/urgency order. The two next-day orders
  // remain below the five overdue ones, independent of their earlier creation.
@@ -75,7 +78,7 @@ it('W-TAG ranks the first five actual values by existing U3 urgency and deadline
  }
  const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RANK_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const operational=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RISK_AUTH');const {getOperationalOrders}=await import('@/lib/server/operationalOrders');return getOperationalOrders(auth.data, undefined, readBetriebsruheInTransaction);});
- expect([...new Set(operational.filter(row=>ids.includes(row.id)).map(row=>row.risk))].sort()).toEqual(['red','yellow']);
+ expect([...new Set(operational.filter(row=>ids.includes(row.id)).map(row=>row.risk))].sort()).toEqual(['orange','red']);
  const day=await read();
  expect(day.items.filter(row=>row.orderId&&ids.includes(row.orderId))).toHaveLength(7);
  const expected=[5,2,6,1,4];

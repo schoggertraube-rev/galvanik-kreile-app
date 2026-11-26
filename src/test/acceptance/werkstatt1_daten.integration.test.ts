@@ -84,14 +84,19 @@ test("Ein Liefertermin bleibt ohne festgelegte Übergabeart lesbar", async () =>
 
 test("Das Löschen eines Teils löst nur den Teilebezug der unveränderlichen Zeitbuchungen", async () => {
   const kunde = await customerFixture("Teilebezug bei Arbeitszeit");
-  const { receipt: { orderId, items } } = await intakeOrderFixture("Teilebezug bei Arbeitszeit", kunde);
-  const itemId = items[0].id;
+  const { receipt: { orderId } } = await intakeOrderFixture("Teilebezug bei Arbeitszeit", kunde);
+  const itemId = randomUUID();
   const original = randomUUID();
   const korrektur = randomUUID();
   const rollback = Error("TEST_ARBEITSZEIT_ROLLBACK");
 
   await expect(sql.begin(async tx => {
     await tx`SELECT set_config('app.tenant_id', ${mandant}, true)`;
+    // Diese TEST-Position entsteht ohne Laufzettel. Der echte Laufzettel der
+    // ersten Position bleibt erhalten, während dieser Fall den Zeitbuchungs-FK belegt.
+    await tx`INSERT INTO public.items (
+      id, tenant_id, order_id, customer_id, name, quantity, surface_requested, unit, current_station_id
+    ) VALUES (${itemId}, ${mandant}, ${orderId}, ${kunde}, 'TEST Teil ohne Laufzettel', 1, 'verzinken', 'stueck', 'angenommen')`;
     await tx`INSERT INTO public.arbeitszeit_buchung (
       id, tenant_id, auftrag_id, item_id, employee_id, station_kuerzel, start_zeit, dauer_minuten,
       kostenstelle_kuerzel, kostensatz_eur_pro_stunde, kostensatz_quelle, erfasst_modus, korrigiert_id, korrektur_grund
@@ -152,6 +157,8 @@ test("Mehrarbeitsfreigaben brauchen einen vollständigen, unveränderlichen Bele
   ]) {
     await expect(schreibeBeleg({ ...beleg, ...fehler })).rejects.toMatchObject(constraint);
   }
+  await expect(schreibeBeleg({ ...beleg, channel: "mail", intakeItemId: randomUUID() }))
+    .resolves.toEqual(expect.any(String));
   const id = await schreibeBeleg(beleg);
   await expect(sql`UPDATE public.events SET payload = ${sql.json({ ...beleg, approvedNetAmountCents: 1 })}::jsonb
     WHERE tenant_id = ${mandant} AND id = ${id}`).rejects.toMatchObject({ code: "P0001" });
