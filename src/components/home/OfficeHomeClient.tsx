@@ -13,6 +13,7 @@ import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import { deriveTodayReminder, type TodayProductionWeek, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
 import { OfficeDaySchedule } from "./OfficeDaySchedule";
+import {OfficeInvoiceControl} from './OfficeInvoiceControl';
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { IntakeDraftList, type IntakeDraftResult } from "@/modules/eingang/public";
 import { discardIntakeDraftAction } from "@/app/actions/eingang.actions";
@@ -20,6 +21,7 @@ import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Icon, Kachel, Lageleis
 import { GlasDialog } from '@/ui/kr/design-final/GlasDialog';
 
 const CommunicationPanel=dynamic(()=>import('@/components/communication/CommunicationPanel').then(module=>module.CommunicationPanel));
+const OfficeOwnNotes=dynamic(()=>import('./OfficeOwnNotes').then(module=>module.OfficeOwnNotes),{ssr:false});
 const CalendarOrders=dynamic(()=>import('@/app/orders/OrdersAppAdapter').then(module=>module.OrdersAppAdapter),{
   ssr:false,
   loading:()=> <p role="status">{PAGE_READ_COPY.loading}</p>,
@@ -262,6 +264,9 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
     {model.kind==='partial'?<Hinweis ton="warn">{PAGE_READ_COPY.partial}<Button art="leise" icon="refresh" text={PAGE_READ_COPY.reload} onClick={()=>router.refresh()}/></Hinweis>:null}
     <IntakeDraftList readDrafts={readHomeIntakeDrafts} discardDraft={discardIntakeDraftAction} />
     <SeitenKopf titel="Der Tag" werkzeug={weekControl} />
+    {model.dashboard.invoiceSheet&&model.dashboard.invoiceMoney&&model.dashboard.calendar&&
+      <OfficeInvoiceControl key={model.cacheLoginScope} sheet={model.dashboard.invoiceSheet} money={model.dashboard.invoiceMoney}
+        today={model.dashboard.calendar.today} onReload={refreshToday} onOpenInvoice={openInvoice}/>}
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}
@@ -280,6 +285,7 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
       </>}
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
+    <OfficeOwnNotes key={model.cacheLoginScope}/>
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
     {invoiceMail?<Dialog titel={V45_TEXT.out$action$unsent({invoice:invoiceMail.number,name:invoiceMail.customerName})} icon="mail" groesse="breit" onSchliessen={()=>setInvoiceMail(null)}><CommunicationPanel key={invoiceMail.documentId} targetType="CUSTOMER" targetId={invoiceMail.customerId} invoiceOriginal={invoiceMail}/></Dialog>:null}
     {calendarMounted ? <GlasDialog offen={calendarOpen&&canWorkOrders} titel={TODAY_PLAN_COPY.calendarTitle}

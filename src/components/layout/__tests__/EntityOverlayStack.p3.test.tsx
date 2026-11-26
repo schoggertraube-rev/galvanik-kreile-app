@@ -24,6 +24,15 @@ import { useOverlayStore } from "@/lib/overlayStore";
 beforeEach(() => useOverlayStore.setState({ stack: [], orderStack: [] }));
 
 describe("P3 shared entity overlay/backstack", () => {
+  it("opens the stored invoice through the existing PDF route on the same stack", async () => {
+    const invoiceId="64e0b9cd-cc03-44e1-b45e-1f8cbd87ecad";
+    render(<EntityOverlayStack />);
+    act(() => useOverlayStore.getState().openInvoice(invoiceId));
+    expect(await screen.findByRole("dialog",{name:"Rechnung"})).toBeVisible();
+    expect(screen.getByTitle("Rechnung")).toHaveAttribute("src",`/api/invoices/${invoiceId}/pdf?kind=original&disposition=inline`);
+    fireEvent.click(screen.getByRole("button",{name:"Schließen"}));
+    await waitFor(()=>expect(useOverlayStore.getState().stack).toHaveLength(0));
+  });
   it("keeps quote -> customer and back on the same stack", async () => {
     render(<EntityOverlayStack />);
     act(() => useOverlayStore.getState().openQuote("quote-1"));

@@ -85,6 +85,24 @@ export const DIALOG_LOAD_COPY={unavailable:'Der Dialog hat sich nicht geladen �
 /** PLAN_LADEZEIT E3: only stale model facts use these refresh messages. */
 export const TODAY_MODEL_COPY={homeTitle:'Der Tag',cardRefreshing:'Diese Karte holt sich gerade den neuesten Stand.',reload:'Jetzt laden',mainRefreshing:'Ich hole gerade den neuesten Stand – dein nächster Schritt erscheint gleich.',rebuildButton:'Startseite neu aufbauen',rebuildRunning:'Ich baue die Startseite gerade neu auf – das dauert ein paar Sekunden.',rebuildDone:'Die Startseite ist neu aufgebaut.'} as const;
 export const TODAY_PLAN_COPY={title:'Tagesplan',period:'Zeitraum',today:'Heute',week:'7 Tage',edit:'Bearbeiten',calendarTitle:'Kalender bearbeiten',closeCalendar:'Kalender schließen'} as const;
+export const TODAY_INVOICE_COPY={
+ title:'Offene Rechnungen',
+ count:(count:number)=>count===1?'1 offener Posten':`${count} offene Posten`,
+ openInvoices:(count:number)=>count===1?'1 Rechnung offen':`${count} Rechnungen offen`,
+ overdueInvoices:(count:number)=>count===1?'1 Rechnung überfällig':`${count} Rechnungen überfällig`,
+ receivables:'Forderungsbestand',openTotal:'Gesamt offen',overdueTotal:'Davon überfällig',
+ overdue:'überfällig',daysOverdue:(days:number)=>days===1?'1 Tag überfällig':`${days} Tage überfällig`,
+ due:(date:string)=>`Zahlungsziel ${date}`,
+ open:(number:string,name:string,amount:string,due:string)=>`Rechnung ${number} öffnen · ${name} · ${amount} · ${due}`,
+ other:'Weitere Wege',customer:(name:string)=>`Kundenkarte ${name}`,order:(number:string)=>`Auftrag ${number}`,
+ original:'Rechnung',openPdf:'Rechnung öffnen',
+} as const;
+export const TODAY_OWN_NOTE_COPY={
+ title:'Eigene Notizen',placeholder:'Was möchtest du dir für heute merken?',saved:'Automatisch gespeichert',
+ invalid:'Notiz für heute',changed:'Deine Notiz wurde inzwischen geändert · neuen Stand laden und erneut speichern',
+ failed:'Nicht gespeichert · Eingaben sind noch da.',
+ completed:'Notiz abgehakt',
+} as const;
 export const PAGE_READ_COPY={orderIncomplete:(number:string)=>`Auftrag ${number} ist gerade nicht lesbar · öffne den Auftrag.`,loading:"Deine Arbeitsfläche wird geladen.",sourceIncomplete:"Diese Quelle ist gerade nicht erreichbar · Erneut laden.",qualificationUnknown:"Den Status kann ich gerade nicht laden.",partial:"Ein Teil der Aufträge fehlt noch · Deine übrigen Aufgaben bleiben sichtbar.",reload:"Erneut laden",settingsPending:"Die neuen Abfragewerte sind noch nicht verfügbar.",timeout:"Abfragezeit in Millisekunden",mailBatch:"Rechnungen je Versandtakt",invalid:"Abfragezeit und Versandgrenze brauchen ganze Zahlen größer null.",refreshLeaseInvalid:(seconds:number)=>`Du kannst die Nachlauf-Frist nur zwischen 1 und ${seconds} Sekunden speichern.`,refreshLeaseTooLong:(seconds:number)=>`Du kannst die Nachlauf-Frist auf höchstens ${seconds} Sekunden setzen.`} as const;
 export const TODAY_WEEK_COPY={
  title:'Diese Woche fertig',

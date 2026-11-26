@@ -4,7 +4,10 @@ import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
   openOrder: vi.fn(),
+  openCustomer: vi.fn(),
   openInvoice: vi.fn(),
+  readNote: vi.fn().mockResolvedValue({code:'SOURCE_INCOMPLETE'}),
+  saveNote: vi.fn().mockResolvedValue({code:'UNAVAILABLE'}),
   requestCreate: vi.fn(),
   listInbox: vi.fn(),
   confirmHandover:vi.fn(),
@@ -13,7 +16,8 @@ const ports = vi.hoisted(() => ({
   refresh: vi.fn(),
   permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
 }));
-vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
+vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: typeof ports) => unknown) => selector(ports) }));
+vi.mock('@/app/actions/today.actions',()=>({readTodayOwnNoteAction:ports.readNote,saveTodayOwnNotesAction:ports.saveNote}));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
 vi.mock('@/components/communication/CommunicationPanel',()=>({CommunicationPanel:({targetId,invoiceOriginal}:{targetId:string;invoiceOriginal?:{documentId:string}})=><div data-testid="TEST-canonical-composer" data-customer={targetId} data-original={invoiceOriginal?.documentId}/> }));
 vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox,confirmInvoiceHandoverAction:ports.confirmHandover }));
@@ -34,6 +38,8 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
 import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
 import {OfficeWeekControl} from '../OfficeWeekControl';
+import {OfficeOwnNotes} from '../OfficeOwnNotes';
+import type {TodayDashboard} from '@/lib/server/todayDashboard';
 import {completeU2Read} from '@/lib/domain/u2ReadContract';
 
 const actionPorts = {
@@ -43,6 +49,44 @@ const actionPorts = {
   assignOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 2 } }),
   handBackOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 3 } }),
 };
+
+it('B-20 Rechnungsblatt uses the existing invoice action and only visible confirmed amounts',()=>{
+ const invoice={id:'test-invoice',number:'TEST-R-26',customerName:'TEST Nord',amountCents:48000,dueDate:'2026-11-16',
+  overdue:true,openOriginal:true,customerId:'test-customer',order:{id:'test-order',number:'TEST-A-26'}};
+ const calendar={readStartedAt:'2026-11-25T15:00:00.000Z',today:'2026-11-25',throughDate:'2026-12-02'};
+ const base={kind:'data',role:'meister',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection} as const;
+ const money:NonNullable<TodayDashboard['invoiceMoney']>={code:'OK',openCount:1,openCents:48000,overdueCount:1,overdueCents:48000,
+  today:1,upcoming:0,sources:[{id:invoice.id,version:1,dueDate:invoice.dueDate,amountCents:invoice.amountCents}]};
+ const renderModel=(visible:boolean)=><RolfHomeClient model={{...base,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],calendar,
+  ...(visible?{invoiceMoney:money,invoiceSheet:{rows:[invoice],incomplete:true}}:{})}}} ports={actionPorts}/>;
+ const {rerender}=render(renderModel(true));
+ fireEvent.click(screen.getByRole('button',{name:'Offene Rechnungen'}));
+ const dialog=screen.getByRole('dialog',{name:'Offene Rechnungen'});
+ expect(within(dialog).getByText('Gesamt offen')).toBeVisible();
+ expect(within(dialog).getByText(PAGE_READ_COPY.sourceIncomplete)).toBeVisible();
+ fireEvent.click(within(dialog).getByRole('button',{name:/Rechnung TEST-R-26 öffnen/}));
+ expect(ports.openInvoice).toHaveBeenCalledWith(invoice.id);
+ rerender(renderModel(false));
+ expect(screen.queryByRole('button',{name:'Offene Rechnungen'})).not.toBeInTheDocument();
+ expect(screen.queryByRole('dialog',{name:'Offene Rechnungen'})).not.toBeInTheDocument();
+});
+
+it('B-20 Tagesnotiz keeps the typed text visible and only confirms the matching saved version',async()=>{
+ const empty={day:'2026-11-26',version:0,text:'',completed:false};
+ let acknowledge!:(result:{code:'OK';note:typeof empty})=>void;
+ ports.readNote.mockResolvedValueOnce({code:'OK',note:empty});
+ ports.saveNote.mockImplementationOnce(()=>new Promise(done=>{acknowledge=done;}));
+ render(<OfficeOwnNotes/>);
+ const input=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ await waitFor(()=>expect(input).toBeEnabled());
+ const text='TEST Text bleibt sichtbar';
+ fireEvent.change(input,{target:{value:text}});fireEvent.blur(input);
+ await waitFor(()=>expect(ports.saveNote).toHaveBeenCalledWith({day:empty.day,version:0,text}));
+ expect(input).toHaveValue(text);
+ expect(screen.queryByText('Automatisch gespeichert')).not.toBeInTheDocument();
+ acknowledge({code:'OK',note:{...empty,version:1,text}});
+ expect(await screen.findByText('Automatisch gespeichert')).toBeVisible();
+});
 
 it('zeigt die freigegebene Wochensumme und schließt zum Auslöser zurück',()=>{
  // Synthetic display boundary; the server role split is covered with real logins.
