@@ -330,11 +330,25 @@ function projectLegacyHandoverBuffer(value) {
   ]));
 }
 
+// B2-a, Klärer 26.11. 16:03: Bei Abholung zählt kein Versandpuffer.
+function projectLegacyPickupTerms(page) {
+  for (const flowCase of page.faelle ?? []) {
+    if (flowCase.id !== "TA03" && flowCase.id !== "TA08") continue;
+    const dateRows = flowCase.dann?.db?.filter(row => row.tabelle === "orders" && Object.hasOwn(row.werte ?? {}, "liefertermin"));
+    if (dateRows?.length !== 1 || dateRows[0].werte.liefertermin !== "{arbeitstag:+6}") {
+      throw new Error(`FLOW_GENERATOR_PICKUP_TERM_UNMAPPED:${flowCase.id}`);
+    }
+    dateRows[0].werte.liefertermin = "{arbeitstag:+5}";
+    flowCase.notiz = "Rechnung: Verzinken hat 3 Arbeitstage Durchlauf und 1 Aufwandstag. Der Schnelltermin für Abholung liegt bei +5 Arbeitstagen. Die Untergrenze von +4 Arbeitstagen bleibt. Ein Versandpuffer fällt hier nicht an.";
+  }
+}
+
 function buildOutputs(raw, document) {
   document = projectLegacyInvoiceTaskRecipients(document);
   document.testmodell = projectLegacyHandoverBuffer(document.testmodell);
   if (document.testmodell?.seiten?.rechnungein) document.testmodell.seiten.rechnungein = projectLegacyInvoiceCopy(document.testmodell.seiten.rechnungein);
   if (!document.testmodell?.seiten) throw new Error("FLOW_GENERATOR_TESTMODELL_MISSING");
+  if (document.testmodell.seiten.eingang) projectLegacyPickupTerms(document.testmodell.seiten.eingang);
   const sha = createHash("sha256").update(raw).digest("hex").toUpperCase();
   const seed = renderSeed(document.testmodell, document.screens);
   const outputs = new Map([
