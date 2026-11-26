@@ -157,20 +157,22 @@ GRANT EXECUTE ON FUNCTION private.lager_material_rechnung_sperren() TO service_r
 CREATE TRIGGER stock_movements_lager_rechnung_sperren
   BEFORE INSERT ON public.stock_movements FOR EACH ROW EXECUTE FUNCTION private.lager_material_rechnung_sperren();
 
--- Der vorhandene Lager-Trigger verarbeitet tenant_id aus den Übergangstabellen.
+-- Der vorhandene Auslöser entwertet den Tagesstand der betroffenen Betriebe.
 DO $install$
-DECLARE lager_tabelle text;
+DECLARE quelle regclass;
 BEGIN
-  FOREACH lager_tabelle IN ARRAY ARRAY[
-    'stock_movements', 'material_prices', 'inventory_sessions', 'inventory_counts',
-    'inventory_lines', 'lager_material_nachbewertungen'
+  FOREACH quelle IN ARRAY ARRAY[
+    'public.stock_movements'::regclass, 'public.material_prices'::regclass,
+    'public.inventory_sessions'::regclass, 'public.inventory_counts'::regclass,
+    'public.inventory_lines'::regclass, 'public.lager_material_nachbewertungen'::regclass,
+    'private.quote_create_receipts'::regclass, 'private.quote_number_counters'::regclass
   ] LOOP
-    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_insert_v1 ON public.%I', lager_tabelle);
-    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_update_v1 ON public.%I', lager_tabelle);
-    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_delete_v1 ON public.%I', lager_tabelle);
-    EXECUTE format('CREATE TRIGGER today_mark_insert_v1 AFTER INSERT ON public.%I REFERENCING NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', lager_tabelle);
-    EXECUTE format('CREATE TRIGGER today_mark_update_v1 AFTER UPDATE ON public.%I REFERENCING OLD TABLE AS today_old NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', lager_tabelle);
-    EXECUTE format('CREATE TRIGGER today_mark_delete_v1 AFTER DELETE ON public.%I REFERENCING OLD TABLE AS today_old FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', lager_tabelle);
+    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_insert_v1 ON %s', quelle);
+    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_update_v1 ON %s', quelle);
+    EXECUTE format('DROP TRIGGER IF EXISTS today_mark_delete_v1 ON %s', quelle);
+    EXECUTE format('CREATE TRIGGER today_mark_insert_v1 AFTER INSERT ON %s REFERENCING NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', quelle);
+    EXECUTE format('CREATE TRIGGER today_mark_update_v1 AFTER UPDATE ON %s REFERENCING OLD TABLE AS today_old NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', quelle);
+    EXECUTE format('CREATE TRIGGER today_mark_delete_v1 AFTER DELETE ON %s REFERENCING OLD TABLE AS today_old FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_inventory_items_v1()', quelle);
   END LOOP;
 END
 $install$;
