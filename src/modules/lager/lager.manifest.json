@@ -85,7 +85,7 @@
     "20261124155741_s_lag_b1a_19_ladezeit.sql",
     "20261124155742_s_lag_b1a_20_ortplatz.sql",
     "20261125124200_s_lag_b1a_auftragskosten_gegenbuchung.sql",
-    "20261125220245_b3a_material_rechnung.sql"
+    "20261126010011_b3a_material_rechnung.sql"
   ],
   "viewsFunctions": [
     "private.lager_naechste_kurznummer",
