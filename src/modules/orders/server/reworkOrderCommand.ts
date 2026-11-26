@@ -359,15 +359,15 @@ export async function nacharbeitAnlegen(input: unknown): Promise<NacharbeitAnleg
       const insertedOrders = await tx.execute<OrderRow>(sql`
         INSERT INTO public.orders (
           id, tenant_id, order_number, customer_id, title, task, station,
-          current_station, current_station_id, version, status, risk, priority_computed,
-          intake_date, due_date, promised_due_date, intake_term_status, intake_source,
+          current_station, current_station_id, version, status,
+          intake_date, due_date, intake_term_status, intake_source,
           source, source_ref, freetext_original, handover_mode, payment_mode, payment_mode_version,
           geprueft, ware, ware_seit, wunschtermin, termin_herkunft, terminstatus_seit,
           nacharbeit_zu, hinweis_auftrag, created_at
         ) VALUES (
           ${orderId}, ${tenantId}, ${orderNumber}, ${context.customer_id}, ${title}, ${task}, ${ORDER_STATION},
-          ${ORDER_STATION}, ${ORDER_STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
-          statement_timestamp() AT TIME ZONE 'UTC', ${input.liefertermin}::date, ${input.liefertermin}::date, 'wunsch', ${context.source_intake_source},
+          ${ORDER_STATION}, ${ORDER_STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN},
+          statement_timestamp() AT TIME ZONE 'UTC', ${input.liefertermin}::date, 'wunsch', ${context.source_intake_source},
           'REKLAMATION_NACHARBEIT', ${context.complaint_id}, ${hint}, ${context.source_handover_mode}, 'keiner', 0,
           false, 'erwartet', statement_timestamp(), ${input.liefertermin}::date, 'vorschlag', statement_timestamp(),
           ${context.complaint_id}, ${hint}, statement_timestamp() AT TIME ZONE 'UTC'

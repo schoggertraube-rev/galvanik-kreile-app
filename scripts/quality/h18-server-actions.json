@@ -64,6 +64,9 @@
     "src/app/actions/today.actions.ts#getTodayDeviceAction": [
       "src/test/acceptance/offline_workshop_sync.browser.integration.test.ts"
     ],
+    "src/app/actions/orders.actions.ts#getFixedStationOrdersAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
     "src/app/actions/orders.actions.ts#getProductionWeekAction": [
       "src/test/acceptance/production_snapshot_storage.integration.test.ts",
       "src/test/acceptance/production_snapshot_history.integration.test.ts"
@@ -151,6 +154,9 @@
     "src/app/actions/orders.actions.ts#changeOrderItemExtraWorkAction": [
       "src/test/h18_order_admin_actions.integration.test.ts"
     ],
+    "src/app/actions/orders.actions.ts#recordPhoneExtraWorkApprovalAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
     "src/app/actions/orders.actions.ts#configureExtraWorkCatalogPositionAction": [
       "src/test/h18_order_admin_actions.integration.test.ts"
     ],
@@ -174,6 +180,18 @@
     "src/app/actions/orders.actions.ts#setOrderItemFinishedAction": [
       "src/test/h18_workshop_actions.integration.test.ts",
       "src/test/acceptance/production_snapshot_storage.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#starteBuendelLaufAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#meldeAusschussAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#bookWorkTimeAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#beendeBuendelLaufAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#transitionWareneingangToGalvanikAction": [
       "src/test/h18_workshop_actions.integration.test.ts",

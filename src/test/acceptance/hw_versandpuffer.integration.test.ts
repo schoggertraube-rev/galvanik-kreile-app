@@ -7,6 +7,7 @@ vi.mock('@/lib/tenant', () => ({ KREILE_TENANT_SLUG: tenant }));
 
 import { full, sql, withSession } from '../../../e2e/ablauf/replayHarness';
 import { getOrderIntakeSuggestionsAction } from '@/app/actions/eingang.actions';
+import { saveCatalogServiceAction } from '@/app/actions/settings.actions';
 import { workingDaysBetween } from '@/lib/domain/workingDays';
 
 it('berücksichtigt den gespeicherten Versandpuffer im Terminvorschlag', async () => {
@@ -21,21 +22,36 @@ it('berücksichtigt den gespeicherten Versandpuffer im Terminvorschlag', async (
       material_aufschlag_prozent, lager_regelversion)
     VALUES (${randomUUID()}, ${tenant}, 'TEST Werkstatt Versandpuffer', 1, 20, 'TEST-HW')
   `;
+  const leistung = await withSession(full, () => saveCatalogServiceAction({
+    id: null, name: 'TEST Verzinken', surface: 'verzinken', unit: 'stueck',
+    netPriceCents: 4500, vatRateBasisPoints: 1900, standardLeadTimeWorkingDays: 3, active: true,
+  }));
+  if (leistung.code !== 'OK') throw Error('TEST_WERKSTATT_KATALOGLEISTUNG_FEHLT');
+  const position = {
+    key: 'test-position', catalogServiceId: leistung.service.id, name: 'TEST Werkstattteil',
+    quantity: 2, surfaceRequested: 'Verzinken', unit: 'Stück', unitPriceCents: 4500,
+  };
+  const vorschlagOhneDurchlaufzeit = await withSession(full, () => getOrderIntakeSuggestionsAction({
+    customerId: null, kind: 'ORDER', wishDate: null, handoverMode: 'shipping',
+    positions: [position, { ...position, key: 'ohne-durchlaufzeit', name: 'TEST Freitextteil', catalogServiceId: null }],
+  }));
+  expect(vorschlagOhneDurchlaufzeit).toMatchObject({
+    ok: true, data: {
+      term: null,
+      prices: [{ positionKey: position.key, unitPriceCents: 4500 }],
+      missingLeadTimes: [{
+        positionKey: 'ohne-durchlaufzeit', catalogServiceId: null, message: 'Durchlaufzeit für TEST Freitextteil fehlt',
+      }],
+    },
+  });
+
   const leseTermin = async () => {
     const result = await withSession(full, () => getOrderIntakeSuggestionsAction({
       customerId: null,
       kind: 'ORDER',
       wishDate: null,
       handoverMode: 'shipping',
-      positions: [{
-        key: 'test-position',
-        catalogServiceId: null,
-        name: 'TEST Werkstattteil',
-        quantity: 2,
-        surfaceRequested: 'Verzinken',
-        unit: 'Stück',
-        unitPriceCents: 4500,
-      }],
+      positions: [position],
     }));
     expect(result).toMatchObject({ ok: true, data: { term: { achievableDate: expect.any(String) } } });
     if (!result.ok || !result.data.term?.achievableDate) throw Error('TEST_VERSANDPUFFER_TERMIN_FEHLT');

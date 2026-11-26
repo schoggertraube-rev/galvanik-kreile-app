@@ -14,7 +14,7 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {readTodayOrderCards,readLiveOrderCardSource} from '@/lib/server/orderCardRead';
 import {readInvoiceShippingConsequences} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readInvoiceVat} from '@/modules/accounting/public';
-import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction, readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 
 import {readMicrosoftGraphSentDocumentEvidence,readMicrosoftGraphSentMailByRequest,readMicrosoftGraphSentMailReference} from '@/lib/server/microsoftGraph';
 import {loadOfficeHome} from '@/lib/server/officeHomeRead';
@@ -100,7 +100,7 @@ it('CB23:05 actual commercial-quote SQL failure preserves the operational card w
    expect(result.data.card.commercialQuote).toBeUndefined();
    expect(log).toHaveBeenCalledWith('[ORDER_CARD_COMMERCIAL_QUOTE_FAILED]',expect.objectContaining({orderId}));
    expect(await withSession(actor,()=>getLiveOrderCardAction({orderId}))).toMatchObject({code:'OK',data:{card:{id:orderId,version:result.data.card.version}}});
-   const today=(login:typeof full)=>withSession(login,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_SOURCE_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+   const today=(login:typeof full)=>withSession(login,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_SOURCE_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
    const visible=await today(full),notice=visible.items.find(item=>item.key==='source-quote:'+orderId);
    expect(notice).toMatchObject({orderId,orderVersion:result.data.card.version,field:'action',title:'Preisbeleg zu Auftrag '+result.data.card.orderNumber+' ist nicht lesbar.',primaryActionLabel:'Auftrag öffnen'});
    expect((await today(actor)).items.some(item=>item.key==='source-quote:'+orderId)).toBe(false);
@@ -179,7 +179,7 @@ it('uses one full-list SQL source for the actual home and Today while preserving
 it('projects the same canonical Today fields without claiming an unread release flag',async()=>{
  const sources=await withSession(full,async()=>{
   const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_L1_AUTH');
-  return Promise.all([getOperationalOrders(auth.data),getOperationalOrders(auth.data,{purpose:'today'})]);
+  return Promise.all([getOperationalOrders(auth.data, undefined, readBetriebsruheInTransaction),getOperationalOrders(auth.data,{purpose:'today'}, readBetriebsruheInTransaction)]);
  });
  const display=(row:typeof sources[0][number])=>{const {ausgabeFrei,serverChangedAt,...fields}=row;void ausgabeFrei;void serverChangedAt;return fields;};
  expect(sources[1].map(display)).toEqual(sources[0].map(display));
@@ -234,7 +234,7 @@ it('PL15:43 sends the customer subject from the actual invoice/company source an
  const customerId=await customerFixture('TEST L1 friendly subject');
  const issued=await readyInvoiceOrder('TEST L1 actual invoice mail','pickup',false,customerId);
  const authorization=await withSession(full,()=>resolveAuthorization());if(!authorization.ok)throw Error('TEST_L1_SUBJECT_AUTH');
- const today=await withSession(full,()=>readTodayDashboard(authorization.data,getComplaints,getQuoteFollowupsForTodayAction));
+ const today=await withSession(full,()=>readTodayDashboard(authorization.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction));
  const row=today.items.find(item=>item.invoiceMail?.documentId===issued.invoice.invoiceId)?.invoiceMail;
  expect(row).toBeDefined();if(!row)throw Error('TEST_L1_SUBJECT_ORIGINAL');
  const [customer]=await sql`SELECT name FROM public.customers WHERE tenant_id=${tenant} AND id=${customerId}`;
@@ -410,7 +410,7 @@ it('PL13:42 proves an actual unfinished Intake order is not applicable without a
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId}));
  expect(card.code).toBe('OK');if(card.code!=='OK')throw Error('TEST_LIVE_CARD');
  expect(card.data.handoverConsequences).toEqual({code:'NOT_APPLICABLE',orderId,orderVersion:card.data.card.version});
- const read=(actor:typeof full)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const read=(actor:typeof full)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const first=await read(full),notice=first.items.find(item=>item.key==='source-shipping:'+orderId);
  expect(notice).toBeUndefined();
  expect(card.data.handoverConsequences).not.toHaveProperty('feeCents');
@@ -446,7 +446,7 @@ it('retains every known order exit when the actual final version read reaches it
   if(phase.phase==='today.versions'&&phase.counts.failed===1&&phase.reasons.includes('PAGE_READ_TIMEOUT'))sawExpiredVersion=true;
  });
  try{
-  const today=await withSession(full,()=>withPageReadBudget(()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
+  const today=await withSession(full,()=>withPageReadBudget(()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs));
   expect(sawBatch).toBe(true);expect(sawExpiredVersion).toBe(true);
   for(const orderId of ids){
    expect(today.orderActions?.missingOrderIds).toContain(orderId);
@@ -505,7 +505,7 @@ it('retains a concrete warning for an explicitly synthetic orphan freeze receipt
  VALUES(${randomUUID()},${tenant},${orderId},'ORDER_FROZEN_V1','TEST synthetic orphan historical freeze',${full.actorId}::uuid,${sql.json({freezeId:randomUUID(),rateId:randomUUID(),hourlyRateCents:14000,totalAmountCents:10000,lineCount:1})},'success',${randomUUID()}::uuid,1,${created.receipt.orderVersion},${randomUUID()}::uuid,'galvanik','fertig',statement_timestamp())`;
  const card=await withSession(full,()=>getLiveOrderCardAction({orderId}));
  expect(card).toMatchObject({code:'OK',data:{handoverConsequences:{code:'SOURCE_INCOMPLETE',orderId}}});
- const today=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const today=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_LIVE_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const notice=today.items.find(item=>item.key==='source-shipping:'+orderId);
  expect(notice).toMatchObject({orderId,orderVersion:created.receipt.orderVersion,field:'action',urgency:'warning',primaryActionLabel:'Auftrag öffnen'});
  expect(notice?.title).toContain('Quelle nicht lesbar.');

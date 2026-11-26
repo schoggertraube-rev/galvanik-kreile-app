@@ -2,6 +2,7 @@
 // KORR S38a-2 B/C: 102 actual fiscal originals per isolated TEST customer.
 // Only Graph is doubled; invoices, originals, cancellation, replacement, tasks,
 // authorization, Today, immutable snapshot and browser-deserialized retries are real.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {randomUUID} from 'node:crypto';
 import {beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -118,12 +119,12 @@ describe.each(['cancel','reissue'] as const)('KORR S38a-2 %s actual frozen remai
   const prices=await createFixture(['preise']);
   const auth=await withSession(prices,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_TODAY_AUTH_REQUIRED');
   expect(auth.data.areas).not.toContain('auftraege');expect(auth.data.areas).not.toContain('mails');
-  const today=await withSession(prices,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction));
+  const today=await withSession(prices,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction));
   const item=today.items.find(row=>row.invoiceId===replacementId&&row.invoiceMail);
   expect(item).toMatchObject({primaryActionLabel:'Rechnung '+replacementNumber+' an '+item!.meta+' senden',invoiceMail:{documentId:replacementId,expectedInvoiceIds:[replacementId],customerId}});
   const denied=await createFixture(['mails']);
   const deniedAuth=await withSession(denied,()=>resolveAuthorization());if(!deniedAuth.ok)throw Error('TEST_TODAY_DENIED_AUTH_REQUIRED');
-  const hidden=await withSession(denied,()=>readTodayDashboard(deniedAuth.data,getComplaints,getQuoteFollowupsForTodayAction));
+  const hidden=await withSession(denied,()=>readTodayDashboard(deniedAuth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction));
   expect(hidden.items.some(row=>row.invoiceMail)).toBe(false);
   expect(mailPosts()).toHaveLength(0);
  });

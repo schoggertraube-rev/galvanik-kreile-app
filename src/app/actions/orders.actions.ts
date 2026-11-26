@@ -23,6 +23,7 @@ async function todayModelPorts():Promise<TodayModelReadPorts>{
  liveComplaints:getComplaints,
  liveFollowups:getQuoteFollowupsForTodayAction,
  readSettings:readModelPageSettingsInTransaction,
+  readTerminEinstellungen:readBetriebsruheInTransaction,
  messages:(auth,value)=>{
   const source=modelRecord(value);if(!source)throw Error('TODAY_MODEL_MESSAGES_INVALID');
   if(source.code!=='OK'){
@@ -80,7 +81,7 @@ export async function readOfficeHomeModelAction(input?:{deferLive?:boolean}):Pro
  if(!current.ok)return {kind:'denied',message:PAGE_READ_COPY.sourceIncomplete};
  if(!hasAnyAuthorizationArea(current.data))return {kind:'no_areas'};
  const {loadOfficeHome}=await import('@/lib/server/officeHomeRead');
- return loadOfficeHome(current.data,input?.deferLive===true,readModelTodayHome);
+ return loadOfficeHome(current.data,input?.deferLive===true,{readModel:readModelTodayHome,readTerminEinstellungen:readBetriebsruheInTransaction});
 }
 
 /** Cheap conditional read: the same settings/qualification SQL, no JSON payload,
@@ -112,7 +113,7 @@ export async function readTodayHomePart(part:import('@/components/home/OfficeHom
   return result.code==='OK'?{code:'OK',part,data:result.data}:{code:'SOURCE_INCOMPLETE',part};
  }
  const {loadOfficeHome,todayHomePartFromModel}=await import('@/lib/server/officeHomeRead');
- const model=await loadOfficeHome(auth,false,readModelTodayHome);
+ const model=await loadOfficeHome(auth,false,{readModel:readModelTodayHome,readTerminEinstellungen:readBetriebsruheInTransaction});
  return todayHomePartFromModel(model,part);
  }catch{console.error('[TODAY_REGION_SOURCE_FAILED]',{part,code:'SOURCE_INCOMPLETE'});return {code:'SOURCE_INCOMPLETE',part};}
 }
@@ -121,7 +122,7 @@ export async function readTodayHomePart(part:import('@/components/home/OfficeHom
 import {withPageReadBudget,hasPageReadBudget,configurePageReadBudget,withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import {DEFAULT_PAGE_READ_SETTINGS} from '@/db/readBudget';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings,readPageReadSettings,readCompanyLetterSettings,readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {canTransportInvoiceDocument} from '@/lib/server/authorization';
 import {canReadOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
@@ -158,6 +159,7 @@ import {
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
+import type { WarendurchlaufActionResult } from "@/app/warendurchlauf/actions";
 import {
   transitionWareneingangToGalvanik,
   correctGalvanikToWareneingang,
@@ -178,6 +180,8 @@ import type {
 import type {
   ChangeOrderItemExtraWorkInput,
   ChangeOrderItemExtraWorkResult,
+  RecordPhoneExtraWorkApprovalInput,
+  RecordPhoneExtraWorkApprovalResult,
 } from "@/lib/server/commands/orderExtraWorkCommand";
 import type {
   FreezeOrderInput,
@@ -276,6 +280,15 @@ export async function changeOrderItemExtraWorkAction(
  },readLoggingSettings);
 }
 
+export async function recordPhoneExtraWorkApprovalAction(
+  input: RecordPhoneExtraWorkApprovalInput,
+): Promise<RecordPhoneExtraWorkApprovalResult> {
+  return observeAction("recordPhoneExtraWorkApprovalAction", subjectForAction("recordPhoneExtraWorkApprovalAction", input), async () => {
+    const { recordPhoneExtraWorkApproval } = await import("@/lib/server/commands/orderExtraWorkCommand");
+    return recordPhoneExtraWorkApproval(input);
+  }, readLoggingSettings);
+}
+
 export async function freezeOrderAction(input: FreezeOrderInput): Promise<FreezeOrderResult> {
  return observeAction('freezeOrderAction',subjectForAction('freezeOrderAction',input),async()=>{
   const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
@@ -343,16 +356,92 @@ export async function changeOrderContentAction(
  },readLoggingSettings);
 }
 
+async function productionPricingComposition() {
+  const [{createProductionPricingRetryTask,settleProductionPricingRetryTasks},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const effect:import('@/modules/tasks/server-public').TaskEffects=(tx,auth,value)=>recordIntakeTaskEffect(tx,auth,value,readCustomerProfile);
+  const ports: NonNullable<Parameters<typeof import("@/lib/server/commands/orderContentCommand").setOrderItemFinished>[1]> = {
+    failed: async (tx, auth, id) => { await createProductionPricingRetryTask(tx, auth, id, { effect }); },
+    settled: async (tx, auth, eventId) => { await settleProductionPricingRetryTasks(tx, auth, eventId, { effect }); },
+  };
+  return ports;
+}
+
 export async function setOrderItemFinishedAction(
   input: SetOrderItemFinishedInput,
 ): Promise<OrderContentResult> {
  return observeAction('setOrderItemFinishedAction',subjectForAction('setOrderItemFinishedAction',input),async()=>{
   const { setOrderItemFinished } = await import("@/lib/server/commands/orderContentCommand");
-  const [{createProductionPricingRetryTask,settleProductionPricingRetryTasks},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
-  const effect:import('@/modules/tasks/server-public').TaskEffects=(tx,auth,value)=>recordIntakeTaskEffect(tx,auth,value,readCustomerProfile);
-  return setOrderItemFinished(input,{failed:async(tx,auth,id)=>{await createProductionPricingRetryTask(tx,auth,id,{effect});},settled:async(tx,auth,eventId)=>{await settleProductionPricingRetryTasks(tx,auth,eventId,{effect});}});
+  return setOrderItemFinished(input, await productionPricingComposition());
 
  },readLoggingSettings);
+}
+
+export async function starteBuendelLaufAction(input: Parameters<typeof import("@/modules/orders/server-public").starteLauf>[1]) {
+  return observeAction("starteBuendelLaufAction", subjectForAction("starteBuendelLaufAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const { starteLauf } = await import("@/modules/orders/server-public");
+    return starteLauf(auth.data, input);
+  }, readLoggingSettings);
+}
+
+export async function meldeAusschussAction(input: Parameters<typeof import("@/modules/orders/server-public").meldeAusschuss>[1]) {
+  return observeAction("meldeAusschussAction", subjectForAction("meldeAusschussAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const [orders, invoices, tasks, settings, intake, customers, copy] = await Promise.all([
+      import("@/modules/orders/server-public"), import("@/lib/server/commands/immutableInvoiceCommand"),
+      import("@/modules/tasks/server-public"), import("@/modules/fundament/server-public"),
+      import("@/modules/eingang/server-public"), import("@/modules/customers/server-public"), import("@/ui/ordersCopy"),
+    ]);
+    return orders.meldeAusschuss(auth.data, input, {
+      sperrendeRechnung: invoices.readOrderScrapInvoiceNumberInTransaction,
+      aktualisiereAnliegen: async (tx, actor, { auftragId, vollstaendig }) => {
+        await tasks.synchronizeFullScrapTask(tx, actor, { orderId: auftragId, vollstaendig, titel: copy.ORDER_SCRAP_COPY.task }, {
+          readChargeScrap: settings.readAusschussBerechnenInTransaction,
+          effect: (writeTx, taskActor, request) => intake.recordIntakeTaskEffect(writeTx, taskActor, request, customers.readCustomerProfile),
+        });
+      },
+    });
+  }, readLoggingSettings);
+}
+
+export async function bookWorkTimeAction(input: unknown) {
+  return observeAction("bookWorkTimeAction", subjectForAction("bookWorkTimeAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const [{ hatArbeitszeitAuftragInTransaction }, { bookWorkTime }, settings] = await Promise.all([
+      import("@/modules/orders/server-public"), import("@/modules/werkstatt/server-public"),
+      import("@/modules/fundament/server-public"),
+    ]);
+    return bookWorkTime(auth.data, input, {
+      auftrag: hatArbeitszeitAuftragInTransaction,
+      station: settings.readWerkstattZeitstationInTransaction,
+      personensatz: settings.readWerkstattKostensatzInTransaction,
+      standardsatz: settings.readQuoteSettingsInTransaction,
+    });
+  }, readLoggingSettings);
+}
+
+export async function beendeBuendelLaufAction(input: Parameters<typeof import("@/modules/orders/server-public").beendeLauf>[1]) {
+  return observeAction("beendeBuendelLaufAction", subjectForAction("beendeBuendelLaufAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const [{ beendeLauf }, { bookLaufZeit, verteileLaufMinuten }, settings, { setOrderItemFinishedInTransaction }, pricing] = await Promise.all([
+      import("@/modules/orders/server-public"), import("@/modules/werkstatt/server-public"),
+      import("@/modules/fundament/server-public"), import("@/lib/server/commands/orderContentCommand"),
+      productionPricingComposition(),
+    ]);
+    return beendeLauf(auth.data, input, {
+      verteileMinuten: verteileLaufMinuten,
+      zeitBuchen: (tx, login, zeit) => bookLaufZeit(tx, login, zeit, {
+        station: settings.readWerkstattZeitstationInTransaction,
+        personensatz: settings.readWerkstattKostensatzInTransaction,
+        standardsatz: settings.readQuoteSettingsInTransaction,
+      }),
+      teilFertigMelden: (tx, login, teil) => setOrderItemFinishedInTransaction(tx, login, teil, pricing),
+    });
+  }, readLoggingSettings);
 }
 
 export async function configureExtraWorkCatalogPositionAction(
@@ -466,7 +555,25 @@ async function readLiveOrderCardForPage(
       const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
       return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);
     }:undefined;
-    const [handoverTask,shippingSettings,handoverConsequences,evidence,actors,manualShipping,customerInformed,printQueue,pickupAppointment,payment,cacheLoginScope]=await Promise.all([
+    const terminAnzeigeLesen = withPageReadPhase("cards.fertigtermin", async () => {
+      const { dueAt, handoverMode, status } = card.data;
+      const [{ zeigeFertigtermin }, { berlinCalendarDay }] = await Promise.all([
+        import("@/modules/orders/public"), import("@/lib/domain/workingDays"),
+      ]);
+      const dueDate = dueAt ? berlinCalendarDay(new Date(dueAt)) : null;
+      const gesperrt = status === "blocked";
+      const heute = berlinCalendarDay();
+      const auftrag = { dueDate, handoverMode };
+      if (!dueDate || !handoverMode || gesperrt) return zeigeFertigtermin(auftrag, null, heute, gesperrt);
+
+      const [{ withPrivilegedTenantTransaction }, { leseFertigterminKalender }] = await Promise.all([
+        import("@/lib/server/privilegedDb"), import("@/lib/server/orderStationRead"),
+      ]);
+      const kalender = await withPrivilegedTenantTransaction(authorization.data, tx =>
+        leseFertigterminKalender(tx, authorization.data.tenantId, fundament.readBetriebsruheInTransaction));
+      return zeigeFertigtermin(auftrag, kalender, heute, gesperrt);
+    });
+    const [handoverTask,shippingSettings,handoverConsequences,evidence,actors,manualShipping,customerInformed,printQueue,pickupAppointment,payment,cacheLoginScope,terminAnzeige]=await Promise.all([
       card.data.handoverNotice?.taskId?(async()=>{const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');return withPrivilegedTenantTransaction(authorization.data,tx=>tasks.readOrderHandoverTaskState(tx,authorization.data,{orderId:card.data.id,taskId:card.data.handoverNotice!.taskId!}));})():Promise.resolve(undefined),
       card.data.handoverMode==='shipping'?fundament.readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true}):Promise.resolve(undefined),
       readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId},readInvoiceVat,fundament.readShippingSettingsInTransaction),
@@ -477,6 +584,7 @@ async function readLiveOrderCardForPage(
       readOrderPickupAppointment(authorization.data,input.orderId),
       card.data.station==='fertig'?getPaymentState(authorization.data,input.orderId,readCredit):Promise.resolve(undefined),
       readCacheLoginScope(),
+      terminAnzeigeLesen,
     ]);
     if(card.data.handoverNotice?.taskId)card.data.handoverNotice.taskState=handoverTask?.status??'nicht_verfuegbar';
     if(shippingSettings){
@@ -485,7 +593,7 @@ async function readLiveOrderCardForPage(
     }
     if(evidence.code!=='OK')return evidence;
     if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
-    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope,nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope,nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,terminAnzeige,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
@@ -704,6 +812,39 @@ async function resolveOperationalReadAuthorization(): Promise<ActionResult<Autho
   return { ok: true, data: authorization.data };
 }
 
+export async function getFixedStationOrdersAction(station: "angenommen" | "galvanik"): Promise<WarendurchlaufActionResult<OperationalOrder[]>> {
+  return observeAction<WarendurchlaufActionResult<OperationalOrder[]>>("getFixedStationOrdersAction", subjectForAction("getFixedStationOrdersAction", { station }), async () => {
+    if (station !== "angenommen" && station !== "galvanik") {
+      return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
+    }
+    noStore();
+    let authorization;
+    try {
+      authorization = await resolveAuthorization();
+    } catch {
+      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+    }
+
+    if (!authorization.ok) {
+      if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+        return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+      }
+      return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+    }
+
+    if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+      return { ok: false, error: "FORBIDDEN", message: "Stationsliste ist nicht erlaubt." };
+    }
+
+    try {
+      const { readTenantStationOrders } = await import("@/lib/server/orderStationRead");
+      return { ok: true, data: await readTenantStationOrders(authorization.data, station, readBetriebsruheInTransaction) };
+    } catch {
+      return { ok: false, error: "QUERY_ERROR", message: "Stationsliste konnte nicht sicher geladen werden." };
+    }
+  }, readLoggingSettings);
+}
+
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {serverReadAt?:string;cacheLoginScope?:string}> {
  return observeAction('getOrdersDb',subjectForAction('getOrdersDb',undefined),async()=>{
   noStore();
@@ -714,7 +855,7 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
     const [{ readTodayOrderCards }, orders] = await Promise.all([
       import("@/lib/server/orderCardRead"),
-      withPageReadPhase('orders.list.source',()=>getOperationalOrders(authorization.data)),
+      withPageReadPhase('orders.list.source',()=>getOperationalOrders(authorization.data,undefined,readBetriebsruheInTransaction)),
     ]);
     const cardReads = await withPageReadPhase('orders.list.cards',()=>readTodayOrderCards(authorization.data,orders.map(order=>order.id)));
     const finished=orders.some(order=>order.station==='fertig')?await withPageReadPhase('orders.list.dispatch',async()=>{
@@ -726,7 +867,15 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
      let profiles:Awaited<ReturnType<typeof readCustomerProfiles>>|null=null;
      try{profiles=await withPrivilegedTenantTransaction(authorization.data,tx=>readCustomerProfiles(tx,authorization.data.tenantId,customerIds));}
      catch(error){console.error('[DISPATCH_CUSTOMER_MAIL_READ_FAILED]',error instanceof Error?error.name:'UnknownError');}
-     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{readHasMail:async id=>{const customer=profiles?.get(id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();}});
+     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{
+      readHasMail:async id=>{const customer=profiles?.get(id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();},
+      readBilledWork:async(tx,tenantId,orderIds)=>{
+       const [{leseBerechneteMehrarbeitInTransaction},{readInvoiceVat}]=await Promise.all([
+        import('@/lib/server/commands/immutableInvoiceCommand'),import('@/modules/accounting/server-public'),
+       ]);
+       return leseBerechneteMehrarbeitInTransaction(tx,tenantId,orderIds,readInvoiceVat);
+      },
+     });
     }):{code:'OK' as const,rows:[]};
     const projections=new Map(finished.code==='OK'?finished.rows.map((row,rank)=>[row.orderId,{state:row.unavailable?'unavailable' as const:'available' as const,rank,...row}]):[]);
     const data: OrderResponse[] = orders.map((order) => {
@@ -762,7 +911,7 @@ export async function getOrdersBaseDb(): Promise<ActionResult<OrderResponse[]> &
   if(!authorization.ok)return authorization.error==='FORBIDDEN'||authorization.error==='UNAUTHORIZED'?{...authorization,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:authorization;
   try{
    const {getOperationalOrders}=await import('@/lib/server/operationalOrders');
-   const data=await withPageReadPhase('orders.list.base',()=>getOperationalOrders(authorization.data,{purpose:'today'}));
+   const data=await withPageReadPhase('orders.list.base',()=>getOperationalOrders(authorization.data,{purpose:'today'},readBetriebsruheInTransaction));
    return {ok:true,data,serverReadAt:new Date().toISOString()};
   }catch(error:unknown){
    console.error('[ORDER_BASE_READ_ERROR]',{name:error instanceof Error?error.name:'UnknownError',code:'ORDER_BASE_READ_FAILED'});
@@ -801,7 +950,7 @@ export async function getOrderRegisterDb(
     const readQuotes = input.filter !== "ORDER";
     const [orderRows, quoteResult] = await Promise.all([
       readOrders
-        ? import("@/lib/server/operationalOrders").then(({ getOperationalOrders }) => getOperationalOrders(authorization.data))
+        ? import("@/lib/server/operationalOrders").then(({ getOperationalOrders }) => getOperationalOrders(authorization.data,undefined,readBetriebsruheInTransaction))
         : Promise.resolve([]),
       readQuotes
         ? import("@/modules/quotes/server-public").then(({ listOpenQuotesCommand }) => listOpenQuotesCommand({

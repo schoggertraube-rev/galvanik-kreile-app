@@ -170,8 +170,6 @@ export const orders = pgTable("orders", {
   currentStationId: varchar("current_station_id", { length: 100 }),
   version: integer("version").notNull().default(1),
   status: varchar("status", { length: 50 }).notNull().default("in_progress"),
-  risk: varchar("risk", { length: 50 }).default("green"),
-  priorityComputed: varchar("priority_computed", { length: 50 }).default("green"),
   inquiryId: text("inquiry_id"), // FK to inquiries for attribution
   parts: jsonb("parts").$type<Record<string, unknown>[]>(), // Legacy / MVP fallback
   statusText: text("status_text"),
@@ -184,7 +182,6 @@ export const orders = pgTable("orders", {
   intakeDate: timestamp("intake_date").defaultNow(),
   priority: text("priority").default("normal"),
   dueDate: timestamp("due_date"),
-  promisedDueDate: timestamp("promised_due_date", { withTimezone: true }),
   intakeTermStatus: text("intake_term_status"),
   intakeSource: text("intake_source"),
   handoverMode: text("handover_mode"),

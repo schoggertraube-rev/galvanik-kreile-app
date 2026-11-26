@@ -5,7 +5,7 @@ import {maskOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
 import {maskTodayOrderCard} from '@/lib/server/orderCardRead';
 import {readTodayOrderSources,type TodayOrderReadPorts} from '@/lib/server/todayOrderRead';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
-import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction, readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
@@ -169,7 +169,7 @@ it('E-G1 first full real profile composes the same dashboard from qualified mode
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const modeled=await withSession(full,()=>readModelForCurrentSession());
  expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_MODEL_COMPOSITION_REQUIRED');
- const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt)));
+ const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,new Date(modeled.dashboard.calendar!.readStartedAt)));
  expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  expect(modeled.pending).toBe(false);expect(modeled.incomplete).toBe(false);
 });
@@ -218,7 +218,7 @@ it.each([...APP_ROLES.map(role=>'role-'+role),...APP_ROLES.map(role=>'role-grant
   }
   const modeled=await readModelForCurrentSession();
   expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_G1_MODEL_REQUIRED');
-  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt));
+  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,new Date(modeled.dashboard.calendar!.readStartedAt));
   expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  });
 });
@@ -229,7 +229,7 @@ it('composes one captured real source snapshot without SQL, preserves it after a
  const now=new Date();
  const {auth,sources}=await withSession(full,async()=>{
   const resolved=await resolveAuthorization();if(!resolved.ok)throw Error('TEST_ACTUAL_COMPOSITION_AUTH');
-  return {auth:resolved.data,sources:await collectTodaySources(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,now)};
+  return {auth:resolved.data,sources:await collectTodaySources(resolved.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,now)};
  });
  const responsibilities=sources.responsibilitySource.code==='OK'?[...sources.responsibilitySource.data]:null;
  const compose=()=>withPageReadBudget(async()=>{
@@ -241,14 +241,14 @@ it('composes one captured real source snapshot without SQL, preserves it after a
  const before=await compose();
  const oldVersion=before.orderActions?.rows.find(row=>row.orderId===order.orderId)?.version;
  expect(oldVersion).toBe(order.version);
- const current=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction,now));
+ const current=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,now));
  expect(current).toEqual(before);
  const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-21',reason:'TEST captured source remains unchanged',clientEventId:randomUUID()};
  const changed=await withSession(full,()=>changeOrderPromisedDueDateAction(command));
  expect(changed.code).toBe('OK');
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(command))))).toEqual({...changed,replayed:true});
  expect(await compose()).toEqual(before);
- const after=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction,now));
+ const after=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,now));
  expect(after.orderActions?.rows.find(row=>row.orderId===order.orderId)?.version).toBeGreaterThan(order.version);
  if(sources.responsibilitySource.code==='OK')expect([...sources.responsibilitySource.data]).toEqual(responsibilities);
  // Explicit missing-DTO boundary, not a claimed SQL/provider failure.
@@ -303,7 +303,7 @@ it('actual GET keeps the explicit live escape independent of model reads and pro
    expect(result.model.modelRead).toMatchObject({source:'live',pending:false});
    expect(result.model.dashboard.orderActions.rows.length).toBeGreaterThan(0);
    const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_LIVE_EQUALITY_AUTH');
-   const original=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(result.model.dashboard.calendar.readStartedAt)));
+   const original=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,new Date(result.model.dashboard.calendar.readStartedAt)));
    expect(JSON.stringify(result.model.dashboard)).toBe(JSON.stringify(original));
    const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
    expect(phases).toContain('today.orders');expect(phases).not.toContain('today.model.read');expect(phases).not.toContain('today.refresh');

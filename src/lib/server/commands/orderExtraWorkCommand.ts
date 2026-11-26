@@ -2,13 +2,17 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
+import { canViewOrderCard } from "@/lib/server/orderCardRead";
+import { leseMehrarbeitsfreigabe, ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { ORDER_CONTENT_COPY } from "@/ui/ordersCopy";
+import { readOrderInvoiceNumberInTransaction, readOrderScrapInvoiceNumberInTransaction } from "./immutableInvoiceCommand";
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {isOfflineOriginal,normalizeOfflineOriginal,offlineOccurrenceTime,type OfflineOriginal} from '@/lib/domain/offlineOriginal';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 const EVENT_TYPE = "ORDER_ITEM_EXTRA_WORK_CHANGED_V1";
+const APPROVAL_EVENT_TYPE = "ORDER_EXTRA_WORK_APPROVED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -50,6 +54,102 @@ export type ChangeOrderItemExtraWorkResult =
   | { code: "CONFLICT"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
+
+export type RecordPhoneExtraWorkApprovalInput = Omit<
+  NonNullable<ReturnType<typeof leseMehrarbeitsfreigabe>>, "channel"
+> & {
+  orderId: string;
+  clientEventId: string;
+};
+
+export type RecordPhoneExtraWorkApprovalResult =
+  | { code: "OK"; eventId: string; replayed: boolean }
+  | { code: "INVOICE_ISSUED"; invoiceNumber: string }
+  | { code: "VALIDATION_ERROR" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "UNAVAILABLE" };
+
+export async function recordPhoneExtraWorkApproval(input: unknown): Promise<RecordPhoneExtraWorkApprovalResult> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" };
+  const { orderId, clientEventId } = input as Record<string, unknown>;
+  const approval = leseMehrarbeitsfreigabe({ ...input, channel: "telefon" });
+  if (!approval || typeof clientEventId !== "string" || !UUID_PATTERN.test(clientEventId)
+    || typeof orderId !== "string" || orderId !== orderId.trim() || !orderId || orderId.length > 128) {
+    return { code: "VALIDATION_ERROR" };
+  }
+  const payload = {
+    ...approval,
+    positions: approval.positions.map(({ lineId, lineVersion }) => ({ lineId, lineVersion }))
+      .sort((links, rechts) => links.lineId.localeCompare(rechts.lineId)),
+  };
+  try {
+    const authorization = await resolveAuthorization();
+    if (!authorization.ok) {
+      return { code: authorization.reason === "AUTHORIZATION_UNAVAILABLE" ? "UNAVAILABLE" : "UNAUTHENTICATED" };
+    }
+    const auth = authorization.data;
+    if (!canViewOrderCard(auth) || auth.packageSwitches?.p3_werkstatt !== true) {
+      return { code: "FORBIDDEN" };
+    }
+
+    return await withPrivilegedTenantTransaction(auth, async tx => {
+      await tx.execute(sql`
+        SELECT pg_advisory_xact_lock(hashtextextended('f1:client-event:' || ${auth.tenantId} || ':' || ${clientEventId}, 0))
+      `);
+      const events = await tx.execute<{
+        id: string; order_id: string; user_id: string; event_type: string; status: string; payload: unknown;
+      }>(sql`
+        SELECT id, order_id, user_id, event_type, status, payload FROM public.events
+        WHERE tenant_id = ${auth.tenantId} AND client_event_id = ${clientEventId}::uuid
+        LIMIT 2
+      `);
+      if (events.length) {
+        const [event] = events;
+        if (events.length === 1 && event.order_id === orderId && event.user_id === auth.userId
+          && event.event_type === APPROVAL_EVENT_TYPE && event.status === "success"
+          && canonicalJson(event.payload) === canonicalJson(payload)) {
+          return { code: "OK", eventId: event.id, replayed: true };
+        }
+        return { code: "CONFLICT" };
+      }
+
+      const [order] = await tx.execute<{ version: number; station: string }>(sql`
+        SELECT version, station FROM public.orders
+        WHERE tenant_id = ${auth.tenantId} AND id = ${orderId}
+        FOR UPDATE
+      `);
+      if (!order) return { code: "NOT_FOUND" };
+      const invoiceNumber = await readOrderScrapInvoiceNumberInTransaction(tx, auth.tenantId, orderId);
+      if (invoiceNumber) return { code: "INVOICE_ISSUED", invoiceNumber };
+
+      const positions = await tx.execute<{ line_id: string; line_version: number; integrity_ok: boolean }>(sql`
+        SELECT line_id::text, line_version, integrity_ok FROM private.v_order_extra_work_live_v1
+        WHERE tenant_id = ${auth.tenantId} AND order_id = ${orderId}
+          AND line_id IN (${sql.join(payload.positions.map(position => sql`${position.lineId}::uuid`), sql`, `)})
+      `);
+      const versions = new Map(positions.filter(position => position.integrity_ok)
+        .map(position => [position.line_id, position.line_version]));
+      if (positions.length !== payload.positions.length
+        || payload.positions.some(position => versions.get(position.lineId) !== position.lineVersion)) {
+        return { code: "CONFLICT" };
+      }
+
+      const [written] = await tx.execute<{ id: string }>(sql`
+        INSERT INTO public.events (
+          id, tenant_id, order_id, event_type, description, payload, status, user_id, station, created_at,
+          client_event_id, event_schema_version, correlation_id, aggregate_version
+        ) VALUES (
+          gen_random_uuid()::text, ${auth.tenantId}, ${orderId}, ${APPROVAL_EVENT_TYPE}, '',
+          ${JSON.stringify(payload)}::jsonb, 'success', ${auth.userId}::uuid, ${order.station},
+          clock_timestamp() AT TIME ZONE 'UTC', ${clientEventId}::uuid, ${EVENT_SCHEMA_VERSION},
+          gen_random_uuid(), ${order.version}
+        ) RETURNING id
+      `);
+      if (!written) throw Error("ORDER_EXTRA_WORK_APPROVAL_WRITE_FAILED");
+      return { code: "OK", eventId: written.id, replayed: false };
+    });
+  } catch {
+    return { code: "UNAVAILABLE" };
+  }
+}
 
 type LockedOrder = {
   id: string;
@@ -282,6 +382,12 @@ export async function changeOrderItemExtraWork(
       }
       if (order.version !== input.expectedOrderVersion) {
         return { code: "CONFLICT", message: "Auftrag wurde bereits geändert." };
+      }
+      const invoiceNumber = await readOrderInvoiceNumberInTransaction(
+        tx, authorization.data.tenantId, order.id, "issued",
+      );
+      if (invoiceNumber) {
+        return { code: "CONFLICT", message: ORDER_CONTENT_COPY.invoiceAlreadyIssued(invoiceNumber) };
       }
       if (
         order.station !== ORDER_LIFECYCLE_STATUS.GALVANIK

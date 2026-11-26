@@ -235,6 +235,19 @@ export function canReadComplaintOrderChoices(auth:Parameters<typeof hasAuthoriza
 export function canTransportInvoiceDocument(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'preise');}
 export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'eingang')&&hasAuthorizationArea(auth,'kunden');}
 
+const WORK_TIME_BACKDATE_BY_ROLE: Readonly<Record<AppRole, boolean>> = {
+  developer: false,
+  admin: true,
+  meister: false,
+  buero: true,
+  werkstatt: false,
+  readonly: false,
+};
+
+export function canBackdateWorkTime(role: AppRole): boolean {
+  return WORK_TIME_BACKDATE_BY_ROLE[role];
+}
+
 /** PL17.11 13:01: financial task recipients do not grant their contents to another area. */
 export function canReadTaskArea(auth:Parameters<typeof hasAuthorizationArea>[0],area:AccessArea|null){
  return area!=='preise'&&area!=='zahlungen'&&area!=='buchhaltung'&&area!=='lager.stamm'||hasAuthorizationArea(auth,area);

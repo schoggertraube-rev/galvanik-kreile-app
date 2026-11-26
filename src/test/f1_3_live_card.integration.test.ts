@@ -1,3 +1,4 @@
+import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
@@ -255,13 +256,13 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
 
   it("loads the live customer summary with Ware-im-Haus and rejects foreign tenant", async () => {
     const { readCustomerSummary } = await import("@/lib/server/customerSummaryRead");
-    const summary = await readCustomerSummary(adminAuthorization, { customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate());
+    const summary = await readCustomerSummary(adminAuthorization, { customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate(),readBetriebsruheInTransaction);
     expect(summary.code).toBe("OK");
     if (summary.code !== "OK") throw new Error("customer summary failed");
     expect(summary.data).toMatchObject({ id: customerId, wareImHaus: true, wareImHausCount: 1, orderCount: 1 });
     expect(summary.data.orders).toContainEqual(expect.objectContaining({ id: orderId, status: "galvanik" }));
-    await expect(readCustomerSummary(foreignAuthorization, { customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate())).resolves.toMatchObject({ code: "NOT_FOUND" });
-    await expect(readCustomerSummary(emptyAuthorization, { customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate())).resolves.toMatchObject({ code: "NOT_FOUND" });
+    await expect(readCustomerSummary(foreignAuthorization, { customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate(),readBetriebsruheInTransaction)).resolves.toMatchObject({ code: "NOT_FOUND" });
+    await expect(readCustomerSummary(emptyAuthorization, { customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate(),readBetriebsruheInTransaction)).resolves.toMatchObject({ code: "NOT_FOUND" });
   });
 
   it("assigns one shared order task and rejects foreign-tenant readback", async () => {

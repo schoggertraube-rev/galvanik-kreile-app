@@ -211,7 +211,7 @@ export async function changeOrderPromisedDueDate(
         replayed: boolean;
       }>(sql`
         SELECT result_code, result_version, replayed
-        FROM private.update_order_promised_due_date_v1(
+        FROM private.update_order_delivery_date_v1(
           ${authorization.data.tenantId}, ${authorization.data.userId}::uuid,
           ${input.clientEventId}::uuid, ${input.orderId}, ${input.dueDate}::date, ${reason}
         )

@@ -12,7 +12,7 @@ import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/auth
 import {readLiveOrderCard,readTodayOrderCards} from '@/lib/server/orderCardRead';
 import {readOrderEvidenceBatch} from '@/lib/server/evidenceRead';
 import {getOperationalOrders} from '@/lib/server/operationalOrders';
-import {readTodayReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction, readTodayReadSettings} from '@/modules/fundament/server-public';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {refreshTodayModel,rebuildTodayModel,type ProjectorAuthorization} from '@/lib/server/todayProjection';
 import {listeTodayMandanten} from '@/lib/server/todayProjectionSchedule';
@@ -35,7 +35,7 @@ let orderId:string;
 async function auth(){const result=await withSession(full,()=>resolveAuthorization());if(!result.ok)throw Error('TEST_REAL_AUTH_REQUIRED');return result.data;}
 const ports:TodayProjectionPorts={
  readSettings:readTodayReadSettings,
- listOrderIds:async()=>{const actor=await auth();return (await getOperationalOrders(actor,{purpose:'today'})).map(row=>row.id);},
+ listOrderIds:async()=>{const actor=await auth();return (await getOperationalOrders(actor,{purpose:'today'}, readBetriebsruheInTransaction)).map(row=>row.id);},
  readSources:async(capability,keys)=>{
   expect(capability.tenantId).toBe(tenant);expect(capability).not.toHaveProperty('userId');
   const actor=await auth(),results=new Map<string,TodayProjectionResult>();
@@ -44,7 +44,7 @@ const ports:TodayProjectionPorts={
     const source=await readLiveOrderCard(actor,{orderId:key.sourceId});
     if(source.code==='OK')results.set(todaySourceKey(key),{code:'OK',payload:{card:source.data},sourceVersion:source.data.version,listed:true});
     else results.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_REAL_CARD_SOURCE_INCOMPLETE'});
-   }else if(key.kind==='orders')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(actor,{purpose:'today'})});
+   }else if(key.kind==='orders')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(actor,{purpose:'today'}, readBetriebsruheInTransaction)});
    else results.set(todaySourceKey(key),{code:'SOURCE_INCOMPLETE',errorCode:'TEST_PORT_NOT_COMPOSED'});
   }
   return results;
@@ -152,7 +152,7 @@ it('PL11:36 locks the tenant before source keys when rebuild and a real command 
     EXISTS(SELECT 1 FROM pg_locks held WHERE held.pid=activity.pid AND held.locktype='tuple' AND held.granted AND held.relation='private.today_tenant_v1'::regclass) AS "waitingOnTenant"
     FROM pg_stat_activity activity
     WHERE wait_event_type='Lock' AND pid<>pg_backend_pid() AND
-     CASE WHEN ${kind}='writer' THEN query LIKE '%FROM private.update_order_promised_due_date_v1%'
+     CASE WHEN ${kind}='writer' THEN query LIKE '%FROM private.update_order_delivery_date_v1%'
       ELSE query LIKE 'UPDATE private.today_source_v1 source%' OR query LIKE 'SELECT 1 FROM private.today_tenant_v1%' OR query LIKE 'SELECT source.kind,%' END`;
    if(rows.length===1)return rows[0] as {pid:number;blockers:number[];waitingOnTenant:boolean};
    await new Promise(resolve=>setTimeout(resolve,10));
@@ -333,13 +333,13 @@ it('feeds the identical Today card/list kernels with the real actor-free capabil
  let actualCapability:ProjectorAuthorization|undefined;
  const readOnly:TodayProjectionPorts={
   readSettings:readTodayReadSettings,
-  listOrderIds:async capability=>(await getOperationalOrders(capability,{purpose:'today'})).map(row=>row.id),
+  listOrderIds:async capability=>(await getOperationalOrders(capability,{purpose:'today'}, readBetriebsruheInTransaction)).map(row=>row.id),
   readSources:async(capability,keys)=>{
    actualCapability=capability;
    const cards=await readTodayOrderCards(capability,keys.filter(key=>key.kind==='order').map(key=>key.sourceId));
    const results=new Map<string,TodayProjectionResult>();
    for(const key of keys){
-    if(key.kind==='orders')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(capability,{purpose:'today'})});
+    if(key.kind==='orders')results.set(todaySourceKey(key),{code:'OK',payload:await getOperationalOrders(capability,{purpose:'today'}, readBetriebsruheInTransaction)});
     else if(key.kind==='order'){
      const card=cards.get(key.sourceId);
      if(card?.code==='OK')results.set(todaySourceKey(key),{code:'OK',payload:{card:card.data},sourceVersion:card.data.version,listed:true});
@@ -427,7 +427,7 @@ it('does not publish the old active-role union as fresh when the tenant epoch ch
     // Explicit isolated source race, after the real profile query and before
     // pending(). No actor, role, card or permission result is fabricated.
     await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${tenant}`;
-    return (await getOperationalOrders(capability,{purpose:'today'})).map(row=>row.id);
+    return (await getOperationalOrders(capability,{purpose:'today'}, readBetriebsruheInTransaction)).map(row=>row.id);
    },
    readSources:async(capability,keys)=>{
     sourceReads++;

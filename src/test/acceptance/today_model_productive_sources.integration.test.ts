@@ -27,7 +27,7 @@ import {NextRequest} from 'next/server';
 import {proxy} from '@/proxy';
 import {pruefeTaktZugriff} from '@/modules/takt/server-public';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
-import {readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction, readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundament/server-public';
 
 
 
@@ -42,7 +42,7 @@ it('rebuilds all eight real list sources and both real order sources without any
  expect(rows).toHaveLength(10);
  for(const row of rows)expect(row,`${row.kind}:${row.source_id}`).toMatchObject({status:'OK',fresh:true});
  const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_REAL_AUTH_REQUIRED');
- const orders=await getOperationalOrders(resolved.data,{purpose:'today'});
+ const orders=await getOperationalOrders(resolved.data,{purpose:'today'}, readBetriebsruheInTransaction);
  expect(rows.find(row=>row.kind==='orders')?.payload).toEqual(JSON.parse(JSON.stringify(orders)));
  for(const order of [pickup,shipping]){
   const live=await readLiveOrderCard(resolved.data,{orderId:order.orderId});if(live.code!=='OK')throw Error('TEST_LIVE_CARD_REQUIRED');
@@ -142,13 +142,13 @@ it('keeps a TEST-only order outside canonical Today membership without a page-tr
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(input))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_MEMBERSHIP_AUTH');
- const listed=await getOperationalOrders(resolved.data,{purpose:'today'});
+ const listed=await getOperationalOrders(resolved.data,{purpose:'today'}, readBetriebsruheInTransaction);
  expect(listed.some(row=>row.id===order.orderId)).toBe(false);
  expect((await refreshTodayModel(tenant)).code).toBe('OK');
  expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);
  const output=vi.spyOn(console,'info');
  try{
-  await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction),true);
+  await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction),true);
   const records=output.mock.calls.filter(call=>call[0]==='[TODAY_MODEL_SHADOW]').map(call=>JSON.parse(String(call[1])));
   expect(records).toEqual([]);
   expect(await sql`SELECT status,listed,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${order.orderId}`).toEqual([{status:'GONE',listed:false,payload:null}]);

@@ -1,6 +1,7 @@
 // @vitest-environment node
 // A38a A10: actual issue/payment/auth/DB readers. Only the calendar read day is
 // controlled; immutable originals and real issuer/auth/session time never change.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {randomUUID} from 'node:crypto';
 import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -34,7 +35,7 @@ it('K1 includes the real native collection original in Today reminders and both 
  const source=await historicalCollection([1900,1900,1900]);
  const [clock]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+agreement.ziel_tage+1)::text AS today FROM public.customer_agreements agreement WHERE agreement.tenant_id=${tenant} AND agreement.id=${source.agreementId}::uuid`;
  const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_K1_AUTH');
- const read=()=>withSession(full,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(clock.today+'T12:00:00Z')));
+ const read=()=>withSession(full,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,new Date(clock.today+'T12:00:00Z')));
  const before=await read();expect(before.invoiceMoney?.code).toBe('OK');
  const issued=await withSession(full,()=>issueCollectionInvoiceAction({collectionId:source.collectionId,expectedVersion:1,clientEventId:randomUUID()}));
  expect(issued.code).toBe('OK');if(issued.code!=='OK')throw Error('TEST_K1_COLLECTION_ISSUE:'+issued.code);
@@ -68,7 +69,7 @@ it('A38a A10 classifies yesterday-open/today-open/yesterday-paid identically in 
  const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_S38A_OVERDUE_AUTH');
  const read=()=>withSession(full,async()=>{
   const list=await readInvoiceTruth(auth.data,{customerId},readInvoiceVat,clock.today);
-  const today=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(clock.today+'T12:00:00Z'));
+  const today=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,new Date(clock.today+'T12:00:00Z'));
   const sum=await withPrivilegedTenantTransaction(auth.data,tx=>readCustomerKennzahlen(tx,auth.data,customerId,clock.today));
   return {list,today,sum};
  });

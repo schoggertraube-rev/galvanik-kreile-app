@@ -2,14 +2,15 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import { orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
-import { evaluateOrderPriority } from "@/lib/priority";
+import { berlinCalendarDay, leseBetriebsruhetage } from "@/lib/domain/workingDays";
+import { zeigeFertigtermin } from "@/modules/orders/public";
 import type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type {
   OrderStationCorrectionReceipt,
   OrderStationTransitionReceipt,
 } from "@/lib/server/commands/orderStationCommand";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 type Station = "wareneingang" | "angenommen" | "galvanik";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -28,10 +29,10 @@ type QueueRow = {
   current_station: string | null;
   current_station_id: string | null;
   status: string;
-  risk: string | null;
   intake_date: Date | string | null;
   due_date: Date | string | null;
   due_date_text: string | null;
+  handover_mode: "pickup" | "shipping" | null;
   created_at: Date | string | null;
   server_changed_at?: Date | string | null;
   tenant_integrity_ok: boolean;
@@ -169,7 +170,36 @@ function parseParts(value: unknown, row: QueueRow): OperationalOrderItem[] {
   });
 }
 
-function mapOperationalQueueRow(row: QueueRow, tenantId: string): OperationalOrder {
+type TerminAnzeige = (row: QueueRow, dueDate: string) => Pick<OperationalOrder, "statusText" | "risk" | "dueLabel" | "dueValue">;
+
+export type TerminEinstellungenLeser = (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
+  betriebsruhe: unknown;
+  versandpufferArbeitstage: number;
+  knappAbArbeitstagen: number | null;
+}>;
+
+export async function leseFertigterminKalender(
+  tx: PrivilegedTenantTransaction, tenantId: string, liesEinstellungen: TerminEinstellungenLeser,
+) {
+  const einstellungen = await liesEinstellungen(tx, tenantId);
+  return { ...einstellungen, betriebsruhe: leseBetriebsruhetage(einstellungen.betriebsruhe) };
+}
+
+async function leseTerminAnzeige(
+  tx: PrivilegedTenantTransaction, tenantId: string, rows: QueueRow[], liesEinstellungen: TerminEinstellungenLeser,
+): Promise<TerminAnzeige> {
+  const heute = berlinCalendarDay();
+  const hatLiefertermin = rows.some(row =>
+    row.status !== "blocked" && row.handover_mode && parseDateOnlyText(row.due_date_text),
+  );
+  const kalender = hatLiefertermin ? await leseFertigterminKalender(tx, tenantId, liesEinstellungen) : null;
+  return (row, dueDate) => zeigeFertigtermin({
+    dueDate: dueDate.slice(0, 10) || null,
+    handoverMode: row.handover_mode,
+  }, kalender, heute, row.status === "blocked");
+}
+
+function mapOperationalQueueRow(row: QueueRow, tenantId: string, zeigeTermin: TerminAnzeige): OperationalOrder {
   const stationValues = [row.station, row.current_station, row.current_station_id]
     .filter((value): value is string => typeof value === "string");
 
@@ -195,19 +225,14 @@ function mapOperationalQueueRow(row: QueueRow, tenantId: string): OperationalOrd
     !isNullableNonBlankString(row.current_station_id) ||
     stationValues.some((value) => value !== stationValues[0]) ||
     typeof row.status !== "string" ||
-    row.status.length === 0 ||
-    !isNullableString(row.risk)
+    row.status.length === 0
   ) {
     throw new Error("ORDER_READMODEL_INVALID");
   }
 
   const parts = parseParts(row.parts, row);
   const dueDate = parseDateOnlyText(row.due_date_text);
-  const priority = evaluateOrderPriority({
-    dueDate,
-    risk: row.risk || undefined,
-    isBlocked: row.status === "blocked" || row.risk === "blocked",
-  });
+  const priority = zeigeTermin(row, dueDate);
   const currentStationId = row.station;
 
   return {
@@ -236,8 +261,8 @@ function mapOperationalQueueRow(row: QueueRow, tenantId: string): OperationalOrd
   };
 }
 
-function mapOperationalQueueRows(rows: QueueRow[], tenantId: string): OperationalOrder[] {
-  return rows.map((row) => mapOperationalQueueRow(row, tenantId));
+function mapOperationalQueueRows(rows: QueueRow[], tenantId: string, zeigeTermin: TerminAnzeige): OperationalOrder[] {
+  return rows.map((row) => mapOperationalQueueRow(row, tenantId, zeigeTermin));
 }
 
 function parseSafeCount(value: number | string): number {
@@ -251,6 +276,7 @@ function parseSafeCount(value: number | string): number {
 /** Fresh per invocation, tenant-bound full operational read port. */
 export async function readTenantOperationalOrders(
   authorization: Pick<AuthorizationSnapshot, "tenantId">,
+  liesEinstellungen: TerminEinstellungenLeser,
   projection?:{purpose:'today'},
 ): Promise<OperationalOrder[]> {
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -259,7 +285,7 @@ export async function readTenantOperationalOrders(
     // those correlated physical/financial proofs for every displayed row.
     const rows = await tx.execute<QueueRow>(sql`
       SELECT ${projection?.purpose==='today'?sql`queue.id,queue.tenant_id,queue.version,queue.order_number,queue.customer_id,queue.customer_name,
-        queue.title,queue.task,queue.station,queue.current_station,queue.current_station_id,queue.status,queue.risk,
+        queue.title,queue.task,queue.station,queue.current_station,queue.current_station_id,queue.status,queue.handover_mode,
         queue.intake_date,queue.due_date,queue.created_at,queue.tenant_integrity_ok,queue.parts`:sql`queue.*,
         (SELECT max(event.created_at) FROM public.events event
          WHERE event.tenant_id = queue.tenant_id AND event.order_id = queue.id) AS server_changed_at`},
@@ -267,7 +293,8 @@ export async function readTenantOperationalOrders(
       FROM private.v_operational_station_queue_v1 queue
       ORDER BY created_at DESC,id
     `);
-    return mapOperationalQueueRows(rows, authorization.tenantId);
+    const zeigeTermin = await leseTerminAnzeige(tx, authorization.tenantId, rows, liesEinstellungen);
+    return mapOperationalQueueRows(rows, authorization.tenantId, zeigeTermin);
   });
 }
 
@@ -315,6 +342,7 @@ export async function readTenantOperationalOrderCount(
 export async function readTenantStationOrders(
   authorization: Pick<AuthorizationSnapshot, "tenantId">,
   station: Station,
+  liesEinstellungen: TerminEinstellungenLeser,
 ): Promise<OperationalOrder[]> {
   const { tenantId } = authorization;
   return withPrivilegedTenantTransaction({ tenantId }, async (tx) => {
@@ -335,7 +363,8 @@ export async function readTenantStationOrders(
       ORDER BY created_at DESC
     `);
 
-    return mapOperationalQueueRows(rows, tenantId);
+    const zeigeTermin = await leseTerminAnzeige(tx, tenantId, rows, liesEinstellungen);
+    return mapOperationalQueueRows(rows, tenantId, zeigeTermin);
   });
 }
 

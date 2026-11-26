@@ -1,5 +1,6 @@
 // @vitest-environment node
 // Real live dashboard and productive scheduled model on the own TEST DB.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -17,7 +18,7 @@ it('keeps live results while page reads leave the projector idle until a bounded
  const now=new Date();
  const live=async()=>{
   const resolved=await resolveAuthorization();if(!resolved.ok)throw Error('TEST_ACTUAL_SHADOW_AUTH_REQUIRED');
-  return readTodayDashboard(resolved.data,()=>readComplaintsForAuthorization(resolved.data),async()=>({code:'OK',tasks:await withPrivilegedTenantTransaction(resolved.data,tx=>readQuoteFollowupTasksForToday(tx,resolved.data))}),now);
+  return readTodayDashboard(resolved.data,()=>readComplaintsForAuthorization(resolved.data),async()=>({code:'OK',tasks:await withPrivilegedTenantTransaction(resolved.data,tx=>readQuoteFollowupTasksForToday(tx,resolved.data))}), readBetriebsruheInTransaction,now);
  };
  const output=vi.spyOn(console,'info');
  try{

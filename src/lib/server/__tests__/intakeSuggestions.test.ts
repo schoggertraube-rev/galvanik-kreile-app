@@ -47,14 +47,19 @@ describe("intake suggestions", () => {
   });
 
   it("calculates an achievable date and rates the customer wish", () => {
-    const result = calculateTermSuggestion({
+    const eingabe = {
       today: "2026-10-26",
       wishDate: "2026-10-30",
-      positions: [{ ...position, unitPriceCents: 80_000 }],
+      positions: [{ ...position, catalogServiceId: "TEST-Leistung", unitPriceCents: 80_000 }],
       catalogById: new Map(),
       dailyOutputEur: 800,
-      settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110},openOrders:[],priority:false,processingWeeks:1,
-    });
+      settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110,betriebsruhe:new Set()},openOrders:[],priority:false,processingWeeks:1,
+    } satisfies Parameters<typeof calculateTermSuggestion>[0];
+    expect(calculateTermSuggestion(eingabe)).toBeNull();
+    const result = calculateTermSuggestion({ ...eingabe, catalogById: new Map([["TEST-Leistung", {
+      id: "TEST-Leistung", name: "TEST Verzinken", surface: "verzinken", unit: "Stück",
+      net_price_cents: 80_000, standard_lead_time_working_days: 3,
+    }]]) });
 
     expect(result).toMatchObject({
       achievableDate: "2026-11-03",

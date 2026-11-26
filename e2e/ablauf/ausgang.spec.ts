@@ -1,3 +1,4 @@
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
@@ -11,7 +12,7 @@ it('S0 release readers and the actual writer use live payment facts instead of a
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const {resolveAuthorization}=await import('@/lib/server/authorization');
  const {readTenantOperationalOrders}=await import('@/lib/server/orderStationRead');
- const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S0_AUTH');return readTenantOperationalOrders(auth.data);});
+ const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S0_AUTH');return readTenantOperationalOrders(auth.data, readBetriebsruheInTransaction);});
  expect(await withSession(full,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'abholung',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  expect((await read()).find(row=>row.id===order.orderId)).toMatchObject({ausgabeFrei:false});
  expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:false}});

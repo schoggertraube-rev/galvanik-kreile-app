@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {it,expect,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -12,13 +13,13 @@ import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
 
 it('W-TAG reads the exact same three real versioned U2 order actions into U3 and hides them without order rights',async()=>{
- const empty=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_EMPTY_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const empty=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_EMPTY_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  expect(empty).toMatchObject({hauptaktion:null,hauptaktionsQuelle:null,challenges:{groups:[]},orderSchedule:{code:'OK',today:0,upcoming:0},invoiceMoney:{code:'OK',openCount:0,openCents:0},assignmentMetric:{code:'OK',count:0}});
  const customerId=await customerFixture('TEST S05 U2 U3');
  const orders:Awaited<ReturnType<typeof intakeOrderFixture>>[]=[];for(let index=0;index<3;index++)orders.push(await intakeOrderFixture('TEST S05 Naht '+index,customerId));
  const [dates]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+1)::text AS tomorrow,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+8)::text AS later`;
  for(const [index,dueDate] of [dates.today,dates.tomorrow,dates.later].entries())expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:orders[index].receipt.orderId,expectedVersion:1,dueDate,reason:'TEST S05 Kalendertag',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
- const read=(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const read=(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const day=await read(full);expect(day.orderSchedule).toMatchObject({code:'OK',today:1,upcoming:1});expect(day.orderActions).toMatchObject({code:'OK',missingOrderIds:[]});
  expect(day.orderActions?.rows).toHaveLength(3);
  // PL12.11.18:23: a due date alone does not override the same U2 colour.
@@ -41,7 +42,7 @@ it('W-TAG reads the exact same three real versioned U2 order actions into U3 and
 it('W-TAG uses an actual frozen pickup appointment instead of the old production date',async()=>{
  const order=await readyInvoiceOrder('TEST S05 Abholkalender');
  const [dates]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+1)::text AS tomorrow`;
- const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const firstInput={orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:dates.today,channel:'telefon' as const,clientEventId:randomUUID()};
  const first=await withSession(full,()=>setOrderPickupAppointmentAction(firstInput));expect(first).toMatchObject({code:'OK'});if(first.code!=='OK')throw Error('TEST_S05_APPOINTMENT');
  const initial=await read(),row=initial.orderActions?.rows.find(row=>row.orderId===order.orderId);

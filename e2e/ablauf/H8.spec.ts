@@ -32,7 +32,7 @@ it('H8 L5 a physically released order cannot be finished again, returned to Galv
  expect(released.code).toBe('OK');if(released.code!=='OK')throw Error('H8_TERMINAL_RELEASE:'+released.code);
  const {getLiveOrderCardAction,setOrderItemFinishedAction,freezeOrderAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:released.receipt.orderVersion}}});
- const before=await sql`SELECT station,version,promised_due_date::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const before=await sql`SELECT station,version,due_date::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
  const keys={part:randomUUID(),finish:randomUUID(),move:randomUUID(),invoice:randomUUID()};
  const {issueInvoiceAction}=await import('@/app/actions/invoices.actions');
  const results=[
@@ -42,7 +42,7 @@ it('H8 L5 a physically released order cannot be finished again, returned to Galv
   await withSession(full,()=>issueInvoiceAction({orderId:order.orderId,expectedVersion:released.receipt.orderVersion,clientEventId:keys.invoice})),
  ];
  for(const result of results)expect(result.code).not.toBe('OK');
- expect(await sql`SELECT station,version,promised_due_date::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT station,version,due_date::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=ANY(${sql.array(Object.values(keys))}::uuid[])`).toEqual([{n:0}]);
  expect(await sql`SELECT id::text FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{id:order.invoice.invoiceId}]);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:released.receipt.orderVersion}}});
@@ -51,10 +51,16 @@ it('H8 L5 a physically released order cannot be finished again, returned to Galv
 it('H8 active order still accepts a due date change with actor, readback and the same retry receipt',async()=>{
  const order=await readyInvoiceOrder('H8-aktiv');
  const {changeOrderPromisedDueDateAction,getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const liesAnnahmezusage=()=>sql<{ due: string|null }[]>`SELECT due_date::text AS due FROM private.order_intake_receipts
+   WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND geprueft IS TRUE AND intake_term_status='bestaetigt'`;
+ const urspruenglicheZusage=await liesAnnahmezusage();
+ expect(urspruenglicheZusage).toHaveLength(1);
+ expect(urspruenglicheZusage[0].due).toBe('2027-05-15');
  const input={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-05-26',reason:'TEST bestätigter Abholtermin vor Übergabe',clientEventId:randomUUID()};
  const changed=await withSession(full,()=>changeOrderPromisedDueDateAction(input));
  expect(changed.code).toBe('OK');if(changed.code!=='OK')throw Error('H8_ACTIVE_PROMISE:'+changed.code);
- expect(await sql`SELECT promised_due_date::date::text AS due,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{due:input.dueDate,version:changed.receipt.aggregateVersion}]);
+ expect(await sql`SELECT due_date::date::text AS due,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{due:input.dueDate,version:changed.receipt.aggregateVersion}]);
+ expect(await liesAnnahmezusage()).toEqual(urspruenglicheZusage);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'fertig',version:changed.receipt.aggregateVersion}}});
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:changed.receipt.eventId}});
  expect(await sql`SELECT user_id::text,notes FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:full.actorId,notes:input.reason}]);
@@ -85,10 +91,10 @@ it.each([['abholung','pickup'],['versand','shipping']] as const)('H8 %s: real re
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{id:order.orderId,station:'abgeholt'}}});
  expect(await withSession(full,()=>recordGoodsOutAction(structuredClone(outInput)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${outInput.clientEventId}::uuid`).toEqual([{n:1}]);
- const before=await sql`SELECT promised_due_date::text,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const before=await sql`SELECT due_date::text,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
  const dateKey=randomUUID();
  const changed=await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:order.orderId,expectedVersion:out.receipt.orderVersion,dueDate:'2027-05-25',reason:'TEST nach Abholung darf kein neuer Termin entstehen',clientEventId:dateKey}));
- const after=await sql`SELECT promised_due_date::text,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const after=await sql`SELECT due_date::text,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
  expect(changed,'L5: already released order must reject due date change; actual DB '+JSON.stringify(after)).toMatchObject({code:'CONFLICT',message:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'});
  expect(after).toEqual(before);
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${dateKey}::uuid`).toEqual([{n:0}]);
@@ -105,9 +111,9 @@ it('H8 a due date written before handover still replays when its retry arrives a
  const out=await withSession(full,()=>recordGoodsOutAction({orderId:order.orderId,mode:'abholung',expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID()}));
  expect(out.code).toBe('OK');if(out.code!=='OK')throw Error('H8_LATE_RETRY_OUT:'+out.code);
  expect(await withSession(full,()=>getLiveOrderCardAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{card:{station:'abgeholt',version:out.receipt.orderVersion}}});
- const before=await sql`SELECT promised_due_date::date::text AS due,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+ const before=await sql`SELECT due_date::date::text AS due,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true,receipt:{eventId:changed.receipt.eventId}});
- expect(await sql`SELECT promised_due_date::date::text AS due,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
+ expect(await sql`SELECT due_date::date::text AS due,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual(before);
  expect(before).toEqual([{due:input.dueDate,version:out.receipt.orderVersion}]);
  expect(await sql`SELECT user_id::text FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`).toEqual([{user_id:full.actorId}]);
 });

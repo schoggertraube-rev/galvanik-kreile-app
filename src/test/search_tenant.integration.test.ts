@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
@@ -167,7 +168,7 @@ describe("Path-1 P3 tenant search real database contract", () => {
     const { searchOrderIntakeCustomers } = await import("@/lib/server/orderIntakeRead");
     const { searchTenant } = await import("@/modules/suche/public");
     const foreign = await searchTenant(intake.receipt.orderNumber, {
-      readOrders: () => readTenantOperationalOrders({ tenantId: `foreign-${suffix}` }),
+      readOrders: () => readTenantOperationalOrders({ tenantId: `foreign-${suffix}` }, readBetriebsruheInTransaction),
       searchCustomers: async (query) => ({
         records: await searchOrderIntakeCustomers({ tenantId: `foreign-${suffix}` }, { query }),
         exhaustive: true,

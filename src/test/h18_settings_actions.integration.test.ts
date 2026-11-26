@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
@@ -419,15 +420,15 @@ describe("H18 settings Server Actions against the real replay database", () => {
       expect(card.data.card.dueAt?.slice(0, 10)).toBe("2026-12-15");
       expect(card.data.card.dueDateChanges[0]).toMatchObject({ changedTo: "2026-12-15", reason: "Kundenwunsch bestätigt" });
     }
-    const [row] = await sql<{ promised_due_date: string; version: number; event_count: number }[]>`
-      SELECT orders.promised_due_date::date::text AS promised_due_date, orders.version,
+    const [row] = await sql<{ due_date: string; version: number; event_count: number }[]>`
+      SELECT orders.due_date::date::text AS due_date, orders.version,
         (SELECT count(*)::integer FROM public.events events
          WHERE events.tenant_id = orders.tenant_id AND events.order_id = orders.id
            AND events.event_type = 'ORDER_PROMISED_DUE_DATE_CHANGED_V1'
            AND events.payload->>'promisedDueDate' = '2026-12-15') AS event_count
       FROM public.orders orders WHERE orders.id = ${intake.receipt.orderId}
     `;
-    expect(row).toEqual({ promised_due_date: "2026-12-15", version: 2, event_count: 1 });
+    expect(row).toEqual({ due_date: "2026-12-15", version: 2, event_count: 1 });
   }, 30_000);
 
   it("H18.7 keeps an order with a card read error in getOrdersDb and exposes its code", async () => {
@@ -509,7 +510,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       const authorization = await resolveAuthorization();
       if (!authorization.ok) throw new Error(`C1A_AUTH_FAILED:${authorization.reason}`);
       const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
-      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();},async()=>{const{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return getQuoteFollowupsForTodayAction();});
+      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();},async()=>{const{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return getQuoteFollowupsForTodayAction();}, readBetriebsruheInTransaction);
     });
     expect(dashboard.items.some((item) => item.orderId === intake.receipt.orderId)).toBe(false);
 
@@ -823,7 +824,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       const authorization = await resolveAuthorization();
       if (!authorization.ok) throw new Error(`H18_TODAY_PREFERENCES_AUTH_FAILED:${authorization.reason}`);
       const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
-      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();},async()=>{const{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return getQuoteFollowupsForTodayAction();});
+      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();},async()=>{const{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return getQuoteFollowupsForTodayAction();}, readBetriebsruheInTransaction);
     });
     expect(dashboard.layout).toEqual(layout);
   }, 30_000);
@@ -865,7 +866,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       const authorization = await resolveAuthorization();
       if (!authorization.ok) throw new Error(`H18_TODAY_REMINDER_AUTH_FAILED:${authorization.reason}`);
       const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
-      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();},async()=>{const{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return getQuoteFollowupsForTodayAction();});
+      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();},async()=>{const{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return getQuoteFollowupsForTodayAction();}, readBetriebsruheInTransaction);
     });
     const before = await readDashboard();
     const item = before.items.find((entry) => entry.orderId === intake.receipt.orderId);

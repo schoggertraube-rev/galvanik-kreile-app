@@ -242,7 +242,7 @@ describe("W4 operational order read actions", () => {
         expect.objectContaining({ kind: "ORDER", id: "order-1", reference: "A-2026-0001", title: "Auftrag A" }),
       ],
     });
-    expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization);
+    expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization, undefined, expect.any(Function));
     expect(ports.withTransaction).toHaveBeenCalledWith({
       tenantId: authorization.tenantId,
       userId: authorization.userId,
@@ -318,7 +318,7 @@ describe("W4 operational order read actions", () => {
       await expect(getOrdersDb()).resolves.toEqual({ ok: true, data: [],serverReadAt:expect.any(String),cacheLoginScope:undefined });
 
       expect(ports.resolveAuthorization).toHaveBeenCalledOnce();
-      expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization);
+      expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization, undefined, expect.any(Function));
       expect(ports.resolveAuthorization.mock.invocationCallOrder[0]).toBeLessThan(
         ports.getOperationalOrders.mock.invocationCallOrder[0],
       );
@@ -393,9 +393,11 @@ describe("W4 operational order read actions", () => {
       ok: true,
       data: [],serverReadAt:expect.any(String),cacheLoginScope:undefined,
     });
-    expect(ports.getOperationalOrders).toHaveBeenCalledWith(snapshot());
+    expect(ports.getOperationalOrders).toHaveBeenCalledWith(snapshot(), undefined, expect.any(Function));
     expect(ports.getOperationalOrders).not.toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-b" }),
+      undefined,
+      expect.any(Function),
     );
   });
 

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getFixedStationOrdersAction } from "@/app/actions/orders.actions";
 
 const resolveAuthorizationSpy = vi.hoisted(() => vi.fn());
 const readTenantStationOrdersSpy = vi.hoisted(() => vi.fn());
@@ -11,6 +12,7 @@ const searchOrderIntakeCustomersSpy = vi.hoisted(() => vi.fn());
 const readOrderIntakeReceiptSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn() }));
+vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy,hasAuthorizationArea:(auth:{areas:readonly string[]},area:string)=>auth.areas.includes(area),getAuthorizationActionGrants:(auth:{areas:readonly string[]})=>({createCustomer:auth.areas.includes("eingang")}) }));
 vi.mock("@/lib/server/orderStationRead", () => ({
   readTenantStationOrders: readTenantStationOrdersSpy,
@@ -46,14 +48,20 @@ describe("W3 tenant station reads", () => {
     readOrderIntakeReceiptSpy.mockResolvedValue(null);
   });
 
+  it("rejects an unsupported station before reading any order data", async () => {
+    const unsupported = "versand" as Parameters<typeof getFixedStationOrdersAction>[0];
+    await expect(getFixedStationOrdersAction(unsupported)).resolves.toMatchObject({ ok: false, error: "NOT_AVAILABLE" });
+    expect(readTenantStationOrdersSpy).not.toHaveBeenCalled();
+  });
+
   it("allows readonly to read both fixed stations with the tenant-bound capability", async () => {
     const { getGalvanikOrdersAction, getWareneingangOrdersAction } = await import("../actions");
 
     await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
     await expect(getGalvanikOrdersAction()).resolves.toEqual({ ok: true, data: [] });
 
-    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, authorization.data, "angenommen");
-    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, authorization.data, "galvanik");
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, authorization.data, "angenommen", expect.any(Function));
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, authorization.data, "galvanik", expect.any(Function));
   });
 
   it("allows buero to read both fixed stations with the tenant-bound capability", async () => {
@@ -66,8 +74,8 @@ describe("W3 tenant station reads", () => {
 
     await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
     await expect(getGalvanikOrdersAction()).resolves.toEqual({ ok: true, data: [] });
-    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, bueroAuthorization.data, "angenommen");
-    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, bueroAuthorization.data, "galvanik");
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, bueroAuthorization.data, "angenommen", expect.any(Function));
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, bueroAuthorization.data, "galvanik", expect.any(Function));
   });
 
   it("authorizes intake customer and receipt reads by capability instead of role", async () => {
@@ -140,7 +148,7 @@ describe("W3 tenant station reads", () => {
     const { getWareneingangOrdersAction } = await import("../actions");
 
     await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
-    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(tenantB.data, "angenommen");
+    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(tenantB.data, "angenommen", expect.any(Function));
   });
 
   it("ignores an adversarial tenant argument and reads only the authorized tenant", async () => {
@@ -150,10 +158,11 @@ describe("W3 tenant station reads", () => {
     await expect(adversarialCall({ tenantId: "tenant-b" })).resolves.toEqual({ ok: true, data: [] });
 
     expect(readTenantStationOrdersSpy).toHaveBeenCalledTimes(1);
-    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(authorization.data, "angenommen");
+    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(authorization.data, "angenommen", expect.any(Function));
     expect(readTenantStationOrdersSpy).not.toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-b" }),
       "angenommen",
+      expect.any(Function),
     );
   });
 
@@ -191,13 +200,14 @@ describe("W3 tenant station reads", () => {
   it("source-locks authorization before read, all tenant predicates, no literal tenant, cache, or legacy reader", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
     const [actions, reader] = await Promise.all([
-      readFile(path.join(root, "app/warendurchlauf/actions.ts"), "utf8"),
+      readFile(path.join(root, "app/actions/orders.actions.ts"), "utf8"),
       readFile(path.join(root, "lib/server/orderStationRead.ts"), "utf8"),
     ]);
 
-    expect(actions.indexOf("resolveAuthorization")).toBeLessThan(actions.indexOf("readTenantStationOrders"));
+    const stationAction = actions.slice(actions.indexOf("export async function getFixedStationOrdersAction"));
+    expect(stationAction.indexOf("resolveAuthorization")).toBeLessThan(stationAction.indexOf("readTenantStationOrders"));
     expect(actions).toContain('permissions.includes("perm_view_leitstand")');
-    expect(actions).toContain("readTenantStationOrders(authorization.data, station)");
+    expect(actions).toContain("readTenantStationOrders(authorization.data, station, readBetriebsruheInTransaction)");
     expect(actions).not.toContain("getOperationalOrdersByStation");
     expect(actions).not.toContain("getOperationalOrdersReadyForStation");
     expect(reader).toContain('import "server-only";');
