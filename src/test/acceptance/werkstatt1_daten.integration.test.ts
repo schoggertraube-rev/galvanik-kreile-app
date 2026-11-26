@@ -400,19 +400,25 @@ test("Ein ungültiger Firmenkalender stoppt den Terminvorschlag mit dem Katalogt
   if (!firma) throw Error("TEST_WERKSTATT_EINSTELLUNGEN_FEHLEN");
   const setzeRuhezeiten = (zeiten: typeof firma.betriebsruhe) =>
     sql`UPDATE public.company_settings SET betriebsruhe = ${sql.json(zeiten)}::jsonb WHERE tenant_id = ${mandant}`;
+  const katalogId = randomUUID();
+  const leistung = "TEST Verzinken bei ungültiger Betriebsruhe";
   try {
+    await sql`INSERT INTO public.catalog_services (
+      id, tenant_id, name, surface, unit, net_price_cents, vat_rate_basis_points, standard_lead_time_working_days, active
+    ) VALUES (${katalogId}::uuid, ${mandant}, ${leistung}, 'verzinken', 'stueck', 1000, 1900, 3, true)`;
     await setzeRuhezeiten([{ von: "2026-11-26", bis: "2026-11-25" }]);
     const { getOrderIntakeSuggestionsAction } = await import("@/app/actions/eingang.actions");
     const ergebnis = await withSession(full, () => getOrderIntakeSuggestionsAction({
       customerId: null, kind: "ORDER", wishDate: null, handoverMode: "shipping",
       positions: [{
-        key: "test-teil", catalogServiceId: null, name: "TEST Teil",
+        key: "test-teil", catalogServiceId: katalogId, name: leistung,
         surfaceRequested: "verzinken", quantity: 1, unit: "Stück", unitPriceCents: null,
       }],
     }));
     expect(ergebnis).toEqual({ ok: false, error: "QUERY_ERROR", message: KALENDER_COPY.format });
   } finally {
     await setzeRuhezeiten(firma.betriebsruhe);
+    await sql`DELETE FROM public.catalog_services WHERE tenant_id = ${mandant} AND id = ${katalogId}::uuid`;
   }
 });
 
@@ -544,7 +550,7 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
   const { bookWorkTimeAction, getExtraWorkMasterDataAction, setExtraWorkHourlyRateAction } = await import("@/app/actions/orders.actions");
   const buchen = (anmeldung: typeof werkstatt, input: unknown) =>
     withSession(anmeldung, () => bookWorkTimeAction(input));
-  const buchenMitAbfragenlimit = (anmeldung: typeof werkstatt, input: unknown, maximum: number) =>
+  const bucheUndZaehleAbfragen = (anmeldung: typeof werkstatt, input: unknown, fachlicheAbfragen: number) =>
     withSession(anmeldung, async () => {
       const login = await resolveAuthorization();
       if (!login.ok) throw Error("TEST_ARBEITSZEIT_ANMELDUNG_FEHLT");
@@ -552,11 +558,13 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
       const treiber = db.$client.options;
       const vorher = treiber.debug;
       let transaktionen = 0;
+      let mandantSetzen = 0;
       let anweisungen = 0;
       treiber.debug = (verbindung, befehl, parameter, typen) => {
         if (typeof vorher === "function") vorher(verbindung, befehl, parameter, typen);
         const sqlBefehl = befehl.trimStart();
         if (/^begin\b/i.test(sqlBefehl)) transaktionen += 1;
+        else if (/^select\s+set_config\(\s*'app\.tenant_id'\s*,\s*\$1\s*,\s*true\s*\)/i.test(sqlBefehl)) mandantSetzen += 1;
         else if (!/^(commit|rollback)\b/i.test(sqlBefehl)) anweisungen += 1;
       };
       try {
@@ -565,8 +573,8 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
           auftrag: hatArbeitszeitAuftragInTransaction,
         });
         expect(transaktionen).toBe(1);
-        expect(anweisungen).toBeGreaterThan(0);
-        expect(anweisungen).toBeLessThanOrEqual(maximum);
+        expect(mandantSetzen).toBe(1);
+        expect(anweisungen).toBe(fachlicheAbfragen);
         return antwort;
       } finally {
         treiber.debug = vorher;
@@ -615,7 +623,7 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
     const rueckdatierung = { ...eingabe, tag: gestern, minuten: 30, clientEventId: randomUUID() };
     expect(await buchen(werkstatt, rueckdatierung)).toEqual({ code: "DATUM" });
     expect(await buchen(buero, rueckdatierung)).toMatchObject({ code: "GRUND" });
-    expect(await buchenMitAbfragenlimit(buero, { ...rueckdatierung, grund: "TEST Nachtrag am Folgetag" }, 7))
+    expect(await bucheUndZaehleAbfragen(buero, { ...rueckdatierung, grund: "TEST Nachtrag am Folgetag" }, 7))
       .toMatchObject({ code: "OK" });
     expect(await buchen(werkstatt, eingabe)).toEqual(original);
     expect(await sql`SELECT kostensatz_eur_pro_stunde::text AS satz, kostensatz_quelle,
@@ -682,9 +690,9 @@ test("Arbeitszeitkorrekturen bleiben im Journal und fließen in die Auftragssumm
       rateId: randomUUID(), expectedVersion: stammdaten.data.currentRate?.version ?? 0,
       hourlyRateCents: 7250, clientEventId: randomUUID(),
     }))).resolves.toMatchObject({ code: "OK" });
-    const mitStandardsatz = await buchenMitAbfragenlimit(ohneKostensatz, {
+    const mitStandardsatz = await bucheUndZaehleAbfragen(ohneKostensatz, {
       ...eingabe, minuten: 20, clientEventId: randomUUID(),
-    }, 9);
+    }, 8);
     if (mitStandardsatz.code !== "OK") throw Error("TEST_ARBEITSZEIT_STANDARDSATZ: " + mitStandardsatz.code);
     expect(await sql`SELECT kostensatz_eur_pro_stunde::text AS satz, kostensatz_quelle
       FROM public.arbeitszeit_buchung WHERE tenant_id = ${mandant} AND id = ${mitStandardsatz.id}::uuid`)
