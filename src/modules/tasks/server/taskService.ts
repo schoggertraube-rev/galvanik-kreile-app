@@ -157,6 +157,41 @@ export async function createMissingGoodsTask(tx:PrivilegedTenantTransaction,auth
  return (await persistTask(tx,auth,value,deps,false)).task.id;
 }
 
+/** Der Auftrags- oder Rechnungsbefehl übergibt den vollständigen Ausschuss aus seiner Transaktion. */
+export async function synchronizeFullScrapTask(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  input: { orderId: string; vollstaendig: boolean; titel: string },
+  deps: Dependencies & { readChargeScrap: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<boolean> },
+): Promise<string | null> {
+  if (!hasAuthorizationArea(auth, 'auftraege') && !hasAuthorizationArea(auth, 'preise')) {
+    reject('FORBIDDEN', LEGACY_ACTION_ACCESS_COPY.forbidden);
+  }
+  if (!input.vollstaendig || await deps.readChargeScrap(tx, auth.tenantId) !== false) return null;
+
+  const reference = { type: 'auftrag', id: input.orderId } as const;
+  const clientKey = eventKey(JSON.stringify([auth.tenantId, input.orderId]), 0, 'order-all-scrap');
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${clientKey},0))`);
+  const [prior] = await tx.execute<Pick<TaskRecord, 'id' | 'bezug_typ' | 'bezug_id'>>(sql`
+    SELECT id::text, bezug_typ, bezug_id FROM public.tasks
+    WHERE tenant_id = ${auth.tenantId} AND client_key = ${clientKey}::uuid`);
+  if (prior) {
+    if (prior.bezug_typ !== reference.type || prior.bezug_id !== reference.id) {
+      reject('CONFLICT', ORDER_HANDOVER_COPY.conflict);
+    }
+    return prior.id;
+  }
+
+  const [clock] = await tx.execute<{ today: string }>(sql`
+    SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD') AS today`);
+  const value: TaskSaveInput = {
+    clientKey, version: 0, kind: 'aufgabe', title: input.titel, dueDate: clock.today, time: null,
+    forLogin: null, forArea: 'auftraege', reference, note: null,
+  };
+  if (Object.keys(taskValidation(value)).length) throw Error('FULL_SCRAP_TASK_INPUT_INVALID');
+  return (await persistTask(tx, auth, value, deps, false)).task.id;
+}
+
 /** U252: the checked order/mail command creates a normal visible callback task. */
 export async function createOrderHandoverTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;taskId?:string;version?:number;kind?:'aufgabe';forLogin?:string;dueDate?:string},deps:Dependencies,appointmentSource?:{taskId:string;appointmentEventId:string},manualEventId?:string){
  if(!canChangeOrderHandover(auth,'login'))reject('FORBIDDEN',ORDER_HANDOVER_COPY.permission);
