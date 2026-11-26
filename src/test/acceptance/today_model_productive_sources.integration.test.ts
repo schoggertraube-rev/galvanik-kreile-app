@@ -19,7 +19,7 @@ import {readLiveOrderCard} from '@/lib/server/orderCardRead';
 import {changeOrderPromisedDueDateAction} from '@/app/actions/orders.actions';
 import {getComplaints} from '@/app/actions/complaints.actions';
 import {getQuoteFollowupsForTodayAction} from '@/app/actions/quotes.actions';
-import {readTodayDashboard} from '@/lib/server/todayDashboard';
+import {readTodayDashboard,todayDashboardListKinds} from '@/lib/server/todayDashboard';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
 import {GET as rebuildRoute} from '@/app/api/heute/neuaufbau/route';
 import {GET as taktRoute} from '@/app/api/takt/route';
@@ -40,6 +40,7 @@ it('rebuilds all eight real list sources and both real order sources without any
  expect(result).toMatchObject({code:'OK',built:10,stale:0});
  const rows=await sql`SELECT kind,source_id,status,payload,source_seq=built_seq AS fresh,source_version FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
  expect(rows).toHaveLength(10);
+ expect(rows.filter(row=>row.source_id==='*').map(row=>row.kind).sort()).toEqual([...todayDashboardListKinds].sort());
  expect([...new Set(rows.map(row=>row.kind))]).toEqual([
   'quelle:accounting.geld','quelle:complaints.liste','quelle:eingang.nachrichten',
   'quelle:fundament.firma','quelle:orders.auftrag','quelle:orders.liste',

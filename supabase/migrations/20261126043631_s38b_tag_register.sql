@@ -10,10 +10,12 @@ UPDATE private.today_source_v1 SET kind=CASE kind
   WHEN 'quotes' THEN 'quelle:quotes.liste'
   WHEN 'tasks' THEN 'quelle:tasks.aufgabe'
   WHEN 'company' THEN 'quelle:fundament.firma'
-END;
+  ELSE kind
+END
+WHERE kind NOT LIKE 'quelle:%';
 ALTER TABLE private.today_source_v1 ADD CONSTRAINT today_source_v1_kind_check CHECK (kind ~ '^quelle:[a-z]+\.[a-z]+$');
 
--- Ereignisse ohne ausdrückliche Zuordnung erhalten keine angenommene Reichweite.
+-- Unbekannte Ereignisse markieren den Mandanten für eine Aktualisierung.
 CREATE OR REPLACE FUNCTION private.today_event_scope_v1(event_type text)
 RETURNS text LANGUAGE sql IMMUTABLE CALLED ON NULL INPUT PARALLEL SAFE SET search_path=pg_catalog AS $scope$
  SELECT CASE
@@ -132,7 +134,7 @@ RETURNS text LANGUAGE sql IMMUTABLE CALLED ON NULL INPUT PARALLEL SAFE SET searc
    'OFFLINE_WORKSHOP_REJECTED_V1',
    'LAGER_STAMMBEFEHL_V1',
    'LAGER_ARTIKEL_AUFGABE_V1') THEN 'tenant'
- END
+  ELSE 'tenant' END
 $scope$;
 
 CREATE OR REPLACE FUNCTION private.today_mark_rows_v1(source_table text, changed jsonb)
@@ -265,7 +267,7 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION private.today_mark_rows_v1(text,jsonb) FROM PUBLIC,anon,authenticated;
 
-CREATE FUNCTION private.today_mark_supplier_invoice_v1() RETURNS trigger
+CREATE OR REPLACE FUNCTION private.today_mark_supplier_invoice_v1() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,private AS $body$
 DECLARE affected jsonb;
 BEGIN
@@ -280,6 +282,9 @@ BEGIN
  RETURN NULL;
 END $body$;
 REVOKE ALL ON FUNCTION private.today_mark_supplier_invoice_v1() FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS today_mark_insert_v1 ON public.supplier_invoice;
+DROP TRIGGER IF EXISTS today_mark_update_v1 ON public.supplier_invoice;
+DROP TRIGGER IF EXISTS today_mark_delete_v1 ON public.supplier_invoice;
 CREATE TRIGGER today_mark_insert_v1 AFTER INSERT ON public.supplier_invoice REFERENCING NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_supplier_invoice_v1();
 CREATE TRIGGER today_mark_update_v1 AFTER UPDATE ON public.supplier_invoice REFERENCING OLD TABLE AS today_old NEW TABLE AS today_new FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_supplier_invoice_v1();
 CREATE TRIGGER today_mark_delete_v1 AFTER DELETE ON public.supplier_invoice REFERENCING OLD TABLE AS today_old FOR EACH STATEMENT EXECUTE FUNCTION private.today_mark_supplier_invoice_v1();

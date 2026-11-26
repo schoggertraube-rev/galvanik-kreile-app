@@ -71,7 +71,7 @@ it('PL11:36 completes the actual login-seen writer and PIN-only update while the
  expect(await sql`SELECT kind,source_id,source_seq::text FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`).toEqual(sources);
 });
 
-it('explicitly classifies every production versioned constant without assuming a scope for unknown events',async()=>{
+it('explicitly classifies every production versioned constant and keeps unknown event types tenant-stale',async()=>{
  const [definition]=await sql`SELECT pg_get_functiondef('private.today_event_scope_v1(text)'::regprocedure) AS source`;
  const files=execFileSync('git',['ls-files','src'],{encoding:'utf8'}).trim().split('\n').filter(path=>/\.[cm]?[jt]sx?$/.test(path)&&!/(?:^|\/)(?:test|__tests__)\/|\.(?:test|spec)\.|v45\.generated/.test(path));
  const types=new Set<string>();
@@ -81,7 +81,7 @@ it('explicitly classifies every production versioned constant without assuming a
  const devTypes=['CUSTOMER_COMMERCIAL_UPDATED_V1','CUSTOMER_CREATED_V1','CUSTOMER_NOTE_CHANGED_V1','CUSTOMER_UPDATED_V1','EXTRA_WORK_RATE_SET_V1','INVOICE_CREATED_V1','ORDER_FROZEN_V1','ORDER_INTAKE_CREATED_V1','ORDER_INVOICE_PRICES_SET_V1','ORDER_ITEM_FINISHED_CHANGED_V1','ORDER_PICKED_UP_V1','ORDER_PROMISED_DUE_DATE_CHANGED_V1','ORDER_STATION_MOVED_V1','ORDER_TASK_ASSIGNED_V1','PAYMENT_CONFIRMED_V1','QUOTE_AWARDED_V1','QUOTE_CREATED_V1','USER_LAST_SEEN_RECORDED_V1'];
  for(const type of devTypes)types.add(type);
  for(const type of types)expect(definition.source,`missing explicit event scope: ${type}`).toContain("'"+type+"'");
- expect(await sql`SELECT private.today_event_scope_v1('TEST_UNKNOWN_FUTURE_V999') AS unknown_scope,private.today_event_scope_v1('USER_LAST_SEEN_RECORDED_V1') AS seen_scope,private.today_event_scope_v1(NULL) AS null_scope`).toEqual([{unknown_scope:null,seen_scope:'none',null_scope:null}]);
+ expect(await sql`SELECT private.today_event_scope_v1('TEST_UNKNOWN_FUTURE_V999') AS unknown_scope,private.today_event_scope_v1('USER_LAST_SEEN_RECORDED_V1') AS seen_scope,private.today_event_scope_v1(NULL) AS null_scope`).toEqual([{unknown_scope:'tenant',seen_scope:'none',null_scope:'tenant'}]);
 });
 
 

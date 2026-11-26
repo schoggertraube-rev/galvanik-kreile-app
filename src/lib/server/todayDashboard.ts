@@ -690,6 +690,9 @@ const modelInputs={
 } as const;
 type DashboardInput=keyof typeof modelInputs;
 type DashboardListInput=Exclude<DashboardInput,'order'>;
+export const todayDashboardListKinds = Object.freeze(
+ Object.values(modelInputs).flatMap(input=>'phase' in input?[input.kind]:[]),
+);
 
 function isVisibleModelInput(auth:AuthorizationSnapshot,access:ReturnType<typeof todaySourceAccess>,kind:string):boolean{
  if(kind===modelInputs.order.kind)return access.orders;
@@ -728,7 +731,7 @@ export async function readTodayModelInTransaction(tx:PrivilegedTenantTransaction
   if(!rows.some(row=>row.builtAt!==null))return {code:'EMPTY' as const,rows:[] as TodayModelSourceRow[],needsRebuild:true};
   const listKinds=new Set(rows.filter(row=>row.sourceId==='*').map(row=>row.kind));
   return {code:'OK' as const,rows:[...rows],needsRebuild:rows.some(row=>row.needsRebuild)
-   ||Object.values(modelInputs).some(input=>'phase' in input&&!listKinds.has(input.kind))};
+   ||todayDashboardListKinds.some(kind=>!listKinds.has(kind))};
  },result=>({rows:result.rows.length,fresh:result.rows.filter(row=>row.fresh===true).length,stale:result.rows.filter(row=>row.fresh!==true).length}));
 }
 
