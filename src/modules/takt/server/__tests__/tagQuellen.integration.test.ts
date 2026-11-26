@@ -1,17 +1,23 @@
 // @vitest-environment node
-import {randomUUID} from 'node:crypto';
 import {expect,it,vi} from 'vitest';
 
 const tenant = vi.hoisted(() => 'TEST-ablauf-takt-stoerung-' + globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant', () => ({KREILE_TENANT_SLUG: tenant}));
 
 import {sql,createFixture,withSession} from '../../../../../e2e/ablauf/replayHarness';
+import {createTaktOutageSettingsFixture} from '@/test/fixtures/taktOutageSettingsFixture';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {starteTaktJobNeu} from '@/app/actions/takt.actions';
 import {beendeLauf,reserviereLauf} from '../laeufe';
 import {nachholMinuteBerlin} from '../lauf';
 import {liesTaktAusfallFakten,liesTaktAusfallZeilen} from '../tagQuellen';
+
+const replayUrl = process.env.DATABASE_URL;
+if (!replayUrl || replayUrl !== process.env.H18_EXPECTED_DATABASE_URL ||
+    new URL(replayUrl).hostname !== '127.0.0.1') {
+  throw Error('TAKT_AUSFALL_REPLAY_REQUIRED');
+}
 
 it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wiederaufnahme', async () => {
   const operator = await createFixture(['wartung'],'developer');
@@ -28,10 +34,9 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
     return liesTaktAusfallZeilen(auth.data,jetzt);
   });
 
+  const settings = createTaktOutageSettingsFixture(tenant);
   try {
-    await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,dienst_ausfall_toleranz_stunden,
-        material_aufschlag_prozent,lager_regelversion)
-      VALUES(${randomUUID()}::uuid,${tenant},'TEST Takt und Neustart',12,20,'TEST-Ablauf')`;
+    await settings.create(12);
     const original = await reserviereLauf(tenant,key,berlinCalendarDay(oldFinish),2000);
     if (!original) throw Error('TEST_TAKT_ALTLAUF_FEHLT');
     await beendeLauf(tenant,original,'ok',1);
@@ -61,11 +66,11 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
     expect(await liesZeilen(other)).toMatchObject({code:'OK',zeilen:expect.arrayContaining([
       expect.objectContaining({key:'takt.ausfall:protokoll_aufbewahrung',befehl:null,handlung:''}),
     ])});
-    await sql`UPDATE public.company_settings SET dienst_ausfall_toleranz_stunden=48 WHERE tenant_id=${tenant}`;
+    await settings.setTolerance(48);
     expect(await liesTaktAusfallFakten({tenantId:tenant},jetzt)).toMatchObject({code:'OK',ausfaelle:[
       {laufstand:{schluessel:'heute_neuaufbau'}},
     ]});
-    await sql`UPDATE public.company_settings SET dienst_ausfall_toleranz_stunden=12 WHERE tenant_id=${tenant}`;
+    await settings.setTolerance(12);
 
     vi.useFakeTimers({toFake:['Date']});
     vi.setSystemTime(jetzt);
@@ -90,6 +95,6 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
   } finally {
     vi.useRealTimers();
     await sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenant}`;
-    await sql`DELETE FROM public.company_settings WHERE tenant_id=${tenant}`;
+    await settings.remove();
   }
 });

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "5156fb149e8357e2b852ef6b127fac6d8c3e5ed5c7f23a156281c431d7e12ac9",
+  "inventorySha256": "b462d3c72a33c06a4568676138d546ca39ebf3e7d2ebca4c4af7283fbce08d5b",
   "testedWriteActions": {
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": [
       "src/test/acceptance/lager_invarianten.integration.test.ts"
@@ -482,6 +482,9 @@
     ],
     "src/app/actions/lager.actions.ts#bestaetigeLagerEtikettZuordnungAction": [
       "src/test/acceptance/lager_stammdaten.integration.test.ts"
+    ],
+    "src/app/actions/takt.actions.ts#starteTaktJobNeu": [
+      "src/modules/takt/server/__tests__/tagQuellen.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
