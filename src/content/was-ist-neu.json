@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-26",
+    "pr": 318,
+    "seite": "auftraege",
+    "ziel": "/orders?station=fertig",
+    "punkte": [
+      "Deine Abhol- und Versandfristen berücksichtigen die Betriebsruhe. Bereits hinterlegte Ruhetage bleiben erhalten."
+    ]
+  },
+  {
+    "datum": "2026-11-26",
     "pr": 316,
     "seite": "heute",
     "ziel": "/",
