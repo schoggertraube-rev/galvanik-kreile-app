@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {PACKAGE_SWITCH_COPY} from '@/ui/packageSwitchCopy';
-import {PACKAGE_SWITCHES,mapPackageSwitchRows,validatePackageSwitchRow,type PackageSwitchId,type PackageSwitchRow} from '../featureCatalog';
+import {PACKAGE_SWITCHES,mapPackageSwitchRows,validatePackageSwitchRow,type PackageSwitchId,type PackageSwitchRow,type PackageSwitchValues} from '../featureCatalog';
 
 export type PackageSwitchContext={tenantId:string;actorId:string;canManage:boolean};
 type FlagRow=PackageSwitchRow;
@@ -15,6 +15,11 @@ async function rows(tx:PrivilegedTenantTransaction):Promise<FlagRow[]>{
  const found=await tx.execute<FlagRow>(sql`SELECT id,enabled,roles_allowed AS roles FROM public.feature_flags
   WHERE id IN (${sql.join(PACKAGE_SWITCHES.map(({id})=>sql`${id}`),sql`,`)}) ORDER BY id`);
  return [...found];
+}
+/** Takt liest dieselben Paketwerte ohne Einstellungs-Schreibrecht oder Ersatzwert. */
+export async function readPackageSwitchValuesForTakt(tenantId:string):Promise<PackageSwitchValues>{
+ if(!tenantId)throw Error('TAKT_PACKAGE_TENANT_MISSING');
+ return withPrivilegedTenantTransaction({tenantId},async tx=>mapPackageSwitchRows(await rows(tx)));
 }
 export async function readPackageSwitches(context:PackageSwitchContext){
  if(!context.canManage)return {code:'FORBIDDEN' as const,message:PACKAGE_SWITCH_COPY.permission};

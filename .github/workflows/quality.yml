@@ -553,7 +553,11 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           BASE_URL: http://127.0.0.1:3100
           APP_SESSION_SECRET: f0-verify-http-tests-ci-secret-2026-08-10
-        run: node scripts/quality/f0-verify-http-tests.mjs
+        run: |
+          node scripts/quality/f0-verify-http-tests.mjs
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            node scripts/quality/s38b-takt-preview.mjs
+          fi
 
       - name: BF-006 stop app
         if: always()

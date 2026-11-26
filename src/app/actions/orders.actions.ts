@@ -97,7 +97,7 @@ export async function readTodayHomeRevision(){
   if(settings.today.todayReadSource==='live')return null;
   const day=readTodayCalendar(new Date()).today,model=await readTodayModelInTransaction(tx,auth,day,true);
   if(model.code!=='OK')return null;
-  return {revision:todayModelRevision(auth,model.rows,day),revisions:todayModelRevisionMap(auth,model.rows,day)};
+  return {revision:todayModelRevision(auth,model.rows,day),revisions:todayModelRevisionMap(auth,model.rows,day),needsRebuild:model.needsRebuild};
  });
 }
 

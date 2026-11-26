@@ -5,6 +5,7 @@ import {
   getSecretKey,
   verifyAppSessionToken,
 } from '@/lib/server/appSession'
+import { hasValidCronCredential } from '@/lib/server/cronCredential'
 
 const LEGACY_AUTH_COOKIES = ['bypass-auth', 'kreile_role'] as const
 
@@ -79,6 +80,14 @@ export async function proxy(request: NextRequest) {
   // A no-data transport heartbeat proves only that this server is reachable.
   // It neither reads a session nor grants access to any authenticated route.
   if (request.nextUrl.pathname === '/api/offline/heartbeat') {
+    return NextResponse.next({ request })
+  }
+  // The scheduled request authenticates with the same credential as the Takt handler.
+  if (
+    request.nextUrl.pathname === '/api/takt' &&
+    request.method === 'GET' &&
+    hasValidCronCredential(request.headers.get('authorization'), process.env.CRON_SECRET)
+  ) {
     return NextResponse.next({ request })
   }
   const isApiRoute = request.nextUrl.pathname.startsWith('/api/')

@@ -5,7 +5,6 @@ import {resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/auth
 import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
 import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import {scheduleTodayCommandFollowup} from '@/lib/server/todayProjectionSchedule';
 import type {TechnicalEvent,TechnicalLogRow,ClickLogRow,LogFilter,LogSubject,LogReason,LoggingSettingsReader} from '../public';
 
 // PL16.11: instance-local loss is explicitly accepted at cold start. Not a second log source.
@@ -104,11 +103,6 @@ export async function readLog(auth:AuthorizationSnapshot,filter:LogFilter,readSe
   if(!settings)return {code:'SOURCE_INCOMPLETE' as const};
   if(!settings.enabled)return {code:'DISABLED' as const};
   return await withPrivilegedTenantTransaction(auth,async tx=>{
-   if(settings.retentionDays!==null){
-    await tx.execute(sql`SET LOCAL app.protocol_retention='on'`);
-    await tx.execute(sql`DELETE FROM public.technical_protocol WHERE tenant_id=${auth.tenantId} AND recorded_at<statement_timestamp()-(${settings.retentionDays}*interval '1 day')`);
-    await tx.execute(sql`DELETE FROM public.app_usage_events WHERE tenant_id=${auth.tenantId} AND event_type='action' AND received_at<statement_timestamp()-(${settings.retentionDays}*interval '1 day')`);
-   }
    const technical=await tx.execute<TechnicalLogRow>(sql`SELECT id,user_id::text AS "userId",occurred_at::text AS "occurredAt",recorded_at::text AS "recordedAt",event_type AS type,command,subject_type AS "subjectType",subject_id AS "subjectId",duration_ms AS "durationMs",reason,dienst,ergebnis,original_ref AS "originalRef",original_sha256 AS "originalSha256",verpasst
     FROM public.technical_protocol WHERE tenant_id=${auth.tenantId}
     ${filter.userId?sql`AND user_id=${filter.userId}::uuid`:sql``}
@@ -164,8 +158,6 @@ export async function observeAction<T>(name:string,subject:LogSubject,work:()=>P
   await logTechnical(auth,{type:code==='UNAVAILABLE'?'server_error':'rejected',command:code==='UNAVAILABLE'?options.errorIdentifier??name:name,subject:source,reason});
  }
  if(auth&&slowMs!==null&&durationMs>slowMs)await logTechnical(auth,{type:'slow',command:name,subject:source,durationMs});
- const tenants=[...readAuthorization().tenantTransactions.keys()];
- if(tenants.length)await scheduleTodayCommandFollowup(tenants);
  return result;
  },logTechnical);
 }

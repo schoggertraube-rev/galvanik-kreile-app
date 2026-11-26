@@ -52,8 +52,8 @@ export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'s
  const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
  if(frozen.code!=='OK')throw Error('FIXTURE_FREEZE:'+frozen.code);
  if(!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('FIXTURE_SYNTHETIC_TENANT_REQUIRED');
- await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days,versand_pauschale_netto_cents)
- SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Ablauf Galvanik','TEST Weg 1','70176','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14,1000
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days,versand_pauschale_netto_cents,material_aufschlag_prozent,lager_regelversion)
+ SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Ablauf Galvanik','TEST Weg 1','70176','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14,1000,20,'TEST-Ablauf'
  WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
  return {customerId,orderId,version:frozen.receipt.aggregateVersion,items:created.receipt.items};
 }

@@ -19,7 +19,7 @@ function execute(args,capture=false){
 }
 const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 if(!process.argv.includes('--isolated-only')){
- try{execute(['run','src/test/acceptance/',...isolated.flatMap(file=>['--exclude',file]),...flags]);}catch(error){failed=true;console.error(error.message);}
+ try{execute(['run','src/test/acceptance/','src/modules/takt/server/__tests__/laeufe.integration.test.ts',...isolated.flatMap(file=>['--exclude',file]),...flags]);}catch(error){failed=true;console.error(error.message);}
 }
 if(!process.argv.includes('--bulk-only'))for(const file of isolated){
  const rows=JSON.parse(execute(['list',file,'--json'],true));
