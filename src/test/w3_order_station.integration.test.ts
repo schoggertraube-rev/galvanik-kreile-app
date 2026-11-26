@@ -1,4 +1,3 @@
-import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import postgres from "postgres";
 import { sql } from "drizzle-orm";
@@ -645,9 +644,9 @@ describe.sequential("W3 order station local replay integration", () => {
     ]);
     const expectedB = new Set([ORDERS.foreign]);
 
-    const tenantAFirst = await readTenantOperationalOrders({ tenantId: TENANT_A }, readBetriebsruheInTransaction);
-    const tenantB = await readTenantOperationalOrders({ tenantId: TENANT_B }, readBetriebsruheInTransaction);
-    const tenantASecond = await readTenantOperationalOrders({ tenantId: TENANT_A }, readBetriebsruheInTransaction);
+    const tenantAFirst = await readTenantOperationalOrders({ tenantId: TENANT_A });
+    const tenantB = await readTenantOperationalOrders({ tenantId: TENANT_B });
+    const tenantASecond = await readTenantOperationalOrders({ tenantId: TENANT_A });
 
     expect(new Set(tenantAFirst.map((order) => order.id))).toEqual(expectedA);
     expect(new Set(tenantB.map((order) => order.id))).toEqual(expectedB);
@@ -666,7 +665,7 @@ describe.sequential("W3 order station local replay integration", () => {
     await pool.query("UPDATE public.orders SET current_station_id='' WHERE id=$1", [ORDERS.visible]);
     try {
       await expect(
-        readTenantOperationalOrders({ tenantId: TENANT_A }, readBetriebsruheInTransaction),
+        readTenantOperationalOrders({ tenantId: TENANT_A }),
       ).rejects.toThrow("ORDER_READMODEL_INVALID");
       await expect(
         readTenantOperationalOrderCount({ tenantId: TENANT_A }),
@@ -722,10 +721,10 @@ describe.sequential("W3 order station local replay integration", () => {
       ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
       expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
       await expect(
-        readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang", readBetriebsruheInTransaction),
+        readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
       ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
       await expect(
-        readTenantOperationalOrders({ tenantId: TENANT_A }, readBetriebsruheInTransaction),
+        readTenantOperationalOrders({ tenantId: TENANT_A }),
       ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
       await expect(
         readTenantOperationalOrderCount({ tenantId: TENANT_A }),
@@ -757,10 +756,10 @@ describe.sequential("W3 order station local replay integration", () => {
     ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
     await expect(
-      readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang", readBetriebsruheInTransaction),
+      readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
     ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
     await expect(
-      readTenantOperationalOrders({ tenantId: TENANT_A }, readBetriebsruheInTransaction),
+      readTenantOperationalOrders({ tenantId: TENANT_A }),
     ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
     await expect(
       readTenantOperationalOrderCount({ tenantId: TENANT_A }),
@@ -788,10 +787,10 @@ describe.sequential("W3 order station local replay integration", () => {
       ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
       expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
       await expect(
-        readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang", readBetriebsruheInTransaction),
+        readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
       ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
       await expect(
-        readTenantOperationalOrders({ tenantId: TENANT_A }, readBetriebsruheInTransaction),
+        readTenantOperationalOrders({ tenantId: TENANT_A }),
       ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
       await expect(
         readTenantOperationalOrderCount({ tenantId: TENANT_A }),
@@ -809,7 +808,7 @@ describe.sequential("W3 order station local replay integration", () => {
       "SELECT id, tenant_id, order_id, event_type, status, station FROM public.events WHERE order_id=$1 ORDER BY id",
       [ORDERS.happy],
     );
-    const beforeRead = await readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang", readBetriebsruheInTransaction);
+    const beforeRead = await readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang");
     expect(beforeRead.map((order) => order.id)).toContain(ORDERS.happy);
 
     const firstResult = await transitionWareneingangToGalvanik({
@@ -866,8 +865,8 @@ describe.sequential("W3 order station local replay integration", () => {
     ).resolves.toEqual({ code: "OK", receipt: firstResult.receipt, replayed: true });
 
     const [wareneingang, galvanik] = await Promise.all([
-      readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang", readBetriebsruheInTransaction),
-      readTenantStationOrders({ tenantId: TENANT_A }, "galvanik", readBetriebsruheInTransaction),
+      readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
+      readTenantStationOrders({ tenantId: TENANT_A }, "galvanik"),
     ]);
     expect(wareneingang.map((order) => order.id)).not.toContain(ORDERS.happy);
     expect(galvanik).toContainEqual(

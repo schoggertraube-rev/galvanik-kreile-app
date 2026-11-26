@@ -178,6 +178,11 @@ export type TerminEinstellungenLeser = (tx: PrivilegedTenantTransaction, tenantI
   knappAbArbeitstagen: number | null;
 }>;
 
+const readCompanyCalendar: TerminEinstellungenLeser = async (tx, tenantId) => {
+  const { readBetriebsruheInTransaction } = await import("@/modules/fundament/server-public");
+  return readBetriebsruheInTransaction(tx, tenantId);
+};
+
 export async function leseFertigterminKalender(
   tx: PrivilegedTenantTransaction, tenantId: string, liesEinstellungen: TerminEinstellungenLeser,
 ) {
@@ -276,7 +281,7 @@ function parseSafeCount(value: number | string): number {
 /** Fresh per invocation, tenant-bound full operational read port. */
 export async function readTenantOperationalOrders(
   authorization: Pick<AuthorizationSnapshot, "tenantId">,
-  liesEinstellungen: TerminEinstellungenLeser,
+  liesEinstellungen: TerminEinstellungenLeser = readCompanyCalendar,
   projection?:{purpose:'today'},
 ): Promise<OperationalOrder[]> {
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -342,7 +347,7 @@ export async function readTenantOperationalOrderCount(
 export async function readTenantStationOrders(
   authorization: Pick<AuthorizationSnapshot, "tenantId">,
   station: Station,
-  liesEinstellungen: TerminEinstellungenLeser,
+  liesEinstellungen: TerminEinstellungenLeser = readCompanyCalendar,
 ): Promise<OperationalOrder[]> {
   const { tenantId } = authorization;
   return withPrivilegedTenantTransaction({ tenantId }, async (tx) => {
