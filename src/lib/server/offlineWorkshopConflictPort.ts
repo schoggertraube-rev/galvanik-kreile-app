@@ -10,9 +10,10 @@ import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 
 type Rejection=WorkshopRejectionCode;
+type ReconciledOriginal=Exclude<PendingWorkshopOriginal,{command:'mail.send'}>;
 type OriginalFields<T extends PendingWorkshopOriginal>=T extends PendingWorkshopOriginal?Pick<T,'command'|'input'|'deviceCapturedAt'>:never;
-type Original=OriginalFields<PendingWorkshopOriginal>;
-function identity(auth:AuthorizationSnapshot,entry:PendingWorkshopOriginal){
+type Original=OriginalFields<ReconciledOriginal>;
+function identity(auth:AuthorizationSnapshot,entry:ReconciledOriginal){
  if(!isPendingWorkshopOriginal(entry)||!entry.deviceCapturedAt||!Number.isFinite(Date.parse(entry.deviceCapturedAt)))throw Error('OFFLINE_WORKSHOP_ORIGINAL_INVALID');
  const original={command:entry.command,input:entry.input,deviceCapturedAt:entry.deviceCapturedAt} as Original;
  const intent=canonicalJson(original),bytes=createHash('sha256').update('offline-workshop:'+auth.tenantId+':'+entry.id).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
@@ -50,7 +51,7 @@ async function previous(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsho
  * terminal evidence: a later retry cannot silently turn it into a new command.
  * Infrastructure/session failures remain in the device queue, without a task.
  */
-export async function reconcileOfflineWorkshop<T extends {code:string}>(auth:AuthorizationSnapshot,entry:PendingWorkshopOriginal,apply:()=>Promise<T>,createTask:(tx:PrivilegedTenantTransaction,eventId:string)=>Promise<string>,readCustomer?:(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<{name:string}|null>){
+export async function reconcileOfflineWorkshop<T extends {code:string}>(auth:AuthorizationSnapshot,entry:ReconciledOriginal,apply:()=>Promise<T>,createTask:(tx:PrivilegedTenantTransaction,eventId:string)=>Promise<string>,readCustomer?:(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<{name:string}|null>){
  const source=identity(auth,entry);
  const buildReceipt=(taskId:string,rejection:Rejection,subject?:WorkshopRejectionSubject):Omit<WorkshopRejectionReceipt,'scope'>=>({eventId:source.id,taskId,actorId:auth.userId,clientEventId:entry.id,deviceCapturedAt:entry.deviceCapturedAt!,originalCanonical:source.intent,rejection,...(subject&&hasAuthorizationArea(auth,'zahlungen')?{subject}:{})});
  return withPrivilegedTenantTransaction(auth,async tx=>{
@@ -94,7 +95,7 @@ export async function readOfflineWorkshopConflictSource(tx:PrivilegedTenantTrans
   WHERE tenant_id=${auth.tenantId} AND id=${eventId} AND event_type='OFFLINE_WORKSHOP_REJECTED_V1' AND status='success' AND event_schema_version=1`);
  const row=rows[0];if(rows.length!==1||row.user_id!==auth.userId||row.payload.quelle!=='offline_abgleich'||row.payload.reason!==copy.reason||!['CONFLICT','FORBIDDEN','NOT_FOUND','VALIDATION_ERROR'].includes(row.payload.rejection))throw Error('OFFLINE_WORKSHOP_SOURCE_INVALID');
  const original=row.payload.original,itemId=original.command==='document.deliveryNote'?original.input.orderIds[0]:'orderId'in original.input?original.input.orderId:'invoiceId'in original.input?original.input.invoiceId:original.input.customerId;
- const entry={...original,kind:'workshop' as const,id:original.input.clientEventId,itemId} as PendingWorkshopOriginal;
+ const entry={...original,kind:'workshop' as const,id:original.input.clientEventId,itemId} as ReconciledOriginal;
  const expected=identity(auth,entry),reference=await originalReference(tx,auth,original);
  if(expected.id!==row.id||expected.intent!==row.payload.intent||row.order_id!==reference.orderId)throw Error('OFFLINE_WORKSHOP_SOURCE_CHANGED');
  return {orderId:row.order_id,customerId:reference.customerId,deviceCapturedAt:original.deviceCapturedAt!};

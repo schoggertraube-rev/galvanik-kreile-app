@@ -33,6 +33,7 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
  if(offlinePartition(auth.data)!==scope)return {code:'FORBIDDEN' as const};
  if(!isPendingWorkshopOriginal(original)||!original.deviceCapturedAt||!Number.isFinite(Date.parse(original.deviceCapturedAt)))return {code:'VALIDATION_ERROR' as const};
  try{
+  if(original.command==='mail.send')return await replayCustomerMail(auth.data,scope,original);
   const result=await reconcileOfflineWorkshop(auth.data,original,()=>applyKnownCommand(auth.data,scope,original),
    (tx,eventId)=>createOfflineWorkshopConflictTask(tx,auth.data,eventId,{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}),readCustomerProfile);
   if(result.code==='PRESERVED'&&'rejectionReceipt'in result){
@@ -49,7 +50,21 @@ async function replayCommand(scope:string,original:PendingWorkshopOriginal){
   return result;
  }catch{return {code:'UNAVAILABLE' as const};}
 }
-async function applyKnownCommand(auth:AuthorizationSnapshot,scope:string,original:PendingWorkshopOriginal){
+async function replayCustomerMail(auth:AuthorizationSnapshot,scope:string,original:Extract<PendingWorkshopOriginal,{command:'mail.send'}>){
+ if(!original.dispatchStartedAt)return {code:'VALIDATION_ERROR' as const};
+ const [{sendCustomerMailAction},{readQueuedMailSentEvent}]=await Promise.all([import('./communications.actions'),import('@/lib/server/communicationPort')]);
+ const {clientEventId:clientRequestId,...intent}=original.input;
+ const result=await sendCustomerMailAction({...intent,clientRequestId});
+ if(result.code!=='OK')return result;
+ const {threadId,messageId}=result.data;
+ if(!messageId)return {code:'UNAVAILABLE' as const};
+ const eventId=await readQueuedMailSentEvent(auth,clientRequestId,{threadId,messageId});
+ if(!eventId)return {code:'UNAVAILABLE' as const};
+ return {...result,mailCommand:original.command,mailReceipt:{clientRequestId,threadId,messageId,eventId,actorId:auth.userId},
+  offlineReceipt:{scope,clientEventId:clientRequestId,deviceCapturedAt:original.deviceCapturedAt!,eventId,actorId:auth.userId}};
+}
+
+async function applyKnownCommand(auth:AuthorizationSnapshot,scope:string,original:Exclude<PendingWorkshopOriginal,{command:'mail.send'}>){
  if(original.command==='shipment.handover'){
   const result=await recordGoodsOutAction({...original.input,offlineOriginal:{actorId:auth.userId,clientEventId:original.input.clientEventId,deviceCapturedAt:original.deviceCapturedAt!}});if(result.code!=='OK')return result;
   if(!isShipmentGroupReceipt(result.receipt,original.input,auth.userId))return {code:'UNAVAILABLE' as const};

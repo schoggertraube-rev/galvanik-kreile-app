@@ -24,6 +24,25 @@ import {
 } from "@/lib/server/microsoftGraph";
 
 type TargetType = "CUSTOMER" | "ORDER";
+
+/** A queued send can be removed only after its existing outgoing message and send event agree. */
+export async function readQueuedMailSentEvent(auth:AuthorizationSnapshot,clientRequestId:string,receipt:{threadId:string;messageId:string}){
+ const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string}>(sql`
+  SELECT event.id::text
+  FROM public.events event
+  JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id AND thread.id::text=event.payload->>'threadId'
+  JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id
+  WHERE event.tenant_id=${auth.tenantId} AND event.correlation_id=${clientRequestId}::uuid
+    AND event.event_type IN ('COMMUNICATION_MAIL_SENT_V1','COMMUNICATION_DOCUMENT_SENT_V1')
+    AND event.status='success' AND event.event_schema_version=1 AND event.user_id::text=${auth.userId}
+    AND thread.id::text=${receipt.threadId} AND thread.status='sent' AND thread.created_by=event.user_id
+    AND message.id::text=${receipt.messageId} AND message.direction='outgoing' AND message.channel='email'
+    AND message.created_by=event.user_id
+    AND (event.event_type='COMMUNICATION_DOCUMENT_SENT_V1' OR event.payload->>'messageId'=message.id::text)
+  LIMIT 2`));
+ return rows.length===1?rows[0].id:null;
+}
+
 export async function readComplaintGoodsReminderContext(auth:AuthorizationSnapshot,orderId:string) {
   if(!hasAuthorizationArea(auth,'kunden'))return null;
   const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{complaintId:string;version:number;orderId:string;number:string;customerName:string;complaintNumber:string}>(sql`SELECT complaint_id AS "complaintId",version,nacharbeit_auftrag_id AS "orderId",rework_order_number AS number,source_customer_name AS "customerName",nummer AS "complaintNumber" FROM public.v_complaint_rework_context_v1 WHERE tenant_id=${auth.tenantId} AND nacharbeit_auftrag_id=${orderId} AND stand='massnahme_nacharbeit' AND rework_ware='erwartet'`));
