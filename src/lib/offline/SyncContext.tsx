@@ -12,6 +12,7 @@ import type {PendingQuarantine} from './pendingStore';
 import {readPendingEntries,rejectedWorkshopProjection,retainQuarantinedPending} from "./pendingStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {syncOriginals} from './syncOriginals';
+import {handOffClosingMail,observeDelayedCommandExit} from './replayWorkshopHttp';
 import {installServerReachability,readServerReachability,subscribeServerReachability,serverReachabilitySnapshot} from './serverReachability';
 import {requestStoragePersistence,readStoragePersistence,subscribeStoragePersistence,serverStoragePersistence,type StoragePersistence} from './storagePersistence';
 import { createId } from "@paralleldrive/cuid2";
@@ -124,9 +125,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const refresh=()=>{void refreshOutboxSnapshot(scope);};
     let timer:ReturnType<typeof setTimeout>|undefined,disposed=false;
     let timerGeneration=0;
-    const run=(flushDelayed=false,keepalive=false)=>{
+    let pendingMailKeys:string[]=[];
+    const run=(flushDelayed=false,keepalive=false,mailHandedOff=false)=>{
       if(!scope||!readServerReachability()||activeScope!==scope)return;
-      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive,offline24h}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(()=>reportProtocolClientError('OFFLINE_SYNC_UNAVAILABLE'));
+      void syncOriginals(scope,()=>activeScope,{flushDelayed,keepalive,workshopOnly:keepalive,offline24h,...(mailHandedOff?{mailHandedOff}:{})}).then(()=>keepalive?undefined:refreshFullDeviceStand(scope,offline24h)).catch(()=>reportProtocolClientError('OFFLINE_SYNC_UNAVAILABLE'));
     };
     const schedule=async()=>{
       const generation=++timerGeneration;if(timer)clearTimeout(timer);
@@ -134,13 +136,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       try{
         const entries=await readPendingEntries(scope);
         if(disposed||generation!==timerGeneration||activeScope!==scope)return;
+        pendingMailKeys=entries.flatMap(entry=>entry.kind==='workshop'&&entry.command==='mail.send'?[entry.id]:[]);
         const due=entries.filter(entry=>entry.kind==='workshop'&&entry.notBefore!==undefined&&entry.dispatchStartedAt===undefined).map(entry=>Date.parse((entry as {notBefore:string}).notBefore));
         if(due.length)timer=setTimeout(()=>run(),Math.max(0,Math.min(...due)-Date.now()));
       }catch{reportProtocolClientError('OFFLINE_DELAYED_READ_FAILED');}
     };
     const changed=()=>{refresh();void schedule();};
-    const leave=()=>run(true,true);
-    const hidden=()=>{if(document.visibilityState==='hidden')leave();};
+    const stopExitFlush=observeDelayedCommandExit(()=>{
+      if(!scope||!readServerReachability()||activeScope!==scope)return;
+      run(true,true,handOffClosingMail(scope,pendingMailKeys));
+    });
     const refreshStand=()=>{void refreshDeviceSnapshot(scope,offline24h);};
     const shellReady=(event:Event)=>{
       const detail=(event as CustomEvent<{scope:string;loginScope:string}>).detail;
@@ -148,10 +153,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     };
     refreshStand();window.addEventListener('kreile-device-stand-changed',refreshStand);
     window.addEventListener('kreile-offline-shell-ready',shellReady);
-    refresh();window.addEventListener('kreile-pending-changed',changed);
-    window.addEventListener('pagehide',leave);document.addEventListener('visibilitychange',hidden);
+    refresh();void schedule();window.addEventListener('kreile-pending-changed',changed);
     const cancelInitialSync=scope&&isOnline?scheduleIdleRead(()=>run(true),2000,10000):()=>{};
-    return ()=>{disposed=true;cancelInitialSync();++timerGeneration;if(timer)clearTimeout(timer);window.removeEventListener('kreile-pending-changed',changed);window.removeEventListener('pagehide',leave);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('kreile-device-stand-changed',refreshStand);window.removeEventListener('kreile-offline-shell-ready',shellReady);if(activeScope===scope)activeScope=null;};
+    return ()=>{disposed=true;cancelInitialSync();stopExitFlush();++timerGeneration;if(timer)clearTimeout(timer);window.removeEventListener('kreile-pending-changed',changed);window.removeEventListener('kreile-device-stand-changed',refreshStand);window.removeEventListener('kreile-offline-shell-ready',shellReady);if(activeScope===scope)activeScope=null;};
   }, [scope,isOnline,offline24h]);
 
   const syncNow = useCallback(async () => {

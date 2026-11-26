@@ -40,6 +40,11 @@ function loadWorker({ network = { kind: "response", status: 200 }, cachedRespons
   const context = {
     URL,
     Response,
+    importScripts: (url: string): void => {
+      if (url !== '/kreile-offline-queue.js') throw Error('Unexpected worker dependency: ' + url);
+      const queue = readFileSync(resolve(process.cwd(), 'public', 'kreile-offline-queue.js'), 'utf8');
+      runInNewContext(queue, context, { filename: 'public/kreile-offline-queue.js' });
+    },
     caches: {
       delete: async () => { metrics.cacheDelete += 1; return false; },
       keys: async () => { metrics.cacheKeys += 1; return []; },
