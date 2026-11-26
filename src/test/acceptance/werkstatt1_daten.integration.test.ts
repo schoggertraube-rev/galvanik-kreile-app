@@ -10,7 +10,7 @@ import { historicalCollection } from "../../../e2e/ablauf/invoiceCollectionFixtu
 import { customerFixture, intakeOrderFixture, invoiceCompanySettingsFixture, readyInvoiceOrder, readyOrderForInvoice } from "../../../e2e/ablauf/orderFixture";
 import { storeOrderPhoto } from "../../../e2e/ablauf/photoFixture";
 import { db } from "@/db";
-import { berlinCalendarDay, leseBetriebsruhetage } from "@/lib/domain/workingDays";
+import { berlinCalendarDay, leseBetriebsruhetage, plusWorkingDays } from "@/lib/domain/workingDays";
 import { calculateTermSuggestion } from "@/lib/server/intakeSuggestions";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { readCustomerListSignals } from "@/lib/server/customerSummaryRead";
@@ -445,6 +445,59 @@ test("Ein ungültiger Firmenkalender stoppt den Terminvorschlag mit dem Katalogt
   } finally {
     await setzeRuhezeiten(firma.betriebsruhe);
     await sql`DELETE FROM public.catalog_services WHERE tenant_id = ${mandant} AND id = ${katalogId}::uuid`;
+  }
+});
+
+test("Liefertermine und Nacharbeit übernehmen keinen Termin in der Betriebsruhe", async () => {
+  const ruhetag = plusWorkingDays(berlinCalendarDay(), 2);
+  if (ruhetag === null) throw Error("TEST_WERKSTATT_RUHETAG_FEHLT");
+  const ursprung = await readyInvoiceOrder("TEST Betriebsruhe bei Termin und Nacharbeit", "shipping");
+  const foto = await storeOrderPhoto(ursprung.orderId);
+  const { reklamationAusfuehrenAction, nacharbeitAnlegenAction, getComplaintDialogAction } =
+    await import("@/app/actions/complaints.actions");
+  const { changeOrderPromisedDueDateAction } = await import("@/app/actions/orders.actions");
+  const reklamation = await withSession(full, () => reklamationAusfuehrenAction({
+    action: "aufnehmen", clientKey: randomUUID(), orderId: ursprung.orderId, intakeItemId: null, intakeVersion: null,
+    parts: [{ position_id: ursprung.items[0].id, menge: 1 }], defect: "Abplatzung",
+    description: "TEST Nacharbeit während Betriebsruhe", photoIds: [foto], goodsReturn: "ja",
+  }));
+  if (reklamation.code !== "OK") throw Error("TEST_WERKSTATT_REKLAMATION_FEHLT");
+  const entscheidung = await createFixture(["auftraege", "entscheiden"]);
+  const [firma] = await sql<{ betriebsruhe: { von: string; bis: string }[] }[]>`
+    SELECT betriebsruhe FROM public.company_settings WHERE tenant_id = ${mandant}
+  `;
+  if (!firma) throw Error("TEST_WERKSTATT_EINSTELLUNGEN_FEHLEN");
+  const [auftrag] = await sql<{ version: number; dueDate: string | null }[]>`
+    SELECT version, due_date::text AS "dueDate" FROM public.orders
+    WHERE tenant_id = ${mandant} AND id = ${ursprung.orderId}
+  `;
+  if (!auftrag) throw Error("TEST_WERKSTATT_AUFTRAG_FEHLT");
+
+  const setzeRuhezeiten = (zeiten: typeof firma.betriebsruhe) =>
+    sql`UPDATE public.company_settings SET betriebsruhe = ${sql.json(zeiten)}::jsonb WHERE tenant_id = ${mandant}`;
+  try {
+    await setzeRuhezeiten([{ von: ruhetag, bis: ruhetag }]);
+    const terminanfrage = {
+      orderId: ursprung.orderId, expectedVersion: auftrag.version, dueDate: ruhetag,
+      reason: "TEST Liefertermin in der Betriebsruhe", clientEventId: randomUUID(),
+    };
+    expect(await withSession(full, () => changeOrderPromisedDueDateAction(terminanfrage)))
+      .toMatchObject({ code: "VALIDATION_ERROR" });
+    const reklamationId = reklamation.receipt.complaintId;
+    expect(await withSession(entscheidung, () => getComplaintDialogAction({ complaintId: reklamationId })))
+      .toMatchObject({ code: "OK", data: { betriebsruhetage: [ruhetag] } });
+    const nacharbeit = {
+      reklamationId, version: reklamation.receipt.version, bewertung: "berechtigt", massnahme: "nacharbeit",
+      liefertermin: ruhetag,
+    };
+    expect(await withSession(entscheidung, () => nacharbeitAnlegenAction(nacharbeit)))
+      .toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(await sql`SELECT version, due_date::text AS "dueDate" FROM public.orders
+      WHERE tenant_id = ${mandant} AND id = ${ursprung.orderId}`).toEqual([auftrag]);
+    expect(await sql`SELECT id FROM public.orders WHERE tenant_id = ${mandant} AND nacharbeit_zu = ${reklamationId}`)
+      .toEqual([]);
+  } finally {
+    await setzeRuhezeiten(firma.betriebsruhe);
   }
 });
 

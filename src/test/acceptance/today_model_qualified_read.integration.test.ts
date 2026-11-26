@@ -365,7 +365,7 @@ it('conditional real GET skips unchanged composition and reloads after an actual
    const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
    expect(phases).toContain('today.model.read');expect(phases).not.toContain('today.model.compose');expect(phases).not.toContain('today.source');
   }finally{output.mockRestore();}
-  const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-09-05',reason:'TEST conditional model actual source sequence',clientEventId:randomUUID()};
+  const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-09-06',reason:'TEST conditional model actual source sequence',clientEventId:randomUUID()};
   expect((await changeOrderPromisedDueDateAction(command)).code).toBe('OK');
   const changed=await getModelRoute(request());expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(etag);
   const current=await changed.json();expect(current.model.modelRead.pending).toBe(true);

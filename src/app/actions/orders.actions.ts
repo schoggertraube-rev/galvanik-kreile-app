@@ -353,7 +353,7 @@ export async function changeOrderPromisedDueDateAction(
   const { changeOrderPromisedDueDate } = await import(
     "@/lib/server/commands/orderPromiseCommand"
   );
-  return changeOrderPromisedDueDate(input);
+  return changeOrderPromisedDueDate(input, readBetriebsruheInTransaction);
 
  },readLoggingSettings);
 }

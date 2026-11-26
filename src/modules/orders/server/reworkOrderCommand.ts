@@ -1,12 +1,14 @@
 import {allocateOrderNumber} from '@/lib/server/orderNumberAllocation';
 import "server-only";
 
-import {isWorkingDay,berlinCalendarDay} from "@/lib/domain/workingDays";
+import {isWorkingDay,berlinCalendarDay,leseBetriebsruhetage} from "@/lib/domain/workingDays";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
+import type { TerminEinstellungenLeser } from "@/lib/server/orderStationRead";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import { KALENDER_COPY } from "@/ui/kalenderCopy";
 import { ORDER_LIFECYCLE_STATUS } from "../public";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -15,6 +17,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ORDER_STATION = ORDER_LIFECYCLE_STATUS.ANGENOMMEN;
 const EVENT_STATION = "wareneingang";
 const EVENT_TYPE = "ORDER_REWORK_CREATED_V1";
+const INVALID_INPUT = { code: "VALIDATION_ERROR", message: "Nacharbeit ist unvollständig oder ungültig." } as const;
 
 type Bewertung = "berechtigt" | "kulanz";
 
@@ -175,7 +178,6 @@ function isValidInput(input: unknown): input is NacharbeitAnlegenInput {
     && (value.bewertung === "berechtigt" || value.bewertung === "kulanz")
     && value.massnahme === "nacharbeit"
     && isIsoDate(value.liefertermin)
-    && isWorkingDay(value.liefertermin)
     && value.liefertermin >= berlinCalendarDay()
     && toPositiveInteger(value.version) === value.version;
 }
@@ -252,9 +254,11 @@ async function receiptForExistingRework(
   };
 }
 
-export async function nacharbeitAnlegen(input: unknown): Promise<NacharbeitAnlegenResult> {
+export async function nacharbeitAnlegen(
+  input: unknown, liesEinstellungen: TerminEinstellungenLeser,
+): Promise<NacharbeitAnlegenResult> {
   if (!isValidInput(input)) {
-    return { code: "VALIDATION_ERROR", message: "Nacharbeit ist unvollständig oder ungültig." };
+    return INVALID_INPUT;
   }
 
   let authorization;
@@ -315,6 +319,9 @@ export async function nacharbeitAnlegen(input: unknown): Promise<NacharbeitAnleg
       if (!["ja", "offen"].includes(context.ware_zurueck ?? "")) {
         return { code: "VALIDATION_ERROR", message: "Nacharbeit braucht die Teile." };
       }
+      const betriebsruhe = leseBetriebsruhetage((await liesEinstellungen(tx, tenantId)).betriebsruhe);
+      if (!betriebsruhe) return { code: "UNAVAILABLE", message: KALENDER_COPY.format };
+      if (!isWorkingDay(input.liefertermin, betriebsruhe)) return INVALID_INPUT;
       if (
         !isCanonicalText(context.source_order_id)
         || !isCanonicalText(context.customer_id)
