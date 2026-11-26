@@ -1,5 +1,3 @@
-import { V45_TEXT } from "./generated/v45Texte.generated";
-
 export const KALENDER_COPY = {
-  format: V45_TEXT.calendar$format,
+  format: "Trage gültige Daten im Format JJJJ-MM-TT ein, Betriebsruhe als von..bis.",
 } as const;
