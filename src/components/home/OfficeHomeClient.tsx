@@ -13,6 +13,7 @@ import { useOverlayStore } from "@/lib/overlayStore";
 import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import { deriveTodayReminder, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
+import { OfficeDaySchedule } from "./OfficeDaySchedule";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { IntakeDraftList, type IntakeDraftResult } from "@/modules/eingang/public";
 import { discardIntakeDraftAction } from "@/app/actions/eingang.actions";
@@ -225,6 +226,12 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
   </Kachel>;
   };
 
+  const daySchedule = canWorkOrders && model.dashboard.calendar && model.dashboard.orderSchedule ? <OfficeDaySchedule
+    calendar={model.dashboard.calendar} schedule={model.dashboard.orderSchedule} orders={model.dashboard.orderActions?.rows ?? []}
+    onOpen={orderId => openOrder(orderId)} onEdit={() => router.push('/orders?view=woche')} /> : null;
+  const visibleLayout = activeLayout.filter(item => customize || fieldHasContent(item.field) || (item.field === 'assign' && model.dashboard.outlookMessage));
+  const [firstMobileField, ...remainingMobileFields] = visibleLayout;
+
   return <section data-testid="rolf-v11-home" data-spec-id="tag">
     {model.kind==='partial'?<Hinweis ton="warn">{PAGE_READ_COPY.partial}<Button art="leise" icon="refresh" text={PAGE_READ_COPY.reload} onClick={()=>router.refresh()}/></Hinweis>:null}
     <IntakeDraftList readDrafts={readHomeIntakeDrafts} discardDraft={discardIntakeDraftAction} />
@@ -233,8 +240,18 @@ export function OfficeHomeClient({ model:initialModel, ports }: { model: OfficeH
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}
     {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Heute zu tun bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); refreshToday(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
-    {!dashboardHasVisibleContent && !customize && !model.dashboard.outlookMessage && model.kind!=="partial" ? <Zustand art="leer" text={companyHasOrders ? "Nichts offen" : "Noch keine Aufträge erfasst."} aktion={!companyHasOrders && canStartOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
-      {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage)).map(fieldCard)}
+    {!dashboardHasVisibleContent && !customize && !model.dashboard.outlookMessage && model.kind!=="partial" ? <div className="kr-stapel">
+      <Zustand art="leer" text={companyHasOrders ? "Nichts offen" : "Noch keine Aufträge erfasst."} aktion={!companyHasOrders && canStartOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />
+      {daySchedule}
+    </div> : <div className="kr-stapel">
+      {device === "desktop" ? <div className="kr-spalten">
+        <div className="kr-stapel">{visibleLayout.filter(item => item.column === "left").map(fieldCard)}</div>
+        <div className="kr-stapel">{daySchedule}{visibleLayout.filter(item => item.column === "right").map(fieldCard)}</div>
+      </div> : <>
+        {firstMobileField && fieldCard(firstMobileField)}
+        {daySchedule}
+        {remainingMobileFields.map(fieldCard)}
+      </>}
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
