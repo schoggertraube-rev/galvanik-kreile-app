@@ -805,9 +805,7 @@ async function readLiveTodayTagQuellen(auth:AuthorizationSnapshot,jetzt:Date,por
  * kernels. Module masks are bound by the App, never by a second domain reader. */
 export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports:TodayModelReadPorts,readAt=new Date(),deferLive=false){
  const calendar=readTodayCalendar(readAt),access=todaySourceAccess(authorizationReadContext(auth));
- const liesOperativeAuftraege=getOperationalOrders;
  return withPrivilegedTenantTransaction(auth,async tx=>{
-  const getOperationalOrders=(context:AuthorizationSnapshot,projection:{purpose:'today'})=>liesOperativeAuftraege(context,projection,ports.readTerminEinstellungen);
   const settings=await ports.readSettings(tx,auth);
   if(settings.page!==null)configurePageReadBudget(settings.page.queryTimeoutMs);
   if(settings.today.todayReadSource==='live')return {code:'LIVE' as const,settings,tagQuellenPorts:ports.tagQuellen};
@@ -836,7 +834,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const taskCalendar=access.messages?live('tasks',project('tasks',unknownTasks,payload=>ports.taskCalendar(auth,payload)),()=>getIntakeTaskAction({calendar:true})):null;
   const storedOrders=value('orders');
   const cachedOperationalSource:TodayDashboardSources['orderSource']=Array.isArray(storedOrders)&&storedOrders.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version))?{code:'OK',data:storedOrders as Extract<TodayDashboardSources['orderSource'],{code:'OK'}>['data']}:{code:'SOURCE_INCOMPLETE'};
-  const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'})})):cachedOperationalSource;
+  const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'},ports.readTerminEinstellungen)})):cachedOperationalSource;
   const unknownGraph:TodayDashboardSources['graph']={code:'SOURCE_INCOMPLETE',message:PAGE_READ_COPY.sourceIncomplete};
   const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)),()=>getIntakeMessagesAction('offen')):{code:'FORBIDDEN' as const,message:''};
   const unknownMoney=unknownTodayMoneySupport();
