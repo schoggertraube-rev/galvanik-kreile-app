@@ -35,6 +35,7 @@ import {storageTaskHasAppointmentSource} from '@/lib/server/pickupAppointmentPor
 import {collectionTaskHasReplySource,collectionTaskReplyRemainder,collectionTaskAppointmentRemainder,readCollectionTaskCurrentOrder} from '@/lib/server/dispatchReplyPort';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {DISPATCH_CALL_COPY,COLLECTION_REMINDER_COPY,OFFLINE_RECONCILIATION_COPY} from '@/ui/situationCatalog';
+import {TODAY_OWN_NOTE_COPY} from '@/ui/allgemeinCopy';
 import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
@@ -47,6 +48,21 @@ import {invoiceMailRemainderAllowsCompletion,TASK_KINDS,taskUuid,taskValidation,
 export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number;priceTaskReceipt?:true};
 export type TaskEffects=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>Promise<void|TaskFailure>;
 type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:TaskRecord,input:TaskCompleteInput)=>Promise<void|TaskFailure>;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>};
+type TodayNoteSave={todayNote:true};
+export const TODAY_NOTE_TASK_PREFIX='e468e52f-2c30-5';
+const isTodayNoteTaskKey=(key:string)=>key.startsWith(TODAY_NOTE_TASK_PREFIX);
+
+function todayNoteTaskKey(tenantId:string,userId:string,day:string){
+ const hash=createHash('sha256').update(JSON.stringify([TODAY_NOTE_TASK_PREFIX,tenantId,userId,day])).digest();
+ hash[8]=(hash[8]&63)|128;
+ const hex=hash.subarray(0,16).toString('hex');
+ return TODAY_NOTE_TASK_PREFIX+hex.slice(13,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
+}
+function ownsTodayNoteTask(auth:AuthorizationSnapshot,task:TaskRecord){
+ return task.erstellt_von===auth.userId&&task.fuer_login===auth.userId&&task.fuer_bereich===null&&
+  task.art==='aufgabe'&&task.bezug_typ==='allgemein'&&task.bezug_id===null&&task.item_id===null&&
+  task.client_key===todayNoteTaskKey(auth.tenantId,auth.userId,task.faellig_am);
+}
 class Rejected extends Error{constructor(readonly result:TaskFailure){super(result.code);}}
 function reject(code:TaskFailure['code'],message:string):never{throw new Rejected({code,message});}
 const columns=sql`id::text,client_key::text,art,titel,faellig_am::text,to_char(uhrzeit,'HH24:MI') AS uhrzeit,vorlauf_tage,fuer_login::text,fuer_bereich,bezug_typ,bezug_id,item_id::text,notiz,status,erledigt_von::text,erledigt_am::text,erledigt_notiz,erstellt_von::text,erstellt_am::text,version`;
@@ -96,7 +112,19 @@ function resultError(error:unknown):TaskFailure{
  console.error('[TASK_COMMAND_FAILED]',{code:error instanceof Rejected?error.result.code:'TASK_COMMAND_FAILED',message:error instanceof Error?error.message:'UnknownError'});
  return error instanceof Rejected?error.result:{code:'UNAVAILABLE',message:'Nicht gespeichert · Eingaben sind noch da. Fehlercode: TASK_COMMAND_FAILED.'};
 }
-export async function saveTask(input:unknown,deps:Dependencies):Promise<TaskResult>{
+export async function saveTask(input:unknown,deps:Dependencies|TodayNoteSave):Promise<TaskResult>{
+ if('todayNote'in deps){
+  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
+  const value=input as {text?:unknown;day?:unknown;version?:unknown}|null;
+  if(typeof value?.text!=='string'||!value.text.trim()||value.text.length>2000||typeof value.version!=='number'||!Number.isSafeInteger(value.version)||value.version<0)
+   return {code:'VALIDATION_ERROR',message:TODAY_OWN_NOTE_COPY.invalid};
+  const day=berlinCalendarDay();
+  if(value.day!==day)return {code:'CONFLICT',message:TODAY_OWN_NOTE_COPY.changed};
+  const request:TaskSaveInput={clientKey:todayNoteTaskKey(auth.tenantId,auth.userId,day),version:value.version,kind:'aufgabe',
+   title:TODAY_OWN_NOTE_COPY.title,dueDate:day,time:null,forLogin:auth.userId,forArea:null,reference:{type:'allgemein',id:null},note:value.text};
+  try{return await withPrivilegedTenantTransaction(auth,tx=>persistTask(tx,auth,request,deps));}
+  catch(error){return error instanceof Rejected?error.result:{code:'UNAVAILABLE',message:TODAY_OWN_NOTE_COPY.failed};}
+ }
  const fields=taskValidation(input);if(Object.keys(fields).length)return {code:'VALIDATION_ERROR',message:'Aufgabe ist noch unvollständig.',fields};
  const value=input as TaskSaveInput;
  if(value.reference.type==='lagerartikel'||value.reference.type==='lagerbestand'||value.forArea==='lager.stamm')return {code:'FORBIDDEN',message:LAGER_STAMM_COPY.aufgabenweg};
@@ -104,11 +132,15 @@ export async function saveTask(input:unknown,deps:Dependencies):Promise<TaskResu
  try{return await withPrivilegedTenantTransaction(auth,tx=>persistTask(tx,auth,value,deps));}catch(error){return resultError(error);}
 }
 /** Both dialog saves and the goods command use this writer and the caller's transaction. */
-async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies,enforceReferenceVisibility=true,invoiceCommand=false,replyRestriction=false,qualifiedCreateId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
+async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies|TodayNoteSave,enforceReferenceVisibility=true,invoiceCommand=false,replyRestriction=false,qualifiedCreateId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
+  const todayNote='todayNote'in deps;
+  if(isTodayNoteTaskKey(value.clientKey)!==todayNote)reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${value.clientKey},0))`);
   const candidates=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${value.clientKey}::uuid FOR UPDATE`);
   if(candidates.length>1)throw Error('TASK_CLIENT_KEY_AMBIGUOUS');
   const before=value.taskId?await find(tx,auth,value.taskId,true):candidates[0]?await find(tx,auth,candidates[0].id,true):null;
+  if(before&&isTodayNoteTaskKey(before.client_key)&&(!todayNote||!ownsTodayNoteTask(auth,before)))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
+  if(todayNote&&!before&&value.version!==0)reject('CONFLICT',TODAY_OWN_NOTE_COPY.changed);
   if(before&&await readCollectionFollowup(tx,auth.tenantId,{markerId:before.client_key}))reject('FORBIDDEN',COLLECTION_FOLLOWUP_COPY.editBlocked);
   if(before&&(await readInvoiceMailRemainderFailure(tx,auth,before.client_key)||await readCancelledCollectionRouting(tx,auth.tenantId,before.client_key)))reject('FORBIDDEN',INVOICE_DELIVERY_COPY.followupEditBlocked);
   if(before&&await reissueTaskSource(tx,auth,before))reject('FORBIDDEN',SHIPPING_FEE_COPY.reissueForbidden);
@@ -125,7 +157,7 @@ async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
    // back to the immutable task provenance for the one existing writer.
    value={...value,reference:{type:'auftrag',id:before.bezug_id}};
   }
-  if(before&&!value.taskId){if(before.erstellt_von===auth.userId&&same(before,value))return {code:'OK',task:before,replayed:true};reject('CONFLICT','Diese Anfragekennung gehört zu einer anderen Aufgabe.');}
+  if(before&&!value.taskId&&!todayNote){if(before.erstellt_von===auth.userId&&same(before,value))return {code:'OK',task:before,replayed:true};reject('CONFLICT','Diese Anfragekennung gehört zu einer anderen Aufgabe.');}
   if(before&&before.version===value.version+1&&same(before,value))return {code:'OK',task:before,replayed:true};
   if(before&&before.version!==value.version)reject('CONFLICT','Aufgabe wurde inzwischen geändert · Eingaben bleiben erhalten.');
   if(before&&(before.bezug_typ!==value.reference.type||before.bezug_id!==value.reference.id||before.item_id!==(value.itemId??null)))reject('CONFLICT','Der ursprüngliche Bezug der Aufgabe bleibt erhalten.');
@@ -140,6 +172,10 @@ async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
   else await tx.execute(sql`INSERT INTO public.tasks(id,tenant_id,client_key,art,titel,faellig_am,uhrzeit,vorlauf_tage,fuer_login,fuer_bereich,bezug_typ,bezug_id,item_id,notiz,status,erstellt_von)
    VALUES(${id}::uuid,${auth.tenantId},${value.clientKey}::uuid,${value.kind},${value.title.trim()},${value.dueDate}::date,${value.time}::time,${value.kind==='frist'?5:0},${value.forLogin}::uuid,${value.forArea},${reference.type},${reference.id},${value.itemId??null}::uuid,${value.note?.trim()||null},'offen',${auth.userId}::uuid)`);
   const after=await find(tx,auth,id);if(!after||after.version!==value.version+1)throw Error('TASK_READBACK_FAILED');
+  if('todayNote'in deps){
+   if(!ownsTodayNoteTask(auth,after)||!same(after,value))throw Error('TODAY_NOTE_READBACK_FAILED');
+   return {code:'OK',task:after,replayed:false};
+  }
   const effect=await deps.effect(tx,auth,{key:eventKey(id,after.version,'save'),taskId:id,action:before?'geaendert':'angelegt',kind:after.art,title:after.titel,note:after.notiz,reference,...(isLagerPreisTask(after)?{priceTaskReceipt:true}:{}),...(!before&&value.itemId?{itemId:value.itemId,itemVersion:value.itemVersion}:{})});if(effect)throw new Rejected(effect);
   return {code:'OK',task:after,replayed:false};
 }
@@ -236,6 +272,8 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
 async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string,lagerOperation?:{type:'bestand';artikelId:string}|{type:'preis';artikelId:string;clientKey:string}):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
+  const todayNote=isTodayNoteTaskKey(before.client_key);
+  if(todayNote&&!ownsTodayNoteTask(auth,before))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
   const reissue=await reissueTaskSource(tx,auth,before);
   if(reissue&&!hasAuthorizationArea(auth,'zahlungen'))reject('FORBIDDEN',SHIPPING_FEE_COPY.reissueForbidden);
   if(await isCanceledInvoiceMailTask(tx,auth,before.id)&&!await readCanceledInvoiceTaskCompletion(tx,auth,before.id))reject('FORBIDDEN','Aufgabe ist für diesen Login nicht änderbar.');
@@ -256,7 +294,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   }
   if(before.art==='rechnung'&&(!invoiceId||before.bezug_typ!=='eingangsrechnung'||before.bezug_id!==invoiceId||!canCompleteTaskArea(auth,'buchhaltung')))reject('FORBIDDEN','Rechnung klären wird ausschließlich in der Eingangsrechnung erledigt.');
   const note=value.note?.trim()||null;
-  const completion=await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
+  const completion=todayNote?undefined:await deps.beforeComplete?.(tx,auth,before,value);if(completion)throw new Rejected(completion);
   const collection=await readCollectionFollowup(tx,auth.tenantId,{markerId:before.client_key});
   if(collection&&(collection.pending||before.bezug_typ!=='auftrag'||before.bezug_id!==collection.orderId||before.erstellt_von!==collection.actorId))throw Error('COLLECTION_FOLLOWUP_COMPLETION_NOT_PROVEN');
   const mailRemainder=await readInvoiceMailRemainderFailure(tx,auth,before.client_key);
@@ -272,7 +310,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const reference=await context(tx,auth,{type:before.bezug_typ,id:before.bezug_id},true,false);
   await tx.execute(sql`UPDATE public.tasks SET status='erledigt',erledigt_von=${auth.userId}::uuid,erledigt_am=statement_timestamp(),erledigt_notiz=${note},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.id}::uuid AND version=${value.version}`);
   const after=await find(tx,auth,before.id);if(!after||after.version!==value.version+1||after.status!=='erledigt')throw Error('TASK_COMPLETION_READBACK_FAILED');
-  const effect=await deps.effect(tx,auth,{key:eventKey(after.id,after.version,'complete'),taskId:after.id,action:'erledigt',kind:after.art,title:after.titel,note,reference,...(preisaufgabe?{priceTaskReceipt:true}:{})});if(effect)throw new Rejected(effect);
+  const effect=todayNote?undefined:await deps.effect(tx,auth,{key:eventKey(after.id,after.version,'complete'),taskId:after.id,action:'erledigt',kind:after.art,title:after.titel,note,reference,...(preisaufgabe?{priceTaskReceipt:true}:{})});if(effect)throw new Rejected(effect);
   return {code:'OK',task:after,replayed:false};
 }
 export async function resolveInvoiceClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string},deps:Dependencies):Promise<void>{
@@ -427,6 +465,7 @@ export async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction
  const readAuth='canReadArea'in auth?auth:liveTaskReadContext(auth);
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
   if('taskId'in request&&!task)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
+  if(task&&isTodayNoteTaskKey(task.client_key)&&('canReadArea'in auth||!ownsTodayNoteTask(auth,task)))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
   if(task&&!readAuth.canReadTaskArea(task.fuer_bereich))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
   const currentOrder=task?.bezug_typ==='auftrag'?await readCollectionTaskCurrentOrder(tx,readAuth,task.id):null;
   const reference=await context(tx,readAuth,task?{type:task.bezug_typ,id:currentOrder??task.bezug_id}:(request as Exclude<TaskOpenRequest,{taskId:string}>).reference,!task);
@@ -462,10 +501,30 @@ export async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction
 /** The only personal projection still uses the actual session actor. */
 export function presentTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead):Extract<TaskReadResult,{code:'OK'}>{
  const {task,reference,canceledCustomer,pricing,pricingSource,collection,collectionSource,credit,creditSource,reissue,reissueSource,mailRemainder,recollection,invoiceFollowupSource}=source;
+ if(task&&isTodayNoteTaskKey(task.client_key)){
+  if(!ownsTodayNoteTask(auth,task))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
+  return {code:'OK',task,reference,currentLogin:auth.userId,canEdit:false,canComplete:task.status==='offen',canOpenReference:false};
+ }
  const mayEdit=task?task.status==='offen'&&allowed(auth,task):true;
  if(task&&mayEdit&&source.canceledForEdit.code==='SOURCE_INCOMPLETE')throw Error('TASK_CANCELLATION_READ_INCOMPLETE');
  const canEdit=mayEdit&&(!task||task.bezug_typ!=='lagerartikel'&&task.bezug_typ!=='lagerbestand')&&(!task||source.canceledForEdit.code==='KNOWN'&&!source.canceledForEdit.value);
   return {code:'OK',task,reference,currentLogin:auth.userId,pricingSource,creditSource,invoiceFollowupSource,...(collection||collectionSource==='SOURCE_INCOMPLETE'?{collectionSource}:{}),...(reissue||reissueSource==="SOURCE_INCOMPLETE"?{reissueSource}:{}),canEdit:canEdit&&collectionSource==='KNOWN'&&!collection&&reissueSource==='KNOWN'&&!reissue&&invoiceFollowupSource==='KNOWN'&&!mailRemainder&&!recollection,canComplete:!!task&&task.status==='offen'&&invoiceMailRemainderAllowsCompletion(invoiceFollowupSource,mailRemainder)&&collectionSource==='KNOWN'&&reissueSource==='KNOWN'&&(reissue?hasAuthorizationArea(auth,'zahlungen'):(canEdit||canceledCustomer!==null))&&task.art!=='rechnung'&&(!credit?.pending||hasAuthorizationArea(auth,'zahlungen')),...(recollection?{completeLabel:E_INVOICE_COPY.collectionRoutingRetry}:collection?{completeLabel:COLLECTION_FOLLOWUP_COPY.retry}:reissue||credit?{completeLabel:SITUATION_COPY.retry}:pricing?{completeLabel:PRODUCTION_PRICING_RETRY_COPY.retry}:canceledCustomer!==null?{completeLabel:MAIL_RESEND_COPY.canceledCompleted(canceledCustomer)}:{}),canOpenReference:reference.type==='allgemein'||reference.label!==null};
+}
+
+/** The personal task cannot enter the tenant-wide Today model. */
+export async function readTodayNoteTask(){
+ const auth=await session();
+ if(!auth)return {code:'UNAUTHENTICATED' as const};
+ const day=berlinCalendarDay();
+ try{
+  return await withPrivilegedTenantTransaction(auth,async tx=>{
+   const key=todayNoteTaskKey(auth.tenantId,auth.userId,day);
+   const rows=await tx.execute<TaskRecord>(sql`SELECT ${columns} FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${key}::uuid`);
+   const row=rows[0];
+   if(rows.length>1||row&&!ownsTodayNoteTask(auth,row))return {code:'SOURCE_INCOMPLETE' as const};
+   return {code:'OK' as const,note:{day,version:row?.version??0,text:row?.status==='offen'?row.notiz??'':'',completed:row?.status==='erledigt'}};
+  });
+ }catch{return {code:'SOURCE_INCOMPLETE' as const};}
 }
 
 

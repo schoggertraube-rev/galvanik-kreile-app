@@ -175,16 +175,17 @@ function OrderRow({ order, qualification, onOpen,onCustomer,onPhoto }: { order: 
   /><div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'flex-end'}}>{onCustomer?<Button icon="users" text="Kundenkarte" onClick={onCustomer}/>:null}{onPhoto?<Button icon="camera" text="Foto" onClick={onPhoto}/>:null}<Button icon="open" art="primaer" text="Öffnen" onClick={()=>onOpen(order.id)}/></div></div>;
 }
 
-export function OrdersAppAdapter() {
+export function OrdersAppAdapter({initialView}: {initialView?: 'woche'} = {}) {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openCustomer=useOverlayStore(state=>state.openCustomer);
   const { hasPermission, loading: permissionsLoading,offline24h,offlineScope } = usePermissions();
   const [state, setState] = useState<OrdersState>({ kind: "loading" });
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<ViewMode>("liste");
+  const [view, setView] = useState<ViewMode>(initialView ?? "liste");
   const [filter, setFilter] = useState<OrderFilter>("alle");
 
   useEffect(() => {
+    if(initialView)return;
     const stored = window.sessionStorage.getItem(KEY) ?? "";
     const search = new URLSearchParams(window.location.search);
     const requestedView = search.get("view");
@@ -194,7 +195,7 @@ export function OrdersAppAdapter() {
       if (requestedView === "woche" || requestedView === "monat") setView(requestedView);
       if (requestedFilter === "fertig" || requestedFilter === "galvanik" || requestedFilter === "angenommen") setFilter(requestedFilter);
     });
-  }, []);
+  }, [initialView]);
 
   useEffect(() => {
     let active = true;
@@ -296,20 +297,21 @@ export function OrdersAppAdapter() {
     wert={view}
     onWert={setView}
   />;
+  const pageHeading = initialView ? null : <SeitenKopf titel="Aufträge" werkzeug={viewPicker} />;
 
   if (state.kind === "loading") return <section data-testid="orders-v11">
-    <SeitenKopf titel="Aufträge" werkzeug={viewPicker} />
+    {pageHeading}
     <Zustand art="laedt" text="Aufträge werden geladen." />
   </section>;
 
   if (state.kind !== "data") return <section data-testid="orders-v11">
-    <SeitenKopf titel="Aufträge" werkzeug={viewPicker} />
+    {pageHeading}
     <Zustand art={state.kind === "error" ? "fehler" : "gesperrt"} text={state.message || failureMessage(state.kind)} />
   </section>;
 
   if (state.orders.length === 0) return <section data-testid="orders-v11">
-    <SeitenKopf titel="Aufträge" werkzeug={viewPicker} />
-    <Zustand art="leer" text="Noch keine Aufträge." aktion={canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />
+    {pageHeading}
+    <Zustand art="leer" text="Noch keine Aufträge." aktion={!initialView && canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />
   </section>;
 
   const now = berlinDate(state.loadedAt);
@@ -339,7 +341,7 @@ export function OrdersAppAdapter() {
   });
 
   return <section data-testid="orders-v11">
-    <SeitenKopf titel="Aufträge" werkzeug={viewPicker} />
+    {pageHeading}
     {view === "liste" ? <div className="kr-stapel">
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 260px" }}><SuchFeld wert={query} onWert={updateQuery} platzhalter="Auftrag, Kunde, Teil oder Oberfläche" /></div>

@@ -401,6 +401,12 @@
   --kr-tag-band-schiene-schatten: inset 0 2px 6px #21435924,inset 0 -1px #fff;
   --kr-tag-band-fortschritt: linear-gradient(125deg,#3f9fc373,#69b9dd5e);
   --kr-tag-band-punkt: #266d89;
+  --kr-tag-week-light: #f5fcfb;
+  --kr-tag-week-muted: #d4e5e8;
+  --kr-tag-week-ground: linear-gradient(112deg,#152f3c 0%,#24444e 51%,#2e5460 79%,#375966 100%);
+  --kr-tag-week-edge: #2b4a56;
+  --kr-tag-week-bar: #97b5be;
+  --kr-tag-week-curve: #a1f0e6;
   --kr-tag-band-punktmass: 8px;
   --kr-tag-band-punktschatten: 0 0 0 3px #ffffffed,0 2px 7px #1743534a;
   --kr-tag-band-termin: #9d6536;

@@ -1,32 +1,45 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
   openOrder: vi.fn(),
+  openCustomer: vi.fn(),
   openInvoice: vi.fn(),
+  readNote: vi.fn().mockResolvedValue({code:'SOURCE_INCOMPLETE'}),
+  saveNote: vi.fn().mockResolvedValue({code:'UNAVAILABLE'}),
   requestCreate: vi.fn(),
   listInbox: vi.fn(),
   confirmHandover:vi.fn(),
+  readWeekOrders:vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
   permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
 }));
-vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
+vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: typeof ports) => unknown) => selector(ports) }));
+vi.mock('@/app/actions/today.actions',()=>({readTodayOwnNoteAction:ports.readNote,saveTodayOwnNotesAction:ports.saveNote}));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
 vi.mock('@/components/communication/CommunicationPanel',()=>({CommunicationPanel:({targetId,invoiceOriginal}:{targetId:string;invoiceOriginal?:{documentId:string}})=><div data-testid="TEST-canonical-composer" data-customer={targetId} data-original={invoiceOriginal?.documentId}/> }));
 vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox,confirmInvoiceHandoverAction:ports.confirmHandover }));
+vi.mock("@/app/actions/orders.actions", () => ({
+  getOrdersBaseDb: () => ports.readWeekOrders(),
+  getOrdersDb: () => ports.readWeekOrders(),
+}));
 vi.mock("@/app/actions/eingang.actions",()=>({getIntakeDraftsAction:vi.fn(async()=>({code:"OK",drafts:[]})),discardIntakeDraftAction:vi.fn(async()=>({code:"OK",drafts:[]}))}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     loading: ports.permissions.loading,
+    hasPermission: () => false,
     hasArea: (area: string) => (area === "eingang" && ports.permissions.canCreateOrder) || (area === "auftraege" && ports.permissions.canWorkOrders),
   }),
 }));
 
 import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
 import {SHIPPING_FEE_COPY,SITUATION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {OfficeWeekControl} from '../OfficeWeekControl';
+import {OfficeOwnNotes} from '../OfficeOwnNotes';
+import type {TodayDashboard} from '@/lib/server/todayDashboard';
 import {completeU2Read} from '@/lib/domain/u2ReadContract';
 
 const actionPorts = {
@@ -37,10 +50,140 @@ const actionPorts = {
   handBackOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 3 } }),
 };
 
-it('öffnet belegte Termine im vorhandenen Auftrag und zeigt keine erfundene Uhrzeit',()=>{
+it('B-20 Rechnungsblatt uses the existing invoice action and only visible confirmed amounts',()=>{
+ const invoice={id:'test-invoice',number:'TEST-R-26',customerName:'TEST Nord',amountCents:48000,dueDate:'2026-11-16',
+  overdue:true,openOriginal:true,customerId:'test-customer',order:{id:'test-order',number:'TEST-A-26'}};
+ const calendar={readStartedAt:'2026-11-25T15:00:00.000Z',today:'2026-11-25',throughDate:'2026-12-02'};
+ const base={kind:'data',role:'meister',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection} as const;
+ const money:NonNullable<TodayDashboard['invoiceMoney']>={code:'OK',openCount:1,openCents:48000,overdueCount:1,overdueCents:48000,
+  today:1,upcoming:0,sources:[{id:invoice.id,version:1,dueDate:invoice.dueDate,amountCents:invoice.amountCents}]};
+ const renderModel=(visible:boolean)=><RolfHomeClient model={{...base,dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],calendar,
+  ...(visible?{invoiceMoney:money,invoiceSheet:{rows:[invoice],incomplete:true}}:{})}}} ports={actionPorts}/>;
+ const {rerender}=render(renderModel(true));
+ fireEvent.click(screen.getByRole('button',{name:'Offene Rechnungen'}));
+ const dialog=screen.getByRole('dialog',{name:'Offene Rechnungen'});
+ expect(within(dialog).getByText('Gesamt offen')).toBeVisible();
+ expect(within(dialog).getByText(PAGE_READ_COPY.sourceIncomplete)).toBeVisible();
+ fireEvent.click(within(dialog).getByRole('button',{name:/Rechnung TEST-R-26 öffnen/}));
+ expect(ports.openInvoice).toHaveBeenCalledWith(invoice.id);
+ rerender(renderModel(false));
+ expect(screen.queryByRole('button',{name:'Offene Rechnungen'})).not.toBeInTheDocument();
+ expect(screen.queryByRole('dialog',{name:'Offene Rechnungen'})).not.toBeInTheDocument();
+});
+
+it('B-20 Tagesnotiz keeps the typed text visible and only confirms the matching saved version',async()=>{
+ const empty={day:'2026-11-26',version:0,text:'',completed:false};
+ let acknowledge!:(result:{code:'OK';note:typeof empty})=>void;
+ ports.readNote.mockResolvedValueOnce({code:'OK',note:empty});
+ ports.saveNote.mockImplementationOnce(()=>new Promise(done=>{acknowledge=done;}));
+ render(<OfficeOwnNotes/>);
+ const input=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ await waitFor(()=>expect(input).toBeEnabled());
+ const text='TEST Text bleibt sichtbar';
+ fireEvent.change(input,{target:{value:text}});fireEvent.blur(input);
+ await waitFor(()=>expect(ports.saveNote).toHaveBeenCalledWith({day:empty.day,version:0,text}));
+ expect(input).toHaveValue(text);
+ expect(screen.queryByText('Automatisch gespeichert')).not.toBeInTheDocument();
+ acknowledge({code:'OK',note:{...empty,version:1,text}});
+ expect(await screen.findByText('Automatisch gespeichert')).toBeVisible();
+});
+
+it('B-20 Tagesnotiz retains the newest edit across navigation while the previous save is in flight',async()=>{
+ const empty={day:'2026-11-26',version:0,text:'',completed:false};
+ const first={...empty,version:1,text:'TEST erster Entwurf'};
+ const newest={...empty,version:2,text:'TEST neuerer Entwurf'};
+ let acknowledgeFirst!:(result:{code:'OK';note:typeof empty})=>void;
+ let acknowledgeNewest!:(result:{code:'OK';note:typeof empty})=>void;
+ ports.readNote.mockResolvedValueOnce({code:'OK',note:empty}).mockResolvedValueOnce({code:'OK',note:first});
+ ports.saveNote.mockImplementationOnce(()=>new Promise(done=>{acknowledgeFirst=done;}))
+  .mockImplementationOnce(()=>new Promise(done=>{acknowledgeNewest=done;}));
+ const opened=render(<OfficeOwnNotes loginScope="TEST-note-navigation-login"/>);
+ const before=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ await waitFor(()=>expect(before).toBeEnabled());
+ fireEvent.change(before,{target:{value:first.text}});fireEvent.blur(before);
+ await waitFor(()=>expect(ports.saveNote).toHaveBeenCalledWith({day:empty.day,version:0,text:first.text}));
+ fireEvent.change(before,{target:{value:newest.text}});
+ opened.unmount();
+ const returned=render(<OfficeOwnNotes loginScope="TEST-note-navigation-login"/>);
+ const after=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ expect(after).toHaveValue(newest.text);
+ expect(screen.queryByText('Automatisch gespeichert')).not.toBeInTheDocument();
+ acknowledgeFirst({code:'OK',note:first});
+ await waitFor(()=>expect(ports.saveNote).toHaveBeenCalledWith({day:empty.day,version:1,text:newest.text}));
+ expect(after).toHaveValue(newest.text);
+ expect(screen.queryByText('Automatisch gespeichert')).not.toBeInTheDocument();
+ acknowledgeNewest({code:'OK',note:newest});
+ expect(await screen.findByText('Automatisch gespeichert')).toBeVisible();
+ returned.unmount();
+ ports.readNote.mockResolvedValueOnce({code:'OK',note:empty});
+ render(<OfficeOwnNotes loginScope="TEST-note-other-login"/>);
+ const other=screen.getByRole('textbox',{name:'Eigene Notizen'});
+ await waitFor(()=>expect(other).toBeEnabled());
+ expect(other).toHaveValue('');
+});
+
+it('zeigt die freigegebene Wochensumme und schließt zum Auslöser zurück',()=>{
+ // Synthetic display boundary; the server role split is covered with real logins.
+ const week={weekStart:'2026-11-16',weekEndExclusive:'2026-11-23',netCents:386000,currentlyUnpricedItemCount:0};
+ const withDays={...week,days:[{date:'2026-11-16',netCents:142000},{date:'2026-11-17',netCents:168000},{date:'2026-11-18',netCents:76000}]};
+ const read=vi.fn(async()=>({code:'OK' as const,data:week}));
+ const ui=(data:typeof week)=> <OfficeWeekControl initial={{code:'OK',data}} read={read} today="2026-11-18"/>;
+ const view=render(ui(withDays));
+ const opener=screen.getByRole('button',{name:'Diese Woche fertig – Liste öffnen'});
+ expect(opener).toHaveTextContent('3.860,00');
+ fireEvent.click(opener);
+ const sheet=screen.getByRole('dialog',{name:'Diese Woche fertig'});
+ expect(within(sheet).getByRole('table')).toBeVisible();
+ expect(within(sheet).getByRole('rowheader',{name:/Mittwoch/})).toHaveTextContent('bis jetzt');
+ expect(within(sheet).getByRole('row',{name:/Mittwoch/})).toHaveTextContent('3.860,00');
+ fireEvent.click(within(sheet).getByRole('button',{name:'Schließen'}));
+ expect(opener).toHaveFocus();
+ view.rerender(ui(week));
+ fireEvent.click(opener);
+ const limited=screen.getByRole('dialog',{name:'Diese Woche fertig'});
+ expect(within(limited).getByText(/3\.860,00/)).toBeVisible();
+ expect(within(limited).queryByRole('table')).not.toBeInTheDocument();
+ expect(within(limited).queryByRole('img')).not.toBeInTheDocument();
+ expect(read).not.toHaveBeenCalled();
+});
+
+it('öffnet Tages- und Wochenpositionen erst auf Anforderung und kehrt zur Auswahl zurück',async()=>{
+ // Synthetic display data. The signed values and the role checks are covered by the real reader case.
+ const monday='2026-11-16',tuesday='2026-11-17';
+ const week={weekStart:monday,weekEndExclusive:'2026-11-23',netCents:7500,currentlyUnpricedItemCount:0,canReadPositions:true as const,
+  days:[{date:monday,netCents:10000},{date:tuesday,netCents:-2500}]};
+ const read=vi.fn(async()=>({code:'OK' as const,data:{...week,positions:{complete:true,rows:[
+  {date:monday,orderId:'TEST-order-a',orderNumber:'TEST-A',customerName:'TEST Kunde',itemId:'TEST-item-a',name:'TEST Teil A',netCents:10000},
+  {date:tuesday,orderId:'TEST-order-b',orderNumber:'TEST-B',customerName:'TEST Kunde',itemId:'TEST-item-b',name:'TEST Teil B',netCents:-2500},
+ ]}}}));
+ render(<OfficeWeekControl initial={{code:'OK',data:week}} read={read} today={tuesday}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Diese Woche fertig – Liste öffnen'}));
+ expect(read).not.toHaveBeenCalled();
+ const sheet=screen.getByRole('dialog',{name:'Diese Woche fertig'});
+ const trigger=within(sheet).getByRole('button',{name:'Fertigmeldungen · Dienstag'});
+ fireEvent.click(trigger);
+ const detail=screen.getByRole('dialog',{name:'Fertigmeldungen · Dienstag'});
+ expect(await within(detail).findByText(/TEST Teil B/)).toHaveTextContent('-25,00');
+ expect(within(detail).queryByText(/TEST Teil A/)).not.toBeInTheDocument();
+ expect(read).toHaveBeenLastCalledWith({onDate:monday,includePositions:true});
+ fireEvent.click(within(detail).getByRole('button',{name:/TEST-B/}));
+ expect(ports.openOrder).toHaveBeenLastCalledWith('TEST-order-b');
+ fireEvent.click(within(detail).getByRole('button',{name:'Schließen'}));
+ expect(trigger).toHaveFocus();
+ fireEvent.click(within(sheet).getByRole('button',{name:'Fertigmeldungen bis Dienstag'}));
+ const through=screen.getByRole('dialog',{name:'Fertigmeldungen bis Dienstag'});
+ expect(await within(through).findByText(/TEST Teil A/)).toBeVisible();
+ expect(within(through).getByText(/TEST Teil B/)).toBeVisible();
+});
+
+it('öffnet belegte Termine und kehrt aus dem Kalenderblatt zum gewählten Tagesplan zurück',async()=>{
  // Synthetic display boundary. The list uses matching versions from the order reader.
  const read=(number:string)=>completeU2Read({code:'OK',erstblick:[{key:'auftrag.lage',werte:{nummer:number}}]});
  const calendar={readStartedAt:'2026-11-25T15:00:00.000Z',today:'2026-11-25',throughDate:'2026-12-02'};
+ ports.readWeekOrders.mockResolvedValue({ok:true,serverReadAt:calendar.readStartedAt,data:[
+  {id:'TEST-week-order',orderNumber:'TEST-WOCHE-1',customerId:'TEST-customer',customerName:'TEST Kalender',
+   title:'TEST Wochenauftrag',dueDate:calendar.today,station:'angenommen',status:'angenommen',risk:'green',parts:[]},
+ ]});
  render(<RolfHomeClient model={{kind:'data',role:'meister',canCreateOrder:false,canWorkOrders:true,canDelegate:false,projection,
   dashboard:{...dashboard,visibleFields:[...dashboard.visibleFields],calendar,
    orderSchedule:{code:'SOURCE_INCOMPLETE',knownCounts:{today:1,upcoming:1},missing:['TEST_INCOMPLETE_SOURCE'],sources:[
@@ -59,8 +202,27 @@ it('öffnet belegte Termine im vorhandenen Auftrag und zeigt keine erfundene Uhr
  expect(screen.queryByRole('button',{name:/A-2026-3031/})).not.toBeInTheDocument();
  fireEvent.click(screen.getByRole('button',{name:/26\. Nov\. A-2026-3032/}));
  expect(ports.openOrder).toHaveBeenLastCalledWith('plan-next');
- fireEvent.click(screen.getByRole('button',{name:'Bearbeiten'}));
- expect(ports.push).toHaveBeenCalledWith('/orders?view=woche');
+ const opener=screen.getByRole('button',{name:'Bearbeiten'});
+ const locationBefore=window.location.href;
+ fireEvent.click(opener);
+ let sheet=screen.getByRole('dialog',{name:'Kalender bearbeiten'});
+ expect(await within(sheet).findByRole('button',{name:/TEST-WOCHE-1/})).toBeVisible();
+ fireEvent.click(within(sheet).getByRole('button',{name:'Kalender schließen'}));
+ await waitFor(()=>expect(opener).toHaveFocus());
+ expect(ports.refresh).not.toHaveBeenCalled();
+ expect(ports.push).not.toHaveBeenCalled();
+ fireEvent.click(opener);
+ sheet=screen.getByRole('dialog',{name:'Kalender bearbeiten'});
+ // Synthetic boundary for the confirmed change signal from the existing order sheet.
+ fireEvent(window,new Event('kreile-sync-orders'));
+ expect(ports.refresh).not.toHaveBeenCalled();
+ fireEvent.click(within(sheet).getByRole('button',{name:'Kalender schließen'}));
+ await waitFor(()=>expect(opener).toHaveFocus());
+ expect(screen.queryByRole('dialog',{name:'Kalender bearbeiten'})).not.toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'7 Tage'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('button',{name:/26\. Nov\. A-2026-3032/})).toBeVisible();
+ expect(window.location.href).toBe(locationBefore);
+ expect(ports.refresh).toHaveBeenCalledTimes(1);
 });
 
 it('shows a concrete source notice and opens the same real order path instead of hiding the missing proposal',()=>{
@@ -85,10 +247,19 @@ it('retains a known task when the order list is unknown and offers a fresh read 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // JSDOM can deliver history.back() after an open sheet has been unmounted.
+  // Keep that browser boundary isolated between display cases.
+  vi.spyOn(window.history,"back").mockImplementation(()=>{});
   ports.permissions.loading = false;
   ports.permissions.canCreateOrder = true;
   ports.permissions.canWorkOrders = true;
   ports.listInbox.mockResolvedValue({ code: "OK", data: [] });
+});
+
+afterEach(async()=>{
+  cleanup();
+  await Promise.resolve();
+  vi.mocked(window.history.back).mockRestore();
 });
 
 const projection: OrdersHomeProjection = {
@@ -293,8 +464,8 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   it("keeps the complete field layout code hidden behind the planned stage-2 connection", async () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields], layout: [...dashboard.layout], defaultLayout: [...dashboard.defaultLayout], allowedFields: [...dashboard.allowedFields] }, projection }} />);
 
-    expect(screen.getByRole("button", { name: "Anpassen · geplant" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Bündeln · geplant" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Anpassen · geplant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Bündeln · geplant" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Felder zuordnen" })).not.toBeInTheDocument();
     expect(actionPorts.savePreferences).not.toHaveBeenCalled();
   });
@@ -319,7 +490,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
     const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
     const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
+    expect(screen.getByText("Noch keine Aufträge erfasst.").closest('[role="status"]')).toBeVisible();
     expect(screen.getByRole("button", { name: "Neu erfassen" })).toBeInTheDocument();
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
@@ -333,7 +504,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
 
   it("unterscheidet vorhandene Aufträge ohne heutige Handlung vom leeren Auftragsbestand", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "werkstatt", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] }, projection }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Nichts offen");
+    expect(screen.getByText("Nichts offen").closest('[role="status"]')).toBeVisible();
     expect(screen.queryByText("Noch keine Aufträge erfasst.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Neu erfassen" })).not.toBeInTheDocument();
   });

@@ -39,6 +39,7 @@
     "@/modules/tasks/server-public#saveTask",
     "@/modules/tasks/server-public#completeTask",
     "@/modules/tasks/server-public#readTask",
+    "@/modules/tasks/server-public#readTodayNoteTask",
     "@/modules/tasks/server-public#readTaskForAuthorization",
     "@/modules/tasks/server-public#projectTaskCalendarSources",
     "@/modules/tasks/server-public#projectQuoteFollowupSources",

@@ -13,7 +13,7 @@ import {classifyOverdue} from "./paymentContract";
 import {readOrderResponsibilityForToday} from "@/lib/server/orderTaskAssignmentRead";
 
 import { sql } from "drizzle-orm";
-import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
+import {canTransportInvoiceDocument,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {hasAnyAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
@@ -65,6 +65,17 @@ type TodayTagQuellePort={
  ausModell:(auth:AuthorizationSnapshot,value:unknown)=>TagQuellenLesestand;
 };
 type TodayTagQuellenPorts={aufgaben:TodayTagQuellePort;taktAusfall:TodayTagQuellePort};
+export type TodayInvoiceSheetRow={
+  id:string;
+  number:string;
+  customerName:string;
+  amountCents:number;
+  dueDate:string;
+  overdue:boolean|null;
+  openOriginal:boolean;
+  customerId?:string;
+  order?:{id:string;number:string};
+};
 export type TodayDashboard = {
   hauptaktion?:U2Read['hauptaktion'];
   hauptaktionsQuelle?:{key:string;id:string;version:number}|null;
@@ -80,6 +91,7 @@ export type TodayDashboard = {
   orderActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:TodayOrderScheduleRow[];missingOrderIds:string[]};
   moneySources?:{invoices:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};prepayments:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'};collections:{code:'OK';count:number}|{code:'SOURCE_INCOMPLETE'}};
   invoiceMoney?:ReturnType<typeof projectTodayInvoiceMoney>;
+  invoiceSheet?:{rows:TodayInvoiceSheetRow[];incomplete:boolean};
   moneyMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   assignmentMetric?:{code:'OK';count:number;sources:Array<{id:string;version:number}>}|{code:'SOURCE_INCOMPLETE'};
   items: TodayItem[];
@@ -99,7 +111,7 @@ export type TodayDashboard = {
 
 type PreferenceRow = { visible_fields: string[]; layout: unknown | null };
 type ReminderRow = { item_key: string; reminder_until: Date | string };
-type InvoiceRow = { overdue:boolean;overdue_as_of:string;payment_version:number;id: string; invoice_number: string; order_id: string | null; customer_name: string; customer_country: string | null; due_date: Date | string | null; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string | null };
+type InvoiceRow = { overdue:boolean;overdue_as_of:string;payment_version:number;id: string; invoice_number: string; order_id: string | null; customer_id?:string; customer_name: string; customer_country: string | null; original_present?:boolean|null; due_date: Date | string | null; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string | null };
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string; full_name: string };
 type AssignmentRow = { integrity_ok:boolean;order_id: string; assigned_to_name: string; current_order_version: number };
@@ -183,8 +195,9 @@ async function readTodayMoneySources(auth:AuthorizationSnapshot|AuthorizedReadCo
  const {money:moneyAllowed}=access;
  return withPrivilegedTenantTransaction(auth,async tx=>{
       const invoiceSource=moneyAllowed ? await readTodaySource(tx,nested=>nested.execute<InvoiceRow>(sql`
-          SELECT invoice.id, invoice.payment_version, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
+          SELECT invoice.id, invoice.payment_version, invoice.invoice_number, invoice.order_id, invoice.customer_id, customer.name AS customer_name,
                  customer.country AS customer_country, invoice.due_date,
+                 (invoice.contract_version=1 AND invoice.pdf_content IS NOT NULL AND invoice.pdf_sha256 IS NOT NULL) IS TRUE AS original_present,
                  ${classifyOverdue(today)} AS overdue,${today}::text AS overdue_as_of,
                  invoice.payment_open_amount_cents AS open_amount_cents,
                  COALESCE(orders.payment_mode, invoice.payment_mode) AS payment_mode, invoice.payment_status, orders.station
@@ -492,6 +505,33 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
   }
 
   const invoiceMoney=projectTodayInvoiceMoney(support.invoiceSource,calendar);
+  const invoiceSheet=moneyAllowed?(()=>{
+    if(support.invoiceSource.code!=='OK')return {rows:[],incomplete:true};
+    const rows:TodayInvoiceSheetRow[]=[];
+    let incomplete=invoiceMoney.code!=='OK';
+    const byId=new Map(support.invoiceSource.data.map(row=>[row.id,row]));
+    const orderNumbers=new Map(ordersAllowed?orders.map(order=>[order.id,order.orderNumber]):[]);
+    const canOpenCustomer=hasAuthorizationArea(auth,'kunden');
+    const canOpenOriginal=canTransportInvoiceDocument(auth);
+    for(const source of invoiceMoney.sources??[]){
+      const invoice=byId.get(source.id);
+      if(!invoice||invoice.payment_version!==source.version||!invoice.invoice_number?.trim()||!invoice.customer_name?.trim()){
+        incomplete=true;
+        continue;
+      }
+      if((canOpenOriginal&&typeof invoice.original_present!=='boolean')||(canOpenCustomer&&typeof invoice.customer_id!=='string'))incomplete=true;
+      const orderId=invoice.order_id;
+      const orderNumber=orderId?orderNumbers.get(orderId):undefined;
+      rows.push({
+        id:source.id,number:invoice.invoice_number,customerName:invoice.customer_name,
+        amountCents:source.amountCents,dueDate:source.dueDate,overdue:isOverdueInvoiceForToday(invoice,today),
+        openOriginal:canOpenOriginal&&invoice.original_present===true,
+        ...(canOpenCustomer&&invoice.customer_id?{customerId:invoice.customer_id}:{}),
+        ...(orderId&&orderNumber?{order:{id:orderId,number:orderNumber}}:{}),
+      });
+    }
+    return {rows,incomplete};
+  })():undefined;
   const overdueInvoices=support.invoices.filter(invoice=>isOverdueInvoiceForToday(invoice,today)===true);
   for (const invoice of overdueInvoices.slice(0,20)) {
     const dueDate = dateOnly(invoice.due_date!);
@@ -615,7 +655,7 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
     ...(ordersAllowed?{orderActions,orderSchedule}:{}),
-    ...(moneyAllowed?{invoiceMoney}:{}),
+    ...(moneyAllowed?{invoiceMoney,invoiceSheet}:{}),
     ...(moneyAllowed?{moneySources:{invoices:countTodaySource(support.invoiceSource),prepayments:countTodaySource(support.prepaymentSource),collections:countTodaySource(support.collectionSource)}}:{}),
     ...(moneyAllowed?{moneyMetric:invoiceMoney.code==='OK'?{code:'OK' as const,count:overdueInvoices.length,sources:overdueInvoices.map(row=>({id:row.id,version:row.payment_version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
     ...(graphAllowed?{assignmentMetric:assignmentMessages?{code:'OK' as const,count:assignmentMessages.length,sources:assignmentMessages.map(row=>({id:row.id,version:row.version}))}:{code:'SOURCE_INCOMPLETE' as const}}:{}),
@@ -841,7 +881,11 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
     ||!modelRecord(row.invoiceSource)||!modelRecord(row.prepaymentSource)||!modelRecord(row.collectionSource)||!modelRecord(row.invoiceMailSource))throw Error('TODAY_MODEL_MONEY_INVALID');
    return row as unknown as Parameters<typeof maskTodayMoneySupport>[1];
   }));
-  const moneyRead=access.money||access.invoiceMail?live('money',cachedMoney,()=>readTodayMoneySupport(auth,calendar.today)):cachedMoney;
+  const moneyRows=cachedMoney.invoiceSource;
+  const canReadCustomerId=hasAuthorizationArea(auth,'kunden');
+  const needsInvoiceDetails=!deferLive&&access.money&&moneyRows.code==='OK'&&moneyRows.data.some(invoice=>
+   (access.invoiceMail&&typeof invoice.original_present!=='boolean')||(canReadCustomerId&&typeof invoice.customer_id!=='string'));
+  const moneyRead=access.money||access.invoiceMail?live('money',cachedMoney,()=>readTodayMoneySupport(auth,calendar.today),needsInvoiceDetails):cachedMoney;
   const unknownComplaints:TodayDashboardSources['complaints']={code:'SOURCE_INCOMPLETE',message:'TODAY_COMPLAINT_SOURCE'};
   const complaintsRead=access.complaints?live<TodayDashboardSources['complaints']>('complaints',project<TodayDashboardSources['complaints']>('complaints',unknownComplaints,payload=>ports.complaints(auth,payload)),ports.liveComplaints):{code:'OK' as const,complaints:[]};
   const unknownFollowups:TodayDashboardSources['quoteFollowups']={code:'SOURCE_INCOMPLETE',message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};
