@@ -1,6 +1,7 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readTodayNoteTask,saveTask} from '@/modules/tasks/server-public';
 
 
 import {LEGACY_ACTION_ACCESS_COPY} from '@/ui/situationCatalog';
@@ -55,5 +56,18 @@ export async function saveTodayReminderAction(input: { itemKey: string; mode: "a
     return { code: "UNAVAILABLE" as const, message: "Die Erinnerung konnte nicht sicher gespeichert werden. Fehlercode: TODAY_REMINDER_SAVE_FAILED." };
   }
 
+ },readLoggingSettings);
+}
+
+export async function readTodayOwnNoteAction(){
+ return observeAction('readTodayOwnNoteAction',subjectForAction('readTodayOwnNoteAction',undefined),readTodayNoteTask,readLoggingSettings);
+}
+
+export async function saveTodayOwnNotesAction(input:{text:string;day:string;version:number}){
+ return observeAction('saveTodayOwnNotesAction',subjectForAction('saveTodayOwnNotesAction',undefined),async()=>{
+  const result=await saveTask(input,{todayNote:true});
+  if(result.code!=='OK')return result;
+  const {faellig_am:day,notiz:text,version,status}=result.task;
+  return {code:'OK' as const,note:{day,text:text??'',version,completed:status==='erledigt'}};
  },readLoggingSettings);
 }

@@ -1,0 +1,12 @@
+.editor { display: grid; gap: var(--kr-tag-luecke); }
+.editor textarea {
+  min-block-size: 4em;
+  padding: var(--kr-tag-band-padding);
+  border: 1px solid var(--kr-tag-band-kante);
+  border-radius: var(--kr-tag-kartenradius);
+  resize: vertical;
+  font: inherit;
+  color: inherit;
+  background: var(--kr-tag-band-grund);
+}
+.label { position: absolute; block-size: 1px; inline-size: 1px; overflow: hidden; clip-path: inset(50%); }

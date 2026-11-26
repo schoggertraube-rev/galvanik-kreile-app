@@ -7,7 +7,7 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {HeuteZeile,TagQuelle} from '@/lib/today/todaySourceRegistry';
 import {TASK_TAG_COPY} from '@/ui/tasksCopy';
 import {TASK_KIND_LABELS,taskUuid,validTaskReference,type TaskKind} from '../contract';
-import {liveTaskReadContext,taskReferenceVisible,type TaskReadContext} from './taskService';
+import {liveTaskReadContext,taskReferenceVisible,TODAY_NOTE_TASK_PREFIX,type TaskReadContext} from './taskService';
 
 export const tagQuellen = [
   {id: 'tasks.aufgabe', modul: 'tasks', bereich: null, rang: null, bestand: {leser: 'tasks', umfang: 'mandant'}},
@@ -76,6 +76,7 @@ export async function liesAufgabenFuerTag(auth:AuthorizationSnapshot|TaskReadCon
       HAVING count(*)=1
     ) bezug ON true
     WHERE task.tenant_id=${auth.tenantId} AND task.status='offen'
+      AND task.client_key::text NOT LIKE ${TODAY_NOTE_TASK_PREFIX+'%'}
     ORDER BY task.faellig_am,task.id`);
    if(!offene.every(istAufgabenFakt))return {code:'SOURCE_INCOMPLETE' as const};
    return {code:'OK' as const,tenantId:auth.tenantId,aufgaben:offene.filter(eintrag=>readAuth.canReadTaskArea(eintrag.bereich))};
