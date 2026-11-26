@@ -3,7 +3,7 @@ import {sql} from 'drizzle-orm';
 import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import {boundedTodayRefreshBudgetMs,type TodayReadSettings} from '@/modules/fundament/public';
-import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
@@ -88,7 +88,7 @@ async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthoriz
  * personal rules, assignment ownership and command grants stay on the live path. */
 function productivePorts():TodayProjectionPorts{
  const orderLists=new WeakMap<ProjectorAuthorization,ReturnType<typeof getOperationalOrders>>();
- const orders=(auth:ProjectorAuthorization)=>{let value=orderLists.get(auth);if(!value){value=getOperationalOrders(auth,{purpose:'today'});orderLists.set(auth,value);}return value;};
+ const orders=(auth:ProjectorAuthorization)=>{let value=orderLists.get(auth);if(!value){value=getOperationalOrders(auth,{purpose:'today'},readBetriebsruheInTransaction);orderLists.set(auth,value);}return value;};
  const orderPorts:TodayOrderReadPorts={readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
   readCredit:(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),
   readShipments:(auth,ids,readSettings)=>readManualShippingBatch(auth,ids,{readSettings,readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,
@@ -171,11 +171,11 @@ async function release(tenantId:string,lease:Lease){
  await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=NULL
   WHERE tenant_id=${tenantId} AND refresh_lease_until=${lease.token}::timestamptz`));
 }
-async function pending(tenantId:string,lease:Lease,limit?:number):Promise<Snapshot[]>{
+async function pending(tenantId:string,lease:Lease,fullRebuild:boolean,limit?:number):Promise<Snapshot[]>{
  return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<Snapshot>(sql`SELECT source.kind,source.source_id AS "sourceId",source.source_seq::text AS "sourceSeq",tenant.tenant_seq::text AS "tenantSeq",${lease.day}::text AS day
   FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant ON tenant.tenant_id=source.tenant_id
   WHERE source.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
-   AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND ${todaySourceNeedsRebuild(lease.day)}
+   AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND ${todaySourceNeedsRebuild(lease.day,fullRebuild)}
   ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
 }
 /** Same short write-phase lock order as the source invalidators. Source reads
@@ -283,7 +283,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   }
   // Freeze this finite worklist. Writes that race this build remain stale for
   // the next bounded refresh; neither failures nor writers cause a rebuild loop.
-  const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild?undefined:settings.todayRefreshBatchLimit));
+  const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit));
   let built=0,stale=0;
   for(let offset=0;offset<rows.length;offset+=15){
    assertOwned();
@@ -291,7 +291,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   }
   assertOwned();
   if(rebuild){
-   const remaining=await withLeaseWrite(lease,()=>pending(tenantId,lease,1));
+   const remaining=await withLeaseWrite(lease,()=>pending(tenantId,lease,true,1));
    if(remaining.length)stale+=remaining.length;
    if(!remaining.length&&!stale){
     const completed=await withLeaseWrite(lease,()=>withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET rebuilt_at=statement_timestamp() WHERE tenant_id=${tenantId} AND tenant_seq=${lease.tenantSeq}::bigint AND refresh_lease_until=${lease.token}::timestamptz AND refresh_lease_until>statement_timestamp() RETURNING tenant_id`)));

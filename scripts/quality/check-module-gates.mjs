@@ -92,7 +92,7 @@ const REAL_DB_TEST_FILE = /^src\/test\/.+\.integration\.test\.ts$/;
 // E2 Projektor, PL 22.11. 04:3x (Entscheid 04:25:53): exactly one named root.
 const TODAY_PROJECTOR_FILE = 'src/lib/server/todayProjection.ts';
 const TODAY_PROJECTOR_READ_FACADES = new Map([
-  ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction'])],
+  ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction','readBetriebsruheInTransaction'])],
   ['orders',new Set(['readManualShipping','readManualShippingBatch'])],
   ['accounting',new Set(['readInvoiceVat','readCustomerCreditInTransaction'])],
   ['customers',new Set([
