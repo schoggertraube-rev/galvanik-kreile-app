@@ -2,6 +2,7 @@ name: agentur-gate
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     branches:
       - main
       - feature/capture-auth-tenant
@@ -13,8 +14,8 @@ on:
     - cron: '30 0,1 * * *'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -37,7 +38,7 @@ jobs:
   agentur-gate:
     name: agentur-gate
     needs: berlin-clock
-    if: needs.berlin-clock.outputs.run == 'yes'
+    if: needs.berlin-clock.outputs.run == 'yes' && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'voll-pruefen'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -90,7 +91,7 @@ jobs:
       matrix:
         part: [bulk, isolated]
     needs: berlin-clock
-    if: needs.berlin-clock.outputs.run == 'yes'
+    if: needs.berlin-clock.outputs.run == 'yes' && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'voll-pruefen'))
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -144,7 +145,7 @@ jobs:
   h16-generated:
     name: h16-generated-flows
     needs: berlin-clock
-    if: needs.berlin-clock.outputs.run == 'yes'
+    if: needs.berlin-clock.outputs.run == 'yes' && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'voll-pruefen'))
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -191,7 +192,7 @@ jobs:
   h16-schema:
     name: h16-schema
     needs: [berlin-clock, h16-native, h16-generated]
-    if: always() && needs.berlin-clock.outputs.run == 'yes'
+    if: always() && !cancelled() && needs.berlin-clock.outputs.run == 'yes' && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'voll-pruefen'))
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
