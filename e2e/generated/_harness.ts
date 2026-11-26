@@ -104,6 +104,17 @@ export async function prepareGeneratedSeed(flowCase: FlowCase) {
   await resetGeneratedDomain();
   const seed = readFileSync(path.resolve(process.cwd(), "e2e/generated/_seed.sql"), "utf8");
   await sql.unsafe(seed);
+  // These generated cases exercise the actual catalog-backed calculation.
+  // TA09 leaves surface empty on purpose, so it must remain free text.
+  const catalogId = "42000000-0000-4000-8000-000000000019";
+  await sql`DELETE FROM public.catalog_services WHERE tenant_id = ${TENANT} AND id = ${catalogId}::uuid`;
+  if (/^TA(?:0[1-8]|1[0124-8])$/.test(flowCase.id)) {
+    await upsertFixture("catalog_services", {
+      id: catalogId, tenant_id: TENANT, name: "Prüfteil eins", surface: "verzinken",
+      unit: "stueck", net_price_cents: 1000, vat_rate_basis_points: 1900,
+      standard_lead_time_working_days: 3, active: true,
+    });
+  }
   const names = selectedFixtureNames(flowCase.gegeben.datenlagen);
   const seeds = generatedFlowRuntime.fixtureSql as unknown as Record<string, string>;
   for (const name of names) {
