@@ -16,8 +16,7 @@ BEGIN
   RETURN NEW;
 END;
 $funktion$;
-REVOKE ALL ON FUNCTION private.lager_preisbefehl_schuetzen() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.lager_preisbefehl_schuetzen() TO service_role;
+REVOKE ALL ON FUNCTION private.lager_preisbefehl_schuetzen() FROM PUBLIC, anon, authenticated, service_role;
 CREATE TRIGGER material_prices_lager_preisbefehl_schuetzen BEFORE UPDATE ON public.material_prices
   FOR EACH ROW EXECUTE FUNCTION private.lager_preisbefehl_schuetzen();
 
@@ -121,8 +120,7 @@ LANGUAGE sql STABLE SET search_path = '' AS $funktion$
     AND mitglied.order_id = ANY(p_auftraege) AND rechnung.contract_version = 1
     AND rechnung.status = 'issued' AND (rechnung.belegart = 'auftrag' OR mitglied.collection_id IS NOT NULL)
 $funktion$;
-REVOKE ALL ON FUNCTION private.lager_material_rechnung(text[]) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.lager_material_rechnung(text[]) TO service_role;
+REVOKE ALL ON FUNCTION private.lager_material_rechnung(text[]) FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION private.lager_material_rechnung_sperren() RETURNS trigger
 LANGUAGE plpgsql SET search_path = '' AS $funktion$
@@ -152,8 +150,7 @@ BEGIN
   RETURN NEW;
 END;
 $funktion$;
-REVOKE ALL ON FUNCTION private.lager_material_rechnung_sperren() FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.lager_material_rechnung_sperren() TO service_role;
+REVOKE ALL ON FUNCTION private.lager_material_rechnung_sperren() FROM PUBLIC, anon, authenticated, service_role;
 CREATE TRIGGER stock_movements_lager_rechnung_sperren
   BEFORE INSERT ON public.stock_movements FOR EACH ROW EXECUTE FUNCTION private.lager_material_rechnung_sperren();
 
@@ -229,7 +226,6 @@ EXCEPTION WHEN data_exception THEN RETURN false;
 END;
 $function$;
 REVOKE ALL ON FUNCTION private.invoice_collection_snapshot_valid(jsonb) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION private.invoice_collection_snapshot_valid(jsonb) TO service_role;
 
 CREATE OR REPLACE FUNCTION private.invoice_original_source_valid(tenant text,customer text,order_key text,order_version integer,expected_freeze uuid,service_day date,original jsonb,issue_time timestamptz)
 RETURNS boolean LANGUAGE plpgsql STABLE SET search_path='' AS $function$
@@ -281,7 +277,6 @@ EXCEPTION WHEN data_exception THEN RETURN false;
 END;
 $function$;
 REVOKE ALL ON FUNCTION private.invoice_original_source_valid(text,text,text,integer,uuid,date,jsonb,timestamptz) FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION private.invoice_original_source_valid(text,text,text,integer,uuid,date,jsonb,timestamptz) TO service_role;
 
 CREATE OR REPLACE FUNCTION private.invoice_original_vat_valid(original jsonb, net bigint, head_rate integer, vat bigint, gross bigint)
  RETURNS boolean

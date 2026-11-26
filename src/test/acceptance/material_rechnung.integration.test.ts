@@ -92,6 +92,22 @@ function verbrauch(orderId: string, inventoryItemId: string, einheit: string, qu
 }
 
 describe("Material am Auftrags- und Rechnungsoriginal", () => {
+  test("Die neuen internen Materialfunktionen sind für API-Rollen nicht aufrufbar", async () => {
+    const rechte = await sql<{ erlaubt: boolean }[]>`
+      SELECT has_function_privilege(rolle.oid, funktion.oid, 'EXECUTE') AS erlaubt
+      FROM pg_roles rolle
+      CROSS JOIN pg_proc funktion
+      JOIN pg_namespace namensraum ON namensraum.oid = funktion.pronamespace
+      WHERE rolle.rolname IN ('anon', 'authenticated', 'service_role')
+        AND namensraum.nspname = 'private'
+        AND funktion.proname IN (
+          'lager_preisbefehl_schuetzen', 'lager_material_rechnung', 'lager_material_rechnung_sperren'
+        )
+    `;
+    expect(rechte).toHaveLength(9);
+    expect(rechte.every(({ erlaubt }) => erlaubt === false)).toBe(true);
+  });
+
   test("Material zur Mehrarbeit erscheint auf Karte und Rechnung mit 8,16 € und bleibt separat berechnet", async () => {
     const catalogPositionId = randomUUID();
     const katalog = await withSession(full, () => configureExtraWorkCatalogPositionAction({
