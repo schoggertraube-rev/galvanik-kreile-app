@@ -500,6 +500,7 @@ export function OrderCardAppAdapter({
       },
       "Liefertermin und Grund wurden gespeichert.",
     );
+    window.dispatchEvent(new Event('kreile-sync-orders'));
   }, [fail, load, orderId, snapshot, success]);
   const onHandoff = useCallback(async () => {
     if (!snapshot) return;
