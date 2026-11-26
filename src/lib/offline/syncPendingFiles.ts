@@ -6,8 +6,9 @@ import type {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction
 import {recognizeNoteConcerns} from '@/lib/domain/noteConcerns';
 import type {PendingWorkshopOriginal} from './pendingStore';
 import type {uploadIntakeOriginal} from '@/modules/eingang/public';
-export type WorkshopAcknowledgement={scope:string;entry:PendingWorkshopOriginal;result:Awaited<ReturnType<typeof import('@/app/actions/offlineWorkshop.actions').replayOfflineWorkshopAction>>};
-type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;workshopRejected?:(proof:WorkshopAcknowledgement)=>void;saveNote:typeof saveIntakeNoteAction;prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null;workshop?:(scope:string,original:PendingWorkshopOriginal)=>Promise<WorkshopAcknowledgement['result']>};
+type QueueReplayResult=Awaited<ReturnType<typeof import('@/app/actions/offlineWorkshop.actions').replayOfflineWorkshopAction>>;
+export type WorkshopAcknowledgement={scope:string;entry:Exclude<PendingWorkshopOriginal,{command:'mail.send'}>;result:Exclude<QueueReplayResult,{mailCommand:'mail.send'}>};
+type Ports={workshopAcknowledged?:(proof:WorkshopAcknowledgement)=>void;workshopRejected?:(proof:WorkshopAcknowledgement)=>void;saveNote:typeof saveIntakeNoteAction;prepare:typeof prepareIntakeFileAction;finish:typeof finishIntakeFileAction;upload:typeof uploadIntakeOriginal;currentScope:()=>string|null;workshop?:(scope:string,original:PendingWorkshopOriginal)=>Promise<QueueReplayResult>};
 type Outcome={secured:number;acknowledged:number;blocked:number};
 const running=new Map<string,Promise<Outcome>>();
 /** Reuses the original registration, immutable-byte upload and secured-original receipt. */
@@ -47,17 +48,18 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
      if(!claimed){blockedItems.add(entry.itemId);continue;}
      if(ports.currentScope()!==scope)break;
      const result=await ports.workshop(scope,claimed);
+     const workshopProof=entry.command!=='mail.send'&&!('mailCommand'in result)?{scope,entry,result}:null;
      if('rejectionReceipt'in result&&isWorkshopRejectionReceipt(scope,entry,result.rejectionReceipt)){
       if(ports.currentScope()!==scope)break;
       if(!await retainRejectedWorkshopOriginal(scope,entry,result.rejectionReceipt)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
       outcome.secured++;
-      if(ports.currentScope()===scope)ports.workshopRejected?.({scope,entry,result});
+      if(workshopProof&&ports.currentScope()===scope)ports.workshopRejected?.(workshopProof);
       continue;
      }
-     if(!isPendingWorkshopAcknowledgement(scope,entry,result)||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);if(ports.currentScope()===scope)ports.workshopRejected?.({scope,entry,result});continue;}
+     if(!isPendingWorkshopAcknowledgement(scope,entry,result)||!('offlineReceipt' in result)){outcome.blocked++;blockedItems.add(entry.itemId);if(workshopProof&&ports.currentScope()===scope)ports.workshopRejected?.(workshopProof);continue;}
      outcome.secured++;
      if(ports.currentScope()!==scope)break;
-     if(await acknowledgePendingWorkshopOriginal(scope,entry,result.offlineReceipt)){outcome.acknowledged++;if(ports.currentScope()===scope)ports.workshopAcknowledged?.({scope,entry,result});}
+     if(await acknowledgePendingWorkshopOriginal(scope,entry,result.offlineReceipt)){outcome.acknowledged++;if(workshopProof&&ports.currentScope()===scope)ports.workshopAcknowledged?.(workshopProof);}
     }catch{outcome.blocked++;blockedItems.add(entry.itemId);reportProtocolClientError('OFFLINE_WORKSHOP_SYNC_FAILED');}
     continue;
    }

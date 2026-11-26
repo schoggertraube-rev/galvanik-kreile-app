@@ -6,6 +6,7 @@ import {readServerReachability} from './serverReachability';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
 
+type ImmediateConfirmedCommand=Exclude<PendingConfirmedCommand,{command:'mail.send'}>;
 type FinancialAcknowledgement=Extract<WorkshopAcknowledgement['result'],{financialCommand:string}>;
 type HandoverAcknowledgement=Extract<WorkshopAcknowledgement['result'],{handoverCommand:string}>;
 type ShipmentAcknowledgement=Extract<WorkshopAcknowledgement['result'],{shipmentCommand:string}>;
@@ -21,7 +22,7 @@ function queueConfirmedCommand(scope:string,command:PendingShipmentGroupCommand,
 function queueConfirmedCommand(scope:string,command:PendingFinancialCommand,currentScope:()=>string|null):Promise<FinancialAcknowledgement|FinancialFailure>;
 function queueConfirmedCommand(scope:string,command:PendingHandoverCommand,currentScope:()=>string|null):Promise<HandoverAcknowledgement|FinancialFailure>;
 function queueConfirmedCommand(scope:string,command:PendingDeliveryNoteCommand,currentScope:()=>string|null):Promise<DeliveryNoteAcknowledgement|FinancialFailure>;
-async function queueConfirmedCommand(scope:string,command:PendingConfirmedCommand,currentScope:()=>string|null){
+async function queueConfirmedCommand(scope:string,command:ImmediateConfirmedCommand,currentScope:()=>string|null){
  const unavailable=command.command==='order.handover'||command.command==='shipment.handover'?ORDER_HANDOVER_COPY.unavailable:command.command==='document.deliveryNote'?DELIVERY_NOTE_COPY.unavailable:CUSTOMER_CREDIT_COPY.unavailable;
  if(currentScope()!==scope)return {code:'UNAVAILABLE' as const,message:unavailable};
  // A-01 / PL16:36: this queue transports confirmed online financial commands;

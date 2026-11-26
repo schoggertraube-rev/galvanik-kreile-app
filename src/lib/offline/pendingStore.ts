@@ -9,6 +9,7 @@ import {readCacheScopeMarker} from './cacheScopeMarker';
 import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
 import type {cancelInvoiceAction} from '@/app/actions/invoices.actions';
+import type {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {isCreateInvoiceInput,isCancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 import {isManualHandoverInput,isManualHandoverCommandReceipt,type ManualHandoverInput} from '@/lib/domain/orderHandoverContract';
 import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput} from '@/lib/domain/shipmentGroupContract';
@@ -25,12 +26,18 @@ export type PendingFinancialCommand=
 export type PendingHandoverCommand={command:'order.handover';input:ManualHandoverInput};
 export type PendingDeliveryNoteCommand={command:'document.deliveryNote';input:DeliveryNoteInput};
 export type PendingShipmentGroupCommand={command:'shipment.handover';input:ShipmentGroupInput};
-export type PendingConfirmedCommand=PendingFinancialCommand|PendingHandoverCommand|PendingDeliveryNoteCommand|PendingShipmentGroupCommand;
+export type PendingMailCommand={
+ command:'mail.send';
+ input:Omit<Parameters<typeof sendCustomerMailAction>[0],'clientRequestId'>&{clientEventId:string};
+};
+export type PendingConfirmedCommand=PendingFinancialCommand|PendingHandoverCommand|PendingDeliveryNoteCommand|PendingShipmentGroupCommand|PendingMailCommand;
 export type PendingWorkshopCommand={command:'item.finished';input:Parameters<typeof setOrderItemFinishedAction>[0]}|{command:'item.extraWork';input:Parameters<typeof changeOrderItemExtraWorkAction>[0]}|PendingConfirmedCommand;
 export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:string;kind:'workshop';deviceCapturedAt?:string;queueSequence?:number;notBefore?:string;dispatchStartedAt?:string;rejection?:WorkshopRejectionReceipt};
 export type PendingPhysicalWorkshopOriginal=Extract<PendingWorkshopOriginal,{command:'item.finished'|'item.extraWork'}>;
 export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
 export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
+const mailKey=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
+const mailInputKeys=new Set(['targetType','targetId','clientEventId','subject','body','attachment','expectedInvoiceIds','singleInvoice','confirmedResend','collectionReminder']);
 export function isPendingWorkshopOriginal(value:unknown):value is PendingWorkshopOriginal{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,input=row.input;
@@ -44,6 +51,12 @@ export function isPendingWorkshopOriginal(value:unknown):value is PendingWorksho
  if(row.command==='order.handover')return isManualHandoverInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='shipment.handover')return isShipmentGroupInput(input)&&!Object.hasOwn(input,'offlineOriginal')&&row.id===input.clientEventId&&row.itemId===input.orderId;
  if(row.command==='document.deliveryNote')return isDeliveryNoteInput(input)&&row.id===input.clientEventId&&row.itemId===input.orderIds[0];
+ if(row.command==='mail.send')return (data.targetType==='CUSTOMER'||data.targetType==='ORDER')
+  &&typeof data.targetId==='string'&&data.targetId.length>0&&data.targetId.length<=128&&row.itemId===data.targetId
+  &&Object.keys(data).every(key=>mailInputKeys.has(key))
+  &&typeof data.subject==='string'&&typeof data.body==='string'&&uuid(data.clientEventId)&&row.id===data.clientEventId
+  &&typeof row.notBefore==='string'&&typeof row.deviceCapturedAt==='string'
+  &&Date.parse(row.notBefore)>Date.parse(row.deviceCapturedAt);
  if(row.command==='credit.payout')return Object.keys(data).sort().join(',')==='amount,clientEventId,customerId,expectedCreditVersion,method,note,reference'&&typeof data.customerId==='string'&&data.customerId.length>0&&data.customerId.length<=128&&row.itemId===data.customerId&&uuid(data.clientEventId)&&row.id===data.clientEventId&&Number.isSafeInteger(data.amount)&&Number(data.amount)>0&&Number.isSafeInteger(data.expectedCreditVersion)&&Number(data.expectedCreditVersion)>=0&&['bar','ueberweisung'].includes(String(data.method))&&(data.note===null||typeof data.note==='string')&&(data.reference===null||typeof data.reference==='object'&&!Array.isArray(data.reference));
  // Historical zero-fee originals stay readable; only the real writer decides
  // acceptance and now rejects zero without creating another invoice.
@@ -63,7 +76,7 @@ export function isPendingFinancialOriginal(entry:PendingWorkshopOriginal):entry 
  return entry.command==='invoice.issue'||entry.command==='invoice.cancel'||entry.command==='credit.apply'||entry.command==='credit.payout';
 }
 export function isPendingConfirmedOriginal(entry:PendingWorkshopOriginal):entry is PendingWorkshopOriginal&PendingConfirmedCommand{
- return isPendingFinancialOriginal(entry)||entry.command==='order.handover'||entry.command==='document.deliveryNote'||entry.command==='shipment.handover';
+ return isPendingFinancialOriginal(entry)||entry.command==='order.handover'||entry.command==='document.deliveryNote'||entry.command==='shipment.handover'||entry.command==='mail.send';
 }
 const STORE = "originals";
 const SHELL_STORE = "shellMetadata";
@@ -501,7 +514,16 @@ export function isPendingWorkshopReceipt(scope:string,entry:PendingWorkshopOrigi
 export function isPendingWorkshopAcknowledgement(scope:string,entry:PendingWorkshopOriginal,value:unknown):boolean{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const result=value as Record<string,unknown>;
- if(entry.command==='shipment.handover'){
+ if(entry.command==='mail.send'){
+  const receipt=result.mailReceipt,ack=result.offlineReceipt,data=result.data;
+  if(result.code!=='OK'||result.mailCommand!==entry.command||!receipt||typeof receipt!=='object'||Array.isArray(receipt)
+   ||!ack||typeof ack!=='object'||Array.isArray(ack)||!data||typeof data!=='object'||Array.isArray(data))return false;
+  const mail=receipt as Record<string,unknown>,proof=ack as Record<string,unknown>;
+  const sent=data as Record<string,unknown>;
+  if(mail.clientRequestId!==entry.id||mail.eventId!==proof.eventId||mail.actorId!==proof.actorId
+   ||mail.threadId!==sent.threadId||mail.messageId!==sent.messageId
+   ||typeof mail.threadId!=='string'||typeof mail.messageId!=='string'||!mailKey.test(mail.threadId)||!mailKey.test(mail.messageId))return false;
+ }else if(entry.command==='shipment.handover'){
   const ack=result.offlineReceipt;
   if(result.code!=='OK'||result.shipmentCommand!==entry.command||!ack||typeof ack!=='object'||Array.isArray(ack)
    ||!isShipmentGroupReceipt(result.receipt,entry.input,(ack as Record<string,unknown>).actorId)
