@@ -1,6 +1,16 @@
 [
   {
     "datum": "2026-11-26",
+    "pr": 316,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Du öffnest „Diese Woche fertig“ und gelangst mit den passenden Rechten vom Tageswert zu den zugehörigen Aufträgen.",
+      "Die Wochenplanung öffnet sich über dem Tagesplan. Beim Schließen bleibt deine Auswahl erhalten."
+    ]
+  },
+  {
+    "datum": "2026-11-26",
     "pr": 313,
     "seite": "heute",
     "ziel": "/",
