@@ -4,9 +4,10 @@ import {sendCommunicationMail} from "@/lib/server/communicationPort";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeReceipt } from "@/lib/server/commands/orderIntakeCommand";
-import { readIntakeConfirmationContext,hasIntakeConfirmationMailAttempt,readIntakeConfirmationOriginal } from "@/lib/server/intakeDraftEvents";
+import { readIntakeConfirmationContext,hasIntakeConfirmationMailAttempt,hasWithdrawnIntakeConfirmationSource,readIntakeConfirmationOriginal } from "@/lib/server/intakeDraftEvents";
 import {storeIntakeMailOriginal,readIntakeMailOriginal} from "@/lib/server/communicationOriginalPort";
 import { orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
+import { INTAKE_CONFIRMATION_WITHDRAWN_COPY } from "@/ui/eingangCopy";
 
 export async function queueIntakeConfirmation(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,receipt:OrderIntakeReceipt){
   const customer=await readIntakeConfirmationContext(tx,auth,receipt.customerId,receipt.orderId);
@@ -29,6 +30,9 @@ export async function scheduleIntakeConfirmation(
       WHERE tenant_id=${auth.tenantId} AND objekt=${receipt.orderId} AND vorlage='auftragsbestaetigung'`));
     if(!rows.length)return 'Kunde bitte informieren (keine Auto-Mail)';
     if(rows.length!==1)throw Error('INTAKE_CONFIRMATION_AMBIGUOUS');
+    if(rows[0].status!=='gesendet'&&await withPrivilegedTenantTransaction(auth,tx=>hasWithdrawnIntakeConfirmationSource(tx,auth.tenantId,{
+      orderId:receipt.orderId,sourceClientEventId:receipt.clientEventId,
+    })))return INTAKE_CONFIRMATION_WITHDRAWN_COPY;
     if(rows[0].status==='fehler'&&!await withPrivilegedTenantTransaction(auth,tx=>hasIntakeConfirmationMailAttempt(tx,auth,{orderId:receipt.orderId,outboxId:rows[0].id,sourceClientEventId:receipt.clientEventId})))return 'Auftragsbestätigung nicht gesendet · '+rows[0].fehler_code;
     if(rows[0].status==='gesendet')return 'Auftragsbestätigung wird gesendet';
     try{
@@ -72,6 +76,8 @@ export async function sendIntakeConfirmation(auth:AuthorizationSnapshot,receipt:
       if(rows.length!==1)throw Error("INTAKE_CONFIRMATION_AMBIGUOUS");
       const row=rows[0];
       if(row.status==='gesendet')return "Auftragsbestätigung wird gesendet";
+      if(await hasWithdrawnIntakeConfirmationSource(tx,auth.tenantId,{orderId:receipt.orderId,sourceClientEventId:receipt.clientEventId}))
+        return INTAKE_CONFIRMATION_WITHDRAWN_COPY;
       if(row.status==='fehler'&&!await hasIntakeConfirmationMailAttempt(tx,auth,{orderId:receipt.orderId,outboxId:row.id,sourceClientEventId:receipt.clientEventId}))return "Auftragsbestätigung nicht gesendet · "+row.fehler_code;
       const source={orderId:receipt.orderId,outboxId:row.id,sourceClientEventId:receipt.clientEventId};
       let original=await readIntakeConfirmationOriginal(tx,auth,source);

@@ -1,9 +1,51 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import type { PrivilegedTenantTransaction } from "./privilegedDb";
 import type { AuthorizationSnapshot } from "./authorization";
 
 type Actor = Pick<AuthorizationSnapshot,"tenantId"|"userId">;
+
+function orderIntakeMailBindings(tenantId:string,receiptFilter:SQL){
+ return sql`SELECT bound.item_id,bound.zeit,receipt.customer_id,receipt.order_id
+  FROM private.order_intake_receipts receipt
+  JOIN public.intake_event bound ON bound.tenant_id=receipt.tenant_id AND bound.befehl_id=receipt.client_event_id
+   AND bound.von=receipt.actor_id::text AND bound.art IN ('zugeordnet','einsatz')
+   AND bound.nachher->>'vorgangArt'='auftrag' AND bound.nachher->>'vorgangId'=receipt.order_id
+   AND bound.nachher->>'kundeId'=receipt.customer_id
+  JOIN public.intake_item original ON original.tenant_id=bound.tenant_id AND original.id=bound.item_id AND original.kanal='mail'
+  WHERE receipt.tenant_id=${tenantId} AND ${receiptFilter}`;
+}
+function withdrawnOrderIntakeMailBindings(tenantId:string,receiptFilter:SQL){
+ return sql`SELECT DISTINCT binding.item_id FROM (${orderIntakeMailBindings(tenantId,receiptFilter)}) binding
+  JOIN public.intake_event withdrawn ON withdrawn.tenant_id=${tenantId} AND withdrawn.item_id=binding.item_id
+    AND withdrawn.zeit>=binding.zeit AND withdrawn.art='zurueckgenommen'
+    AND withdrawn.vorher->>'kundeId'=binding.customer_id
+    AND withdrawn.vorher->>'vorgangArt'='auftrag' AND withdrawn.vorher->>'vorgangId'=binding.order_id
+    AND withdrawn.nachher->'intent'->>'command'='eingang.zuordnung_zuruecknehmen'
+    AND withdrawn.nachher->>'zuordnung'='offen'`;
+}
+function confirmationAssignmentWithdrawn(tenantId:string,orderId:string,sourceClientEventId:string){
+ return sql`EXISTS(${withdrawnOrderIntakeMailBindings(tenantId,sql`receipt.order_id=${orderId} AND receipt.client_event_id=${sourceClientEventId}::uuid`)})`;
+}
+
+export async function readOwnWithdrawnOrderIntakeMailItems(tx:PrivilegedTenantTransaction,actor:Actor,clientEventId:string){
+ const rows=await tx.execute<{item_id:string}>(withdrawnOrderIntakeMailBindings(actor.tenantId,
+  sql`receipt.actor_id=${actor.userId}::uuid AND receipt.client_event_id=${clientEventId}::uuid`));
+ return new Set(rows.map(row=>row.item_id));
+}
+
+export async function hasWithdrawnIntakeConfirmationSource(tx:PrivilegedTenantTransaction,tenantId:string,input:{orderId:string;sourceClientEventId:string}){
+ const [row]=await tx.execute<{withdrawn:boolean}>(sql`SELECT ${confirmationAssignmentWithdrawn(tenantId,input.orderId,input.sourceClientEventId)} AS withdrawn`);
+ return row.withdrawn;
+}
+
+/** Withdrawal and the existing sender serialize against the same pending outbox row. */
+export async function lockIntakeConfirmationForAssignment(tx:PrivilegedTenantTransaction,tenantId:string,itemId:string,orderId:string){
+ await tx.execute(sql`SELECT outbox.id FROM public.outbox_mails outbox
+  WHERE outbox.tenant_id=${tenantId} AND outbox.objekt=${orderId} AND outbox.vorlage='auftragsbestaetigung' AND outbox.status<>'gesendet'
+   AND EXISTS(SELECT 1 FROM (${orderIntakeMailBindings(tenantId,sql`receipt.order_id=${orderId}`)}) binding WHERE binding.item_id=${itemId}::uuid)
+  FOR UPDATE OF outbox`);
+}
 export async function readIntakeConfirmationOriginal(tx:PrivilegedTenantTransaction,actor:Actor,input:{orderId:string;outboxId:string;sourceClientEventId:string}){
  if(!await readIntakeConfirmationMailSource(tx,actor,input))return null;
  const rows=await tx.execute<{original:import('./communicationOriginalPort').IntakeMailOriginal|null}>(sql`SELECT payload->'intakeConfirmation'->'original' AS original FROM public.events
@@ -38,6 +80,7 @@ export async function readIntakeConfirmationMailSource(tx:PrivilegedTenantTransa
   JOIN public.events event ON event.tenant_id=receipt.tenant_id AND event.id=receipt.event_id AND event.user_id=receipt.actor_id AND event.event_type='ORDER_INTAKE_CREATED_V1' AND event.status='success'
   WHERE outbox.tenant_id=${actor.tenantId} AND outbox.id=${input.outboxId}::uuid AND outbox.objekt=${input.orderId} AND outbox.vorlage='auftragsbestaetigung'
    AND (outbox.status<>'gesendet' OR EXISTS(SELECT 1 FROM public.communication_threads thread WHERE thread.tenant_id=outbox.tenant_id AND thread.source='MS_GRAPH_OUT:'||outbox.id::text))
+   AND (outbox.status='gesendet' OR NOT ${confirmationAssignmentWithdrawn(actor.tenantId,input.orderId,input.sourceClientEventId)})
   ${lock?sql`FOR UPDATE OF outbox`:sql``}`);
  return rows.length===1?rows[0]:null;
 }

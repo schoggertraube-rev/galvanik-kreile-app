@@ -9,7 +9,11 @@ import { customerFixture, intakeOrderFixture } from "../../../e2e/ablauf/orderFi
 
 const fresh = <T>(input: T): T => JSON.parse(JSON.stringify(input));
 
-it.each(["automatisch", "bestaetigt"] as const)("L-M3 keeps the incoming assignment decision on retry (%s)", async assignment => {
+it.each([
+  {assignment:"automatisch",withdraw:false},
+  {assignment:"bestaetigt",withdraw:false},
+  {assignment:"bestaetigt",withdraw:true},
+] as const)("L-M3 keeps the confirmation decision on retry ($assignment, withdrawal before send=$withdraw)", async ({assignment,withdraw}) => {
   const customerId = await customerFixture(`TEST L-M3 ${assignment}`);
   const sourceId = randomUUID();
   // Synthetic settings and assignment for an isolated tenant. Use the actual booking and sender below.
@@ -36,7 +40,7 @@ it.each(["automatisch", "bestaetigt"] as const)("L-M3 keeps the incoming assignm
     return nativeFetch(request, init);
   });
   try {
-    const { erfasseAuftragAusEingangAction } = await import("@/app/actions/eingang.actions");
+    const { assignIntakeCustomerAction, erfasseAuftragAusEingangAction, getIntakeAssignmentAction } = await import("@/app/actions/eingang.actions");
     const input = {
       clientKey: randomUUID(), geprueft: false, text: "TEST bestätigter Auftrag aus E-Mail",
       customer: { mode: "EXISTING" as const, customerId }, dueDate: "2027-05-15", termStatus: "bestaetigt",
@@ -48,15 +52,36 @@ it.each(["automatisch", "bestaetigt"] as const)("L-M3 keeps the incoming assignm
         unitPriceCents: null, vatRateBasisPoints: null,
       }],
     };
-    const result = await withSession(full, () => erfasseAuftragAusEingangAction(input), true);
+    const result = await withSession(full, async()=>{
+      const booked=await erfasseAuftragAusEingangAction(input);
+      if(withdraw&&booked.code==="OK"){
+        const assigned=await getIntakeAssignmentAction({itemId:sourceId,mode:"normal"});
+        if(assigned.code!=="OK")throw Error("TEST_LM3_CONFIRMATION_ASSIGNMENT_REQUIRED");
+        expect(await assignIntakeCustomerAction({
+          itemId:sourceId,version:assigned.view.version,mode:"undo",clientEventId:randomUUID(),
+        })).toMatchObject({code:"OK"});
+      }
+      return booked;
+    },true);
     if (result.code !== "OK") throw Error(`TEST_LM3_BOOKING:${result.code}:${result.message}`);
     expect(result.intakeItemId).toBe(sourceId);
     const outbox = await sql`SELECT status FROM public.outbox_mails WHERE tenant_id=${KREILE_TENANT_SLUG} AND objekt=${result.orderId}`;
-    const expectedSends = assignment === "bestaetigt" ? 1 : 0;
-    expect(outbox).toEqual(expectedSends ? [{ status: "gesendet" }] : []);
+    const expectedSends = assignment === "bestaetigt" && !withdraw ? 1 : 0;
+    expect(outbox).toEqual(assignment==="bestaetigt" ? [{ status: withdraw?"wartet":"gesendet" }] : []);
     expect(await withSession(full, () => erfasseAuftragAusEingangAction(fresh(input)), true))
       .toMatchObject({ code: "OK", orderId: result.orderId, replayed: true });
     expect(sends).toBe(expectedSends);
+    if(withdraw){
+      const [source]=await sql`SELECT kunde_id,vorgang_id,zuordnung FROM public.intake_item
+        WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${sourceId}::uuid`;
+      expect(source).toEqual({kunde_id:null,vorgang_id:null,zuordnung:'offen'});
+      expect(await withSession(full,()=>erfasseAuftragAusEingangAction(fresh({...input,text:'TEST anderer Auftrag mit altem Schlüssel'})),true))
+        .toMatchObject({code:'CONFLICT'});
+      expect(await sql`SELECT event.id FROM public.events event JOIN public.outbox_mails outbox
+        ON outbox.tenant_id=event.tenant_id AND outbox.id=event.correlation_id
+        WHERE outbox.tenant_id=${KREILE_TENANT_SLUG} AND outbox.objekt=${result.orderId}
+         AND event.event_type IN ('COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_SENT_V1')`).toHaveLength(0);
+    }
   } finally {
     graph.mockRestore();
   }

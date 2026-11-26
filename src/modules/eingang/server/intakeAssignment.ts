@@ -7,6 +7,7 @@ import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '
 import {ACCESS_AREAS,canAssignIntakeCustomer,canSynchronizeIntakeMailbox} from '@/lib/auth/authorizationContract';
 import {qualifySavedMailReplyBinding,type SavedMailReplyBinding} from '@/lib/server/dispatchResponsePort';
 import {readSelectedReplyTaskEnd} from '@/lib/server/dispatchReplyPort';
+import {lockIntakeConfirmationForAssignment} from '@/lib/server/intakeDraftEvents';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {CustomerWriter} from '@/lib/server/commands/orderIntakeCommand';
 import type {CustomerCreateCommandResult} from '@/modules/customers/public';
@@ -137,6 +138,7 @@ export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTas
    }
    if(row.version!==value.version||row.kanal!=='mail'||!row.kunde_id||row.zuordnung==='offen')
     reject('CONFLICT','Eingang wurde inzwischen geändert. Bitte neu lesen.');
+   if(row.vorgang_art==='auftrag'&&row.vorgang_id)await lockIntakeConfirmationForAssignment(tx,auth.tenantId,row.id,row.vorgang_id);
    const replyCompletion=await readSelectedReplyTaskEnd(tx,auth,row.id);
    const restoredTaskId=replyCompletion?await restoreReplyTask(tx,auth,row.id,replyCompletion):null;
    const changed=await tx.execute(sql`UPDATE public.intake_item

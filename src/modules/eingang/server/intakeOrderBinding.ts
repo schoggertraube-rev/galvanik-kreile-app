@@ -1,5 +1,5 @@
 import "server-only";
-import { hasOwnOrderIntakeReceipt } from "@/lib/server/intakeDraftEvents";
+import { hasOwnOrderIntakeReceipt, readOwnWithdrawnOrderIntakeMailItems } from "@/lib/server/intakeDraftEvents";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { OrderIntakeTransactionBinding } from "@/lib/server/commands/orderIntakeCommand";
@@ -72,6 +72,7 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
   let itemId:string|null=null;
   let locked:Array<Row&{zuordnung:string}>=[];
   const authorizedMailSources = new Set<string>();
+  let withdrawnMailItems = new Set<string>();
   let replaysMailOrder=false;
   return {
     ...(sources.length||input.draftId||input.telefonNotiz?{intentKey:JSON.stringify({sources:sources.map(source=>[source.id,source.version]),draftId:input.draftId??null,...(input.telefonNotiz?{telefonNotiz:input.telefonNotiz}:{})})}:{}),
@@ -100,11 +101,13 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
       if(sources.length?locked.length!==sources.length:locked.length>1)throw Error("INTAKE_CAPTURE_NOT_FOUND");
       itemId=locked[0]?.id??null;
       replaysMailOrder=locked.some(row=>row.kanal==='mail')&&await hasOwnOrderIntakeReceipt(tx,auth,input.clientEventId);
+      withdrawnMailItems=replaysMailOrder?await readOwnWithdrawnOrderIntakeMailItems(tx,auth,input.clientEventId):new Set();
       authorizedMailSources.clear();
       for(const row of locked){
         if((row.kanal==="mail"||row.erstellt_von!==auth.userId)&&!hasAuthorizationArea(auth,"mails"))throw Error("INTAKE_CAPTURE_FORBIDDEN");
         if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,row.id))throw Error("INTAKE_CAPTURE_FORBIDDEN");
         if(row.kennzeichen.includes("in_erfassung_verworfen"))throw Error("INTAKE_CAPTURE_DISCARDED");
+        if(withdrawnMailItems.has(row.id))continue;
         const ownNewCustomerReplay=input.customerId===null&&Boolean(row.vorgang_id)&&(replaysMailOrder||await hasOwnOrderIntakeReceipt(tx,auth,input.clientEventId));
         if(row.kunde_id&&row.kunde_id!==(prospect?.customerId??input.customerId)&&!ownNewCustomerReplay)throw Error("INTAKE_CAPTURE_CUSTOMER_CONFLICT");
         if(sources.length&&!row.vorgang_id&&row.version!==sources.find(source=>source.id===row.id)?.version)throw Error("INTAKE_CAPTURE_VERSION_CONFLICT");
@@ -142,6 +145,7 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
       }
       for(const row of locked.length?locked:[null]){
       const id=row?.id??itemId;
+      if(id&&withdrawnMailItems.has(id))continue;
       await bindIntakeOriginalToOrder(tx,auth,{itemId:id!,customerId:receipt.customerId,orderId:receipt.orderId,clientEventId:input.clientEventId,complete:true});
       await tx.execute(sql`UPDATE public.intake_suggestion SET order_id=${receipt.orderId} WHERE tenant_id=${auth.tenantId} AND item_id=${id}::uuid AND order_id IS NULL`);
       }
