@@ -233,6 +233,9 @@ export function hasAuthorizationArea(
 /** Canonical pure gates shared by writers and read projections. */
 export function canReadComplaintOrderChoices(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'auftraege');}
 export function canTransportInvoiceDocument(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'preise');}
+export function canManageServiceCatalog(hasArea:(area:AccessArea)=>boolean){
+ return hasArea('einstellungen')&&hasArea('preise');
+}
 export function canAssignIntakeCustomer(auth:Parameters<typeof hasAuthorizationArea>[0]){return hasAuthorizationArea(auth,'eingang')&&hasAuthorizationArea(auth,'kunden');}
 
 /** PL17.11 13:01: financial task recipients do not grant their contents to another area. */

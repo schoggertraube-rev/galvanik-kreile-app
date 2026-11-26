@@ -1,5 +1,7 @@
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
+export const INTAKE_CATALOG_LINK_COPY='Leistungskatalog';
+export const INTAKE_MISSING_LEAD_TIME_COPY=(leistung:string)=>`Durchlaufzeit für ${leistung} fehlt`;
 export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;
 export const MAILBOX_SYNC_COPY={retryTask:'Mailabruf fortsetzen – Fortschritt konnte nicht gesichert werden',unavailable:'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.',pending:(count:number)=>`Mailabruf: noch ${count} Mails offen, der nächste Abruf holt sie`} as const;
 /** PL13.11.09:23: photographs are present; choose the actual order. */

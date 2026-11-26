@@ -6,6 +6,7 @@ import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { isWorkingDay, berlinCalendarDay, plusWorkingDays, previousWorkingDay, workingDaysBetween } from "@/lib/domain/workingDays";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError } from "@/lib/orderPositionContract";
+import {INTAKE_MISSING_LEAD_TIME_COPY} from '@/ui/eingangCopy';
 import type {
   IntakePriceCase,
   IntakePriceSuggestion,
@@ -23,7 +24,7 @@ type CatalogRow = {
   surface: string;
   unit: string;
   net_price_cents: number | string;
-  standard_lead_time_working_days: number | string;
+  standard_lead_time_working_days: number | string | null;
 };
 
 type HistoryRow = {
@@ -48,12 +49,6 @@ type PriceCandidate = {
   quantity: number;
   unitPriceCents: number;
   invoiceDate: string;
-};
-
-const SURFACE_LEAD_DAYS: Readonly<Record<string, number>> = {
-  verchromen: 5,
-  vernickeln: 4,
-  verzinken: 3,
 };
 
 function integer(value: number | string, code: string): number {
@@ -188,14 +183,21 @@ const addDays=(date:string,count:number)=>new Date(Date.parse(date+"T00:00:00Z")
 const weekStart=(date:string)=>addDays(date,-((new Date(date+"T00:00:00Z").getUTCDay()+6)%7));
 function workdaysInclusive(from:string,to:string){const dates:string[]=[];for(let date=from;date<=to;date=addDays(date,1))if(isWorkingDay(date))dates.push(date);return dates;}
 
+function readPositionLeadTimes(positions:readonly IntakeSuggestionPositionInput[],catalogById:ReadonlyMap<string,CatalogRow>){
+ return positions.filter(position=>normaliseOrderPositionSurface(position.surfaceRequested)!=='offen').map(position=>{
+  const catalog=position.catalogServiceId?catalogById.get(position.catalogServiceId):undefined;
+  const stored=catalog?.standard_lead_time_working_days;
+  const days=stored==null||stored===''?null:Number(stored);
+  return {position,leistung:catalog?.name??position.name,days:days!==null&&Number.isSafeInteger(days)&&days>=0?days:null};
+ });
+}
+
 /** The single scheduling kernel: calendar helpers, order load and the proposed order. */
-export function calculateTermSuggestion(input:{today:string;wishDate:string|null;positions:IntakeSuggestionPositionInput[];catalogById:ReadonlyMap<string,CatalogRow>;dailyOutputEur:number;settings:IntakeSchedulingSettings;openOrders:IntakeCapacityOrder[];priority:boolean;processingWeeks?:number|null;kind?:"ORDER"|"QUOTE"}):IntakeTermSuggestion|null{
- const eligible=input.positions.filter(position=>normaliseOrderPositionSurface(position.surfaceRequested)!=="offen");
+export function calculateTermSuggestion(input:{today:string;wishDate:string|null;positions:IntakeSuggestionPositionInput[];catalogById:ReadonlyMap<string,CatalogRow>;dailyOutputEur:number;settings:IntakeSchedulingSettings;openOrders:IntakeCapacityOrder[];priority:boolean;processingWeeks?:number|null;kind?:"ORDER"|"QUOTE"},eligible=readPositionLeadTimes(input.positions,input.catalogById)):IntakeTermSuggestion|null{
  if(!eligible.length)return null;
- let lead=0,leadSurface=eligible[0].surfaceRequested;
- for(const position of eligible){
-  const catalog=position.catalogServiceId?input.catalogById.get(position.catalogServiceId):undefined;
-  const days=catalog?.standard_lead_time_working_days!=null?integer(catalog.standard_lead_time_working_days,"INTAKE_CATALOG_LEAD_INVALID"):SURFACE_LEAD_DAYS[normalized(position.surfaceRequested)]??3;
+ let lead=0,leadSurface=eligible[0].position.surfaceRequested;
+ for(const {position,days} of eligible){
+  if(days===null)return null;
   if(days>=lead){lead=days;leadSurface=position.surfaceRequested;}
  }
  const value=input.positions.reduce((sum,position)=>sum+lineAmountCents(position.unitPriceCents??0,position.quantity),0);
@@ -310,11 +312,11 @@ export async function readIntakeSuggestions(
       input.customerId?tx.execute<{vorrang:boolean}>(sql`SELECT vorrang FROM public.customers WHERE tenant_id=${authorization.tenantId} AND id=${input.customerId}`):Promise.resolve([]),
     ]);
 
-    const capacity = settings.terminKapazitaet;
-    if (!capacity) throw new Error("INTAKE_DAILY_OUTPUT_MISSING_OR_AMBIGUOUS");
-    const dailyOutputEur = integer(capacity.tagesleistungEur, "INTAKE_DAILY_OUTPUT_INVALID");
-    if (dailyOutputEur < 1 || dailyOutputEur > 99_999) throw new Error("INTAKE_DAILY_OUTPUT_INVALID");
     const catalogById = new Map(catalogRows.map((row) => [row.id, row]));
+    const eligible=readPositionLeadTimes(input.positions,catalogById);
+    const missingLeadTimes=eligible.filter(entry=>entry.days===null).map(({position,leistung})=>({
+      positionKey:position.key,catalogServiceId:position.catalogServiceId,message:INTAKE_MISSING_LEAD_TIME_COPY(leistung),
+    }));
     const history: PriceCandidate[] = historyRows.map((row) => ({
       customerId: row.customer_id,
       customerName: row.customer_name,
@@ -327,8 +329,13 @@ export async function readIntakeSuggestions(
       invoiceDate: row.invoice_date,
     }));
 
-    return {
-      term: input.handoverMode===null?null:calculateTermSuggestion({
+    let term:IntakeTermSuggestion|null=null;
+    if(input.handoverMode!==null&&eligible.length>0&&missingLeadTimes.length===0){
+      const capacity=settings.terminKapazitaet;
+      if(!capacity)throw Error('INTAKE_DAILY_OUTPUT_MISSING_OR_AMBIGUOUS');
+      const dailyOutputEur=integer(capacity.tagesleistungEur,'INTAKE_DAILY_OUTPUT_INVALID');
+      if(dailyOutputEur<1||dailyOutputEur>99_999)throw Error('INTAKE_DAILY_OUTPUT_INVALID');
+      term=calculateTermSuggestion({
         today: berlinCalendarDay(),
         wishDate: input.wishDate,
         positions: input.positions.map(position=>!canReadMoney&&position.catalogServiceId?{...position,unitPriceCents:catalogById.has(position.catalogServiceId)?Number(catalogById.get(position.catalogServiceId)!.net_price_cents):null}:position),
@@ -336,7 +343,11 @@ export async function readIntakeSuggestions(
         dailyOutputEur,
         settings:{handoverBufferDays:settings.versandpufferArbeitstage,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent},
         openOrders:capacityRows.map(row=>({...row,valueCents:Number(row.valueCents)})),priority:customerRows[0]?.vorrang===true,processingWeeks:input.processingWeeks,kind:input.kind,
-      }),
+      },eligible);
+    }
+    return {
+      term,
+      ...(missingLeadTimes.length?{missingLeadTimes}:{}),
       prices: canReadMoney
         ? input.positions.flatMap((position) => {
             const suggestion = choosePriceSuggestion(
