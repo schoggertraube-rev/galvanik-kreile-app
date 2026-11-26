@@ -4,7 +4,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: vi.fn() }));
 
 import { plusWorkingDays, workingDaysBetween } from "@/lib/domain/workingDays";
-import { calculateTermSuggestion, choosePriceSuggestion } from "@/lib/server/intakeSuggestions";
+import { calculateTermSuggestion, choosePriceSuggestion, readIntakeSuggestions } from "@/lib/server/intakeSuggestions";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const position = {
   key: "position-1",
@@ -97,6 +98,48 @@ describe("intake suggestions", () => {
       .toMatchObject({ bufferWorkingDays: 1, rating: "passt" });
     expect(calculateTermSuggestion({ ...input, settings: { ...input.settings, knappAbArbeitstagen: null } }))
       .toMatchObject({ rating: null, unavailableReason: expect.stringMatching(/Terminschwelle/) });
+  });
+
+  it("meldet die fehlende Durchlaufzeit einer Freitextposition und erhält ihren Preisvorschlag", async () => {
+    const beispielfall = history();
+    const execute = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{
+        customer_id: beispielfall.customerId,
+        customer_name: beispielfall.customerName,
+        item_name: beispielfall.name,
+        catalog_service_id: null,
+        surface_requested: beispielfall.surface,
+        unit: beispielfall.unit,
+        quantity: beispielfall.quantity,
+        unit_price_cents: beispielfall.unitPriceCents,
+        invoice_date: beispielfall.invoiceDate,
+      }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ vorrang: false }]);
+    vi.mocked(withPrivilegedTenantTransaction).mockImplementationOnce((_, read) =>
+      read({ execute } as unknown as PrivilegedTenantTransaction),
+    );
+
+    const result = await readIntakeSuggestions({
+      userId: "TEST Preise", tenantId: "TEST Einkauf", displayName: "TEST Preise",
+      role: "admin", active: true, areas: ["preise"], permissions: [],
+    }, {
+      customerId: beispielfall.customerId,
+      kind: "ORDER",
+      wishDate: "2026-12-18",
+      handoverMode: "pickup",
+      positions: [position],
+    }, async () => ({
+      betriebsruhe: [], versandpufferArbeitstage: 2, knappAbArbeitstagen: 2,
+      terminKapazitaet: { tagesleistungEur: 800, passtProzent: 80, knappProzent: 100, vorrangProzent: 110 },
+    }));
+
+    expect(result).toMatchObject({
+      term: null,
+      missingLeadTimes: [{ positionKey: position.key, catalogServiceId: null, message: "Durchlaufzeit für Flansch groß fehlt" }],
+      prices: [{ positionKey: position.key, source: "gleich", unitPriceCents: 1_200 }],
+    });
   });
 
   it("prefers the newest exact customer case", () => {
