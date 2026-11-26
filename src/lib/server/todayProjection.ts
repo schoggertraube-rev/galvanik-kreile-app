@@ -10,7 +10,8 @@ import {readManualShippingBatch} from '@/modules/orders/server-public';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
 import {readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
 import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors} from '@/modules/quotes/server-public';
-import {readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
+import {liesAufgabenFuerTag,readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
+import {liesTaktAusfallZeilen} from '@/modules/takt/server-public';
 import {paymentReadAuthorization,type PaymentReadProfile,type PaymentReadAuthorization} from './paymentContract';
 import {readTodayOrderSources,type TodayOrderReadPorts} from './todayOrderRead';
 import {readLiveOrderCardSource} from './orderCardRead';
@@ -25,6 +26,9 @@ if(!auftragsQuelle)throw Error('TODAY_PROJECTOR_ORDER_SOURCE_MISSING');
 const AUFTRAGSQUELLE='quelle:'+auftragsQuelle.id;
 const listenQuellen=new Map<string,string>(TAG_QUELLEN.flatMap(quelle=>quelle.bestand?.umfang==='mandant'
  ? [[`quelle:${quelle.id}`,quelle.bestand.leser] as const]:[]));
+const taktAusfallQuelle=TAG_QUELLEN.find(quelle=>quelle.bestand?.leser==='takt_ausfall');
+if(!taktAusfallQuelle)throw Error('TODAY_PROJECTOR_TAKT_SOURCE_MISSING');
+const TAKT_AUSFALL_QUELLE=`quelle:${taktAusfallQuelle.id}`;
 const projectionBrand:unique symbol=Symbol('TodayReadOnlyProjector');
 /** A read capability, never an AuthorizationSnapshot or a command identity. */
 export type ProjectorAuthorization=Readonly<{tenantId:string;areas:readonly AccessArea[];permissions:readonly PermissionKey[];canReadArea:(area:AccessArea)=>boolean;canReadTaskArea:(area:AccessArea|null)=>boolean;payment:PaymentReadAuthorization;canReadOperationalQuotes:boolean;hasActiveProfiles:boolean;[projectionBrand]:true}>;
@@ -111,7 +115,8 @@ function productivePorts():TodayProjectionPorts{
    // PL08:59: absence of an actual active profile is not a zero-valued
    // financial/task result. Keep every section unavailable for the live escape.
    if(!auth.hasActiveProfiles)return new Map(keys.map(key=>[todaySourceKey(key),{code:'SOURCE_INCOMPLETE' as const,errorCode:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING'}]));
-   const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(new Date()).today,access=todaySourceAccess(auth);
+   const jetzt=new Date();
+   const values=new Map<string,TodayProjectionResult>(),day=readTodayCalendar(jetzt).today,access=todaySourceAccess(auth);
    const requestedOrderKeys=keys.filter(key=>key.kind===AUFTRAGSQUELLE);
    const orderKeys:TodaySourceKey[]=[];
    if(requestedOrderKeys.length){
@@ -143,7 +148,11 @@ function productivePorts():TodayProjectionPorts{
     company:async()=>{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise'),fresh:true});return source(read,known(read));},
     quote_followups:async()=>source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day))),
     money:async()=>{const read=await readTodayMoneySupport(auth,day);return source(read,!read.supportMissing.length&&[read.invoiceSource,read.prepaymentSource,read.collectionSource,read.invoiceMailSource].every(known));},
-    tasks:async()=>{const read=await readTaskForAuthorization(auth,{calendar:true});return source(read,known(read));},
+    tasks:async()=>{
+     const [aufgaben,kalender]=await Promise.all([liesAufgabenFuerTag(auth),readTaskForAuthorization(auth,{calendar:true})]);
+     return source({...aufgaben,kalender},known(aufgaben)&&known(kalender));
+    },
+    takt_ausfall:async()=>{const read=await liesTaktAusfallZeilen({tenantId:auth.tenantId},jetzt);return source(read,known(read));},
     quotes:async()=>{
      // Keep the existing operational read capability and actor-bound masking.
      const context={tenantId:auth.tenantId,capabilities:{canReadQuote:auth.canReadOperationalQuotes&&access.messages}};
@@ -181,11 +190,12 @@ async function release(tenantId:string,lease:Lease){
  await withPrivilegedTenantTransaction({tenantId},tx=>tx.execute(sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=NULL
   WHERE tenant_id=${tenantId} AND refresh_lease_until=${lease.token}::timestamptz`));
 }
-async function pending(tenantId:string,lease:Lease,fullRebuild:boolean,limit?:number):Promise<Snapshot[]>{
+async function pending(tenantId:string,lease:Lease,fullRebuild:boolean,limit?:number,kind?:string):Promise<Snapshot[]>{
+ const auswahl=kind===undefined?todaySourceNeedsRebuild(lease.day,fullRebuild):sql`source.kind=${kind} AND source.source_id='*'`;
  return withPrivilegedTenantTransaction({tenantId},tx=>tx.execute<Snapshot>(sql`SELECT source.kind,source.source_id AS "sourceId",source.source_seq::text AS "sourceSeq",tenant.tenant_seq::text AS "tenantSeq",${lease.day}::text AS day
   FROM private.today_source_v1 source JOIN private.today_tenant_v1 tenant ON tenant.tenant_id=source.tenant_id
   WHERE source.tenant_id=${tenantId} AND tenant.refresh_lease_until=${lease.token}::timestamptz AND tenant.refresh_lease_until>statement_timestamp()
-   AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND ${todaySourceNeedsRebuild(lease.day,fullRebuild)}
+   AND tenant.tenant_seq=${lease.tenantSeq}::bigint AND ${auswahl}
   ORDER BY source.built_at NULLS FIRST,source.kind,source.source_id ${limit===undefined?sql``:sql`LIMIT ${limit}`}`));
 }
 /** Same short write-phase lock order as the source invalidators. Source reads
@@ -255,7 +265,7 @@ async function projectGroup(auth:ProjectorAuthorization,lease:Lease,rows:readonl
  return publishGroup(auth.tenantId,lease,rows,results,Math.round(performance.now()-started),assertOwned);
 }
 
-async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean,signal?:AbortSignal){
+async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean,signal?:AbortSignal,kind?:string){
  signal?.throwIfAborted();
  const settings=await ports.readSettings({tenantId}),lease=await claim(tenantId,settings);
  if(!lease)return {code:'BUSY' as const,built:0,stale:0};
@@ -293,7 +303,7 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
   }
   // Freeze this finite worklist. Writes that race this build remain stale for
   // the next bounded refresh; neither failures nor writers cause a rebuild loop.
-  const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit));
+  const rows=await withLeaseWrite(lease,()=>pending(tenantId,lease,rebuild,rebuild?undefined:settings.todayRefreshBatchLimit,kind));
   let built=0,stale=0;
   for(let offset=0;offset<rows.length;offset+=15){
    assertOwned();
@@ -314,8 +324,8 @@ async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:
  finally{await heartbeat.stop();await outsidePageReadBudget(()=>withPageReadBudget(()=>release(tenantId,lease),2000));}
 }
 const projectionCounts=(result:{built:number;stale:number})=>({rows:result.built+result.stale,built:result.built,stale:result.stale});
-export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true;signal?:AbortSignal})=>{
- const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false,options?.signal),projectionCounts);
+export const refreshTodayModel=(tenantId:string,ports:TodayProjectionPorts=productivePorts(),options?:{bounded:true;signal?:AbortSignal;taktErgebnis?:true})=>{
+ const run=(selected=ports)=>withPageReadPhase('today.refresh',()=>runProjection(tenantId,selected,false,options?.signal,options?.taktErgebnis?TAKT_AUSFALL_QUELLE:undefined),projectionCounts);
  if(!options?.bounded)return run();
  return withPageReadBudget(async()=>{
   const settings=await readTodayReadSettings({tenantId,fresh:true});

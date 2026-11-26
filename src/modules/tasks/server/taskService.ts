@@ -64,7 +64,7 @@ async function find(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapsh
  return rows.length===1?rows[0]:null;
 }
 function hiddenReference(reference:TaskReference):TaskReferenceRead{return {...reference,label:null,customerId:null,customerType:null,orderId:null,channel:null,phone:null,sourceVersion:null};}
-function taskReferenceVisible(auth:AuthorizedReadContext,reference:TaskReferenceRead){
+export function taskReferenceVisible(auth:AuthorizedReadContext,reference:Pick<TaskReferenceRead,'type'|'channel'>){
  if(reference.type==='allgemein')return false;
  const requiredArea=reference.type==='eingang'&&reference.channel==='mail'?'mails':refAreas[reference.type];
  return reference.type==='eingang'&&auth.canReadArea('mails')||requiredArea!==undefined&&auth.canReadArea(requiredArea);
@@ -348,7 +348,7 @@ export async function restrictCollectionTaskForAppointment(tx:PrivilegedTenantTr
 export type TaskReadContext=AuthorizedReadContext&Readonly<{canReadTaskArea:(area:AccessArea|null)=>boolean}>;
 export type TaskSourceRead=Awaited<ReturnType<typeof readTaskSourceInTransaction>>;
 export type TaskCalendarSources={code:'OK'|'SOURCE_INCOMPLETE';rows:TaskSourceRead[];missingTaskIds:string[]};
-function liveTaskReadContext(auth:AuthorizationSnapshot):TaskReadContext{
+export function liveTaskReadContext(auth:AuthorizationSnapshot):TaskReadContext{
  return {...authorizationReadContext(auth),canReadTaskArea:area=>canReadTaskArea(auth,area)};
 }
 function validateTaskRead(request:TaskOpenRequest|{calendar:true}):TaskFailure|null{
@@ -423,7 +423,7 @@ export function projectTaskCalendarSources(auth:AuthorizationSnapshot,source:Tas
  const unknownGap=source.code==='SOURCE_INCOMPLETE'&&source.missingTaskIds.length===0;
  return {code:missingTaskIds.length||unknownGap?'SOURCE_INCOMPLETE':'OK',rows,missingTaskIds};
 }
-async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|TaskReadContext,request:TaskOpenRequest){
+export async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|TaskReadContext,request:TaskOpenRequest){
  const readAuth='canReadArea'in auth?auth:liveTaskReadContext(auth);
   const task='taskId'in request?await find(tx,auth,request.taskId):null;
   if('taskId'in request&&!task)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
@@ -460,7 +460,7 @@ async function readTaskSourceInTransaction(tx:PrivilegedTenantTransaction,auth:A
   return {code:'OK' as const,task,reference,canceledForEdit,canceledCustomer,pricing:pricing!==null,pricingSource,collection:collection!==null,collectionSource,credit:credit===null?null:{pending:credit.pending},creditSource,reissue:reissue!==null,reissueSource,mailRemainder:mailRemainder===null?null:{pending:mailRemainder.pending},recollection:recollection!==null,invoiceFollowupSource};
 }
 /** The only personal projection still uses the actual session actor. */
-function presentTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead):Extract<TaskReadResult,{code:'OK'}>{
+export function presentTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead):Extract<TaskReadResult,{code:'OK'}>{
  const {task,reference,canceledCustomer,pricing,pricingSource,collection,collectionSource,credit,creditSource,reissue,reissueSource,mailRemainder,recollection,invoiceFollowupSource}=source;
  const mayEdit=task?task.status==='offen'&&allowed(auth,task):true;
  if(task&&mayEdit&&source.canceledForEdit.code==='SOURCE_INCOMPLETE')throw Error('TASK_CANCELLATION_READ_INCOMPLETE');

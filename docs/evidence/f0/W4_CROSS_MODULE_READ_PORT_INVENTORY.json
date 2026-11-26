@@ -237,6 +237,9 @@
     "src/modules/quotes/server/quoteReads.ts": [
       "private.v_quotes_v1"
     ],
+    "src/modules/tasks/server/tagQuellen.ts": [
+      "private.v_task_contexts_v1"
+    ],
     "src/modules/tasks/server/taskService.ts": [
       "private.v_storage_final_task_context_v1",
       "private.v_task_contexts_v1",

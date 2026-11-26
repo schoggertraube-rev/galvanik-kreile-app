@@ -58,7 +58,7 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,d
       // existing whole live collector. Individual disqualified model rows use
       // only their canonical live readers inside the model collection.
       const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'},readTerminEinstellungen));
-      [orderSource,dashboard]=await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})),withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,readTerminEinstellungen,now,ordersRead))]);
+      [orderSource,dashboard]=await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})),withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,readTerminEinstellungen,now,ordersRead,modeled.tagQuellenPorts))]);
       modelRead={source:modeled.code==='LIVE'?'live':'modell',pending:modeled.code==='EMPTY',incomplete:false,pollMs:modeled.settings.today.todayStalePollMs,maxPollMs:modeled.settings.today.todayShadowIntervalMs,rebuild:modeled.code==='EMPTY'};
     }
     if(modeled.settings.page===null)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];

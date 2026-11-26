@@ -3,3 +3,4 @@ export {logTechnical,readLog,observeAction,subjectForAction} from './server/prot
 export {logClick} from './server/click';
 export {logClientDiagnostics} from './server/clientDiagnostics';
 export {taktJobs} from './server/taktJobs';
+export {tagQuellen} from './server/tagQuellen';

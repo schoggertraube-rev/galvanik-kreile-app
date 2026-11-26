@@ -124,21 +124,17 @@ it('schließt nur den eigenen Versuch ab und verliert keinen fehlenden Beleg', a
   expect(command).toContain("status='läuft' AND versuch=");
 });
 
-it('liest ausschließlich den letzten belegten Erfolg desselben Jobs und Mandanten', async () => {
+it('liefert einen gespeicherten Termin oder null ohne Abschlussbeleg', async () => {
   const letzterTermin = new Date('2026-11-23T23:00:00Z');
   const execute = vi.fn().mockResolvedValueOnce([{faellig_ms: letzterTermin.getTime()}]).mockResolvedValueOnce([]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
   expect(await liesLetztenOk('tenant-a', 'heute_neuaufbau')).toEqual(letzterTermin);
   expect(await liesLetztenOk('tenant-a', 'heute_neuaufbau')).toBe(null);
   expect(transaction).toHaveBeenCalledWith({tenantId: 'tenant-a'}, expect.any(Function));
-  const command = execute.mock.calls[0][0].queryChunks.map((part: {value?: string[]}) => part.value?.join('') ?? '').join('');
-  expect(command).toContain("status='ok' AND beendet_um IS NOT NULL");
-  expect(command).toContain('ORDER BY faellig_fuer DESC LIMIT 1');
 });
 
-it('wertet eine fünfminütige Auffrischung nicht als täglichen Vollaufbau', async () => {
-  const execute = vi.fn().mockResolvedValue([]);
+it('gibt keinen Vollaufbau mit ungültigem belegtem Zeitpunkt zurück', async () => {
+  const execute = vi.fn().mockResolvedValue([{faellig_ms: Number.NaN}]);
   transaction.mockImplementation(async (_tenant, work) => work({execute}));
-  await liesLetztenOk('tenant-a', 'heute_neuaufbau');
-  expect(sqlText(execute.mock.calls[0][0])).toContain('length(faellig_fuer)=10');
+  await expect(liesLetztenOk('tenant-a', 'heute_neuaufbau')).rejects.toThrow('TAKT_LETZTER_OK_ZEIT_INVALID');
 });

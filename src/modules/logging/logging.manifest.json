@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "owner": "S20 A-09 / I-046",
   "publicExports": [
+    "@/modules/logging/server-public#tagQuellen",
     "@/modules/logging/public#LogSubject",
     "@/modules/logging/public#LogSettings",
     "@/modules/logging/public#LogReason",

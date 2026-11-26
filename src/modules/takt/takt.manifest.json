@@ -16,8 +16,12 @@
     "@/modules/takt/server-public#TaktZugriff",
     "@/modules/takt/server-public#fuehreTaktAus",
     "@/modules/takt/server-public#holeTaktNach",
+    "@/modules/takt/server-public#starteTaktStoerungsjob",
     "@/modules/takt/server-public#liesTaktLaeufe",
-    "@/modules/takt/server-public#TaktLaufZeile"
+    "@/modules/takt/server-public#TaktLaufZeile",
+    "@/modules/takt/server-public#liesTaktAusfallZeilen",
+    "@/modules/takt/server-public#projiziereTaktAusfallZeilen",
+    "@/modules/takt/server-public#tagQuellen"
   ],
   "capabilities": [],
   "migrations": [],

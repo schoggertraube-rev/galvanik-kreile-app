@@ -31,6 +31,7 @@ async function settledStatistics(){
 const exceptions=new Map([
  ['private.today_source_v1','Derived model being rebuilt, never an independent business input'],
  ['private.today_tenant_v1','Derived lease and tenant epoch being rebuilt'],
+ ['public.takt_job_runs','The Takt runner refreshes this one source after a completed receipt, covered by s38b_takt_outage.integration.test.ts'],
 ]);
 
 it('E-G2 gives every relation actually read by a full productive rebuild all three invalidation triggers',async()=>{
@@ -63,14 +64,18 @@ it('E-G2 gives every relation actually read by a full productive rebuild all thr
  const sources=await sql`SELECT kind,status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
  for(const source of sources)expect(source.status,source.kind).toBe('OK');
  const lists=new Map(sources.filter(source=>source.kind!=='quelle:orders.auftrag').map(source=>[source.kind,source.payload]));
- expect(lists.size).toBe(8);
+ expect(lists.size).toBe(9);
  expect(lists.get('quelle:orders.liste')).toHaveLength(2);
  expect(lists.get('quelle:eingang.nachrichten').messages.length).toBeGreaterThan(0);
  expect(lists.get('quelle:accounting.geld').invoiceSource.data).toHaveLength(2);
  expect(lists.get('quelle:complaints.liste').complaints).toHaveLength(1);
  expect(lists.get('quelle:quotes.nachfassen')).toHaveLength(1);
  expect(lists.get('quelle:quotes.liste').list.quotes).toHaveLength(1);
- expect(lists.get('quelle:tasks.aufgabe').rows).toHaveLength(1);
+ expect(lists.get('quelle:tasks.aufgabe')).toMatchObject({
+  aufgaben:expect.arrayContaining([expect.objectContaining({id:task.id,titel:task.titel})]),
+  kalender:{rows:[expect.objectContaining({task:expect.objectContaining({titel:'TEST Quellenaufgabe'})})]},
+ });
+ expect(lists.get('quelle:takt.ausfall')).toMatchObject({code:'OK',ausfaelle:expect.any(Array)});
  expect(lists.get('quelle:fundament.firma')).toMatchObject({code:'OK'});
  const after=await settledStatistics();
  const reads=[...after].filter(([name,count])=>count>(before.get(name)??BigInt(0))).map(([name])=>name);
