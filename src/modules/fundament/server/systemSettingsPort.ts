@@ -12,6 +12,8 @@ import {ACCESS_AREA_LABELS} from '@/lib/auth/authorizationContract';
 import {parseProtocolSettings} from '../protocolSettings';
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
+import {readBetriebsruheInTransaction} from './s16dSpurDSettingsPort';
+import {leseBetriebsruhetage} from '@/lib/domain/workingDays';
 import {STORAGE_CHARGE_COPY,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import "server-only";
 
@@ -127,20 +129,32 @@ export async function readCompanyLetterSettings(context:Pick<CompanyDocumentCont
  try{return await (context.fresh?readFreshCompanyLetterSettingsRow:readCompanyLetterSettingsRow)(context.tenantId,context.includeDeliveryNoteIdentity===true)}catch(error){logSystemSettingsPortFailure('COMPANY_LETTER_SETTINGS_READ_FAILED',error);return {code:'UNAVAILABLE' as const};}
 }
 
-export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
+export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string,lockForCalendar=false):Promise<ShippingSettings|null>{
  const rows=await tx.execute<ShippingSettings>(sql`SELECT versand_dienst AS service,versand_nummer_format AS "numberPattern",versand_nummer_hinweis AS "numberHint",
    versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",versand_pauschale_netto_cents AS "shippingFeeCents",ausgang_regeln AS "dispatchPolicy",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
-   FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
+   FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2 ${lockForCalendar?sql`FOR SHARE`:sql``}`);
  if(!rows.length)return null;
  if(rows.length!==1||!rows[0]||typeof rows[0].service!=="string"||!rows[0].service.trim())throw Error('SHIPPING_SETTINGS_INVALID');
  if(rows[0].dispatchPolicy!==null&&!dispatchPolicyValid(rows[0].dispatchPolicy))throw Error("DISPATCH_POLICY_INVALID");
  if(rows[0].shippingFeeCents!==null&&(!Number.isSafeInteger(rows[0].shippingFeeCents)||Number(rows[0].shippingFeeCents)<0))throw Error('SHIPPING_FEE_SOURCE_INVALID');
  return rows[0];
 }
-export async function readShippingSettings(context:CompanyDocumentContext){
+export async function readShippingSettings(context:CompanyDocumentContext,withBetriebsruhe?:true){
  if(!context.canRead)return {code:"FORBIDDEN" as const,message:"Versandangaben sind nicht freigegeben."};
- try{const settings=await withPrivilegedTenantTransaction(context,tx=>readShippingSettingsInTransaction(tx,context.tenantId));
-  return settings?{code:"OK" as const,settings}:{code:"NOT_FOUND" as const,message:"Firmendaten fehlen. Fehlercode: SHIPPING_SETTINGS_MISSING."};
+ try{return await withPrivilegedTenantTransaction(context,async tx=>{
+  const settings=await readShippingSettingsInTransaction(tx,context.tenantId,withBetriebsruhe);
+  if(!settings)return {code:"NOT_FOUND" as const,message:"Firmendaten fehlen. Fehlercode: SHIPPING_SETTINGS_MISSING."};
+  if(!withBetriebsruhe)return {code:"OK" as const,settings};
+  const betriebsruhe=await withTenantSavepoint(tx,async nested=>{
+   const raw=(await readBetriebsruheInTransaction(nested,context.tenantId)).betriebsruhe;
+   const dates=leseBetriebsruhetage(raw);
+   return dates===null?null:[...dates];
+  }).catch(error=>{
+   logSystemSettingsPortFailure('DISPATCH_BUSINESS_CALENDAR_READ_FAILED',error);
+   return null;
+  });
+  return {code:"OK" as const,settings,betriebsruhe};
+ });
  }catch(error){logSystemSettingsPortFailure('SHIPPING_SETTINGS_READ_FAILED',error);return {code:"UNAVAILABLE" as const,message:"Versandangaben konnten nicht geladen werden. Fehlercode: SHIPPING_SETTINGS_READ_FAILED."};}
 }
 export async function updateShippingSettings(context:SystemSettingsContext,input:unknown){

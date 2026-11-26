@@ -12,4 +12,5 @@ it('historical rules keep the final stage off; only explicit valid intervals and
  for(const value of [-1,0.5,3651,'2',undefined])expect(dispatchPolicyValid({...configured,finalStageAfterLetterDays:value})).toBe(false);
  for(const value of ['', 'meister', undefined])expect(dispatchPolicyValid({...configured,finalStageRecipientId:value})).toBe(false);
  expect(dispatchPolicyValid({...configured,unexpected:true})).toBe(false);
+ expect(dispatchPolicyValid({...configured,holidays:['2026-12-24']})).toBe(false);
 });

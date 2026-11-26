@@ -28,6 +28,20 @@ import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('STORAGE_LETTER_LOOPBACK_REQUIRED');
 
+async function withTestClosure<T>(date:string,run:()=>Promise<T>){
+ const read=async()=>{
+  const [row]=await sql`SELECT betriebsruhe FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+  if(!row)throw Error('TEST_COMPANY_CLOSURE_MISSING');
+  return row.betriebsruhe;
+ };
+ return withRestoredTestSource({label:'TEST Betriebsruhe',read,restore:async snapshot=>{
+  await sql`UPDATE public.company_settings SET betriebsruhe=${sql.json(snapshot)} WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+ }},async()=>{
+  await sql`UPDATE public.company_settings SET betriebsruhe=${sql.json([{von:date,bis:date}])} WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+  return run();
+ });
+}
+
 async function prepareLetter(label:string,endCall=true,shared=false){
  const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-storage-letter-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail'))return new Response(null,{status:202});return nativeFetch(input,init);});
@@ -584,8 +598,7 @@ it.each(['unposted','posted'] as const)('an actual pickup agreement pauses the %
  if(stage==='posted'){expect(await withSession(full,()=>completeIntakeTaskAction(post))).toMatchObject({code:'OK'});const final=await withSession(full,()=>createStorageFinalTaskAction(request));if(final.code!=='OK')throw Error('APPOINTMENT_FINAL_TASK');finalTaskId=final.taskId;}
  const friday=new Date(berlinCalendarDay()+'T12:00:00Z');friday.setUTCDate(friday.getUTCDate()+14);while(friday.getUTCDay()!==5)friday.setUTCDate(friday.getUTCDate()+1);
  const day=(offset:number)=>{const date=new Date(friday);date.setUTCDate(date.getUTCDate()+offset);return date.toISOString().slice(0,10);};
- const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('APPOINTMENT_CALENDAR');
- expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,holidays:[day(3)]}}))).toMatchObject({code:'OK'});
+ await withTestClosure(day(3),async()=>{
  const current=await plan(),input={orderId:order.orderId,expectedVersion:current!.version,previousEventId:null,date:day(0),channel:'telefon' as const,clientEventId:randomUUID()};
  const actor=await createFixture(['auftraege'],'werkstatt');
  const ordinary=await withSession(full,()=>saveIntakeTaskAction({clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST normale Aufgabe bleibt offen',dueDate:berlinCalendarDay(),time:null,forLogin:full.actorId,forArea:null,reference:{type:'auftrag',id:order.orderId},note:null}));if(ordinary.code!=='OK')throw Error('APPOINTMENT_ORDINARY_TASK');
@@ -624,6 +637,7 @@ it.each(['unposted','posted'] as const)('an actual pickup agreement pauses the %
   expect(await withSession(full,()=>completeIntakeTaskAction({taskId:call.taskId,version:read.task!.version,note:'TEST andere Ware nicht erreicht',callResult:'notReached'}))).toMatchObject({code:'OK'});
   expect((await plan())!.finishedDispatch!.reminder).toMatchObject({state:'PAUSED',due:day(4)});
  }
+ });
 });
 
 it('the configured storage rate and its actual audit receipt commit together or roll back for a recoverable retry',async()=>{
@@ -655,7 +669,8 @@ it('PL12:06 freezes the promised postal deadline in the original despite later i
  const taskVersion=task.task.version;
  expect(await withSession(full,()=>completeIntakeTaskAction({taskId:prepared.taskId,version:taskVersion,note:'TEST Original zur Post',postalResult:{kind:'posted',postedOn:berlinCalendarDay(),documentSha256:prepared.document.sha256}}))).toMatchObject({code:'OK'});
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('FROZEN_DEADLINE_SETTINGS');
- expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,finalStageAfterLetterDays:20,holidays:[berlinCalendarDay()]}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...settings.settings.dispatchPolicy!,finalStageAfterLetterDays:20}}))).toMatchObject({code:'OK'});
+ await withTestClosure(berlinCalendarDay(),async()=>{
  expect((await plan())?.finishedDispatch?.storage?.letter?.finalStage).toMatchObject({state:boundary.state,due:original.snapshot.deadline.due});
  const final=await withSession(full,()=>createStorageFinalTaskAction(request));expect(final.code).toBe(boundary.state==='DUE'?'OK':'CONFLICT');
  if(final.code==='OK'){
@@ -664,7 +679,7 @@ it('PL12:06 freezes the promised postal deadline in the original despite later i
  }
  expect(await sql`SELECT payload->'document'->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${prepared.document.id}`).toEqual([original]);
  expect(await sql`SELECT count(*)::int AS n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${order.orderId} AND status='offen'`).toEqual([{n:boundary.state==='DUE'?1:0}]);
-
+ });
 });
 it('PL12:06 freezes the actual mail original deadline and preserves its fresh retry after settings shorten the interval',async()=>{
  const {order,request,plan}=await prepareLetter('Mailfrist-Original');
@@ -684,7 +699,7 @@ it('PL12:06 a missed actual pickup agreement starts E4 through postal original a
  const order=await readyInvoiceOrder('Verpasster-Termin');
  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('MISSED_SETTINGS');
- expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[],storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId}}))).toMatchObject({code:'OK'});
  const past=new Date(historicalDispatchDate(clock.databaseNow,4));
  const agreement=await withSession(full,()=>setOrderPickupAppointmentAction({orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:past.toISOString().slice(0,10),channel:'telefon',clientEventId:randomUUID()}));if(agreement.code!=='OK')throw Error('MISSED_AGREEMENT');
  async function current(){const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('MISSED_QUEUE');return queue.data.find(row=>row.id===order.orderId)!;}
@@ -710,17 +725,17 @@ it('PL12:06 a missed actual pickup agreement starts E4 through postal original a
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type IN ('ORDER_COLLECTION_CALL_CREATED_V1','ORDER_COLLECTION_CALL_RESULT_V1') AND payload->'meta'->'orderIds' @> ${sql.json([order.orderId])}`).toHaveLength(0);
 });
 it('PL12:06 missed-appointment eligibility observes both working-day boundaries without defaults',()=>{
- const policy={...emptyDispatchPolicy(),holidays:['2026-11-09'],storageAfterDays:0};
- expect(pickupStorageDue('2026-11-06',policy)).toBe('2026-11-10');
- expect(pickupStorageDue('2026-11-06',{...policy,storageAfterDays:3})).toBe('2026-11-12');
- expect(pickupStorageDue('2026-11-06',{...policy,storageAfterDays:null})).toBeNull();
- expect(pickupStorageDue('2026-11-06',null)).toBeNull();
+ const policy={...emptyDispatchPolicy(),storageAfterDays:0};
+ expect(pickupStorageDue('2026-11-06',policy,['2026-11-09'])).toBe('2026-11-10');
+ expect(pickupStorageDue('2026-11-06',{...policy,storageAfterDays:3},['2026-11-09'])).toBe('2026-11-12');
+ expect(pickupStorageDue('2026-11-06',{...policy,storageAfterDays:null},['2026-11-09'])).toBeNull();
+ expect(pickupStorageDue('2026-11-06',null,[])).toBeNull();
 });
 it('PL12:06 a missed pickup uses the existing mail sender and final task, while a newer agreement invalidates the old proposal',async()=>{
  const clock=await readHistoricalDispatchClock(sql,KREILE_TENANT_SLUG,full.actorId);
  vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-missed-appointment-token'.repeat(4),expires_in:3600});if(url.hostname==='graph.microsoft.com'&&url.pathname.endsWith('/sendMail'))return new Response(null,{status:202});return nativeFetch(input,init);});
  const order=await readyInvoiceOrder('Verpasster-Termin-Mail'),settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('MISSED_MAIL_SETTINGS');
- expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[],storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId,holdMinutes:0}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),storageAfterDays:0,finalStageAfterLetterDays:0,finalStageRecipientId:full.actorId,holdMinutes:0}}))).toMatchObject({code:'OK'});
  const past=new Date(historicalDispatchDate(clock.databaseNow,4));
  const agreement=await withSession(full,()=>setOrderPickupAppointmentAction({orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:past.toISOString().slice(0,10),channel:'persoenlich',clientEventId:randomUUID()}));if(agreement.code!=='OK')throw Error('MISSED_MAIL_AGREEMENT');
  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('MISSED_MAIL_QUEUE');const letter=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.storage?.letter;if(!letter)throw Error('MISSED_MAIL_LETTER');

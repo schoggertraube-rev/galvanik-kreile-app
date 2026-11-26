@@ -22,7 +22,7 @@ function safeDispatchReadError(error:unknown){
 }
 
 /** Enrich existing operational rows; never a second saved queue or release rule. */
-export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>}){
+export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,betriebsruhe:readonly string[]|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>}){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  const result:FinishedDispatch[]=[];
  const appointments=new Map<string,NonNullable<FinishedDispatch['pickupAppointment']>&{recordedAt:string}>();
@@ -34,15 +34,15 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
  for(const order of finished){
   const notification=notifications.get(order.id);
   if(notification?.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
-  const workingDays=policy===null||!notification.frozenAt?null:workingDaysBetween(berlinCalendarDay(new Date(notification.frozenAt)),berlinCalendarDay(),policy.holidays);
+  const workingDays=policy===null||betriebsruhe===null||!notification.frozenAt?null:workingDaysBetween(berlinCalendarDay(new Date(notification.frozenAt)),berlinCalendarDay(),betriebsruhe);
   if(workingDays!==null&&workingDays<0){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['DISPATCH_CALENDAR_INVALID'],unavailable:true});continue;}
   result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,
    informedAt:notification.informed?.recordedAt??null,channel:notification.informed?.channel??null,blockReason:notification.blockReason,
-   workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[])]});
+   workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null||betriebsruhe===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[])]});
   if(notification.handover==='pickup'){
    const read=await readOrderPickupAppointment(auth,order.id),row=result.at(-1)!;
    if(read.code!=='OK'){row.unavailable=true;row.gaps.push('PICKUP_APPOINTMENT_UNAVAILABLE');continue;}
-   if(read.appointment){const resumeOn=policy===null?null:plusWorkingDays(read.appointment.date,1,policy.holidays);row.pickupAppointment={eventId:read.appointment.eventId,date:read.appointment.date,resumeOn,paused:resumeOn===null?null:resumeOn>berlinCalendarDay()};appointments.set(order.id,{...row.pickupAppointment,recordedAt:read.appointment.recordedAt});}
+   if(read.appointment){const resumeOn=policy===null||betriebsruhe===null?null:plusWorkingDays(read.appointment.date,1,betriebsruhe);row.pickupAppointment={eventId:read.appointment.eventId,date:read.appointment.date,resumeOn,paused:resumeOn===null?null:resumeOn>berlinCalendarDay()};appointments.set(order.id,{...row.pickupAppointment,recordedAt:read.appointment.recordedAt});}
   }
   if(notification.handover){
    const key=JSON.stringify([order.customerId,notification.handover]);
@@ -63,7 +63,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   let noMail=false;
   try{if(ports?.readHasMail)noMail=!await ports.readHasMail(group.customerId);}catch(error){console.error('[DISPATCH_CUSTOMER_MAIL_READ_FAILED]',error instanceof Error?error.name:'UnknownError');failGroup();continue;}
   const pausedOrderIds=group.members.filter(member=>appointments.has(member.orderId)).map(member=>member.orderId);
-  const initial=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail,pausedOrderIds},policy,history);
+  const initial=planInitialDispatchReminder({tenantId:auth.tenantId,...group,today:berlinCalendarDay(),noMail,pausedOrderIds},policy,betriebsruhe,history);
   let calls:Awaited<ReturnType<typeof readDispatchCalls>>;
   try{calls=await readDispatchCalls(auth,group.customerId,group.handover,initial.orderIds);}catch(error){console.error('[DISPATCH_CALL_READ_FAILED]',safeDispatchReadError(error));failGroup();continue;}
   const answered=new Map<string,{call?:typeof calls[number];mail?:DispatchResponseCheck['proofs'][number]}>();
@@ -92,7 +92,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   if(fresh.length)cohorts.push({members:fresh,call:activeCalls.find(call=>call.result===null&&call.freezes.some(proof=>fresh.some(member=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId)))});
   for(const {members,call} of cohorts){
   const activeHistory=history.filter(row=>members.some(member=>row.orderIds.includes(member.orderId)&&(row.postalDocumentId?row.storageOrigin?.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId):!row.sentAt||Date.parse(row.sentAt)>=Date.parse(member.noticeAt??member.readyAt??''))));
-  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,members,deliveryFailedAt:members.flatMap(member=>member.deliveryFailedAt?[member.deliveryFailedAt]:[]).sort()[0]??null,today:berlinCalendarDay(),noMail,pausedOrderIds},policy,activeHistory);
+  const plan=planInitialDispatchReminder({tenantId:auth.tenantId,...group,members,deliveryFailedAt:members.flatMap(member=>member.deliveryFailedAt?[member.deliveryFailedAt]:[]).sort()[0]??null,today:berlinCalendarDay(),noMail,pausedOrderIds},policy,betriebsruhe,activeHistory);
   if(call){plan.callTaskId=call.taskId;plan.stage='E3';plan.clientKey=call.stageKey;plan.due=call.due;plan.state='DUE';}
   if(reaction){plan.responseState=reaction.state==='REPLIED'?'NONE':reaction.state;plan.requiresResponseCheck=plan.responseState!=='NONE';if(reaction.state==='UNAVAILABLE')plan.state='RECONCILE_RESPONSE';}
   if(noMail&&!group.threads.size){plan.requiresResponseCheck=false;plan.responseState='NONE';}
@@ -103,11 +103,11 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
     const unsent:FinishedDispatch[]=[];let storageUnavailable=false;
     for(const member of members){
      const row=result.find(item=>item.orderId===member.orderId);if(!row)continue;
-     row.storage=storageEligibility(member.noticeAt,call.recordedAt,berlinCalendarDay(),policy,noMail);
+     row.storage=storageEligibility(member.noticeAt,call.recordedAt,berlinCalendarDay(),policy,betriebsruhe,noMail);
      const letters=activeHistory.filter(item=>item.stage==='E4'&&!item.voidId&&item.orderIds.includes(member.orderId)&&item.storageOrigin?.callTaskId===call.taskId&&item.storageOrigin.freezes.some(proof=>proof.orderId===member.orderId&&proof.freezeId===member.freezeId));
      const letter=letters.at(-1);
      if(letter){
-      row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':letter.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,...(letter.postalDocumentId?{postalDocumentId:letter.postalDocumentId,postalTaskId:letter.postalTaskId}:{}),callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy,letter.storageDeadline??{date:'',due:null})};
+      row.storage.letter={state:letter.sentAt&&!letter.deliveryFailedAt?'SENT':letter.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:letter.stageKey,orderIds:letter.orderIds,due:letter.dueDate,sentAt:letter.sentAt,threadId:letter.threadId,...(letter.postalDocumentId?{postalDocumentId:letter.postalDocumentId,postalTaskId:letter.postalTaskId}:{}),callTaskId:call.taskId,freezes:letter.storageOrigin!.freezes,finalStage:finalStorageStage(letter.deliveryFailedAt?null:letter.sentAt,berlinCalendarDay(),policy,betriebsruhe,letter.storageDeadline??{date:'',due:null})};
       try{const final=await readStorageFinalTaskState(auth,letter.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}
       catch(error){console.error('[STORAGE_FINAL_READ_FAILED]',safeDispatchReadError(error));failGroup();storageUnavailable=true;break;}
 
@@ -120,7 +120,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
      const clientKey=storageLetterKey(auth.tenantId,group.customerId,group.handover,call.stageKey+(voidId?':void:'+voidId:''),orderIds);
      const due=unsent.map(row=>row.storage!.eligibleOn!).sort().at(-1)!;
      const freezes=call.freezes.filter(proof=>orderIds.includes(proof.orderId));
-     for(const row of unsent)row.storage!.letter={state:'DUE',clientKey,orderIds,due,sentAt:null,threadId:null,callTaskId:call.taskId,freezes,finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};
+     for(const row of unsent)row.storage!.letter={state:'DUE',clientKey,orderIds,due,sentAt:null,threadId:null,callTaskId:call.taskId,freezes,finalStage:finalStorageStage(null,berlinCalendarDay(),policy,betriebsruhe)};
     }
    }
   }
@@ -134,28 +134,28 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   const members=result.filter(item=>!item.unavailable&&replyLeads(item.orderId)?.eventId===reply.eventId);
   const orderIds=members.map(item=>item.orderId).sort(),freezes=reply.proof.freezes.filter(proof=>orderIds.includes(proof.orderId));
   if(freezes.length!==orderIds.length){row.unavailable=true;row.gaps.push('REPLY_FREEZE_UNAVAILABLE');continue;}
-  const due=pickupStorageDue(berlinCalendarDay(new Date(reply.proof.receivedAt)),policy);
+  const due=pickupStorageDue(berlinCalendarDay(new Date(reply.proof.receivedAt)),policy,betriebsruhe);
   row.storage={state:due===null?'NEEDS_SETTING':due>berlinCalendarDay()?'WAIT':'DUE',eligibleOn:due,missingSettings:due===null?['storageAfterDays']:[],replyEventId:reply.eventId};
   const originals=(histories.get(JSON.stringify([reply.customerId,reply.handover]))??[]).filter(item=>item.stage==='E4'&&item.storageOrigin?.replyEventId===reply.eventId&&item.storageOrigin.freezes.some(proof=>proof.orderId===row.orderId&&freezes.some(actual=>actual.orderId===proof.orderId&&actual.freezeId===proof.freezeId)));
   const original=originals.filter(item=>!item.voidId).at(-1),voidId=originals.filter(item=>item.voidId).at(-1)?.voidId;
   if(original){
-   row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),replyEventId:reply.eventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
+   row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),replyEventId:reply.eventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,betriebsruhe,original.storageDeadline??{date:'',due:null})};
    try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[REPLY_FINAL_READ_FAILED]',safeDispatchReadError(error));row.unavailable=true;row.storage=undefined;}
-  }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,reply.customerId,reply.handover,reply.eventId+(voidId?':void:'+voidId:''),orderIds),orderIds,due,sentAt:null,threadId:null,replyEventId:reply.eventId,freezes,finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};
+  }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,reply.customerId,reply.handover,reply.eventId+(voidId?':void:'+voidId:''),orderIds),orderIds,due,sentAt:null,threadId:null,replyEventId:reply.eventId,freezes,finalStage:finalStorageStage(null,berlinCalendarDay(),policy,betriebsruhe)};
  }
  for(const row of result){const appointment=appointments.get(row.orderId);if(!appointment||replyLeads(row.orderId)||row.unavailable||!row.reminder)continue;
   row.reminder={...row.reminder,state:appointment.paused===null?'NEEDS_SETTING':appointment.paused?'PAUSED':'APPOINTMENT_EXPIRED',due:appointment.resumeOn,clientKey:null,requiresResponseCheck:false,responseState:'NONE'};
   if(appointment.paused===false){
    const order=orders.find(item=>item.id===row.orderId)!,group=groups.get(JSON.stringify([order.customerId,'pickup'])),member=group?.members.find(item=>item.orderId===row.orderId);
-   const due=pickupStorageDue(appointment.date,policy);
+   const due=pickupStorageDue(appointment.date,policy,betriebsruhe);
    if(!member?.freezeId){row.unavailable=true;row.gaps.push('PICKUP_APPOINTMENT_FREEZE_UNAVAILABLE');continue;}
    row.storage={state:due===null?'NEEDS_SETTING':due>berlinCalendarDay()?'WAIT':'DUE',eligibleOn:due,missingSettings:due===null?['storageAfterDays']:[],appointmentEventId:appointment.eventId};
    const originals=(histories.get(JSON.stringify([order.customerId,'pickup']))??[]).filter(item=>item.stage==='E4'&&item.storageOrigin?.appointmentEventId===appointment.eventId&&item.storageOrigin.freezes.some(proof=>proof.orderId===row.orderId&&proof.freezeId===member.freezeId));
    const original=originals.filter(item=>!item.voidId).at(-1),voidId=originals.filter(item=>item.voidId).at(-1)?.voidId;
    if(original){
-    row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),appointmentEventId:appointment.eventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
+    row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),appointmentEventId:appointment.eventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,betriebsruhe,original.storageDeadline??{date:'',due:null})};
     try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[APPOINTMENT_FINAL_READ_FAILED]',safeDispatchReadError(error));row.unavailable=true;row.storage=undefined;continue;}
-   }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,order.customerId,'pickup',appointment.eventId+(voidId?':void:'+voidId:''),[row.orderId]),orderIds:[row.orderId],due,sentAt:null,threadId:null,appointmentEventId:appointment.eventId,freezes:[{orderId:row.orderId,freezeId:member.freezeId}],finalStage:finalStorageStage(null,berlinCalendarDay(),policy)};
+   }else if(due&&due<=berlinCalendarDay())row.storage.letter={state:'DUE',clientKey:storageLetterKey(auth.tenantId,order.customerId,'pickup',appointment.eventId+(voidId?':void:'+voidId:''),[row.orderId]),orderIds:[row.orderId],due,sentAt:null,threadId:null,appointmentEventId:appointment.eventId,freezes:[{orderId:row.orderId,freezeId:member.freezeId}],finalStage:finalStorageStage(null,berlinCalendarDay(),policy,betriebsruhe)};
    continue;
   }
   // A paused member no longer belongs to the pending cohort. Keep its real
@@ -165,7 +165,7 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
    row.storage={state:'WAIT',eligibleOn:appointment.resumeOn,missingSettings:[],appointmentEventId:appointment.eventId};
    const original=(histories.get(JSON.stringify([order.customerId,'pickup']))??[]).filter(item=>item.stage==='E4'&&item.storageOrigin?.freezes.some(proof=>proof.orderId===row.orderId&&proof.freezeId===member?.freezeId)).at(-1);
    if(original){
-    row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),callTaskId:original.storageOrigin?.callTaskId,appointmentEventId:original.storageOrigin?.appointmentEventId,replyEventId:original.storageOrigin?.replyEventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,original.storageDeadline??{date:'',due:null})};
+    row.storage.letter={state:original.sentAt&&!original.deliveryFailedAt?'SENT':original.postalDocumentId?'WAIT_FOR_POST':'RECONCILE_MAIL',clientKey:original.stageKey,orderIds:original.orderIds,due:original.dueDate,sentAt:original.sentAt,threadId:original.threadId,...(original.postalDocumentId?{postalDocumentId:original.postalDocumentId,postalTaskId:original.postalTaskId}:{}),callTaskId:original.storageOrigin?.callTaskId,appointmentEventId:original.storageOrigin?.appointmentEventId,replyEventId:original.storageOrigin?.replyEventId,freezes:original.storageOrigin!.freezes,finalStage:finalStorageStage(original.deliveryFailedAt?null:original.sentAt,berlinCalendarDay(),policy,betriebsruhe,original.storageDeadline??{date:'',due:null})};
     try{const final=await readStorageFinalTaskState(auth,original.stageKey);if(final)row.storage.letter.finalStage={state:final.status==='offen'?'TASK_PENDING':'COMPLETED',taskId:final.taskId,recipientId:final.recipientId,due:final.due,missingSettings:[]};}catch(error){console.error('[PAUSED_ORIGINAL_READ_FAILED]',safeDispatchReadError(error));row.unavailable=true;row.storage=undefined;continue;}
    }
   }

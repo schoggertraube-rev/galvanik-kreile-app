@@ -111,7 +111,7 @@ it('Fertig existing operational consumer reads one notification/release projecti
  const {readShippingSettingsAction,saveShippingSettingsAction}=await import('@/app/actions/settings.actions');
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('DISPATCH_SETTINGS_READ');
  const {emptyDispatchPolicy}=await import('@/modules/fundament/public');
- const policy={...emptyDispatchPolicy(),holidays:['2026-12-24']};
+ const policy=emptyDispatchPolicy();
  const input={service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:policy};
  expect(await withSession(full,()=>saveShippingSettingsAction(input))).toMatchObject({code:'OK',replayed:false,settings:{dispatchPolicy:policy}});
  expect(await sql`SELECT ausgang_regeln FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{ausgang_regeln:policy}]);
@@ -119,7 +119,7 @@ it('Fertig existing operational consumer reads one notification/release projecti
  expect(configured.data.find(row=>row.id===green.orderId)?.finishedDispatch).toMatchObject({state:'available',workingDays:0,gaps:[]});
  expect(await withSession(full,()=>saveShippingSettingsAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT payload->>'actorId' AS actor FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated' ORDER BY created_at DESC LIMIT 1`).toEqual([{actor:full.actorId}]);
- expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,holidays:['2026-02-30']}}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,holidays:['2026-12-24']}}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withSession(full,()=>saveShippingSettingsAction({...input,dispatchPolicy:{...policy,reminderDays:5}}))).toMatchObject({code:'CONFLICT'});
 });
 

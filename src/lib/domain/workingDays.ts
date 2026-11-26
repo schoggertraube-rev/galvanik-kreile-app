@@ -1,4 +1,5 @@
 const DAY_MS = 86_400_000;
+const FIRST_DAY = Date.UTC(100, 0, 1) / DAY_MS;
 
 type CalendarDay = { year: number; month: number; day: number };
 
@@ -24,6 +25,29 @@ function ordinal(value: CalendarDay): number {
 function fromOrdinal(value: number): CalendarDay {
   const date = new Date(value * DAY_MS);
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+export function leseBetriebsruhetage(wert: unknown): ReadonlySet<string> | null {
+  if (!Array.isArray(wert)) return null;
+  const zeitraeume: { von: number; bis: number }[] = [];
+  for (const eintrag of wert) {
+    if (typeof eintrag !== "object" || eintrag === null
+      || typeof eintrag.von !== "string" || typeof eintrag.bis !== "string") return null;
+    const von = parseDay(eintrag.von);
+    const bis = parseDay(eintrag.bis);
+    if (!von || !bis || eintrag.von > eintrag.bis) return null;
+    zeitraeume.push({ von: ordinal(von), bis: ordinal(bis) });
+  }
+
+  const tage = new Set<string>();
+  let letztesEnde = FIRST_DAY - 1;
+  for (const { von, bis } of zeitraeume.sort((links, rechts) => links.von - rechts.von)) {
+    for (let tag = Math.max(von, letztesEnde + 1); tag <= bis; tag += 1) {
+      tage.add(formatDay(fromOrdinal(tag)));
+    }
+    letztesEnde = Math.max(letztesEnde, bis);
+  }
+  return tage;
 }
 
 function easterSunday(year: number): CalendarDay {

@@ -14,9 +14,9 @@ import {readDispatchReplyReceipt,readLatestReplyForFreeze,replyCoversFreezes,rep
 
 const uuid=/^[a-f\d]{8}-[a-f\d]{4}-[1-5][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 export type StorageOrigin={callTaskId?:string;appointmentEventId?:string;replyEventId?:string;freezes:Array<{orderId:string;freezeId:string}>};
-export function pickupStorageDue(date:string,policy:DispatchPolicy|null|undefined){
- if(!policy||policy.storageAfterDays==null)return null;
- const pause=plusWorkingDays(date,1,policy.holidays),storage=plusWorkingDays(date,policy.storageAfterDays,policy.holidays);
+export function pickupStorageDue(date:string,policy:DispatchPolicy|null|undefined,betriebsruhe:readonly string[]|null){
+ if(!policy||policy.storageAfterDays==null||betriebsruhe===null)return null;
+ const pause=plusWorkingDays(date,1,betriebsruhe),storage=plusWorkingDays(date,policy.storageAfterDays,betriebsruhe);
  if(!pause||!storage)throw Error('PICKUP_STORAGE_CALENDAR_INVALID');
  return pause>storage?pause:storage;
 }

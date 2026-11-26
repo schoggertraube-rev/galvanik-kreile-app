@@ -7,7 +7,7 @@ export type PickupAppointmentProjection={eventId:string;date:string;resumeOn:str
 export type InitialDispatchReminderPlan={stage:'E1'|'E2'|'E3';state:'WAIT_FOR_NOTICE'|'NEEDS_SETTING'|'WAIT'|'DUE'|'STOPPED'|'PAUSED'|'APPOINTMENT_EXPIRED'|'RECONCILE_RESPONSE'|'RECONCILE_MAIL'|'CALL_PENDING'|'CALL_NOT_REACHED';due:string|null;oldestNoticeAt:string|null;anchorOrderId?:string;callTaskId?:string;clientKey:string|null;orderIds:string[];orderNumbers:string[];needsNotice:string[];automaticSend:false;requiresResponseCheck:boolean;responseState?:'NONE'|'REPLIED'|'NOT_CHECKED'|'UNAVAILABLE'};
 
 /** A proposal only. The sending command must verify replies and immutable prior dispatches. */
-export function planInitialDispatchReminder(input:{tenantId:string;customerId:string;handover:'pickup'|'shipping';members:readonly DispatchNoticeMember[];today:string;noMail?:boolean;deliveryFailedAt?:string|null;pausedOrderIds?:readonly string[]},policy:DispatchPolicy|null,history:ReadonlyArray<{stage:'E1'|'E2'|'E4';sentAt:string|null;deliveryFailedAt?:string|null}>=[]):InitialDispatchReminderPlan{
+export function planInitialDispatchReminder(input:{tenantId:string;customerId:string;handover:'pickup'|'shipping';members:readonly DispatchNoticeMember[];today:string;noMail?:boolean;deliveryFailedAt?:string|null;pausedOrderIds?:readonly string[]},policy:DispatchPolicy|null,betriebsruhe:readonly string[]|null,history:ReadonlyArray<{stage:'E1'|'E2'|'E4';sentAt:string|null;deliveryFailedAt?:string|null}>=[]):InitialDispatchReminderPlan{
  const members=[...input.members].sort((a,b)=>a.orderId.localeCompare(b.orderId));
  if(!members.length||new Set(members.map(row=>row.orderId)).size!==members.length)throw Error('DISPATCH_COHORT_INVALID');
  const clockMembers=members.filter(member=>!input.pausedOrderIds?.includes(member.orderId));
@@ -23,8 +23,8 @@ export function planInitialDispatchReminder(input:{tenantId:string;customerId:st
   if(!start)return {...base,stage:'E3'};
   if(!Number.isFinite(Date.parse(start)))throw Error('DISPATCH_READY_TIME_INVALID');
   const informedByPhone=input.noMail&&!failedAt&&clockMembers.every(member=>member.noticeAt&&member.noticeChannel==='telefon');
-  if(informedByPhone&&policy?.callAfterDays==null)return {...base,stage:'E3',state:'NEEDS_SETTING',needsNotice:[]};
-  const due=informedByPhone?plusWorkingDays(berlinCalendarDay(new Date(start)),policy!.callAfterDays!,policy!.holidays):berlinCalendarDay(new Date(start));
+  if(informedByPhone&&(policy?.callAfterDays==null||betriebsruhe===null))return {...base,stage:'E3',state:'NEEDS_SETTING',needsNotice:[]};
+  const due=informedByPhone?plusWorkingDays(berlinCalendarDay(new Date(start)),policy!.callAfterDays!,betriebsruhe!):berlinCalendarDay(new Date(start));
   if(!due)throw Error('DISPATCH_PHONE_CALENDAR_INVALID');
   const anchor=clockMembers.find(member=>member.noticeAt===oldest&&oldest!==null)?.orderId??ready?.orderId;
   return {...base,stage:'E3',state:due>input.today?'WAIT':'DUE',due,anchorOrderId:anchor,needsNotice:[],clientKey:dispatchReminderKey(input.tenantId,input.customerId,input.handover,'E3',due,JSON.stringify([anchor,oldest??ready?.readyAt]))};
@@ -35,8 +35,8 @@ export function planInitialDispatchReminder(input:{tenantId:string;customerId:st
  const first=history.filter(row=>row.stage==='E1'&&row.sentAt).at(-1),second=history.filter(row=>row.stage==='E2'&&row.sentAt).at(-1);
  const stage=second?'E3':first?'E2':'E1',start=second?.sentAt??first?.sentAt??oldest;
  const interval=policy?.[stage==='E1'?'reminderDays':stage==='E2'?'secondReminderDays':'callAfterDays'];
- if(interval===undefined||interval===null)return {...base,stage,state:'NEEDS_SETTING'};
- const due=plusWorkingDays(berlinCalendarDay(new Date(start)),interval,policy!.holidays);
+ if(interval===undefined||interval===null||betriebsruhe===null)return {...base,stage,state:'NEEDS_SETTING'};
+ const due=plusWorkingDays(berlinCalendarDay(new Date(start)),interval,betriebsruhe);
  if(!due)throw Error('DISPATCH_REMINDER_CALENDAR_INVALID');
  const clientKey=dispatchReminderKey(input.tenantId,input.customerId,input.handover,stage,due,JSON.stringify([base.anchorOrderId,oldest]));
  return {...base,stage,due,clientKey,state:due>input.today?'WAIT':'DUE'};

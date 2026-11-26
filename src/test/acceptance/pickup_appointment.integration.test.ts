@@ -48,7 +48,7 @@ it('a separate actual appointment preserves the production date, records actor/c
 it('a stale call proposal cannot recreate a callback after an actual pickup agreement has paused its group',async()=>{
  const order=await readyInvoiceOrder('Abholtermin-Anrufrennen');
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('CALL_RACE_SETTINGS');
- expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[]}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:emptyDispatchPolicy()}))).toMatchObject({code:'OK'});
  expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
  const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('CALL_RACE_QUEUE');
  const plan=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;
@@ -67,7 +67,7 @@ it('a stale call proposal cannot recreate a callback after an actual pickup agre
 it('PL12:06 atomically ends only the actual matching callback with its appointment proof and preserves a recoverable retry',async()=>{
  const seeded=await readyInvoiceOrder('Termin-beendet-Anruf');
  const settings=await withSession(full,()=>readShippingSettingsAction());if(settings.code!=='OK')throw Error('CLOSE_CALL_SETTINGS');
- expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:{...emptyDispatchPolicy(),holidays:[]}}))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>saveShippingSettingsAction({service:settings.settings.service,numberPattern:settings.settings.numberPattern,numberHint:settings.settings.numberHint,trackingUrl:settings.settings.trackingUrl,expectedUpdatedAt:settings.settings.updatedAt,dispatchPolicy:emptyDispatchPolicy()}))).toMatchObject({code:'OK'});
  async function openCall(label:string,existing?:typeof seeded){
   const order=existing??await readyInvoiceOrder(label);expect(await withSession(full,()=>updateCustomerAction({customerId:order.customerId,clientEventId:randomUUID(),email:''}))).toMatchObject({code:'OK'});
   const queue=await withSession(full,()=>getOrdersDb());if(!queue.ok)throw Error('CLOSE_CALL_QUEUE');const p=queue.data.find(row=>row.id===order.orderId)?.finishedDispatch?.reminder;if(!p?.due||!p.clientKey)throw Error('CLOSE_CALL_PLAN');

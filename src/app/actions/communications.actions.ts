@@ -192,7 +192,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
   }
 
   const [{getOrdersDb},{readShippingSettings,readShippingSettingsInTransaction}]=await Promise.all([import('@/app/actions/orders.actions'),import('@/modules/fundament/server-public')]);
-  const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
+  const [orders,settings]=await Promise.all([getOrdersDb(),readShippingSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true},true)]);
   if(!orders.ok||settings.code!=='OK')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.unavailable};
   const candidates=orders.data.filter(order=>order.customerId===input.targetId&&order.station==='fertig'&&order.finishedDispatch?.handover===request.handover);
   const storageLetter=request.stage==='E4'?candidates.find(order=>order.finishedDispatch?.storage?.letter?.clientKey===request.clientKey)?.finishedDispatch?.storage?.letter:undefined;
@@ -200,7 +200,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
   if(!proposal||proposal.stage!==request.stage||proposal.state!=='DUE'||proposal.due!==request.dueDate||!proposal.clientKey||proposal.requiresResponseCheck||proposal.needsNotice.length)return {code:'CONFLICT' as const,message:COLLECTION_REMINDER_COPY.notReady};
   if(settings.settings.dispatchPolicy?.holdMinutes!==0)return {code:'IN_KLAERUNG' as const,message:COLLECTION_REMINDER_COPY.holdUnavailable};
   const members=candidates.filter(order=>proposal.orderIds.includes(order.id)).sort((a,b)=>a.id.localeCompare(b.id));
-  const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),...(storageLetter?{storageDeadline:freezeStorageDeadline(settings.settings.dispatchPolicy),storageOrigin:{callTaskId:storageLetter.callTaskId,appointmentEventId:storageLetter.appointmentEventId,replyEventId:storageLetter.replyEventId,freezes:storageLetter.freezes}}:{})};
+  const meta:CollectionReminderMeta={stage:request.stage,customerId:input.targetId,handover:request.handover,dueDate:request.dueDate,stageKey:proposal.clientKey,intent:collectionReminderIntent({...input,collectionReminder:request}),orders:members.map(order=>({id:order.id,number:order.orderNumber,version:order.version})),...(storageLetter?{storageDeadline:freezeStorageDeadline(settings.settings.dispatchPolicy,settings.betriebsruhe??null),storageOrigin:{callTaskId:storageLetter.callTaskId,appointmentEventId:storageLetter.appointmentEventId,replyEventId:storageLetter.replyEventId,freezes:storageLetter.freezes}}:{})};
   const [{readCollectionCustomerFacts,readCollectionMoneyAccess},{readCustomerProfile},{readCompanyLetterSettings}]=await Promise.all([import('@/lib/server/storageLetterRead'),import('@/modules/customers/server-public'),import('@/modules/fundament/server-public')]);
   const [customer,company]=await Promise.all([withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,input.targetId)),readCompanyLetterSettings({tenantId:auth.tenantId,actorId:auth.userId,canRead:true})]);
   if(!customer||company.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const,message:COLLECTION_REMINDER_COPY.proofUnavailable};

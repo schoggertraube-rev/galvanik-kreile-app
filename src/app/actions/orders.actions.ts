@@ -732,14 +732,14 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]> & {se
     const cardReads = await withPageReadPhase('orders.list.cards',()=>readTodayOrderCards(authorization.data,orders.map(order=>order.id)));
     const finished=orders.some(order=>order.station==='fertig')?await withPageReadPhase('orders.list.dispatch',async()=>{
      const [{readFinishedDispatchQueue},{readShippingSettings}]=await Promise.all([import('@/modules/orders/server-public'),import('@/modules/fundament/server-public')]);
-     const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true});
+     const settings=await readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true},true);
      if(settings.code==='UNAVAILABLE')return {code:'UNAVAILABLE' as const};
      const [{readCustomerProfiles},{withPrivilegedTenantTransaction}]=await Promise.all([import('@/modules/customers/server-public'),import('@/lib/server/privilegedDb')]);
      const customerIds=[...new Set(orders.filter(order=>order.station==='fertig').map(order=>order.customerId))];
      let profiles:Awaited<ReturnType<typeof readCustomerProfiles>>|null=null;
      try{profiles=await withPrivilegedTenantTransaction(authorization.data,tx=>readCustomerProfiles(tx,authorization.data.tenantId,customerIds));}
      catch(error){console.error('[DISPATCH_CUSTOMER_MAIL_READ_FAILED]',error instanceof Error?error.name:'UnknownError');}
-     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,{readHasMail:async id=>{const customer=profiles?.get(id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();}});
+     return readFinishedDispatchQueue(authorization.data,orders,settings.code==='OK'?settings.settings.dispatchPolicy??null:null,settings.code==='OK'?settings.betriebsruhe??null:null,{readHasMail:async id=>{const customer=profiles?.get(id);if(!customer)throw Error('DISPATCH_CUSTOMER_NOT_FOUND');return !!customer.email?.trim();}});
     }):{code:'OK' as const,rows:[]};
     const projections=new Map(finished.code==='OK'?finished.rows.map((row,rank)=>[row.orderId,{state:row.unavailable?'unavailable' as const:'available' as const,rank,...row}]):[]);
     const data: OrderResponse[] = orders.map((order) => {
