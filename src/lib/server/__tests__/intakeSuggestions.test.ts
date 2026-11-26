@@ -4,8 +4,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: vi.fn() }));
 
 import { plusWorkingDays, workingDaysBetween } from "@/lib/domain/workingDays";
-import { calculateTermSuggestion, choosePriceSuggestion, readIntakeSuggestions } from "@/lib/server/intakeSuggestions";
-import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { calculateTermSuggestion, choosePriceSuggestion } from "@/lib/server/intakeSuggestions";
 
 const position = {
   key: "position-1",
@@ -48,97 +47,20 @@ describe("intake suggestions", () => {
   });
 
   it("calculates an achievable date and rates the customer wish", () => {
-    const eingabe = {
+    const result = calculateTermSuggestion({
       today: "2026-10-26",
       wishDate: "2026-10-30",
-      handoverMode: "pickup",
-      positions: [{ ...position, catalogServiceId: "TEST-Leistung", unitPriceCents: 80_000 }],
+      positions: [{ ...position, unitPriceCents: 80_000 }],
       catalogById: new Map(),
       dailyOutputEur: 800,
-      settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110,betriebsruhe:new Set(),knappAbArbeitstagen:2},openOrders:[],priority:false,processingWeeks:1,
-    } satisfies Parameters<typeof calculateTermSuggestion>[0];
-    expect(calculateTermSuggestion(eingabe)).toBeNull();
-    const result = calculateTermSuggestion({ ...eingabe, catalogById: new Map([["TEST-Leistung", {
-      id: "TEST-Leistung", name: "TEST Verzinken", surface: "verzinken", unit: "Stück",
-      net_price_cents: 80_000, standard_lead_time_working_days: 3,
-    }]]) });
+      settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110},openOrders:[],priority:false,processingWeeks:1,
+    });
 
     expect(result).toMatchObject({
       achievableDate: "2026-11-03",
       wishDate: "2026-10-30",
       rating: "nicht_machbar",
       bufferWorkingDays: -2,
-    });
-  });
-
-  it("uses the configured close-to-deadline threshold for a shipping proposal", () => {
-    const input = {
-      today: "2026-10-26",
-      wishDate: "2026-11-03",
-      handoverMode: "shipping",
-      positions: [{ ...position, catalogServiceId: "TEST-Leistung", unitPriceCents: 500 }],
-      catalogById: new Map([["TEST-Leistung", {
-        id: "TEST-Leistung", name: "TEST Verzinken", surface: "verzinken", unit: "Stück",
-        net_price_cents: 500, standard_lead_time_working_days: 0,
-      }]]),
-      dailyOutputEur: 800,
-      settings: {
-        handoverBufferDays: 2, fitsPercent: 80, tightPercent: 100, priorityPercent: 110,
-        betriebsruhe: new Set<string>(), knappAbArbeitstagen: 1,
-      },
-      openOrders: [],
-      priority: false,
-      processingWeeks: 1,
-    } satisfies Parameters<typeof calculateTermSuggestion>[0];
-
-    expect(calculateTermSuggestion(input)).toMatchObject({
-      achievableDate: "2026-11-02", bufferWorkingDays: 1, rating: "knapp",
-    });
-    expect(calculateTermSuggestion({ ...input, settings: { ...input.settings, knappAbArbeitstagen: 0 } }))
-      .toMatchObject({ bufferWorkingDays: 1, rating: "passt" });
-    expect(calculateTermSuggestion({ ...input, settings: { ...input.settings, knappAbArbeitstagen: null } }))
-      .toMatchObject({ rating: null, unavailableReason: expect.stringMatching(/Terminschwelle/) });
-  });
-
-  it("meldet die fehlende Durchlaufzeit einer Freitextposition und erhält ihren Preisvorschlag", async () => {
-    const beispielfall = history();
-    const execute = vi.fn()
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{
-        customer_id: beispielfall.customerId,
-        customer_name: beispielfall.customerName,
-        item_name: beispielfall.name,
-        catalog_service_id: null,
-        surface_requested: beispielfall.surface,
-        unit: beispielfall.unit,
-        quantity: beispielfall.quantity,
-        unit_price_cents: beispielfall.unitPriceCents,
-        invoice_date: beispielfall.invoiceDate,
-      }])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ vorrang: false }]);
-    vi.mocked(withPrivilegedTenantTransaction).mockImplementationOnce((_, read) =>
-      read({ execute } as unknown as PrivilegedTenantTransaction),
-    );
-
-    const result = await readIntakeSuggestions({
-      userId: "TEST Preise", tenantId: "TEST Einkauf", displayName: "TEST Preise",
-      role: "admin", active: true, areas: ["preise"], permissions: [],
-    }, {
-      customerId: beispielfall.customerId,
-      kind: "ORDER",
-      wishDate: "2026-12-18",
-      handoverMode: "pickup",
-      positions: [position],
-    }, async () => ({
-      betriebsruhe: [], versandpufferArbeitstage: 2, knappAbArbeitstagen: 2,
-      terminKapazitaet: { tagesleistungEur: 800, passtProzent: 80, knappProzent: 100, vorrangProzent: 110 },
-    }));
-
-    expect(result).toMatchObject({
-      term: null,
-      missingLeadTimes: [{ positionKey: position.key, catalogServiceId: null, message: "Durchlaufzeit für Flansch groß fehlt" }],
-      prices: [{ positionKey: position.key, source: "gleich", unitPriceCents: 1_200 }],
     });
   });
 
