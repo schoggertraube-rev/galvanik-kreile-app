@@ -50,6 +50,31 @@
 .ledger tbody th small { display:block; font-weight:400; }
 .current th { border-inline-start: .2rem solid var(--kr-tag-band-punkt); }
 
+.valueButton, .totalButton {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-underline-offset: .15em;
+  cursor: pointer;
+}
+.positionDay h3 { margin: 0 0 .5rem; }
+.positionDay ul { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.positionDay li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .3rem .8rem;
+  border-block-start: 1px solid var(--kr-tag-band-kante);
+  padding-block: .35rem;
+}
+
 @media (max-width: 767px) {
   .summary:has(.figure) { grid-template-columns: 1fr; }
   .total { display:grid; grid-template-columns: minmax(0,1fr) auto; align-items:center; gap:.2em .6em; }

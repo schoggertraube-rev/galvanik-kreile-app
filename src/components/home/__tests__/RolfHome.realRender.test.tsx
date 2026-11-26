@@ -62,6 +62,35 @@ it('zeigt die freigegebene Wochensumme und schließt zum Auslöser zurück',()=>
  expect(read).not.toHaveBeenCalled();
 });
 
+it('öffnet Tages- und Wochenpositionen erst auf Anforderung und kehrt zur Auswahl zurück',async()=>{
+ // Synthetic display data. The signed values and the role checks are covered by the real reader case.
+ const monday='2026-11-16',tuesday='2026-11-17';
+ const week={weekStart:monday,weekEndExclusive:'2026-11-23',netCents:7500,currentlyUnpricedItemCount:0,canReadPositions:true as const,
+  days:[{date:monday,netCents:10000},{date:tuesday,netCents:-2500}]};
+ const read=vi.fn(async()=>({code:'OK' as const,data:{...week,positions:{complete:true,rows:[
+  {date:monday,orderId:'TEST-order-a',orderNumber:'TEST-A',customerName:'TEST Kunde',itemId:'TEST-item-a',name:'TEST Teil A',netCents:10000},
+  {date:tuesday,orderId:'TEST-order-b',orderNumber:'TEST-B',customerName:'TEST Kunde',itemId:'TEST-item-b',name:'TEST Teil B',netCents:-2500},
+ ]}}}));
+ render(<OfficeWeekControl initial={{code:'OK',data:week}} read={read} today={tuesday}/>);
+ fireEvent.click(screen.getByRole('button',{name:'Diese Woche fertig – Liste öffnen'}));
+ expect(read).not.toHaveBeenCalled();
+ const sheet=screen.getByRole('dialog',{name:'Diese Woche fertig'});
+ const trigger=within(sheet).getByRole('button',{name:'Fertigmeldungen · Dienstag'});
+ fireEvent.click(trigger);
+ const detail=screen.getByRole('dialog',{name:'Fertigmeldungen · Dienstag'});
+ expect(await within(detail).findByText(/TEST Teil B/)).toHaveTextContent('-25,00');
+ expect(within(detail).queryByText(/TEST Teil A/)).not.toBeInTheDocument();
+ expect(read).toHaveBeenLastCalledWith({onDate:monday,includePositions:true});
+ fireEvent.click(within(detail).getByRole('button',{name:/TEST-B/}));
+ expect(ports.openOrder).toHaveBeenLastCalledWith('TEST-order-b');
+ fireEvent.click(within(detail).getByRole('button',{name:'Schließen'}));
+ expect(trigger).toHaveFocus();
+ fireEvent.click(within(sheet).getByRole('button',{name:'Fertigmeldungen bis Dienstag'}));
+ const through=screen.getByRole('dialog',{name:'Fertigmeldungen bis Dienstag'});
+ expect(await within(through).findByText(/TEST Teil A/)).toBeVisible();
+ expect(within(through).getByText(/TEST Teil B/)).toBeVisible();
+});
+
 it('shows a concrete source notice and opens the same real order path instead of hiding the missing proposal',()=>{
  const title=SHIPPING_FEE_COPY.proposalMissing('A-2026-0001',false,'freigabe');
  const item={key:'source-shipping:order-1',field:'action' as const,kind:'order' as const,orderId:'order-1',orderVersion:1,title,meta:'',urgency:'warning' as const,primaryActionLabel:SITUATION_COPY.quote.openOrder};
