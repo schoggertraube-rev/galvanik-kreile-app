@@ -8,6 +8,13 @@ export type TodayLayoutColumn = "left" | "right";
 export type TodayLayoutItem = { field: TodayLayoutField; column: TodayLayoutColumn; order: number };
 export type TodayReminderMode = "afternoon" | "tomorrow" | "after_due";
 export type TodayReminderDecision = { until: Date; message: string };
+export type TodayProductionWeek = {
+  weekStart: string;
+  weekEndExclusive: string;
+  netCents: number;
+  currentlyUnpricedItemCount: number;
+  days?: ReadonlyArray<{date: string; netCents: number}>;
+};
 
 const TODAY_LAYOUT_FIELDS = new Set<TodayLayoutField>(["action", "today", "assign", "money", "bundle"]);
 const TODAY_LAYOUT_COLUMNS = new Set<TodayLayoutColumn>(["left", "right"]);

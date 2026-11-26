@@ -12,7 +12,7 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
-import { deriveTodayReminder, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
+import { deriveTodayReminder, type TodayProductionWeek, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
 import { OfficeDaySchedule } from "./OfficeDaySchedule";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { IntakeDraftList, type IntakeDraftResult } from "@/modules/eingang/public";
@@ -28,7 +28,7 @@ export type OfficeHomeModel =
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
 export type TodayHomePart='week'|'notices'|'counts';
-export type TodayHomePartResult={code:'SOURCE_INCOMPLETE';part:TodayHomePart}|{code:'OK';part:'week';data:{weekStart:string;weekEndExclusive:string;netCents:number;currentlyUnpricedItemCount:number}}|{code:'OK';part:'notices';missing:string[]}|{code:'OK';part:'counts'};
+export type TodayHomePartResult={code:'SOURCE_INCOMPLETE';part:TodayHomePart}|{code:'OK';part:'week';data:TodayProductionWeek}|{code:'OK';part:'notices';missing:string[]}|{code:'OK';part:'counts'};
 type BasicResult = { code: string; message?: string };
 type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
 type MailPreview = { id: string; subject: string; senderName: string; senderAddress: string|null; receivedAt: string|null; preview: string; body: string };

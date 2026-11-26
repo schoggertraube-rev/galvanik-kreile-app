@@ -426,14 +426,17 @@ it('keeps real payment and release evidence while masking credit for a price-onl
  expect(JSON.stringify(payment)).toBe(original);
 });
 
-it('week reads the actual aggregate without money rights and rejects the absent stock route',async()=>{
- const actor=await createFixture(['mails'],'buero');
+it.each([
+ {label:'mails only',areas:['mails']},
+ {label:'mails, prices and payments',areas:['mails','preise','zahlungen']},
+])('week reads the actual aggregate without accounting rights and rejects the absent stock route ($label)',async({areas})=>{
+ const actor=await createFixture(areas,'buero');
  await withSession(actor,async()=>{
   const {getProductionWeekAction}=await import('@/app/actions/orders.actions');
-  const original=await getProductionWeekAction();expect(original.code).toBe('OK');
+  const original=await getProductionWeekAction();if(original.code!=='OK')throw Error('TEST_PRODUCTION_WEEK_UNAVAILABLE');
   const week=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=week'));
   expect(week.status).toBe(200);const result=await week.json();
-  expect(result.result).toEqual({code:'OK',part:'week',data:original.code==='OK'?original.data:undefined});
+  expect(result.result).toEqual({code:'OK',part:'week',data:original.data});
   expect(Object.keys(result.result.data).sort()).toEqual(['currentlyUnpricedItemCount','netCents','weekEndExclusive','weekStart']);
   const stock=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=stock'));
   expect(stock.status).toBe(400);
