@@ -12,6 +12,8 @@ import {pageReadQueryObservation,withPageReadBudget} from '@/db/readBudget';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import {canReadTaskArea} from '@/lib/auth/authorizationContract';
 import {resolveAuthorization} from '@/lib/server/authorization';
+import {rebuildTodayModel,refreshTodayModel} from '@/lib/server/todayProjection';
+import {readOfficeHomeModelAction} from '@/app/actions/orders.actions';
 import {authorizationReadContext} from '@/lib/server/authorizationReadContext';
 import {liesAufgabenFuerTag,projiziereAufgabenFuerTag} from '@/modules/tasks/server-public';
 import type {TaskSaveInput} from '@/modules/tasks/public';
@@ -74,10 +76,31 @@ it('liest offene Aufgaben ohne Eingang, schützt Geld und Bezug und entfernt den
  expect(ausModell).toMatchObject({code:'OK',zeilen:[{key,bestand:{reference:null}}]});
  expect(JSON.stringify(ausModell)).not.toContain('TEST Preis besprechen');
  expect(JSON.stringify(ausModell)).not.toContain(auftrag.orderId);
+ expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+ const modell=()=>sql`SELECT status,source_seq=built_seq AS aktuell,payload FROM private.today_source_v1
+   WHERE tenant_id=${tenant} AND kind='quelle:tasks.aufgabe' AND source_id='*'`;
+ const [modellSpeicher]=await modell();
+ expect(modellSpeicher).toMatchObject({status:'OK',aktuell:true,payload:{code:'OK',aufgaben:expect.arrayContaining([
+  expect.objectContaining({id:erfasst.task.id}),expect.objectContaining({id:geld.task.id}),
+ ])}});
+ expect(JSON.stringify(modellSpeicher)).not.toContain('TEST private Aufgabennotiz');
+ const tag=()=>withSession(auftraege,()=>readOfficeHomeModelAction());
+ const aktiverTag=await tag();
+ expect(aktiverTag).toMatchObject({dashboard:{tagQuellen:{aufgaben:{code:'OK',zeilen:[zeile]}}}});
+ expect(JSON.stringify(aktiverTag)).not.toContain('TEST Preis besprechen');
+ // An older derived snapshot still holds the original calendar payload.
+ await sql`UPDATE private.today_source_v1 SET payload=payload->'kalender'
+  WHERE tenant_id=${tenant} AND kind='quelle:tasks.aufgabe' AND source_id='*'`;
+ expect(await tag()).toMatchObject({dashboard:{tagQuellen:{aufgaben:{code:'OK',zeilen:[zeile]}}}});
+ await sql`UPDATE private.today_source_v1 SET payload=${sql.json(modellSpeicher.payload)}::jsonb
+  WHERE tenant_id=${tenant} AND kind='quelle:tasks.aufgabe' AND source_id='*'`;
  const lesen=()=>getIntakeTaskAction({taskId:zeile.bestand.arg});
  expect(await withSession(kunden,lesen)).toMatchObject({code:'OK',canComplete:false,canOpenReference:false});
  expect(await withSession(auftraege,lesen)).toMatchObject({code:'OK',canComplete:true,canOpenReference:true});
  const erledigt=await withSession(auftraege,()=>completeIntakeTaskAction({taskId:erfasst.task.id,version:erfasst.task.version,note:null}));
  expect(erledigt).toMatchObject({code:'OK',task:{id:erfasst.task.id,status:'erledigt'}});
  expect((await lies(auftraege)).data).toEqual({code:'OK',zeilen:[]});
+ expect(await tag()).toMatchObject({dashboard:{tagQuellen:{aufgaben:{code:'OK',zeilen:[]}}}});
+ expect((await refreshTodayModel(tenant)).code).toBe('OK');
+ expect(JSON.stringify(await modell())).not.toContain(erfasst.task.id);
 });

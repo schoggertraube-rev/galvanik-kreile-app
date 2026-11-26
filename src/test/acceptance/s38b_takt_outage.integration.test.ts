@@ -9,6 +9,8 @@ import {sql,createFixture,withSession} from '../../../e2e/ablauf/replayHarness';
 import {berlinCalendarDay,berlinUhrzeit} from '@/lib/domain/workingDays';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {starteTaktJobNeu} from '@/app/actions/takt.actions';
+import {readOfficeHomeModelAction} from '@/app/actions/orders.actions';
+import {rebuildTodayModel} from '@/lib/server/todayProjection';
 import {liesTaktAusfallZeilen,projiziereTaktAusfallZeilen} from '@/modules/takt/server-public';
 import {createTaktOutageSettingsFixture} from '@/test/fixtures/taktOutageSettingsFixture';
 
@@ -88,6 +90,16 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
 
     vi.useFakeTimers({toFake:['Date']});
     vi.setSystemTime(jetzt);
+    expect((await rebuildTodayModel(tenant)).code).toBe('OK');
+    const modellstand=()=>sql`SELECT kind,status,built_at::text,payload FROM private.today_source_v1
+     WHERE tenant_id=${tenant} AND source_id='*' ORDER BY kind`;
+    const vorher=await modellstand();
+    expect(vorher.find(quelle=>quelle.kind==='quelle:takt.ausfall')).toMatchObject({status:'OK',payload:{code:'OK',ausfaelle:[
+      {schluessel:'heute_neuaufbau'},{schluessel:key},
+    ]}});
+    expect(await withSession(other,()=>readOfficeHomeModelAction())).toMatchObject({dashboard:{tagQuellen:{taktAusfall:{code:'OK',zeilen:expect.arrayContaining([
+      expect.objectContaining({key:protokollKey,befehl:null}),
+    ])}}}});
     expect(await withSession(other,()=>starteTaktJobNeu(input))).toMatchObject({code:'FORBIDDEN'});
     expect(await withSession(operator,()=>starteTaktJobNeu({...input,tenantId:'TEST-fremd'})))
       .toEqual({code:'VALIDATION_ERROR',message:'Wähle einen hinterlegten Dienst.'});
@@ -104,6 +116,9 @@ it('nutzt die echte Störung, die Systemdiagnose und eine einzige belegte Wieder
       .toEqual([{job_schluessel:'heute_neuaufbau',status:'ok',versuch:1}]);
 
     expect(await lies(operator)).toMatchObject({code:'OK',zeilen:[{key:tagKey}]});
+    const nachher=await modellstand();
+    expect(nachher.find(quelle=>quelle.kind==='quelle:takt.ausfall')).toMatchObject({status:'OK',payload:{code:'OK',ausfaelle:[{schluessel:'heute_neuaufbau'}]}});
+    expect(nachher.filter(quelle=>quelle.kind!=='quelle:takt.ausfall')).toEqual(vorher.filter(quelle=>quelle.kind!=='quelle:takt.ausfall'));
     expect(await withSession(operator,()=>starteTaktJobNeu(input)))
       .toEqual({code:'CONFLICT',message:'Für diesen Dienst steht gerade kein Neustart an.'});
   }finally{

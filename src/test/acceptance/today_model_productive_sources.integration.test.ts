@@ -31,20 +31,20 @@ import {readPageReadSettings,readCompanyLetterSettings} from '@/modules/fundamen
 
 
 
-it('rebuilds all eight real list sources and both real order sources without any session or injected source port',async()=>{
+it('rebuilds all nine real list sources and both real order sources without any session or injected source port',async()=>{
  const pickup=await readyInvoiceOrder('TEST productive projector pickup');
  const shipping=await readyInvoiceOrder('TEST productive projector shipping','shipping');
  const before=await sql`SELECT id::text,event_type,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
  const actors=await sql`SELECT id::text,role,active FROM public.app_users WHERE tenant_id=${tenant} ORDER BY id`;
  const result=await rebuildTodayModel(tenant);
- expect(result).toMatchObject({code:'OK',built:10,stale:0});
+ expect(result).toMatchObject({code:'OK',built:11,stale:0});
  const rows=await sql`SELECT kind,source_id,status,payload,source_seq=built_seq AS fresh,source_version FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
- expect(rows).toHaveLength(10);
+ expect(rows).toHaveLength(11);
  expect(rows.filter(row=>row.source_id==='*').map(row=>row.kind).sort()).toEqual([...todayDashboardListKinds].sort());
  expect([...new Set(rows.map(row=>row.kind))]).toEqual([
   'quelle:accounting.geld','quelle:complaints.liste','quelle:eingang.nachrichten',
   'quelle:fundament.firma','quelle:orders.auftrag','quelle:orders.liste',
-  'quelle:quotes.liste','quelle:quotes.nachfassen','quelle:tasks.aufgabe',
+  'quelle:quotes.liste','quelle:quotes.nachfassen','quelle:takt.ausfall','quelle:tasks.aufgabe',
  ]);
  for(const row of rows)expect(row,`${row.kind}:${row.source_id}`).toMatchObject({status:'OK',fresh:true});
  const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_REAL_AUTH_REQUIRED');
@@ -75,7 +75,7 @@ it('keeps the real partial company result retryable while all other known source
   expect((await refreshTodayModel(tenant)).code).toBe('OK');
   const [company]=await sql`SELECT status,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:fundament.firma'`;
   expect(company).toMatchObject({status:'SOURCE_INCOMPLETE',payload:{code:'VALIDATION_ERROR',missingFields:['street']}});
-  expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:fundament.firma' AND status='OK'`).toEqual([{count:9}]);
+  expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:fundament.firma' AND status='OK'`).toEqual([{count:10}]);
  });
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  expect(await sql`SELECT status,payload->>'code' AS code FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='quelle:fundament.firma'`).toEqual([{status:'OK',code:'OK'}]);
@@ -95,7 +95,7 @@ it('PL08:59 refuses to manufacture payment or task facts when no actual active p
   await sql`UPDATE public.app_users SET active=false WHERE tenant_id=${tenant}`;
   expect((await refreshTodayModel(tenant)).code).toBe('OK');
   const rows=await sql`SELECT kind,status,error_code,payload FROM private.today_source_v1 WHERE tenant_id=${tenant} ORDER BY kind,source_id`;
-  expect(rows).toHaveLength(10);
+  expect(rows).toHaveLength(11);
   for(const row of rows)expect(row).toMatchObject({status:'SOURCE_INCOMPLETE',error_code:'TODAY_PROJECTOR_ACTIVE_PROFILE_MISSING',payload:null});
   await sql`UPDATE public.app_users SET active=true WHERE tenant_id=${tenant} AND id=${readonly.actorId}::uuid`;
   expect((await rebuildTodayModel(tenant)).code).toBe('OK');
@@ -106,11 +106,11 @@ it('PL08:59 refuses to manufacture payment or task facts when no actual active p
   expect(denied).toEqual([
    {kind:'quelle:orders.liste',payload:{code:'FORBIDDEN'}},
    {kind:'quelle:quotes.liste',payload:{list:{code:'FORBIDDEN',message:'Offene KVs dürfen mit dieser Rolle nicht gelesen werden.'}}},
-   {kind:'quelle:tasks.aufgabe',payload:expect.objectContaining({code:'FORBIDDEN'})},
+   {kind:'quelle:tasks.aufgabe',payload:{code:'OK',tenantId:tenant,aufgaben:[],kalender:expect.objectContaining({code:'FORBIDDEN'})}},
   ]);
  });
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
- expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK'`).toEqual([{count:10}]);
+ expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK'`).toEqual([{count:11}]);
 });
 
 it('uses fresh background firm settings after the real RSC cache already read their previous values',async()=>{
@@ -209,7 +209,7 @@ it('uses only the real existing diagnostic permission when no Cron credential is
   expect(accepted.status).toBe(204);expect(await accepted.text()).toBe('');
   expect(accepted.headers.get('Cache-Control')).toBe('private, no-store');
  }finally{vi.useRealTimers();}
- expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:orders.auftrag'`).toEqual([{count:8}]);
+ expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind<>'quelle:orders.auftrag'`).toEqual([{count:9}]);
  expect(await sql`SELECT refresh_lease_until FROM private.today_tenant_v1 WHERE tenant_id=${tenant}`).toEqual([{refresh_lease_until:null}]);
 });
 

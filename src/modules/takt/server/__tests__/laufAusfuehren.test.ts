@@ -19,7 +19,8 @@ vi.mock('../laeufe', () => ports);
 const modelStale = vi.hoisted(() => vi.fn(async () => false));
 vi.mock('@/lib/server/todayProjectionSchedule', () => ({liesTodayModellVeraltet: modelStale, liesTodayModellBesetzt: async () => false}));
 const refresh = vi.hoisted(() => vi.fn(async () => 'ok' as const));
-vi.mock('@/lib/today/taktJobs', () => ({fuehreHeuteAuffrischung: refresh}));
+const refreshOutage = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/lib/today/taktJobs', () => ({fuehreHeuteAuffrischung: refresh, frischeTaktAusfallNachErgebnis: refreshOutage}));
 const testJobs = vi.hoisted(() => ({
   ausfuehren: vi.fn(async (tenantId: string) => { void tenantId; return 'ok' as const; }),
 }));
@@ -55,6 +56,8 @@ it('frischt ein veraltetes Modell nur einmal je Berliner Fünfminutenfenster auf
   await fuehreTaktAus({tenantId: 'tenant-a', jetzt: new Date('2026-11-25T05:07:00Z')});
   // The daily full build takes priority while it is due.
   expect(refresh).not.toHaveBeenCalled();
+  expect(refreshOutage).toHaveBeenCalledTimes(1);
+  expect(ports.beendeLauf.mock.invocationCallOrder[0]).toBeLessThan(refreshOutage.mock.invocationCallOrder[0]);
   ports.liesLetztenOk.mockResolvedValueOnce(new Date('2026-11-24T23:00:00Z'));
   testJobs.ausfuehren.mockClear();
   await fuehreTaktAus({tenantId: 'tenant-a', jetzt: new Date('2026-11-25T05:07:00Z')});

@@ -1,7 +1,6 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {outsidePageReadBudget} from '@/db/readBudget';
-import {listeTodayMandanten} from '@/lib/server/todayProjectionSchedule';
 import {withPrivilegedTenantTransaction, withTaktStatementTimeout, type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {hasAuthorizationArea, type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {TAKT_BUDGET_MS, TAKT_RETENTION_BUDGET_MS} from '../public';
@@ -17,6 +16,7 @@ export type TaktLaufZeile = Readonly<{
 
 /** The existing Today tenant register is the sole source for cron fan-out. */
 export async function liesTaktMandanten(): Promise<string[]> {
+  const {listeTodayMandanten}=await import('@/lib/server/todayProjectionSchedule');
   return listeTodayMandanten();
 }
 

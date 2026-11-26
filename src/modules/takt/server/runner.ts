@@ -4,8 +4,7 @@ import {TAKT_JOBS, bauePaketAktiv, baueTaktLeser} from '../jobs';
 import type {PackageSwitchId} from '@/modules/fundament/public';
 import {PageReadTimeout} from '@/db/readBudget';
 import {withTaktStatementTimeout} from '@/lib/server/privilegedDb';
-import {liesTodayModellBesetzt, liesTodayModellVeraltet} from '@/lib/server/todayProjectionSchedule';
-import {fuehreHeuteAuffrischung} from '@/lib/today/taktJobs';
+import {frischeTaktAusfallNachErgebnis,fuehreHeuteAuffrischung} from '@/lib/today/taktJobs';
 import {beendeLauf, liesLetztenOk, liesOffeneWiederholungen, liesTaktMandanten, reserviereLauf, TAKT_NACHHOLEN} from './laeufe';
 import {fuehreFaelligenJobAus, liesFaelligeJobs, nachholMinuteBerlin, type FaelligerJob} from './lauf';
 import {liesTaktAusfallFakten} from './tagQuellen';
@@ -24,6 +23,7 @@ export async function starteTaktStoerungsjob(tenantId: string, schluessel: strin
       return stand.ausfaelle.some(ausfall => ausfall.laufstand.schluessel === schluessel);
     },
   }, baueTaktLeser(tenantId), bauePaketAktiv(tenantId));
+  if(ergebnis!=='nicht_reserviert'&&ergebnis!=='besetzt')await frischeTaktAusfallNachErgebnis(tenantId);
   return {schluessel: job.schluessel, ergebnis};
 }
 
@@ -53,8 +53,11 @@ async function liesAnstehendeJobs(
   const faellige = await liesFaelligeJobs(frei, jetzt, schluessel => liesLetztenOk(tenantId, schluessel));
   if (!faellige.some(eintrag => eintrag.job.schluessel === 'heute_neuaufbau')) {
     const heute = frei.find(job => job.schluessel === 'heute_neuaufbau');
-    if (heute && await liesTodayModellVeraltet(tenantId, jetzt)) {
-      faellige.push({job: {...heute, ausfuehren: fuehreHeuteAuffrischung}, faelligFuer: nachholMinuteBerlin(jetzt, 5)});
+    if (heute) {
+      const {liesTodayModellVeraltet}=await import('@/lib/server/todayProjectionSchedule');
+      if (await liesTodayModellVeraltet(tenantId, jetzt)) {
+        faellige.push({job: {...heute, ausfuehren: fuehreHeuteAuffrischung}, faelligFuer: nachholMinuteBerlin(jetzt, 5)});
+      }
     }
   }
   return [...zuerst, ...faellige];
@@ -95,8 +98,11 @@ export async function fuehreTaktAus(options: Readonly<{
   for (const tenantId of mandanten) {
     if (signal.aborted || rest() < 1) break;
     try {
-      if (options.nurJob === 'heute_neuaufbau' && await lies(() => liesTodayModellBesetzt(tenantId))) {
-        return {mandanten: mandanten.length, laeufe, restOffen: false, erfolglos: true, besetzt: true};
+      if (options.nurJob === 'heute_neuaufbau') {
+        const {liesTodayModellBesetzt}=await import('@/lib/server/todayProjectionSchedule');
+        if (await lies(() => liesTodayModellBesetzt(tenantId))) {
+          return {mandanten: mandanten.length, laeufe, restOffen: false, erfolglos: true, besetzt: true};
+        }
       }
       const leser = baueTaktLeser(tenantId);
       const paketAbfrage = options.paketAktiv;
@@ -104,10 +110,12 @@ export async function fuehreTaktAus(options: Readonly<{
       const faellige: readonly FaelligerJob[] = options.nurJob
         ? jobs.map(job => ({job, faelligFuer: `hand:${jetzt.toISOString().slice(0, 16)}Z`}))
         : await lies(() => liesAnstehendeJobs(tenantId, jobs, jetzt));
+      let hatAbschluss=false;
       const ausfuehren = async (eintrag: FaelligerJob) => {
         const budget = rest();
         if (signal.aborted || budget < 1) throw new PageReadTimeout();
         const result = await fuehreFaelligenJobAus(tenantId, eintrag, leser, paketAktiv, budget, signal);
+        if(result!=='nicht_reserviert'&&result!=='besetzt')hatAbschluss=true;
         if (result !== 'nicht_reserviert') laeufe++;
         if (result === 'besetzt') besetzt = true;
         if (result === 'fehler' || result === 'abgebrochen' || result === 'besetzt') erfolglos = true;
@@ -122,6 +130,7 @@ export async function fuehreTaktAus(options: Readonly<{
           if (heute && heute.faelligFuer !== eintrag.faelligFuer) await ausfuehren(heute);
         }
       }
+      if(hatAbschluss&&!signal.aborted&&rest()>0)await frischeTaktAusfallNachErgebnis(tenantId,signal);
     } catch {
       erfolglos = true;
       if (!signal.aborted && rest() > 0) console.error('[TAKT_TENANT_FAILED]', {code: 'SOURCE_INCOMPLETE'});
