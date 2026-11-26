@@ -391,15 +391,19 @@ export async function readIntakeSuggestions(
       if (!capacity) throw new Error("INTAKE_DAILY_OUTPUT_MISSING_OR_AMBIGUOUS");
       const dailyOutputEur = integer(capacity.tagesleistungEur, "INTAKE_DAILY_OUTPUT_INVALID");
       if (dailyOutputEur < 1 || dailyOutputEur > 99_999) throw new Error("INTAKE_DAILY_OUTPUT_INVALID");
-      term = calculateSchedule({
+      const planung = {
         today: berlinCalendarDay(),
         wishDate: input.wishDate,
         handoverMode,
         positions: input.positions.map(position=>!canReadMoney&&position.catalogServiceId?{...position,unitPriceCents:catalogById.has(position.catalogServiceId)?Number(catalogById.get(position.catalogServiceId)!.net_price_cents):null}:position),
         catalogById,
         dailyOutputEur,
-        settings:{handoverBufferDays:handoverMode==="pickup"?0:settings.versandpufferArbeitstage,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent,betriebsruhe,knappAbArbeitstagen:settings.knappAbArbeitstagen},
+        settings:{handoverBufferDays:input.handoverMode==="shipping"?settings.versandpufferArbeitstage:0,fitsPercent:capacity.passtProzent,tightPercent:capacity.knappProzent,priorityPercent:capacity.vorrangProzent},
         openOrders:capacityRows.map(row=>({...row,valueCents:Number(row.valueCents)})),priority:customerRows[0]?.vorrang===true,processingWeeks:input.processingWeeks,kind:input.kind,
+      };
+      term = calculateSchedule({
+        ...planung,
+        settings: { ...planung.settings, betriebsruhe, knappAbArbeitstagen: settings.knappAbArbeitstagen },
       }, zeiten);
     }
 
