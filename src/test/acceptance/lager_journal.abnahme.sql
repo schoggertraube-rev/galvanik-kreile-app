@@ -1,5 +1,6 @@
 BEGIN;
 GRANT UPDATE, DELETE, TRUNCATE ON public.stock_movements TO service_role;
+GRANT TRUNCATE ON public.lager_material_nachbewertungen TO service_role;
 -- Nur in dieser zurückgerollten Abnahme: die Policy getrennt vom fehlenden Grant prüfen.
 GRANT SELECT, INSERT ON public.inventory_sessions TO authenticated;
 DO $abnahme$
@@ -139,7 +140,7 @@ BEGIN
     IF SQLERRM <> 'LAGER_JOURNAL_UNVERAENDERLICH' THEN RAISE; END IF;
   END;
   BEGIN
-    TRUNCATE public.stock_movements;
+    TRUNCATE public.stock_movements, public.lager_material_nachbewertungen;
     RAISE EXCEPTION 'TEST TRUNCATE als service_role zugelassen';
   EXCEPTION WHEN check_violation THEN
     IF SQLERRM <> 'LAGER_JOURNAL_UNVERAENDERLICH' THEN RAISE; END IF;

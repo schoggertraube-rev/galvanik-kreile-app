@@ -61,6 +61,25 @@ it('reserviert denselben Mandanten und dieselbe Minute parallel genau einmal', a
   await expect(reserviereLauf(tenant, schluessel, minute, 25_000)).resolves.toBeNull();
 });
 
+it('liest den belegten Vollaufbau je Job und Betrieb trotz jüngerer Auffrischung', async () => {
+  const job = 'takt.test_vollaufbau';
+  const andererJob = 'takt.test_anderer_vollaufbau';
+  async function reservieren(betrieb: string, schluessel: string, termin: string) {
+    const claim = await reserviereLauf(betrieb, schluessel, termin, 25_000);
+    if (!claim) throw Error('TEST_TAKT_RESERVIERUNG_FEHLT');
+    return claim;
+  }
+  await beendeLauf(tenant, await reservieren(tenant, job, '2026-11-22'), 'ok', 1);
+  await beendeLauf(tenant, await reservieren(tenant, job, minute), 'ok', 1);
+  await beendeLauf(tenant, await reservieren(tenant, job, '2026-11-25'), 'fehler', 1, 'takt_ausfuehrung');
+  await reservieren(tenant, job, '2026-11-26');
+  await beendeLauf(tenant, await reservieren(tenant, andererJob, '2026-11-25'), 'ok', 1);
+  await beendeLauf(catchupTenant, await reservieren(catchupTenant, job, '2026-11-25'), 'ok', 1);
+  expect(await liesLetztenOk(tenant, job)).toEqual(new Date('2026-11-21T23:00:00Z'));
+  expect(await liesLetztenOk(catchupTenant, job)).toEqual(new Date('2026-11-24T23:00:00Z'));
+  expect(await liesLetztenOk(tenant, andererJob)).toEqual(new Date('2026-11-24T23:00:00Z'));
+});
+
 it('hält das Nachholen in der Berliner Minute einmalig und schließt abgelaufene Arbeit', async () => {
   const jetzt = new Date();
   const due = nachholMinuteBerlin(jetzt);

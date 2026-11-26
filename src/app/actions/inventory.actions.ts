@@ -8,8 +8,17 @@ import {
   bucheLagerEinzeln,
   leseLagerArtikelAltvertrag,
   leseLagerBewegungenAltvertrag,
+  type LagerPreisAufgabe,
 } from "@/modules/lager/server-public";
-import { synchronizeLagerBestandTask } from "@/modules/tasks/server-public";
+import { readCustomerProfile } from "@/modules/customers/server-public";
+import { recordIntakeTaskEffect } from "@/modules/eingang/server-public";
+import { synchronizeLagerBestandTask, synchronizeLagerPreisTask } from "@/modules/tasks/server-public";
+
+const synchronisierePreisaufgabe: LagerPreisAufgabe = (tx, auth, artikelId, einheit, lesePreisstand) =>
+  synchronizeLagerPreisTask(tx, auth, artikelId, einheit, {
+    lesePreisstand,
+    effect: (effectTx, akteur, aufgabe) => recordIntakeTaskEffect(effectTx, akteur, aufgabe, readCustomerProfile),
+  });
 import { LAGER_BUCHUNG_COPY } from "@/ui/lagerBuchungCopy";
 
 function fehlendeArtikelId(artikelId: unknown) {
@@ -43,5 +52,6 @@ export async function getInventoryMovementsByItemAction(artikelId: string): Prom
 
 export async function createInventoryMovementAction(input: CreateStockMovementInput): Promise<ActionResult<StockMovement>> {
   return observeAction("createInventoryMovementAction", subjectForAction("createInventoryMovementAction", input),
-    () => bucheLagerEinzeln(input, readLagerEinstellungen, synchronizeLagerBestandTask), readLoggingSettings);
+    () => bucheLagerEinzeln(input, readLagerEinstellungen, synchronizeLagerBestandTask, synchronisierePreisaufgabe),
+    readLoggingSettings);
 }

@@ -1,7 +1,13 @@
 {
   "version": 1,
-  "inventorySha256": "b462d3c72a33c06a4568676138d546ca39ebf3e7d2ebca4c4af7283fbce08d5b",
+  "inventorySha256": "f57dc64537375b5ee0d2ad6d593a7fadf1455c16aef17169a5bf441c69ea8b4c",
   "testedWriteActions": {
+    "src/app/actions/lager-material.actions.ts#leseAuftragsmaterial": [
+      "src/test/acceptance/material_rechnung.integration.test.ts"
+    ],
+    "src/app/actions/lager-preis.actions.ts#hinterlegeLagerPreis": [
+      "src/test/acceptance/material_rechnung.integration.test.ts"
+    ],
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": [
       "src/test/acceptance/lager_invarianten.integration.test.ts"
     ],

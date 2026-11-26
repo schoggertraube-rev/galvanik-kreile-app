@@ -1,4 +1,5 @@
 "use server";
+import {leseLagerMaterialpositionenInTransaction} from '@/modules/lager/server-public';
 import {readCustomerInvoiceTerms} from '@/modules/customers/server-public';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readLoggingSettings} from '@/modules/fundament/server-public';
@@ -41,7 +42,10 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
       const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms);
+      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms,leseLagerMaterialpositionenInTransaction);
+      if (invoice.code === 'MATERIAL_PREIS_FEHLT' || invoice.code === 'MATERIAL_EINHEIT_OHNE_CODE') {
+        return { code: 'VALIDATION_ERROR' as const, message: invoice.message };
+      }
       return invoice.code==='OK'?null:{code:invoice.code,message:invoice.message,...(invoice.code==='VALIDATION_ERROR'&&invoice.source?{source:invoice.source}:{})};
     }}:{}),
     afterWriteFailure:async(tx,auth,receipt)=>{await createGoodsOutClarificationTask(tx,auth,{orderId:receipt.orderId,eventId:receipt.eventId},{effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)});},

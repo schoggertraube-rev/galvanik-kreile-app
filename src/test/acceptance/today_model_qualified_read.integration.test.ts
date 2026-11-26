@@ -489,8 +489,15 @@ it('meldet den echten Takt ohne Sitzung bei Teilausfall als fehlgeschlagen und f
     expect((await taktGET(new Request(url))).status).toBe(401);
     expect(await runs()).toEqual([]);
 
-    const response = await taktGET(new Request(url, {headers: {Authorization: `Bearer ${cronSecret}`}}));
-    expect(response.status).toBe(503);
+    const tageslauf = new Date(readTodayCalendar(new Date()).today+'T12:00:00Z');
+    vi.useFakeTimers({toFake:['Date']});
+    try {
+      vi.setSystemTime(tageslauf);
+      const response = await taktGET(new Request(url, {headers: {Authorization: `Bearer ${cronSecret}`}}));
+      expect(response.status).toBe(503);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(await sql`SELECT status,fehlercode FROM public.takt_job_runs
       WHERE tenant_id=${blockedTenant} AND job_schluessel='heute_neuaufbau'`)
       .toEqual([{status:'fehler',fehlercode:'takt_heute_besetzt'}]);
@@ -511,11 +518,17 @@ it('meldet den echten Takt ohne Sitzung bei Teilausfall als fehlgeschlagen und f
 
 it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende Automatik', async () => {
   const bediener = await createFixture(['wartung'],'developer');
-  const tag = readTodayCalendar(new Date()).today;
-  const zeit = new Date(tag+'T12:00:00Z');
+  // Der vorherige Cron-Aufruf kann den aktuellen Tag für diesen Betrieb bereits abgeschlossen haben.
+  const zeit = new Date(readTodayCalendar(new Date()).today+'T12:00:00Z');
+  zeit.setUTCDate(zeit.getUTCDate()+1);
+  const tag = readTodayCalendar(zeit).today;
+  const vorhandene = await sql<{id:string}[]>`SELECT id::text FROM public.takt_job_runs
+    WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau'`;
+  const vorhandeneIds = vorhandene.map(lauf => lauf.id);
   const manuell = () => withSession(bediener, () => rebuildGET(new Request('http://127.0.0.1/api/heute/neuaufbau')));
   const laeufe = () => sql<{faellig_fuer:string;status:string}[]>`SELECT faellig_fuer,status FROM public.takt_job_runs
-    WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau' ORDER BY gestartet_um,id`;
+    WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau'
+      AND NOT (id::text = ANY(${vorhandeneIds}::text[])) ORDER BY gestartet_um,id`;
   const modellStand = async () => {
     const [row] = await sql<{seq:string}[]>`SELECT built_seq::text AS seq FROM private.today_source_v1
       WHERE tenant_id=${tenant} AND kind='orders' AND source_id='*'`;
@@ -556,6 +569,7 @@ it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende
     ]);
   } finally {
     await erster?.catch(()=>undefined);
-    await sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenant}`;
+    await sql`DELETE FROM public.takt_job_runs WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau'
+      AND NOT (id::text = ANY(${vorhandeneIds}::text[]))`;
   }
 },60_000);

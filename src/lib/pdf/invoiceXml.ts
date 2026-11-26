@@ -83,9 +83,9 @@ export function createInvoiceXml(input:InvoiceXmlInput):Uint8Array{
   const members=invoiceOriginalLineMembers(snapshot,line);
   const reference=snapshot.collection===undefined?'':node('ram:Description',members.map(member=>member.orderNumber+' / '+member.serviceDate).join(' · '));
   const period=snapshot.collection===undefined?'':billingPeriod(members.map(member=>member.serviceDate));
-  const quantity=line.type==='BASE'?String(line.quantity):line.type==='EXTRA_WORK'?invoiceXmlWorkHours(line.minutes):'1';
-  const price=line.type==='BASE'?invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents):invoiceXmlAmount(line.type==='EXTRA_WORK'?line.hourlyRateCents:line.amountCents);
-  const amount=line.type==='BASE'?line.lineNetAmountCents:line.amountCents;
+  const quantity=line.type==='MATERIAL'?line.quantity:line.type==='BASE'?String(line.quantity):line.type==='EXTRA_WORK'?invoiceXmlWorkHours(line.minutes):'1';
+  const price=line.type==='MATERIAL'?line.unitNetAmount:line.type==='BASE'?invoiceBaseUnitPrice(line.quantity,line.unitNetAmountCents,line.lineNetAmountCents):invoiceXmlAmount(line.type==='EXTRA_WORK'?line.hourlyRateCents:line.amountCents);
+  const amount=line.type==='BASE'||line.type==='MATERIAL'?line.lineNetAmountCents:line.amountCents;
   if(!line.unit||!line.taxCategory||line.vat_rate_basis_points===undefined)throw Error('INVOICE_ELECTRONIC_LINE_SOURCE_REQUIRED');
   return '<ram:IncludedSupplyChainTradeLineItem><ram:AssociatedDocumentLineDocument>'+node('ram:LineID',String(index+1))+'</ram:AssociatedDocumentLineDocument><ram:SpecifiedTradeProduct>'+node('ram:Name',name)+reference+'</ram:SpecifiedTradeProduct><ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice>'+node('ram:ChargeAmount',price)+'</ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement><ram:SpecifiedLineTradeDelivery>'+node('ram:BilledQuantity',(direction===-1?'-':'')+quantity,{unitCode:line.unit})+'</ram:SpecifiedLineTradeDelivery><ram:SpecifiedLineTradeSettlement><ram:ApplicableTradeTax>'+node('ram:TypeCode','VAT')+node('ram:CategoryCode',line.taxCategory)+node('ram:RateApplicablePercent',(line.vat_rate_basis_points/100).toFixed(2))+'</ram:ApplicableTradeTax>'+period+'<ram:SpecifiedTradeSettlementLineMonetarySummation>'+node('ram:LineTotalAmount',invoiceXmlAmount(direction*amount))+'</ram:SpecifiedTradeSettlementLineMonetarySummation></ram:SpecifiedLineTradeSettlement></ram:IncludedSupplyChainTradeLineItem>';
  }).join('');

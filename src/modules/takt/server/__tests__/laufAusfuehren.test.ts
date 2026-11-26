@@ -3,6 +3,8 @@ import {beforeEach, expect, it, vi} from 'vitest';
 import type {TaktJob, TaktLeser} from '../../public';
 import type {PackageSwitchId} from '@/modules/fundament/public';
 
+vi.mock('@/db', () => ({db: {}}));
+
 const timeoutScope = vi.hoisted(() => vi.fn(async (_milliseconds:number,work:()=>Promise<unknown>) => work()));
 vi.mock('@/lib/server/privilegedDb', () => ({withTaktStatementTimeout:timeoutScope}));
 
