@@ -87,6 +87,8 @@ export function GlasDialog({
   const seitenebene = useRef<HTMLDivElement>(null);
   const aktuell = useRef({ onGeschlossen, fokus, oeffner });
   const beschreibungId = useId();
+  const nurDockSchliessen = ansicht === 'dock' && kopfVerborgen;
+  const ganzerKopfVerborgen = kopfVerborgen && !nurDockSchliessen;
 
   useBlattZurueck(offen && (ansicht === 'blatt' || ansicht === 'dock'), element, schliessen);
 
@@ -112,7 +114,7 @@ export function GlasDialog({
         else dialog.setAttribute('open', '');
         const initial = aktuell.current.fokus?.current
           ?? dialog.querySelector<HTMLElement>('[autofocus]:not(:disabled)')
-          ?? dialog.querySelector<HTMLElement>(kopfVerborgen
+          ?? dialog.querySelector<HTMLElement>(ganzerKopfVerborgen
             ? '[data-overlay-body] :is(button:not(:disabled), a[href], input:not(:disabled))'
             : '[data-dialog-erster-fokus]:not(:disabled)');
         initial?.focus({ preventScroll: true });
@@ -131,7 +133,7 @@ export function GlasDialog({
     }
 
     return () => { abgebrochen = true; };
-  }, [offen, nebenKopf, kopfVerborgen]);
+  }, [offen, nebenKopf, ganzerKopfVerborgen]);
 
   useLayoutEffect(() => {
     const dialog = element.current;
@@ -255,9 +257,9 @@ export function GlasDialog({
           if (ziehStart.current !== null && event.clientY - ziehStart.current >= 44) schliessen();
           ziehStart.current = null;
         }} />
-      <header className={kopfVerborgen ? 'kr-sr' : styles.kopf}>
-        {kopfSymbol}
-        <div className={styles.titelgruppe}>
+      <header className={ganzerKopfVerborgen ? 'kr-sr' : styles.kopf}>
+        {!nurDockSchliessen && kopfSymbol}
+        <div className={nurDockSchliessen ? 'kr-sr' : styles.titelgruppe}>
           <h2 className={styles.titel}>{titel}</h2>
           {beschreibung && <div id={beschreibungId}>{beschreibung}</div>}
           {kopfAktionen}
@@ -272,7 +274,7 @@ export function GlasDialog({
           aria-label={schliessenText}
           onClick={schliessen}
           disabled={schliesstGesperrt}
-          tabIndex={kopfVerborgen ? -1 : undefined}
+          tabIndex={ganzerKopfVerborgen ? -1 : undefined}
         >{schliessenSymbol ?? schliessenText}</button>
       </header>
       <div className={styles.inhalt} data-overlay-body>{children}</div>

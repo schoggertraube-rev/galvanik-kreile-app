@@ -36,6 +36,12 @@
 
 .dialog[data-r53-form="dock"]::backdrop { background: transparent; backdrop-filter: none; }
 .dialog[data-r53-form="dock"] .inhalt { padding: 0; }
+.dialog[data-r53-form="dock"] .kopf { display: contents; }
+.dialog[data-r53-form="dock"] .schliessen {
+  position: absolute;
+  inset-block-start: var(--gb-dock-mehr-innen);
+  inset-inline-end: var(--gb-dock-mehr-innen);
+}
 
 .dialog[data-r53-form="blatt"] {
   margin: var(--r53-form-blatt-margin);
@@ -77,13 +83,14 @@
     margin: auto 0 0;
     padding-block-end: env(safe-area-inset-bottom);
   }
-  .dialog[data-r53-form='blatt'] .griff {
+  .dialog:is([data-r53-form='blatt'], [data-r53-form='dock']) .griff {
     display: grid;
     flex: none;
     place-items: center;
     min-block-size: 24px;
     touch-action: none;
   }
+  .dialog[data-r53-form='dock'] .griff { min-block-size: var(--r53-form-icon-min); }
   .griff::before {
     content: '';
     inline-size: 36px;
