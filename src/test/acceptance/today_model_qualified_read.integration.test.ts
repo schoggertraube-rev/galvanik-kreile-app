@@ -434,7 +434,7 @@ it('week reads the actual aggregate without money rights and rejects the absent 
   const week=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=week'));
   expect(week.status).toBe(200);const result=await week.json();
   expect(result.result).toEqual({code:'OK',part:'week',data:original.code==='OK'?original.data:undefined});
-  expect(Object.keys(result.result.data).sort()).toEqual(['currentlyUnpricedItemCount','netCents','weekEndExclusive','weekStart']);
+  expect(Object.keys(result.result.data).sort()).toEqual(['currentlyUnpricedItemCount','days','netCents','weekEndExclusive','weekStart']);
   const stock=await getModelRoute(new Request('http://127.0.0.1/api/heute/modell?nur=veraltet&bereich=stock'));
   expect(stock.status).toBe(400);
  });

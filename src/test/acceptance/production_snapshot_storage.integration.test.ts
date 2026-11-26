@@ -20,7 +20,7 @@ it('K15 an already priced finished item records only its later price delta in th
  // Isolated TEST clock boundary, not a reconstructed snapshot: the real finish
  // writer still creates and validates both its event and captured value.
  const clock='test_production_clock_'+randomUUID().replaceAll('-','');
- await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' AND NEW.event_type='ORDER_ITEM_FINISHED_CHANGED_V1' AND NEW.payload->>'finished'='true' THEN NEW.created_at='2026-10-05 12:00:00'; END IF; RETURN NEW; END $$`);
+ await sql.unsafe(`CREATE FUNCTION private.${clock}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${KREILE_TENANT_SLUG}' AND NEW.order_id='${orderId}' AND NEW.event_type='ORDER_ITEM_FINISHED_CHANGED_V1' AND NEW.payload->>'finished'='true' THEN NEW.created_at='2026-10-04 22:15:00'; END IF; RETURN NEW; END $$`);
  await sql.unsafe(`CREATE TRIGGER ${clock} BEFORE INSERT ON public.events FOR EACH ROW EXECUTE FUNCTION private.${clock}()`);
  let finished:Awaited<ReturnType<typeof setOrderItemFinishedAction>>;
  try{finished=await withSession(full,()=>setOrderItemFinishedAction({orderId,itemId,expectedVersion:moved.receipt.aggregateVersion,clientEventId:randomUUID(),finished:true}));}
@@ -30,7 +30,9 @@ it('K15 an already priced finished item records only its later price delta in th
  const input={orderId,expectedVersion:finished!.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST Preis in anderer Woche',items:[{id:itemId,catalogServiceId:null,name:'TEST Preiswoche',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:20000,vatRateBasisPoints:1900 as const}]};
  const changed=await withSession(full,()=>changeOrderContentAction(input));if(changed.code!=='OK')throw Error('K15_PRICE:'+changed.code);
  expect(await sql`SELECT net_cents::int,origin_event_id FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${changed.receipt.eventId} AND component='pricing'`).toEqual([{net_cents:10000,origin_event_id:finished!.receipt.eventId}]);
- expect(await withSession(full,()=>getProductionWeekAction({onDate:'2026-10-05'}))).toMatchObject({code:'OK',data:{netCents:10000}});
+ const viewer=await createFixture(['auftraege'],'werkstatt');
+ expect(await withSession(viewer,()=>getProductionWeekAction({onDate:'2026-10-05'}))).toMatchObject({code:'OK',data:{netCents:10000,days:[{date:'2026-10-05',netCents:10000}]}});
+ expect(await withSession(viewer,()=>getProductionWeekAction({onDate:'2026-10-04'}))).toMatchObject({code:'OK',data:{netCents:0,days:[]}});
  expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:before.data.netCents+10000}});
  expect(await withSession(full,()=>changeOrderContentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK',replayed:true});
  const lower={...input,expectedVersion:changed.receipt.aggregateVersion,clientEventId:randomUUID(),note:'TEST Preis gesenkt',items:[{...input.items[0],unitPriceCents:5000}]};
@@ -39,7 +41,10 @@ it('K15 an already priced finished item records only its later price delta in th
  const reopen={orderId,itemId,expectedVersion:lowered.receipt.aggregateVersion,clientEventId:randomUUID(),finished:false};
  const reopened=await withSession(full,()=>setOrderItemFinishedAction(reopen));if(reopened.code!=='OK')throw Error('K15_REOPEN:'+reopened.code);
  expect(await sql`SELECT component,net_cents::int FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} ORDER BY component,net_cents`).toEqual([{component:'base',net_cents:10000},{component:'pricing',net_cents:-15000},{component:'pricing',net_cents:10000}]);
- expect(await withSession(full,()=>getProductionWeekAction())).toMatchObject({code:'OK',data:{netCents:before.data.netCents-10000}});
+ const after=await withSession(viewer,()=>getProductionWeekAction());
+ expect(after).toMatchObject({code:'OK',data:{netCents:before.data.netCents-10000}});
+ if(after.code!=='OK')throw Error('K15_WEEK_REVERSE_READ');
+ expect(after.data.days.reduce((sum,day)=>sum+day.netCents,0)).toBe(after.data.netCents);
  expect(await withSession(full,()=>setOrderItemFinishedAction(JSON.parse(JSON.stringify(reopen))))).toMatchObject({code:'OK',replayed:true});
  expect(await sql`SELECT count(*)::int AS n FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_id=${reopened.receipt.eventId} AND component='pricing' AND direction=-1`).toEqual([{n:2}]);
  expect(await sql`SELECT sum(direction*net_cents)::int AS net FROM private.order_production_snapshots WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`).toEqual([{net:0}]);
