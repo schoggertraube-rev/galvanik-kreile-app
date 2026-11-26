@@ -22,6 +22,9 @@
   gap: var(--a-3);
   padding: var(--a-3) var(--a-5);
 }
+@media (max-width: 767px) {
+  .werkstattAktionen > button:not([data-ton="haupt"]) { display: none; }
+}
 .mitDock:has(> .werkstattAktionen) > :global(.kr-inhalt) { padding-block-end: var(--a-3); }
 .mitDock > .werkstattAktionen {
   padding-block-end: calc(var(--gb-dock-hoehe) + 2 * var(--gb-dock-unten) + env(safe-area-inset-bottom));
