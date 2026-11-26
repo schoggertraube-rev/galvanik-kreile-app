@@ -178,11 +178,6 @@ export type TerminEinstellungenLeser = (tx: PrivilegedTenantTransaction, tenantI
   knappAbArbeitstagen: number | null;
 }>;
 
-const readCompanyCalendar: TerminEinstellungenLeser = async (tx, tenantId) => {
-  const { readBetriebsruheInTransaction } = await import("@/modules/fundament/server-public");
-  return readBetriebsruheInTransaction(tx, tenantId);
-};
-
 export async function leseFertigterminKalender(
   tx: PrivilegedTenantTransaction, tenantId: string, liesEinstellungen: TerminEinstellungenLeser,
 ) {
@@ -191,13 +186,16 @@ export async function leseFertigterminKalender(
 }
 
 async function leseTerminAnzeige(
-  tx: PrivilegedTenantTransaction, tenantId: string, rows: QueueRow[], liesEinstellungen: TerminEinstellungenLeser,
+  tx: PrivilegedTenantTransaction, tenantId: string, rows: QueueRow[], liesEinstellungen?: TerminEinstellungenLeser,
 ): Promise<TerminAnzeige> {
   const heute = berlinCalendarDay();
   const hatLiefertermin = rows.some(row =>
     row.status !== "blocked" && row.handover_mode && parseDateOnlyText(row.due_date_text),
   );
-  const kalender = hatLiefertermin ? await leseFertigterminKalender(tx, tenantId, liesEinstellungen) : null;
+  if (hatLiefertermin && !liesEinstellungen) throw Error("BETRIEBSKALENDER_LESER_FEHLT");
+  const kalender = hatLiefertermin && liesEinstellungen
+    ? await leseFertigterminKalender(tx, tenantId, liesEinstellungen)
+    : null;
   return (row, dueDate) => zeigeFertigtermin({
     dueDate: dueDate.slice(0, 10) || null,
     handoverMode: row.handover_mode,
@@ -281,7 +279,7 @@ function parseSafeCount(value: number | string): number {
 /** Fresh per invocation, tenant-bound full operational read port. */
 export async function readTenantOperationalOrders(
   authorization: Pick<AuthorizationSnapshot, "tenantId">,
-  liesEinstellungen: TerminEinstellungenLeser = readCompanyCalendar,
+  liesEinstellungen?: TerminEinstellungenLeser,
   projection?:{purpose:'today'},
 ): Promise<OperationalOrder[]> {
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -347,7 +345,7 @@ export async function readTenantOperationalOrderCount(
 export async function readTenantStationOrders(
   authorization: Pick<AuthorizationSnapshot, "tenantId">,
   station: Station,
-  liesEinstellungen: TerminEinstellungenLeser = readCompanyCalendar,
+  liesEinstellungen?: TerminEinstellungenLeser,
 ): Promise<OperationalOrder[]> {
   const { tenantId } = authorization;
   return withPrivilegedTenantTransaction({ tenantId }, async (tx) => {

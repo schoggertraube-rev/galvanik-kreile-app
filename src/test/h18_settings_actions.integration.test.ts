@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
+import { berlinCalendarDay } from "@/lib/domain/workingDays";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
@@ -841,7 +842,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
-      dueDate,
+      dueDate: berlinCalendarDay(),
       geprueft: true,
       termStatus: "bestaetigt",
       intakeSource: "persoenlich",
