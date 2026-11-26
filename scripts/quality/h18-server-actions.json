@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "5156fb149e8357e2b852ef6b127fac6d8c3e5ed5c7f23a156281c431d7e12ac9",
+  "inventorySha256": "44c81863ded3568518faa52b2cb2a764f818a14d99995d3cf6fd4d406a508acf",
   "testedWriteActions": {
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": [
       "src/test/acceptance/lager_invarianten.integration.test.ts"
@@ -485,13 +485,6 @@
     ]
   },
   "writeActionOverrides": {
-    "src/app/actions/admin.actions.ts#createUser": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/admin.actions.ts#initializeDefaultFlags": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/admin.actions.ts#toggleFeatureFlag": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/admin.actions.ts#toggleUserStatus": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/admin.actions.ts#updateFeatureFlagRoles": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/admin.actions.ts#updateUserPin": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/admin.actions.ts#updateUserRole": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/auth.actions.ts#loginWithPin": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/auth.ts#login": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/auth.ts#logout": "H18.8 Bestand ohne Replay-Action-Test",
@@ -515,7 +508,6 @@
     "src/app/actions/price-lines.actions.ts#deletePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/price-lines.actions.ts#updatePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/settings.actions.ts#saveSalesStageFeatureAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/systemStats.ts#runSupabaseWriteTest": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/tracking.actions.ts#logUiEvent": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/buchhaltung/actions.ts#assignBelegeBatchAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/buchhaltung/actions.ts#createBelegAction": "H18.8 Bestand ohne Replay-Action-Test",
@@ -523,13 +515,6 @@
     "src/app/buchhaltung/actions.ts#createRechnungAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/buchhaltung/actions.ts#freigebenBelegAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/buchhaltung/actions.ts#stornoBelegAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/buchhaltung/periodenabschluss/actions.ts#finalSchliessePeriodeAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/buchhaltung/periodenabschluss/actions.ts#runEnergieVerteilungAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/buchhaltung/periodenabschluss/actions.ts#schliessePeriodeAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/cockpit/actions.ts#dismissWarnung": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/cockpit/actions.ts#refreshWarnungen": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/cockpit/actions.ts#savePhoneNote": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/cockpit/actions.ts#speichereJahresplan": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/marketing/aktion/actions.ts#changeAktionStatus": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/marketing/aktion/actions.ts#createAktion": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/marketing/kanaele/actions.ts#updateKanalConfig": "H18.8 Bestand ohne Replay-Action-Test",

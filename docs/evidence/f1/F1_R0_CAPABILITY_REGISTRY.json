@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 9,
-    "server_action_groups": 48,
+    "server_action_groups": 43,
     "kpi_definitions": 7,
-    "provider_connections": 15,
+    "provider_connections": 13,
     "nav_links_without_page": 3,
-    "total": 97
+    "total": 90
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -293,26 +293,6 @@
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY"
       ]
-    },
-    {
-      "stable_id": "server-actions.admin",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/admin.actions.ts",
-      "exported_functions": [
-        "getUsers",
-        "createUser",
-        "updateUserRole",
-        "updateUserPin",
-        "toggleUserStatus",
-        "getFeatureFlags",
-        "toggleFeatureFlag",
-        "updateFeatureFlagRoles",
-        "initializeDefaultFlags"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Admin user/feature-flag management. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
     },
     {
       "stable_id": "server-actions.ai-search",
@@ -915,50 +895,6 @@
       "reachable": false
     },
     {
-      "stable_id": "server-actions.buchhaltung-periodenabschluss",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/buchhaltung/periodenabschluss/actions.ts",
-      "exported_functions": [
-        "getPeriodenabschlussStatusAction",
-        "runEnergieVerteilungAction",
-        "schliessePeriodeAction",
-        "finalSchliessePeriodeAction"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Period closing workflow. Supabase-connected, no verified E2E.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "server-actions.cockpit",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/cockpit/actions.ts",
-      "exported_functions": [
-        "getCockpitKpis",
-        "getTopKunden",
-        "getInaktiveKunden",
-        "getEngpassDaten",
-        "getAgingDaten",
-        "getAuftragDbRanking",
-        "getWhatIfKontext",
-        "getEngpassDetails",
-        "getAuftragDbDetails",
-        "getForecastDaten",
-        "getKundenDetails",
-        "getAgingRechnungen",
-        "getAktiveWarnungen",
-        "dismissWarnung",
-        "refreshWarnungen",
-        "getAktiverJahresplan",
-        "speichereJahresplan",
-        "savePhoneNote"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Owner cockpit KPI and scenario actions. Supabase read-models, no independent E2E evidence.",
-      "visible": false,
-      "reachable": true
-    },
-    {
       "stable_id": "server-actions.global-search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/global-search-actions.ts",
@@ -1245,37 +1181,6 @@
       "reachable": true
     },
     {
-      "stable_id": "provider.gemini",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "Gemini/Google GenAI",
-      "adapter_file": "src/lib/ai/geminiClient.ts",
-      "env_vars": [
-        "GEMINI_API_KEY",
-        "GEMINI_MODEL_PRIMARY",
-        "GEMINI_MODEL_FALLBACK"
-      ],
-      "classification": "LEGACY_REMOVE",
-      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter remains inventory-only, invisible and unreachable; a secret must not activate it and there is no runtime fallback.",
-      "visible": false,
-      "reachable": false,
-      "evidence_files": [
-        "src/lib/ocr/GeminiProvider.ts"
-      ]
-    },
-    {
-      "stable_id": "provider.klippa",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "Klippa/OCR",
-      "adapter_file": "src/lib/ocr/KlippaProvider.ts",
-      "env_vars": [
-        "KLIPPA_API_KEY"
-      ],
-      "classification": "LEGACY_REMOVE",
-      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter and scan route remain quarantined, invisible and unreachable; a secret must not activate them.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "provider.mail-smtp",
       "kind": "PROVIDER_CONNECTION",
       "provider": "Mail/SMTP",
@@ -1346,37 +1251,6 @@
       "open_reason": "logUiEvent and getRealAnalyticsStats in tracking.actions.ts. Internal event log to Supabase. No confirmed external analytics provider contract.",
       "visible": false,
       "reachable": true
-    },
-    {
-      "stable_id": "server-actions.system-stats",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/systemStats.ts",
-      "exported_functions": [
-        "getSystemStats",
-        "runSupabaseWriteTest"
-      ],
-      "visible": false,
-      "reachable": false,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "System diagnostics and write-test actions. Supabase-connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "server-actions.buchhaltung-analysis",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/buchhaltung/analysis.actions.ts",
-      "exported_functions": [
-        "getUstvaAnalysisAction",
-        "getKraftstoffAnalysisAction",
-        "getOffenePostenAnalysisAction",
-        "getBwaAnalysisAction",
-        "getAusgabenAnalysisAction",
-        "getSparzaehlerAnalysisAction",
-        "getAusgabenKategorien"
-      ],
-      "visible": false,
-      "reachable": false,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Accounting period-analysis actions. Supabase-connected via SupabaseBuchhaltungProvider. No independent E2E evidence."
     },
     {
       "stable_id": "nav.orders-new",

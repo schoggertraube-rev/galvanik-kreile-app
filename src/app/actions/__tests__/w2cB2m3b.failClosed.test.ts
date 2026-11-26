@@ -39,7 +39,6 @@ vi.mock("@/lib/repositories/ordersRepository", () => ({
 }));
 
 const denial = "NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt.";
-const w3Denial = "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("W2C B2M3B fail-closed commands", () => {
@@ -48,12 +47,10 @@ describe("W2C B2M3B fail-closed commands", () => {
     Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
   });
 
-  it("denies item, price, repository, system, and warning writers before every port", async () => {
-    const [items, prices, stats, cockpit, { itemsRepository }, { kvpRepository }] = await Promise.all([
+  it("denies item, price, and repository writers before every port", async () => {
+    const [items, prices, { itemsRepository }, { kvpRepository }] = await Promise.all([
       import("../items.actions"),
       import("../price-lines.actions"),
-      import("../systemStats"),
-      import("@/app/cockpit/actions"),
       import("@/lib/repositories/itemsRepository"),
       import("@/lib/repositories/kvpRepository"),
     ]);
@@ -70,9 +67,6 @@ describe("W2C B2M3B fail-closed commands", () => {
     await expect(itemsRepository.createMany([])).rejects.toThrow(denial);
     await expect(kvpRepository.addItem({ title: "x", category: "x", benefit: "x", status: "neu", problemDesc: "", hasPhoto: false, date: "" })).rejects.toThrow(denial);
     await expect(kvpRepository.updateItemStatus("k", "neu")).rejects.toThrow(denial);
-    await expect(stats.runSupabaseWriteTest()).resolves.toEqual({ success: false, message: denial, durationMs: 0 });
-    await expect(cockpit.dismissWarnung("w", "ausreichend lang")).resolves.toEqual({ ok: false, error: "NOT_AVAILABLE", message: w3Denial });
-    await expect(cockpit.refreshWarnungen()).resolves.toEqual({ ok: false, error: "NOT_AVAILABLE", message: w3Denial });
 
     for (const port of Object.values(ports)) expect(port).not.toHaveBeenCalled();
   });
@@ -91,20 +85,14 @@ describe("W2C B2M3B fail-closed commands", () => {
 });
 
 describe("W2C B2M3B caller quarantine", () => {
-  it("keeps read paths and removes unavailable writer calls and local KVP persistence", async () => {
-    const files = await Promise.all([
-      "components/admin/AdminDashboard.tsx",
-      "app/kvp/KvpClient.tsx",
-      "app/cockpit/components/FruehwarnungenKachel.tsx",
-    ].map((file) => readFile(path.join(root, file), "utf8")));
-    const [admin, kvp, warnings] = files;
+  it("keeps KVP free of local persistence and removes retired writer entrypoints", async () => {
+    const kvp = await readFile(path.join(root, "app/kvp/KvpClient.tsx"), "utf8");
 
     expect(existsSync(path.join(root, "components/orders/ItemDrawer.tsx"))).toBe(false);
     expect(existsSync(path.join(root, "components/orders/PriceLinesEditor.tsx"))).toBe(false);
-    expect(warnings).toContain("getAktiveWarnungen");
-    expect(warnings).toMatch(/<button\s+disabled[\s\S]*?>\s*Aktualisieren \(NOT_AVAILABLE\)\s*<\/button>/);
-    expect(admin).not.toContain("runSupabaseWriteTest");
+    expect(existsSync(path.join(root, "components/admin/AdminDashboard.tsx"))).toBe(false);
+    expect(existsSync(path.join(root, "app/actions/systemStats.ts"))).toBe(false);
+    expect(existsSync(path.join(root, "app/cockpit/components/FruehwarnungenKachel.tsx"))).toBe(false);
     expect(kvp).not.toMatch(/localStorage\.setItem|enqueueAction|Date\.now|OfflineManager/);
-    expect(warnings).not.toMatch(/refreshWarnungen|dismissWarnung/);
   });
 });

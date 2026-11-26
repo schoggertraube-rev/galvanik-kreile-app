@@ -137,51 +137,31 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
     }
   });
 
-  it('removes the obsolete shipment shell and retired export route while keeping inert clients quarantined', async () => {
+  it('keeps retired accounting clients, export route, and shipment shell absent', () => {
     const files = [
       'app/buchhaltung/belege/BelegeClient.tsx',
       'app/buchhaltung/belege/[id]/BelegDetailClient.tsx',
       'app/buchhaltung/rechnungen/neu/RechnungForm.tsx',
       'app/buchhaltung/kosten/neu/KostenForm.tsx',
+      'app/buchhaltung/export/page.tsx',
+      'components/orders/variants/VersandVariant.tsx',
     ];
-    for (const file of files) {
-      const source = await readFile(path.join(srcRoot, file), 'utf8');
-      expect(source).toContain('FoundationUnavailable');
-      expect(source).not.toMatch(/actions|OfflineManager|enqueue|<form\b|<button\b|<input\b|useRouter|fetch\(/i);
-    }
-    expect(existsSync(path.join(srcRoot, 'app/buchhaltung/export/page.tsx'))).toBe(false);
-    expect(existsSync(path.join(srcRoot, 'components/orders/variants/VersandVariant.tsx'))).toBe(false);
+    for (const file of files) expect(existsSync(path.join(srcRoot, file)), file).toBe(false);
   });
 
-  it('keeps retired accounting receipt routes non-rendering and their clients inert', async () => {
-    const parentFiles = [
+  it('keeps retired accounting receipt routes and clients absent', () => {
+    const retiredFiles = [
       'app/buchhaltung/belege/page.tsx',
       'app/buchhaltung/belege/[id]/page.tsx',
-    ];
-    for (const file of parentFiles) {
-      expect(existsSync(path.join(srcRoot, file)), file).toBe(false);
-    }
-
-    const clientFiles = [
       'app/buchhaltung/belege/BelegeClient.tsx',
       'app/buchhaltung/belege/[id]/BelegDetailClient.tsx',
     ];
-    for (const file of clientFiles) {
-      const source = await readFile(path.join(srcRoot, file), 'utf8');
-      expect(source).toContain('FoundationUnavailable');
-      expect(source).not.toMatch(/import\s+type|interface\s+\w*Props|initialBelege|initialBeleg|\{\s*(?:id|initial)/);
-    }
+    for (const file of retiredFiles) expect(existsSync(path.join(srcRoot, file)), file).toBe(false);
   });
 
-  it('keeps Aging reads and phone notes while disabling only dunning controls', async () => {
-    const source = await readFile(path.join(srcRoot, 'app/cockpit/components/AgingKachel.tsx'), 'utf8');
-    expect(source).toMatch(/getAgingDaten|getAgingRechnungen|savePhoneNote/);
-    expect(source).not.toMatch(/sendeZahlungserinnerung|sendeMahnung|navigator\.clipboard|actionStatus|Kopiert/);
-    expect(source).not.toContain('Keine bisherige Kommunikation dokumentiert');
-    expect(source).toContain('Kommunikationsstatus nicht verfügbar.');
-    expect(source).toMatch(/>NOT_AVAILABLE — Mahnwesen bis W3 nicht verfügbar<|NOT_AVAILABLE — Mahnwesen bis W3 nicht verfügbar/);
-    expect(source).toMatch(/Zahlungserinnerung[\s\S]{0,300}disabled[\s\S]{0,300}NOT_AVAILABLE|disabled[\s\S]{0,300}NOT_AVAILABLE[\s\S]{0,300}Zahlungserinnerung/);
-    expect(source).toMatch(/Mahnung[\s\S]{0,300}disabled[\s\S]{0,300}NOT_AVAILABLE|disabled[\s\S]{0,300}NOT_AVAILABLE[\s\S]{0,300}Mahnung/);
+  it('keeps the retired cockpit aging entrypoints absent', () => {
+    expect(existsSync(path.join(srcRoot, 'app/cockpit/components/AgingKachel.tsx'))).toBe(false);
+    expect(existsSync(path.join(srcRoot, 'app/cockpit/actions.ts'))).toBe(false);
   });
 
   it('removes the fabricated shipment shell instead of relocating it', () => {
