@@ -118,3 +118,5 @@ export type { LagerBewegungssuche } from "./server-bestand";
 export { bucheAuftragsverbrauch, leseLagerAuftragsmaterialInTransaction,
   leseLagerW1Vorschlaege, leseLagerW1VorschlaegeInTransaction, entscheideLagerW1Vorschlag } from "./server-w1";
 export { speichereLagerBadanalyseInTransaction, leseLagerBadprozessbestandInTransaction } from "./server-badanalyse";
+export { leseAuftragsmaterial, leseLagerMaterialpositionenInTransaction } from "./server-material";
+export { hinterlegeLagerPreis, type LagerPreisAufgabe } from "./server-preis";

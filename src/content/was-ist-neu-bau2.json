@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "datum": "2026-11-25",
+    "pr": 294,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Auf der Rechnung siehst du, welches Material extra berechnet wird.",
+      "Fehlt ein Materialpreis, wartet die Rechnung. Wer Preise hinterlegen darf, bekommt dafür eine Aufgabe."
+    ]
+  }
+]

@@ -2,16 +2,56 @@ import {normaliseOrderPositionUnit,orderPositionUnitLabel} from '@/lib/orderPosi
 
 /** S54o d: only original-bound S/AE sources, never a rate/country guess. */
 export type InvoiceElectronicTaxCategory='S'|'AE';
-export type InvoiceElectronicUnitCode='C62'|'KGM'|'GRM'|'MTR'|'MTK'|'HUR'|'DMK'|'SET';
+const materialUnits = {
+  paar: { code: 'PR', label: 'Paar' },
+  ml: { code: 'MLT', label: 'ml' },
+  l: { code: 'LTR', label: 'l' },
+  mm: { code: 'MMT', label: 'mm' },
+  cm: { code: 'CMT', label: 'cm' },
+} as const;
+
+type MaterialOnlyUnitCode = (typeof materialUnits)[keyof typeof materialUnits]['code'];
+type ExistingInvoiceUnitCode = 'C62'|'KGM'|'GRM'|'MTR'|'MTK'|'HUR'|'DMK'|'SET';
+export type InvoiceElectronicUnitCode = ExistingInvoiceUnitCode | MaterialOnlyUnitCode;
+export type InvoiceMaterialUnitCode = 'C62' | 'KGM' | 'GRM' | 'MTR' | MaterialOnlyUnitCode;
+
+export function isInvoiceMaterialUnitCode(value: unknown): value is InvoiceMaterialUnitCode {
+  return value === 'C62' || value === 'KGM' || value === 'GRM' || value === 'MTR'
+    || Object.values(materialUnits).some(({ code }) => code === value);
+}
+
+export function invoiceMaterialLineNetCents(unitNetAmount: unknown, quantity: unknown): number | null {
+  if (typeof unitNetAmount !== 'string' || typeof quantity !== 'string') return null;
+  const price = /^(0|[1-9][0-9]*)\.([0-9]{4})$/.exec(unitNetAmount);
+  const amount = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,3}))?$/.exec(quantity);
+  if (!price || price[0] !== unitNetAmount || !amount || amount[0] !== quantity) return null;
+
+  const thousandths = BigInt(amount[1] + (amount[2] ?? '').padEnd(3, '0'));
+  if (thousandths === BigInt(0)) return null;
+  const tenThousandths = BigInt(price[1] + price[2]);
+  const cents = (tenThousandths * thousandths + BigInt(50000)) / BigInt(100000);
+  return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null;
+}
+
 export function invoiceElectronicUnitLabel(code:InvoiceElectronicUnitCode,source?:'default_piece'):string{
  if(source!==undefined){if(source!=='default_piece'||code!=='C62')throw Error('INVOICE_ELECTRONIC_UNIT_SOURCE_INVALID');return 'Stk';}
- const labels:Record<InvoiceElectronicUnitCode,string>={C62:'Stk.',KGM:'kg',GRM:'g',MTR:'m',MTK:'m²',HUR:'Std.',DMK:'dm²',SET:'Satz'};
- if(!Object.hasOwn(labels,code))throw Error('INVOICE_ELECTRONIC_UNIT_INVALID');
- return labels[code];
+ const material = Object.values(materialUnits).find(unit => unit.code === code);
+ if (material) return material.label;
+ const labels:Readonly<Partial<Record<InvoiceElectronicUnitCode,string>>>={C62:'Stk.',KGM:'kg',GRM:'g',MTR:'m',MTK:'m²',HUR:'Std.',DMK:'dm²',SET:'Satz'};
+ const label = Object.hasOwn(labels, code) ? labels[code] : undefined;
+ if(!label)throw Error('INVOICE_ELECTRONIC_UNIT_INVALID');
+ return label;
 }
 export type InvoiceElectronicSourceLocation={kind:'settings'|'customer'|'order';field:string;objectId?:string;itemId?:string;orderVersion?:number;codePoint?:number};
 export class InvoiceElectronicSourceError extends Error{
  constructor(readonly location:InvoiceElectronicSourceLocation){super('INVOICE_ELECTRONIC_SOURCE_REQUIRED');this.name='InvoiceElectronicSourceError';}
+}
+
+export class InvoiceMaterialUnitError extends Error {
+  constructor(readonly unit: string) {
+    super('MATERIAL_EINHEIT_OHNE_CODE');
+    this.name = 'InvoiceMaterialUnitError';
+  }
 }
 
 /** A serialization code for the existing unit, without converting quantities.
@@ -21,9 +61,14 @@ export class InvoiceElectronicSourceError extends Error{
  * https://unece.org/sites/default/files/2023-10/rec20_rev3_Annex1e.pdf
  * https://unece.org/sites/default/files/2023-10/rec20_rev3_Annex2e.pdf
  */
-export function invoiceElectronicUnit(value:unknown):{source:string;code:InvoiceElectronicUnitCode;label:string}|null{
+export function invoiceElectronicUnit(value:unknown, lineType?: 'MATERIAL'):{source:string;code:InvoiceElectronicUnitCode;label:string}|null{
  if(typeof value!=='string'||!value.trim())return null;
- const source=value.trim(),unit=normaliseOrderPositionUnit(source);
+ const source = value.trim();
+ const unit = normaliseOrderPositionUnit(lineType === 'MATERIAL' && source === 'stk' ? 'stueck' : source);
+ if (lineType === 'MATERIAL' && Object.hasOwn(materialUnits, source)) {
+  return { source, ...materialUnits[source as keyof typeof materialUnits] };
+ }
+ if (lineType === 'MATERIAL' && !['stk', 'kg', 'g', 'm'].includes(source)) return null;
  if(unit!==null){
   const codes={stueck:'C62',kg:'KGM',dm2:'DMK',satz:'SET',stunde:'HUR'} as const;
   return {source,code:codes[unit],label:orderPositionUnitLabel(unit)};
