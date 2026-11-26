@@ -288,6 +288,8 @@ describe('W2C accounting active-route containment', () => {
     expect(comparisonKey(explicit!)).toBe(forbiddenTargets[0]);
     expect(comparisonKey(resolveModuleTarget(entryPath, '../../buchhaltung/actions.ts')!)).toBe(forbiddenTargets[0]);
     expect(comparisonKey(resolveModuleTarget(entryPath, '@/app/buchhaltung/actions')!)).toBe(forbiddenTargets[0]);
+    const directoryIndex = canonicalExistingPath(resolve(srcRoot, 'db/index.ts'));
+    expect(resolveModuleTarget(entryPath, '@/db')).toBe(directoryIndex);
     for (const specifier of [
       '../BuchhaltungCockpitClient',
       '../analysis.actions',

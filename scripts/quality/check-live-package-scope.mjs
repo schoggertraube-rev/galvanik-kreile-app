@@ -514,6 +514,7 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/app/actions/goodsOut.actions.ts",
   "src/app/actions/orders.actions.ts",
   "src/app/settings/SettingsAppAdapter.tsx",
+  "src/components/admin/CompanySettingsForm.tsx",
   "src/components/warenausgang/WarenausgangQueue.tsx",
   "src/modules/orders/server/types.ts",
   "src/modules/werkstatt/server/deriveWerkstattView.ts",
