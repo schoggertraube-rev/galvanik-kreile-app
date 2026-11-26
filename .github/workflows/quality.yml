@@ -948,10 +948,20 @@ jobs:
       - name: Start isolated local Supabase for S54o
         if: steps.berlin-night.outputs.run != 'no'
         id: s54o-db
+        shell: bash
         run: |
           npm run quality:supabase-cli
           ./node_modules/.bin/supabase start
           ./node_modules/.bin/supabase db reset --local --no-seed
+          runtime_env="$(./node_modules/.bin/supabase status -o env)"
+          api_url="$(sed -n 's/^API_URL="\([^"]*\)"$/\1/p' <<< "$runtime_env")"
+          service_role_key="$(sed -n 's/^SERVICE_ROLE_KEY="\([A-Za-z0-9._-]\+\)"$/\1/p' <<< "$runtime_env")"
+          if [[ "$api_url" != 'http://127.0.0.1:54321' || -z "$service_role_key" || "$service_role_key" == *$'\n'* ]]; then
+            echo 'S54o needs the URL and service role of its local Supabase stack.' >&2
+            exit 1
+          fi
+          printf '::add-mask::%s\n' "$service_role_key"
+          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\n' "$api_url" "$service_role_key" >> "$GITHUB_ENV"
 
       - name: S54o actual hybrid invoice originals on current replay
         if: steps.berlin-night.outputs.run != 'no'
