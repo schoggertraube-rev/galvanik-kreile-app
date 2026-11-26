@@ -69,10 +69,11 @@ describe('Nähte-b: neues Menü mit den bestehenden Zielen',()=>{
  it('öffnet dieselbe Planung auch aus dem Desktop-Menü',()=>{
   const onPlanung=vi.fn();
   render(<AppShell geraet="desktop" variante="buero" aktiv="tag" kuerzel="GK"
-   suche={null} plus={null} onNav={()=>{}} onStart={()=>{}} onKonto={()=>{}} onPlanung={onPlanung}
+   suche={null} plus={null} onNav={()=>{}} onStart={()=>{}} onKonto={()=>{}} onPlanung={onPlanung} planungAktiv
   ><section>TEST Inhalt</section></AppShell>);
   const nav=within(screen.getByRole('navigation',{name:'Hauptnavigation'}));
   fireEvent.click(nav.getByRole('button',{name:'Menü öffnen'}));
+  expect(nav.getByRole('button',{name:'Planung'})).toHaveAttribute('aria-current','page');
   fireEvent.click(nav.getByRole('button',{name:'Planung'}));
   expect(onPlanung).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({type:'click'}));
  });

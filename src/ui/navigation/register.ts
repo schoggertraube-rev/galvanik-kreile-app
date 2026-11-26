@@ -17,6 +17,6 @@ export type Bereich = typeof NAVIGATION[number]['id'];
 
 export function sichtbareNavigation(ausgeblendet: readonly Bereich[]) {
   const sichtbare = NAVIGATION.filter(eintrag => !ausgeblendet.includes(eintrag.id));
-  const auftragsrecht = sichtbare.some(eintrag => eintrag.id === 'auftraege');
-  return auftragsrecht ? sichtbare.filter(eintrag => eintrag.id !== 'kunden') : sichtbare;
+  const auftragsrecht = sichtbare.some(eintrag => eintrag.id === ORDERS_NAVIGATION[0].id);
+  return auftragsrecht ? sichtbare.filter(eintrag => eintrag.id !== CUSTOMERS_NAVIGATION[0].id) : sichtbare;
 }

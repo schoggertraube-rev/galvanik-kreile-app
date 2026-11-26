@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Inbox, LogOut } from "lucide-react";
-import { useEffect,useRef,useState,type ReactNode } from "react";
+import { useEffect,useRef,useState,type MouseEvent,type ReactNode } from "react";
 import { usePathname,useRouter } from "next/navigation";
 import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
@@ -29,7 +29,21 @@ export function MoreMenu({ open, oeffner, onClose, ziele, werkzeuge, amDock }: {
     if(!open){openedAtPath.current=pathname;return;}
     if(pathname!==openedAtPath.current)onClose();
   },[pathname,open,onClose]);
-  const closeIfCurrentRoute=(href:string)=>{if(pathname===href)onClose();};
+  const closeIfCurrentRoute = (href: string, cancel: () => void) => {
+    if (new URL(href, window.location.href).href !== window.location.href) return false;
+    cancel();
+    onClose();
+    return true;
+  };
+  const nativeLink = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const {href} = event.currentTarget;
+    if (!closeIfCurrentRoute(href, () => event.preventDefault()) && amDock) {
+      // Die Seite tritt an die Stelle des geöffneten Blatts im Browserverlauf.
+      event.preventDefault();
+      window.location.replace(href);
+    }
+  };
 
   if (!open || !supportedProfile) return null;
 
@@ -56,19 +70,22 @@ export function MoreMenu({ open, oeffner, onClose, ziele, werkzeuge, amDock }: {
   return (
     <Dialog titel="Mehr" icon="grid" oeffner={oeffner} onSchliessen={onClose} beschaeftigt={busy} amDock={amDock}>
         <div className={amDock ? styles.moreDockGrid : styles.moreGrid}>
-          {hasArea("mails") ? <a className={zielStil} data-spec-id="navigation.nachrichten" href="/nachrichten" onClick={event=>{if(pathname==='/nachrichten'){event.preventDefault();onClose();}}}>
+          {hasArea("mails") ? <a className={zielStil} data-spec-id="navigation.nachrichten" href="/nachrichten" onClick={nativeLink}>
             <GlasNavigationsSymbol bereich="nachrichten" /><strong>Nachrichten</strong>
           </a> : null}
           {!amDock && erfassen}
-          {!amDock && hasPermission("perm_view_leitstand") ? <Link className={zielStil} href="/warendurchlauf" prefetch={false} onNavigate={()=>closeIfCurrentRoute('/warendurchlauf')}>
+          {!amDock && hasPermission("perm_view_leitstand") ? <Link className={zielStil} href="/warendurchlauf" prefetch={false} onNavigate={event=>{closeIfCurrentRoute('/warendurchlauf',event.preventDefault);}}>
             <GlasNavigationsSymbol bereich="werkstatt" /><strong>Werkstatt</strong>
           </Link> : null}
-          {ziele?.map(ziel => <Link key={ziel.id} className={zielStil} data-spec-id={`navigation.${ziel.id}`}
-            href={ziel.route} prefetch={false} onNavigate={() => closeIfCurrentRoute(ziel.route)}>
-            <GlasNavigationsSymbol bereich={ziel.id} ersatz={<Icon name={ziel.icon}/>} /><strong>{ziel.text}</strong>
-          </Link>)}
+          {ziele?.map(ziel => {
+            const props = {className: zielStil, 'data-spec-id': `navigation.${ziel.id}`, href: ziel.route};
+            const inhalt = <><GlasNavigationsSymbol bereich={ziel.id} ersatz={<Icon name={ziel.icon}/>} /><strong>{ziel.text}</strong></>;
+            return amDock
+              ? <a key={ziel.id} {...props} onClick={nativeLink}>{inhalt}</a>
+              : <Link key={ziel.id} {...props} prefetch={false} onNavigate={event => {closeIfCurrentRoute(ziel.route,() => event.preventDefault());}}>{inhalt}</Link>;
+          })}
           {settingsVisible ? (
-            <a className={zielStil} data-spec-id="navigation.einstellungen" href="/settings" onClick={event=>{if(pathname==='/settings'){event.preventDefault();onClose();}}}>
+            <a className={zielStil} data-spec-id="navigation.einstellungen" href="/settings" onClick={nativeLink}>
               <GlasNavigationsSymbol bereich="einstellungen" /><strong>Einstellungen</strong>
             </a>
           ) : null}

@@ -10,6 +10,7 @@ import type { Geraet } from './typen';
 import { cx } from './typen';
 import styles from './AppShell.module.css';
 import {sichtbareNavigation,type Bereich} from '../navigation/register';
+import {ORDER_WEEK_NAVIGATION} from '../navigation/orders';
 import { Glasnavigation, GlasNavigationsSymbol, type Glaseintrag } from './design-final/Glasnavigation';
 import { KREILE_KOPF_KUERZEL } from '@/ui/allgemeinCopy';
 export type {Bereich} from '../navigation/register';
@@ -25,7 +26,7 @@ export interface AppShellProps {
   onNav: (b: Bereich | 'mehr', oeffner?: HTMLButtonElement) => void;
   onStart: () => void; onKonto: (oeffner: HTMLButtonElement) => void;
   onNeuerEingang?: () => void; onWareRaus?: () => void;
-  onPlanung?: () => void;
+  onPlanung?: () => void; planungAktiv?: boolean;
   navigationsleiste?: boolean;
   /** nur variante=werkstatt */ onAuftragOeffnen?: () => void; onMehrarbeit?: () => void; onFertigMelden?: () => void;
   ebene?: ReactNode | ((werkstattWerkzeuge: ReactNode) => ReactNode); zustand?:ReactNode;children: ReactNode;
@@ -66,7 +67,8 @@ export function AppShell(p: AppShellProps) {
     ? <div className={styles.werkstattWerkzeuge}>{werkstattWeitere.map(werkstattKnopf)}</div> : null)
     : p.ebene;
   const navigation = sichtbareNavigation(aus);
-  const aktiv = p.aktiv === 'kunden' && navigation.some(entry => entry.id === 'auftraege') ? 'auftraege' : p.aktiv;
+  const aktiverBereich = p.aktiv === 'kunden' && navigation.some(entry => entry.id === 'auftraege') ? 'auftraege' : p.aktiv;
+  const aktiv = p.planungAktiv && p.onPlanung ? ORDER_WEEK_NAVIGATION.id : aktiverBereich;
   const sichtbareZiele: Glaseintrag[] = navigation.map(entry => ({
     id: entry.id,
     text: leiste && (entry.id === 'auftraege' || entry.id === 'kunden') ? 'Aufträge und Kunden' : entry.text,
@@ -75,8 +77,8 @@ export function AppShell(p: AppShellProps) {
     zaehler: p.badges?.[entry.id]?.n, aufrufen: () => p.onNav(entry.id),
   }));
   const planung: Glaseintrag | null = p.onPlanung
-    ? {id: 'planung', text: 'Planung', icon: <GlasNavigationsSymbol bereich="planung" />, dockSpalte: 4,
-      specId: 'navigation.planung', aufrufen: p.onPlanung}
+    ? {...ORDER_WEEK_NAVIGATION, icon: <GlasNavigationsSymbol bereich={ORDER_WEEK_NAVIGATION.id}/>,
+      specId: `navigation.${ORDER_WEEK_NAVIGATION.id}`, aufrufen: p.onPlanung}
     : null;
   if (planung) {
     const werkstattIndex = sichtbareZiele.findIndex(eintrag => eintrag.id === 'werkstatt');

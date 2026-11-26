@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AppShell,
   GlobalesPlus,
@@ -20,7 +20,7 @@ import styles from "./TargetShell.module.css";
 import {WasIstNeu} from './WasIstNeu';
 import {DeviceStandStatus} from '@/lib/offline/DeviceStandStatus';
 import {NAVIGATION,sichtbareNavigation} from '@/ui/navigation/register';
-import {ORDER_WEEK_ROUTE} from '@/ui/navigation/orders';
+import {ORDER_WEEK_NAVIGATION, ORDER_WEEK_ROUTE} from '@/ui/navigation/orders';
 
 function readDevice(): Geraet {
   if (window.innerWidth < 768) return "handy";
@@ -57,6 +57,7 @@ function berlinDate() {
 
 export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyle=false }: { children: React.ReactNode; globalCreate?: React.ReactNode;loginHandle?:string;vorfinalStyle?:boolean }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const permissions = usePermissions();
   const device = useSyncExternalStore(subscribeDevice, readDevice, readServerDevice);
@@ -103,9 +104,14 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   }}/> : null;
   const menuTargets = sichtbareNavigation(hidden).filter(entry =>
     !['tag', 'werkstatt', 'nachrichten', 'einstellungen'].includes(entry.id));
-  const schliesseUndOeffne = (aktion: () => void) => () => {
+  const schliesseUndOeffne = (ziel: string) => () => {
+    if (device === 'handy' && moreMenu) {
+      if (new URL(ziel, window.location.href).href === window.location.href) setMoreMenu(null);
+      else window.location.replace(ziel);
+      return;
+    }
     setMoreMenu(null);
-    aktion();
+    router.push(ziel);
   };
   const overlay = (werkstattWerkzeuge: ReactNode) => (
     <>
@@ -140,11 +146,12 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
           onStart={() => router.push("/")}
           onKonto={oeffner => setMoreMenu({oeffner})}
           onNeuerEingang={permissions.hasArea("eingang") ? () => requestGlobalCreate() : undefined}
-          onWareRaus={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/orders?station=fertig")) : undefined}
+          onWareRaus={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne("/orders?station=fertig") : undefined}
           onAuftragOeffnen={permissions.hasPermission("perm_view_leitstand") ? () => router.push("/orders") : undefined}
+          planungAktiv={pathname === ORDER_WEEK_NAVIGATION.pfad && searchParams?.get('view') === ORDER_WEEK_NAVIGATION.view}
           onPlanung={permissions.hasPermission("perm_view_leitstand") ? () => window.location.assign(ORDER_WEEK_ROUTE) : undefined}
-          onMehrarbeit={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/warendurchlauf")) : undefined}
-          onFertigMelden={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne(() => router.push("/warendurchlauf")) : undefined}
+          onMehrarbeit={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne("/warendurchlauf") : undefined}
+          onFertigMelden={permissions.hasPermission("perm_op_status") ? schliesseUndOeffne("/warendurchlauf") : undefined}
           ebene={overlay}
           >
             {children}
