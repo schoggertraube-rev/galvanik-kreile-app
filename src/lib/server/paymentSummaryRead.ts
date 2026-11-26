@@ -1,4 +1,4 @@
-import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
+import {canChangeOrderHandover,hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import {formatEuro} from '@/lib/domain/formatEuro';
 import "server-only";
 import {readOpenOrderComplaint,readOpenOrderComplaintsBatch} from './orderReleaseRead';
@@ -187,7 +187,8 @@ async function qualifyPaymentState(tx:PrivilegedTenantTransaction,authorization:
       }
       return { ...mapped,...(additionalPayments.length?{additionalPayments}:{}),...(creditApplication?{creditApplication}:{}),complaintHold:{blocked:complaint!==null,reason:'open_complaint' as const,complaintIds:complaint?.complaintIds??[]}, customerDeliveryBlock:customerDeliveryBlock(rows[0].payment_mode,rows[0].customer_overdue_invoice_ids) };
 }
-async function readPaymentStateGroupInTransaction(tx:PrivilegedTenantTransaction,authorization:PaymentReadAuthorization,orderIds:string[],readCredit?:CreditSourceRead){
+async function readPaymentStateGroup(authorization:PaymentReadAuthorization,orderIds:string[],readCredit?:CreditSourceRead){
+ return withPrivilegedTenantTransaction(authorization,async tx=>{
   const grouped=new Map<string,PaymentStateSourceRow[]>(orderIds.map(orderId=>[orderId,[]]));
   {
    const requested=sql`ARRAY[${sql.join(orderIds.map(orderId=>sql`${orderId}`),sql`, `)}]::text[]`;
@@ -219,6 +220,7 @@ async function readPaymentStateGroupInTransaction(tx:PrivilegedTenantTransaction
    result.set(orderId,data&&"code" in data?{code:"FORBIDDEN",message:"Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt."}:data?{code:"OK",data}:{code:"NOT_FOUND",message:"Zahlungs- und Warenausgangsdaten sind nicht verfügbar."});
   }
   return result;
+ });
 }
 export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot|PaymentReadAuthorization,orderIds:readonly string[],readCredit?:CreditSourceRead):Promise<Map<string,OrderPaymentStateReadResult>>{
  const readAuth='canReadSummary'in authorization?authorization:paymentReadAuthorization(authorization);
@@ -230,7 +232,7 @@ export async function getPaymentStatesBatch(authorization:AuthorizationSnapshot|
  }
  const read=async(ids:string[]):Promise<void>=>{
   if(!ids.length)return;
-  try{const rows=await withPrivilegedTenantTransaction(readAuth,tx=>readPaymentStateGroupInTransaction(tx,readAuth,ids,readCredit));for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");result.set(orderId,value);}}
+  try{const rows=await readPaymentStateGroup(readAuth,ids,readCredit);for(const orderId of ids){const value=rows.get(orderId);if(!value)throw Error("ORDER_PAYMENT_STATE_AMBIGUOUS");result.set(orderId,value);}}
   catch(error){
    if(ids.length>1){const middle=Math.floor(ids.length/2);await read(ids.slice(0,middle));await read(ids.slice(middle));return;}
    logReadFailure("getPaymentState database error",error);result.set(ids[0],{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."});
@@ -244,12 +246,16 @@ export async function getPaymentState(authorization:AuthorizationSnapshot|Paymen
  return rows.get(orderId)??{code:"UNAVAILABLE",message:"Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden."};
 }
 
-export async function getPaymentStateInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string):Promise<OrderPaymentStateReadResult>{
- if(!ORDER_ID_PATTERN.test(orderId))return {code:'VALIDATION_ERROR',message:'Ungültige Zahlungsabfrage.'};
- const readAuth=paymentReadAuthorization(auth);
- if(!readAuth.canReadOrderStates)return {code:'FORBIDDEN',message:'Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt.'};
- const rows=await readPaymentStateGroupInTransaction(tx,readAuth,[orderId]);
- const state=rows.get(orderId);
- if(!state)throw Error('ORDER_PAYMENT_STATE_AMBIGUOUS');
- return state;
+/** Same qualified source as the order card, projected to the mail release decision. */
+export async function readMailPaymentReleaseInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
+ if(!auth.active||!canChangeOrderHandover(auth,'mail')||!ORDER_ID_PATTERN.test(orderId))return null;
+ const showAmount=hasAuthorizationArea(auth,'zahlungen');
+ const rows=await tx.execute<{mode:string;paid:boolean;ready:boolean;amount:number|null}>(sql`
+   SELECT payment_mode AS mode,all_invoice_payments_allowed AS paid,goods_out_allowed AS ready,
+     CASE WHEN ${showAmount} AND active_invoice_count=1 THEN payment_open_amount_cents END AS amount
+   FROM private.read_order_payment_states_v1(${auth.tenantId},ARRAY[${orderId}]::text[])
+   WHERE order_id=${orderId} AND integrity_ok IS TRUE AND invoice_state='issued'
+     AND payment_integrity_ok IS TRUE AND payment_status IN ('offen','teilbezahlt','bezahlt')`);
+ const result=rows[0];
+ return rows.length===1&&typeof result.paid==='boolean'&&typeof result.ready==='boolean'?result:null;
 }

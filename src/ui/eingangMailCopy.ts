@@ -19,5 +19,9 @@ export const MAIL_PROMISE_COPY = {
     `Menge weicht ab (${quantity(requested)} statt ${quantity(quoted)}) – Rückfrage senden.`,
   quoteExpired: (number: string) => `KV ${number} ist abgelaufen – neue Fassung anlegen.`,
   quoteAlreadyOrder: (quote: string, order: string) => `KV ${quote} ist schon Auftrag ${order}.`,
+  verifyBankDetails: (sender: string) => `Neue Bankverbindung von ${sender} – telefonisch bestätigen.`,
+  // TODO_PL S-1/L19: final wording for the cancellation overview.
+  cancellation: (order: string, station: string, costs: string|null) =>
+    `${order} · ${station}${costs===null?'':` · Materialkosten ${costs}`}`,
   override: 'Trotzdem zusagen',
 } as const;
