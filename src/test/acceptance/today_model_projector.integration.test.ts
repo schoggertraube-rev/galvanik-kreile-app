@@ -310,12 +310,18 @@ it('reads the persisted single-row batch limit and skips incomplete rows until r
  const bounded:TodayProjectionPorts={...ports,readSources:async(capability,keys)=>{
   expect(keys).toHaveLength(1);visits.push(todaySourceKey(keys[0]));return ports.readSources(capability,keys);
  }};
- const [pending]=await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status<>'SOURCE_INCOMPLETE'`;
- expect(pending.count).toBeGreaterThan(1);
- for(let attempt=0;attempt<pending.count;attempt++)expect((await refreshTodayModel(tenant,bounded)).code).toBe('OK');
- expect(new Set(visits).size).toBe(pending.count);
+ const source=await readLiveOrderCard(await auth(),{orderId});if(source.code!=='OK')throw Error('TEST_KNOWN_CARD_REQUIRED');
+ expect(await withSession(full,()=>changeOrderPromisedDueDateAction({
+  orderId,expectedVersion:source.data.version,dueDate:'2027-08-05',reason:'TEST bounded Today refresh',clientEventId:randomUUID(),
+ }))).toMatchObject({code:'OK'});
+ const pending=await sql`SELECT kind||':'||source_id AS key FROM private.today_source_v1
+  WHERE tenant_id=${tenant} AND source_seq>built_seq`;
+ const pendingKeys=new Set(pending.map(row=>row.key));
+ expect([...pendingKeys]).toEqual(expect.arrayContaining(['order:'+orderId,'orders:*']));
+ for(let attempt=0;attempt<pendingKeys.size;attempt++)expect(await refreshTodayModel(tenant,bounded)).toMatchObject({code:'OK',built:1});
+ expect(new Set(visits)).toEqual(pendingKeys);
  expect(await refreshTodayModel(tenant,bounded)).toMatchObject({code:'OK',built:0,stale:0});
- expect(visits).toHaveLength(pending.count);
+ expect(visits).toHaveLength(pending.length);
  expect(await sql`SELECT status,source_seq=built_seq AS fresh FROM private.today_source_v1 WHERE tenant_id=${tenant} AND kind='order' AND source_id=${orderId}`).toEqual([{status:'OK',fresh:true}]);
 });
 

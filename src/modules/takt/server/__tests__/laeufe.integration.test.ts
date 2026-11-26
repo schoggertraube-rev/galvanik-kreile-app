@@ -169,7 +169,7 @@ it('führt ein abgeschaltetes Paket und ein Paket mit Lesefehler nie aus', async
     }
     throw Error('TAKT_TEST_SQL_ERROR_NOT_RAISED');
   });
-  await expect(fuehreFaelligenJobAus(tenant, {job, faelligFuer: '2026-11-25T10:01'}, leser, paketLesefehler))
+  await expect(fuehreFaelligenJobAus(tenant, {job, faelligFuer: '2026-11-25T10:01+01:00'}, leser, paketLesefehler))
     .resolves.toBe('fehler');
   expect(ausfuehren).not.toHaveBeenCalled();
   expect(leseFehler).toMatchObject({code: '22012'});
