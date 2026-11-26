@@ -73,10 +73,16 @@ describe("Gregor system administration composition", () => {
   it("keeps legal company settings and return navigation available without exposing price editors", async () => {
     const source = await ports.readSettings();
     ports.readSettings.mockResolvedValue({...source,snapshot:{...source.snapshot,capabilities:{...source.snapshot.capabilities,canManageFinancial:false}}});
-    render(await SettingsAppAdapter());
+    render(await SettingsAppAdapter({openCatalog:true}));
     expect(screen.getByRole("button",{name:"Firmendaten speichern"})).toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Leistungskatalog"})).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Stundensatz Mehrarbeit (€/h)")).not.toBeInTheDocument();
+  });
+
+  it("opens the catalog tab directly when the existing settings grant permits it",async()=>{
+    render(await SettingsAppAdapter({openCatalog:true}));
+    expect(screen.getByRole('button',{name:'Leistungskatalog'})).toHaveAttribute('aria-pressed','true');
+    expect(screen.getByRole('heading',{name:'Leistungskatalog'})).toBeVisible();
   });
 
   it("renders settings for an admin role", async () => {

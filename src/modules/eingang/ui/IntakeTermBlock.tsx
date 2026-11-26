@@ -1,15 +1,18 @@
 "use client";
 import {Button,Eingabe,Icon,Segment} from "@/ui/kr";
-import {INTAKE_PROCESSING_WEEKS,type IntakeTermSuggestion} from "@/lib/intakeSuggestionsContract";
+import {INTAKE_PROCESSING_WEEKS,type IntakeSuggestions,type IntakeTermSuggestion} from "@/lib/intakeSuggestionsContract";
+import {INTAKE_CATALOG_LINK_COPY} from '@/ui/eingangCopy';
 
 export type IntakeTermSelection={kind:"adopted"|"kept"|"proposal"|"kv";basisKey:string;wishDate:string;achievableDate:string;title?:string};
 const dateLabel=(value:string)=>new Intl.DateTimeFormat("de-DE",{timeZone:"UTC",weekday:"short",day:"2-digit",month:"2-digit"}).format(new Date(value+"T00:00:00Z"));
 
-export function IntakeTermBlock({handover,handoverOrigin,onHandover,weeks,onWeeks,term,loading,failed,date,onDate,choice,onProposal,onOffer,onKeep,onChange,canDecide,quote,expired,surfacePending}:{
+export function IntakeTermBlock({handover,handoverOrigin,onHandover,weeks,onWeeks,term,loading,failed,date,onDate,choice,onProposal,onOffer,onKeep,onChange,canDecide,quote,expired,surfacePending,missingLeadTimes,catalogHref}:{
  handover:""|"PICKUP"|"SHIPPING";handoverOrigin:"customer-card"|"last-order"|null;onHandover:(mode:"PICKUP"|"SHIPPING")=>void;
  weeks:1|2|3|5|null;onWeeks:(weeks:1|2|3|5)=>void;term:IntakeTermSuggestion|null;loading:boolean;failed:boolean;
  date:string;onDate:(date:string)=>void;choice:IntakeTermSelection|null;onProposal:(proposal:NonNullable<IntakeTermSuggestion["proposals"]>[number])=>void;
  onOffer:()=>void;onKeep:()=>void;onChange:()=>void;canDecide:boolean;quote:boolean;expired:boolean;surfacePending:boolean;
+ missingLeadTimes?:IntakeSuggestions['missingLeadTimes'];
+ catalogHref?:string;
 }){
  const blocked=term?.rating==="nicht_machbar"||term?.rating==="unmoeglich";
  return <div className="ev-tv" data-spec-id="eingang.terminvorschlag">
@@ -17,6 +20,10 @@ export function IntakeTermBlock({handover,handoverOrigin,onHandover,weeks,onWeek
   {!handover?<><div className="ev-tv-leer"><Icon name="calendar"/>Erst Abholung oder Versand wählen</div>{surfacePending?<p data-spec-id="eingang.abgleich">Noch nicht abgeglichen – erst Oberfläche wählen</p>:null}</>:<>
    <div className="ev-tv-z"><div className="ev-tv-l">Bearbeitungszeit {term?.estimatedWeeks?<small>App-Schätzung: {term.estimatedWeeks} Wochen</small>:null}</div><div className="ev-tv-k-reihe" data-spec-id="eingang.bearbeitungszeit">{INTAKE_PROCESSING_WEEKS.map(value=><button key={value} type="button" className="ev-tv-w" aria-pressed={(weeks??term?.estimatedWeeks)===value} data-spec-id={`eingang.bearbeitungszeit.${value}`} onClick={()=>onWeeks(value)}>{value} {value===1?"Woche":"Wochen"}</button>)}</div></div>
    {expired?<div className="ev-tv-wunsch ev-tv-wunsch--warn" role="status">Termin nicht mehr leistbar – neu wählen</div>:null}
+   {!loading&&!failed&&missingLeadTimes?.length?<div data-spec-id="eingang.abgleich.durchlaufzeit" role="status">
+    {missingLeadTimes.map(fact=><p key={fact.positionKey}>{fact.message}</p>)}
+    {catalogHref?<a href={catalogHref} target="_blank" rel="noopener">{INTAKE_CATALOG_LINK_COPY}</a>:null}
+   </div>:null}
    {choice?<div className="ev-vorschlag ev-vorschlag--ok"><Icon name="check"/><b>{choice.kind==="proposal"?`Liefertermin ${dateLabel(choice.achievableDate)} · Vorschlag ${choice.title} · Termin bestätigt`:choice.kind==="adopted"?`Gegenvorschlag ${dateLabel(choice.achievableDate)} · Wunsch war ${dateLabel(choice.wishDate)} · Kunde erhält ihn mit der Auftragsbestätigung`:choice.kind==="kv"?`Wunsch ${dateLabel(choice.wishDate)} übernommen (KV)`:`Wunsch ${dateLabel(choice.wishDate)} zugesagt (über Auslastung) · Termin bestätigt`}</b><Button data-spec-id="eingang.liefertermin.aendern" text="Ändern" onClick={onChange}/></div>:<>
     {failed?<p data-spec-id="eingang.abgleich">Terminvorschlag nicht verfügbar</p>:term?.unavailableReason?<p data-spec-id="eingang.abgleich" role="status">{term.unavailableReason}</p>:term&&date?<div data-spec-id="eingang.abgleich" className={`ev-tv-wunsch${blocked?" ev-tv-wunsch--warn":" ev-tv-wunsch--ok"}`}><Icon name={blocked?"alert":"check"}/><span>Wunsch {dateLabel(date)} · {term.rating==="unmoeglich"?"unmöglich":term.rating==="nicht_machbar"?"nicht machbar":term.rating??"wird geprüft"}{blocked&&term.offerDate?` · frühestens ${dateLabel(term.offerDate)}`:""}</span>{blocked&&term.offerDate?<Button data-spec-id="eingang.abgleich.anbieten" art="primaer" text={`${dateLabel(term.offerDate)} anbieten`} onClick={onOffer}/>:null}{blocked&&term.rating!=="unmoeglich"&&(canDecide||quote)?<Button data-spec-id="eingang.abgleich.trotzdem" text={quote?"Wunsch übernehmen":"Wunsch trotzdem zusagen"} onClick={onKeep}/>:null}</div>:null}
    </>}

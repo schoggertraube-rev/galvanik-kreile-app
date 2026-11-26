@@ -3,9 +3,11 @@ import {recordObservedFailure} from './actionObservation';
 import {sql} from 'drizzle-orm';
 import {createHash} from 'node:crypto';
 import {PRODUCTION_PRICING_RETRY_COPY} from '@/ui/situationCatalog';
+import {hasAuthorizationArea} from '@/lib/auth/authorizationContract';
 import type {PrivilegedTenantTransaction} from './privilegedDb';
 import {readOrderCommercialQuote,type OrderCommercialQuote} from './orderQuoteReadPort';
 import type {AuthorizationSnapshot} from './authorization';
+import type {TodayProductionWeek} from '@/lib/today/todayDashboardPolicy';
 import {withPrivilegedTenantTransaction,withTenantSavepoint} from './privilegedDb';
 /** R2: real immutable receipt context survives rollback of the pricing savepoint.
  * The root completion composition binds it to the normal TaskWriter; missing
@@ -14,19 +16,40 @@ type PricingFailureSource={phase:'basis';orderId:string;productionEventId:string
 export class ProductionPricingRetryNeeded extends Error {
  constructor(readonly source:PricingFailureSource,cause:unknown){super('PRODUCTION_PRICING_RETRY_REQUIRED',{cause});this.name='ProductionPricingRetryNeeded';recordObservedFailure('PRODUCTION_PRICING_RETRY_REQUIRED');}
 }
-/** U264: all real logins may read the single aggregate, never position prices. */
+/** U-264: all active logins see the total. Daily analysis requires Buchhaltung & Zahlen. */
 export async function readProductionWeek(auth:AuthorizationSnapshot,onDate?:string){
  if(onDate!==undefined&&(!/^\d{4}-\d{2}-\d{2}$/.test(onDate)||!Number.isFinite(Date.parse(onDate))||new Date(onDate).toISOString().slice(0,10)!==onDate))return {code:'VALIDATION_ERROR' as const};
+ const canReadDailyAmounts=hasAuthorizationArea(auth,'buchhaltung');
  try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const rows=await tx.execute<{week_start:string;week_end:string;net_cents:string;unpriced:number}>(sql`WITH bounds AS (SELECT date_trunc('week',coalesce(${onDate??null}::date,(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date))::date AS first)
+  const rows=await tx.execute<{week_start:string;week_end:string;net_cents:string;unpriced:number;days:{date:string;netCents:string}[]|null}>(sql`WITH bounds AS (
+   SELECT date_trunc('week',coalesce(${onDate??null}::date,(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date))::date AS first
+  ), daily AS (
+   SELECT (snapshot.occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin')::date AS day,
+    coalesce(sum(snapshot.direction*snapshot.net_cents),0) AS net_cents
+   FROM private.order_production_snapshots snapshot CROSS JOIN bounds
+   WHERE snapshot.tenant_id=${auth.tenantId} AND snapshot.valuation='captured'
+    AND (snapshot.occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin')>=bounds.first
+    AND (snapshot.occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin')<bounds.first+7
+   GROUP BY 1
+  )
    SELECT bounds.first::text AS week_start,(bounds.first+7)::text AS week_end,
-    coalesce((SELECT sum(snapshot.direction*snapshot.net_cents) FROM private.order_production_snapshots snapshot WHERE snapshot.tenant_id=${auth.tenantId} AND snapshot.valuation='captured'
-     AND (snapshot.occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin')>=bounds.first AND (snapshot.occurred_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Berlin')<bounds.first+7),0)::text AS net_cents,
+    coalesce((SELECT sum(net_cents) FROM daily),0)::text AS net_cents,
+    CASE WHEN ${canReadDailyAmounts} THEN
+     coalesce((SELECT jsonb_agg(jsonb_build_object('date',day::text,'netCents',net_cents::text) ORDER BY day) FROM daily),'[]'::jsonb)
+    END AS days,
     (SELECT count(*)::int FROM private.order_production_snapshots base WHERE base.tenant_id=${auth.tenantId} AND base.valuation='captured' AND base.component='base' AND base.direction=1 AND base.net_cents IS NULL
      AND NOT EXISTS(SELECT 1 FROM private.order_production_snapshots other WHERE other.item_id=base.item_id AND (other.reverses_event_id=base.event_id AND other.component='base' OR other.origin_event_id=base.event_id AND other.component='pricing'))) AS unpriced
  FROM bounds`);
   if(rows.length!==1||!Number.isSafeInteger(Number(rows[0].net_cents)))throw Error('PRODUCTION_WEEK_AMOUNT_INVALID');
-  const row=rows[0];return {code:'OK' as const,data:{weekStart:row.week_start,weekEndExclusive:row.week_end,netCents:Number(row.net_cents),currentlyUnpricedItemCount:row.unpriced}};
+  const row=rows[0];
+  const data:TodayProductionWeek={weekStart:row.week_start,weekEndExclusive:row.week_end,netCents:Number(row.net_cents),currentlyUnpricedItemCount:row.unpriced};
+  if(canReadDailyAmounts){
+   if(!Array.isArray(row.days))throw Error('PRODUCTION_DAY_SOURCE_MISSING');
+   const days=row.days.map(day=>({date:day.date,netCents:Number(day.netCents)}));
+   if(!days.every(day=>Number.isSafeInteger(day.netCents)))throw Error('PRODUCTION_DAY_AMOUNT_INVALID');
+   data.days=days;
+  }
+  return {code:'OK' as const,data};
  });}catch(error){console.error('[PRODUCTION_WEEK_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const};}
 }
 
