@@ -120,3 +120,35 @@ it("L-M3 changes handover only after a person assigns the saved mail", async () 
     code: "OK", replayed: true, receipt: { handoverMode: "pickup" },
   });
 });
+
+it("L-M3 keeps the order draft out until its original mail is assigned", async () => {
+  const customerId = await customerFixture("L-M3 Entwurf");
+  const itemId = randomUUID();
+  const id = randomUUID();
+  const clientEventId = randomUUID();
+  // Isolated initial candidate. Assignment, draft write, readback and retry use the actual commands.
+  await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,text)
+    VALUES(${itemId}::uuid,${KREILE_TENANT_SLUG},${itemId},'mail','rein','mailabruf',
+      ${full.actorId}::uuid,${customerId},'automatisch','TEST Original für Auftragsentwurf')`;
+  const { assignIntakeCustomerAction, getIntakeDraftsAction, saveIntakeDraftAction } =
+    await import("@/app/actions/eingang.actions");
+  const save = {
+    id, clientEventId, art: "eingang", lastField: null, expectedVersion: null,
+    payload: { clientKey: id, customerId, documents: [itemId], items: [{ name: "TEST Teil", quantity: "3" }] },
+  };
+  const blocked = await withSession(full, () => saveIntakeDraftAction(save));
+  expect(blocked).toMatchObject({ code: "CONFLICT" });
+  expect(await sql`SELECT id FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${id}::uuid`)
+    .toHaveLength(0);
+  expect(await withSession(full, () => assignIntakeCustomerAction({
+    itemId, customerId, version: 1, clientEventId: randomUUID(), mode: "move",
+  }))).toMatchObject({ code: "OK" });
+
+  const saved = await withSession(full, () => saveIntakeDraftAction(fresh(save)));
+  expect(saved, JSON.stringify(saved)).toMatchObject({ code: "OK" });
+  const expected = { code: "OK", drafts: expect.arrayContaining([expect.objectContaining({ id, payload: save.payload })]) };
+  expect(await withSession(full, () => getIntakeDraftsAction())).toMatchObject(expected);
+  expect(await withSession(full, () => saveIntakeDraftAction(fresh(save)))).toMatchObject(expected);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG}
+    AND event_type='INTAKE_DRAFT_SAVED_V1' AND client_event_id=${clientEventId}::uuid`).toHaveLength(1);
+});

@@ -4,7 +4,8 @@ import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { readIntakeDraftEvent, appendIntakeDraftEvent } from "@/lib/server/intakeDraftEvents";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { mayUseContinuationSources } from "./intakeContinuationAccess";
+import { INTAKE_DRAFT_MAIL_ASSIGNMENT_COPY } from "@/ui/eingangCopy";
+import { hasConfirmedCustomerAssignment, mayUseContinuationSources, readIntakeSourceRelations } from "./intakeContinuationAccess";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type DraftRow = { id: string; art: "eingang" | "kunde" | null; payload: Record<string, unknown>; zuletzt_feld: string | null; version: number; updated_at: string };
@@ -83,8 +84,55 @@ export async function discardIntakeDraft(input: unknown) {
 }
 
 export type DraftWriteInput={id:string;clientEventId:string;art:'eingang'|'kunde';payload:Record<string,unknown>;lastField:string|null;expectedVersion:number|null};
+
+async function draftMailFailure(
+  tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, payload: DraftWriteInput['payload'],
+  continuationOriginals?: readonly string[],
+) {
+  const { documents, sourceItemId } = payload;
+  const copy = INTAKE_DRAFT_MAIL_ASSIGNMENT_COPY;
+  if (!continuationOriginals && documents !== undefined && !Array.isArray(documents)) {
+    return { code: 'VALIDATION_ERROR' as const, message: copy.sourceMissing };
+  }
+  const suppliedIds = continuationOriginals ?? [...(Array.isArray(documents) ? documents : []), ...(sourceItemId == null ? [] : [sourceItemId])];
+  const ids = new Set<string>();
+  for (const id of suppliedIds) {
+    if (typeof id !== 'string' || !UUID.test(id)) return { code: 'VALIDATION_ERROR' as const, message: copy.sourceMissing };
+    ids.add(id.toLowerCase());
+  }
+  if (!ids.size) return null;
+
+  const sourceRelations = await readIntakeSourceRelations(tx, auth.tenantId, [...ids]);
+  const foundIds = new Set(sourceRelations.map(row => row.id));
+  if ([...ids].some(id => !foundIds.has(id)) || sourceRelations.some(row => row.has_parent && !row.source_id)) {
+    return { code: 'CONFLICT' as const, message: copy.sourceMissing };
+  }
+  const mailIds = new Set<string>();
+  for (const row of sourceRelations) {
+    if (row.channel === 'mail' && !row.has_parent) mailIds.add(row.id);
+    if (row.source_channel === 'mail' && row.source_id) mailIds.add(row.source_id);
+  }
+  if (!mailIds.size) return null;
+  if (!hasAuthorizationArea(auth, 'mails')) return { code: 'FORBIDDEN' as const, message: copy.needsMailAccess };
+
+  const mails = await tx.execute<{ kunde_id: string | null; zuordnung: string; kennzeichen: string[] }>(sql`
+    SELECT kunde_id,zuordnung,kennzeichen FROM public.intake_item
+    WHERE tenant_id=${auth.tenantId} AND kanal='mail'
+      AND id=ANY(ARRAY[${sql.join([...mailIds].map(id => sql`${id}`), sql`, `)}]::uuid[])
+    ORDER BY id FOR SHARE NOWAIT`);
+  const customer = object(payload.request) && object(payload.request.customer) ? payload.request.customer : null;
+  const selectedCustomerId = payload.customerId ?? customer?.customerId;
+  const confirmedCustomers = new Set(mails.map(mail => mail.kunde_id));
+  if (mails.length !== mailIds.size || confirmedCustomers.size !== 1 || mails.some(mail =>
+    !mail.kunde_id || !hasConfirmedCustomerAssignment(mail.zuordnung) || mail.kennzeichen.includes('in_erfassung_verworfen')
+    || selectedCustomerId != null && selectedCustomerId !== mail.kunde_id)) {
+    return { code: 'CONFLICT' as const, message: copy.needsConfirmation };
+  }
+  return null;
+}
+
 /** The existing X12 writer, also used inside the prospect transaction. */
-export async function writeIntakeDraftInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:DraftWriteInput){
+export async function writeIntakeDraftInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:DraftWriteInput,continuationOriginals?:readonly string[]){
   const serialized=JSON.stringify(input.payload);
   if(serialized.length>250_000)return {code:'VALIDATION_ERROR' as const,message:'Entwurf ist zu groß.'};
   const intent = createHash("sha256").update(JSON.stringify([input.id,input.art,input.payload,input.lastField,input.expectedVersion])).digest("hex");
@@ -95,6 +143,10 @@ export async function writeIntakeDraftInTransaction(tx:PrivilegedTenantTransacti
     WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND id=${input.id}::uuid FOR UPDATE`);
   if (!current.length && input.expectedVersion!==null) return {code:"CONFLICT" as const,message:"Dieser Entwurf wurde bereits gebucht oder verworfen. Eingaben bleiben erhalten."};
   if (current.length && current[0]!.version!==input.expectedVersion) return {code:"CONFLICT" as const,message:"Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten."};
+  if (input.art === 'eingang') {
+    const failure = await draftMailFailure(tx, auth, input.payload, continuationOriginals);
+    if (failure) return failure;
+  }
   if (current.length) await tx.execute(sql`UPDATE private.intake_drafts SET art=${input.art},payload=${serialized}::jsonb,
     zuletzt_feld=${input.lastField},status='open',version=version+1,updated_at=statement_timestamp()
     WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND id=${input.id}::uuid`);
@@ -161,7 +213,7 @@ export async function createIntakeContinuation(input: unknown) {
       if (!event.length) return { code:"CONFLICT" as const, message:"Der unveränderte Originaltext ist nicht nachgewiesen." };
       const existing = await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND (id=${value.childId}::uuid OR client_key=${value.childId})`);
       if (existing.length) return { code:"CONFLICT" as const, message:"Die Eingangskennung wird bereits verwendet." };
-      const draftResult = await writeIntakeDraftInTransaction(tx,auth,{id:value.draftId,clientEventId:value.clientEventId,art:"eingang",payload:value.payload,lastField:null,expectedVersion:null});
+      const draftResult = await writeIntakeDraftInTransaction(tx,auth,{id:value.draftId,clientEventId:value.clientEventId,art:"eingang",payload:value.payload,lastField:null,expectedVersion:null},[value.parentId,value.textSourceId]);
       if (draftResult) return draftResult;
       await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,fortsetzung_von,file_id)
         VALUES(${value.childId}::uuid,${auth.tenantId},${value.childId},${parent.kanal === "mail" || textSource.kanal === "mail" ? "mail" : parent.kanal},'intern','app',${auth.userId}::uuid,${value.parentId}::uuid,${value.fileId}::uuid)`);

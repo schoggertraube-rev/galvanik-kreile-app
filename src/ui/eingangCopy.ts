@@ -47,3 +47,9 @@ export const PACKAGE_ONSITE_COPY={partial:(name:string,nr:string)=>'Kunde '+name
 export const QUOTE_POSITION_COPY={title:'Positionen',position:(n:number)=>'Position '+n,remove:(n:number)=>'Position '+n+' entfernen',name:'Teil / Leistung',placeholder:'Katalog oder Freitext',quantity:'Menge',material:'Material',surface:'Oberfläche',choose:'Bitte wählen',unit:'Einheit',price:'Preis netto (€)',add:'Position hinzufügen'} as const;
 export const PACKAGE_ASSIGN_COPY={notConnected:'Kundenzuordnung ist nicht verbunden · Original bleibt erhalten.',changed:'Kunde wurde inzwischen zugeordnet · neu lesen.',failed:'Zuordnung nicht bestätigt · Original und Auswahl bleiben erhalten.',unavailable:PACKAGE_UNAVAILABLE_COPY} as const;
 export const INTAKE_MAIL_ADDRESS_MISSING_COPY='Adresse fehlt';
+// TODO_PL: Text für einen Entwurf mit ungeklärter Original-Mail.
+export const INTAKE_DRAFT_MAIL_ASSIGNMENT_COPY = {
+ sourceMissing: "Das Original zum Entwurf ist nicht verfügbar. Deine Eingaben bleiben erhalten.",
+ needsConfirmation: "Ordne die Original-Mail dem Kunden zu. Deine Eingaben bleiben erhalten.",
+ needsMailAccess: "Dir fehlt der Bereich Mails für dieses Original. Deine Eingaben bleiben erhalten.",
+} as const;

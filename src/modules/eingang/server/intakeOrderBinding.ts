@@ -8,15 +8,11 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {readIntakeProspectReference,type IntakeProspectReference} from './intakeProspect';
-import {mayUseContinuationSources} from "./intakeContinuationAccess";
+import {hasConfirmedCustomerAssignment,mayUseContinuationSources} from "./intakeContinuationAccess";
 import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 
 export type IntakeOrderSource = { id: string; version: number };
 type Row = { id:string; kanal:string; fortsetzung_von:string|null; kunde_id:string|null; vorgang_art:string|null; vorgang_id:string|null; version:number; kennzeichen:string[]; erstellt_von:string; text:string|null };
-
-function hasConfirmedCustomerAssignment(assignment: string): boolean {
-  return assignment==='bestaetigt'||assignment==='hand';
-}
 
 /** U252: one immutable imported mail is the authority for this order instruction. */
 export async function readIntakeHandoverMail(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;lock?:boolean}){
