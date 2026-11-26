@@ -43,6 +43,7 @@
       "private.v_order_freeze_state_v1"
     ],
     "src/lib/server/commands/orderExtraWorkCommand.ts": [
+      "private.v_order_extra_work_live_v1",
       "private.v_order_freeze_state_v1",
       "private.v_order_item_extra_work_receipts_v1"
     ],
@@ -215,6 +216,10 @@
     ],
     "src/modules/eingang/server/intakeMessages.ts": [
       "private.v_intake_message_contexts_v1"
+    ],
+    "src/modules/orders/server/mehrarbeitBuchungen.ts": [
+      "private.v_order_extra_work_live_v1",
+      "private.v_order_item_extra_work_receipts_v1"
     ],
     "src/modules/orders/server/reworkOrderCommand.ts": [
       "public.v_complaint_rework_context_v1"
