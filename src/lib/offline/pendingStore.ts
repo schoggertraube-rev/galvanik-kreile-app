@@ -37,6 +37,9 @@ export type PendingWorkshopOriginal=PendingWorkshopCommand&{id:string;itemId:str
 export type PendingPhysicalWorkshopOriginal=Extract<PendingWorkshopOriginal,{command:'item.finished'|'item.extraWork'}>;
 export type PendingWorkshopReceipt={scope:string;clientEventId:string;deviceCapturedAt:string;eventId:string;actorId:string};
 export type PendingEntry=PendingOriginal|PendingWorkshopOriginal|PendingQuarantine;
+type IdleClockSample={localAt:number;monotonicAt:number};
+type ConfirmedIdleDeadline=IdleClockSample&{serverAt:number;expiresAt:number};
+type LegacyIdleDeadline={confirmedAt:number;expiresAt:number};
 type SharedQueue = {
  storeName: string;
  databaseVersion: number;
@@ -47,9 +50,16 @@ type SharedQueue = {
   validate: typeof isPendingWorkshopOriginal) => Promise<PendingWorkshopOriginal|null|boolean>;
  acknowledgeMail: (db: IDBDatabase, row: PendingWorkshopOriginal) => Promise<boolean>;
  requestReplay: (scope: string, row: PendingWorkshopOriginal, keepalive: boolean) => Promise<Response>;
+ idleClockSample: () => IdleClockSample|null;
+ isConfirmedIdleClock: (value: unknown) => value is ConfirmedIdleDeadline;
+ makeConfirmedIdleClock: (serverAt: number, expiresAt: number, started: IdleClockSample|null) => ConfirmedIdleDeadline|null;
+ remainingIdleClock: (value: unknown) => number|null;
 };
 const sharedQueue = (globalThis as typeof globalThis & { KreileOfflineQueue: SharedQueue }).KreileOfflineQueue;
 export const requestPendingReplay = sharedQueue.requestReplay;
+export const captureIdleClock = sharedQueue.idleClockSample;
+export const makeConfirmedIdleClock = sharedQueue.makeConfirmedIdleClock;
+export const remainingIdleClock = sharedQueue.remainingIdleClock;
 export function isPendingWorkshopOriginal(value:unknown):value is PendingWorkshopOriginal{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>,input=row.input;
@@ -103,8 +113,7 @@ async function database(scope: string): Promise<IDBDatabase> {
     request.onblocked = () => {abandoned=true;reject(new Error("INTAKE_PENDING_STORAGE_BLOCKED"));};
   });
 }
-type ConfirmedIdleDeadline={confirmedAt:number;expiresAt:number};
-export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string;idleDeadline?:ConfirmedIdleDeadline};
+export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string;idleDeadline?:ConfirmedIdleDeadline|LegacyIdleDeadline};
 /** Exact metadata-only U2 response, already filtered by the server port. */
 type DeviceEnvelope={serverChangedAt?:string|null;portVersion:1;objectId:string;serverReadAt:string;sourceLoginScope:string};
 type DeviceDashboard={items:readonly unknown[];visibleFields:readonly unknown[];layout:readonly unknown[];defaultLayout:readonly unknown[];allowedFields:readonly unknown[];delegationTargets:readonly unknown[];outlookMessage:string|null;messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:readonly {messageId:string;version:number;read:import('@/lib/domain/u2ReadContract').U2Read}[];missingMessageIds:readonly string[]}};
@@ -232,7 +241,7 @@ export async function readPendingDeviceStand(scope:string,loginScope:string):Pro
  });
 }
 type ShellRead={code:'EMPTY'}|{code:'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata};
-function confirmedIdleDeadline(value:unknown):value is ConfirmedIdleDeadline{
+function legacyIdleDeadline(value:unknown):value is LegacyIdleDeadline{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>;
  return Object.keys(row).length===2&&typeof row.confirmedAt==='number'&&Number.isSafeInteger(row.confirmedAt)
@@ -242,7 +251,7 @@ function shellMetadata(value:unknown,scope:string):value is PendingShellMetadata
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>;
  const shape=Object.keys(row).length===3&&row.idleDeadline===undefined
-  ||Object.keys(row).length===4&&row.scope===scope&&confirmedIdleDeadline(row.idleDeadline);
+  ||Object.keys(row).length===4&&row.scope===scope&&(sharedQueue.isConfirmedIdleClock(row.idleDeadline)||legacyIdleDeadline(row.idleDeadline));
  return shape&&(row.scope===scope||row.scope===null)&&typeof row.cacheGeneration==='number'&&Number.isSafeInteger(row.cacheGeneration)&&row.cacheGeneration>0&&row.cacheGeneration<Number.MAX_SAFE_INTEGER&&typeof row.updatedAt==='string'&&Number.isFinite(Date.parse(row.updatedAt));
 }
 function shellKey(loginScope:string):string{if(!/^[0-9a-f]{64}$/.test(loginScope))throw Error('OFFLINE_SHELL_LOGIN_SCOPE_REQUIRED');return 'login:'+loginScope;}
@@ -257,7 +266,7 @@ export async function readPendingShellMetadata(scope:string,loginScope:string):P
 }
 /** Project the server's latest confirmed time into the existing read metadata. */
 export async function rememberPendingShellDeadline(scope:string,loginScope:string,deadline:ConfirmedIdleDeadline):Promise<void>{
- if(!confirmedIdleDeadline(deadline)||readCacheScopeMarker()!==loginScope)return;
+ if(remainingIdleClock(deadline)===null||readCacheScopeMarker()!==loginScope)return;
  const key=shellKey(loginScope),connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction(SHELL_STORE,'readwrite'),store=tx.objectStore(SHELL_STORE),read=store.get(key);
@@ -265,8 +274,7 @@ export async function rememberPendingShellDeadline(scope:string,loginScope:strin
    const previous:unknown=read.result;
    if(readCacheScopeMarker()!==loginScope||!shellMetadata(previous,loginScope)||previous.scope!==loginScope)return;
    const old=previous.idleDeadline;
-   if(old&&(old.confirmedAt>deadline.confirmedAt
-      ||old.confirmedAt===deadline.confirmedAt&&old.expiresAt<=deadline.expiresAt))return;
+   if(sharedQueue.isConfirmedIdleClock(old)&&old.serverAt>=deadline.serverAt)return;
    store.put({...previous,idleDeadline:deadline},key);
   };
   tx.oncomplete=()=>{connection.close();resolve();};

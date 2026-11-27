@@ -118,10 +118,7 @@ async function existingShell(scope, login) {
       tx.onabort = () => { db.close(); reject(Error("OFFLINE_WORKER_METADATA_ABORTED")); };
       tx.oncomplete = () => {
         db.close(); const row = read.result;
-        const time = row?.idleDeadline;
-        const now = Date.now();
-        const idleAllowed = time && Object.keys(time).length === 2 && Number.isSafeInteger(time.confirmedAt)
-          && time.confirmedAt > 0 && time.confirmedAt <= now && Number.isSafeInteger(time.expiresAt) && now < time.expiresAt;
+        const idleAllowed = globalThis.KreileOfflineQueue.remainingIdleClock(row?.idleDeadline) !== null;
         resolve(row && typeof row === "object" && Object.keys(row).length === 4 && idleAllowed && row.scope === login && Number.isSafeInteger(row.cacheGeneration) && row.cacheGeneration > 0 && row.cacheGeneration < Number.MAX_SAFE_INTEGER && typeof row.updatedAt === "string" && Number.isFinite(Date.parse(row.updatedAt)) ? row : null);
       };
     };
@@ -149,7 +146,8 @@ async function readPrivateNavigation(request) {
     const html=await response.clone().text(),root=/<html\b[^>]*>/i.exec(html)?.[0];
     if(!root||!root.includes('data-auth-status="authenticated"')||!root.includes('data-offline-24h="enabled"')||!root.includes('data-offline-scope="'+selected.scope+'"')||!root.includes('data-offline-login-scope="'+login+'"'))return null;
     const current = await existingShell(selected.scope, login);
-    if (await privateLoginMarker() !== login || !current || current.cacheGeneration !== selected.generation || Date.now() >= current.idleDeadline.expiresAt) return null;
+    if (await privateLoginMarker() !== login || !current || current.cacheGeneration !== selected.generation
+      || globalThis.KreileOfflineQueue.remainingIdleClock(current.idleDeadline) === null) return null;
     return response;
   } catch { console.error("[OFFLINE_WORKER_PRIVATE_READ_BLOCKED]"); return null; }
 }

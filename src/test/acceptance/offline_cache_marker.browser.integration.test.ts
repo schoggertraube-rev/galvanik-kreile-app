@@ -8,7 +8,13 @@ import {randomUUID} from 'node:crypto';
 import {build} from 'esbuild';
 it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('a missing login marker prevents old cache reads after both deletion stores fail and the browser reloads',async()=>{
  const compiled=await build({stdin:{contents:`export * from './src/lib/offline/pendingStore.ts';export * from './src/lib/offline/logoutReadState.ts';export * from './src/lib/offline/cacheScopeMarker.ts';export * from './src/lib/offline/privateReadCache.ts';`,resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'browser'});
- const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/queue.mjs'?'text/javascript':'text/html');res.end(req.url==='/queue.mjs'?compiled.outputFiles[0].text:req.url==='/TEST-warm'?`<!doctype html><html data-auth-status="authenticated" data-offline-24h="enabled" data-offline-scope="${'a'.repeat(64)}" data-offline-login-scope="${'b'.repeat(64)}"><title>TEST synthetic qualified warm response</title></html>`:'<!doctype html><title>TEST synthetic cache fence only</title>');});
+ const server=createServer((req,res)=>{
+  const now=Date.now(),warm=req.url==='/TEST-warm'||req.url==='/TEST-no-clock';
+  res.setHeader('Content-Type',req.url==='/queue.mjs'?'text/javascript':'text/html');
+  res.end(req.url==='/queue.mjs'?compiled.outputFiles[0].text:warm?
+   `<!doctype html><html data-auth-status="authenticated" data-offline-24h="enabled" data-offline-scope="${'a'.repeat(64)}" data-offline-login-scope="${'b'.repeat(64)}" ${req.url==='/TEST-warm'?`data-offline-idle-confirmed-at="${now}" data-offline-idle-expires-at="${now+60_000}"`:''}><title>TEST synthetic qualified warm response</title></html>`
+   :'<!doctype html><title>TEST synthetic cache fence only</title>');
+ });
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw Error('TEST_LOOPBACK');
  const execute=promisify(execFile),session='TEST-marker-'+randomUUID();const cli=(args:string[])=>execute(process.execPath,[process.env.KREILE_PLAYWRIGHT_CLI_JS!,`-s=${session}`,...args],{maxBuffer:1024*1024,timeout:90000});
  const evaluate=async(code:string)=>{const encoded=Buffer.from('('+code+')').toString('base64');const result=await cli(['eval',`async()=>await(eval(atob('${encoded}')))()`]).catch(error=>{throw Error('TEST_BROWSER: '+String(error.stdout??error.message).slice(0,1500));});expect(result.stdout).not.toContain('### Error');return result.stdout;};
@@ -23,8 +29,10 @@ it.skipIf(!process.env.KREILE_PLAYWRIGHT_CLI_JS)('a missing login marker prevent
    const cache=await caches.open(p.qualifiedPrivateCacheName(scope,login,1));
    await cache.put('/TEST-private',new Response('<p>TEST private content</p>',{headers:{'Content-Type':'text/html'}}));
    await cache.put('/api/TEST',new Response('<p>TEST poisoned API</p>',{headers:{'Content-Type':'text/html'}}));
-   if(!await p.readScopedPrivateResponse(scope,login,'/TEST-private')||await p.readScopedPrivateResponse(scope,login,'/api/TEST'))throw Error('TEST_READER_BOUNDARY');
+   if(await p.readScopedPrivateResponse(scope,login,'/TEST-private'))throw Error('TEST_READER_USED_UNCONFIRMED_CLOCK');
    if(!await p.warmScopedPrivateResponse(scope,login,new URL('/TEST-warm',location.origin))||!await p.readScopedPrivateResponse(scope,login,'/TEST-warm'))throw Error('TEST_QUALIFIED_HTML_NOT_STORED');
+   if(!await p.readScopedPrivateResponse(scope,login,'/TEST-private')||await p.readScopedPrivateResponse(scope,login,'/api/TEST'))throw Error('TEST_READER_BOUNDARY');
+   if(await p.warmScopedPrivateResponse(scope,login,new URL('/TEST-no-clock',location.origin))||await cache.match('/TEST-no-clock'))throw Error('TEST_HTML_WITHOUT_CLOCK_STORED');
    if(await p.warmScopedPrivateResponse(scope,login,new URL('/TEST-no-auth',location.origin))||await cache.match('/TEST-no-auth'))throw Error('TEST_UNQUALIFIED_HTML_STORED');
    for(const headers of [{Authorization:'TEST not authority'},{RSC:'1'},{'Next-Router-State-Tree':'TEST'}])if(await p.readScopedPrivateResponse(scope,login,new Request(location.origin+'/TEST-warm',{headers})))throw Error('TEST_PRIVATE_SUBREQUEST_READ');
    const nativePut=Cache.prototype.put;

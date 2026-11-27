@@ -1,7 +1,7 @@
 
 import {reportProtocolClientError} from '@/modules/logging/public';
 import {hasCacheScopeMarker,readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
-import {readPendingShellMetadata,changePendingShellMetadata,rememberPendingShellDeadline,revokeUnmarkedPendingDeviceReads} from './pendingStore';
+import {captureIdleClock,makeConfirmedIdleClock,readPendingShellMetadata,changePendingShellMetadata,rememberPendingShellDeadline,remainingIdleClock,revokeUnmarkedPendingDeviceReads} from './pendingStore';
 import {privateReadCachePrefix} from './logoutReadState';
 
 export function qualifiedPrivateCacheName(scope:string,loginScope:string,generation:number):string{
@@ -42,7 +42,7 @@ export async function readScopedPrivateResponse(scope:string,loginScope:string,r
  }
  try{
   const state=await readPendingShellMetadata(scope,loginScope);
-  if(state.code!=='OK'||state.metadata.scope!==loginScope)return null;
+  if(state.code!=='OK'||state.metadata.scope!==loginScope||remainingIdleClock(state.metadata.idleDeadline)===null)return null;
   const name=qualifiedPrivateCacheName(scope,loginScope,state.metadata.cacheGeneration);
   // Opening a missing cache would create a replacement truth; only read existing.
   if(!(await caches.keys()).includes(name))return null;
@@ -50,7 +50,8 @@ export async function readScopedPrivateResponse(scope:string,loginScope:string,r
   const response=await caches.match(request,{cacheName:name});
   if(response&&(!response.ok||response.redirected||!/^text\/html(?:;|$)/i.test(response.headers.get('content-type')??'')))return null;
   const current=await readPendingShellMetadata(scope,loginScope);
-  if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration)return null;
+  if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration
+    ||remainingIdleClock(current.metadata.idleDeadline)===null)return null;
   return response??null;
  }catch{reportProtocolClientError('OFFLINE_PRIVATE_CACHE_READ_BLOCKED');return null;}
 }
@@ -62,11 +63,14 @@ export async function readScopedPrivateResponse(scope:string,loginScope:string,r
 export async function warmScopedPrivateResponse(scope:string,loginScope:string,url:URL):Promise<boolean>{
  if(!/^[a-f0-9]{64}$/.test(scope)||readCacheScopeMarker()!==loginScope||url.origin!==window.location.origin||url.search!==''||/^\/(?:api|auth|start|login)(?:\/|$)/.test(url.pathname))return false;
  try{
+  const started=captureIdleClock();
   const response=await fetch(url,{credentials:'same-origin',cache:'no-store',headers:{Accept:'text/html'}});
   if(!response.ok||response.redirected||!/^text\/html(?:;|$)/i.test(response.headers.get('content-type')??''))return false;
   const document=new DOMParser().parseFromString(await response.clone().text(),'text/html');
   const root=document.documentElement;
   if(root.dataset.authStatus!=='authenticated'||root.getAttribute('data-offline-24h')!=='enabled'||root.dataset.offlineScope!==scope||root.dataset.offlineLoginScope!==loginScope||readCacheScopeMarker()!==loginScope)return false;
+  const deadline=makeConfirmedIdleClock(Number(root.dataset.offlineIdleConfirmedAt),Number(root.dataset.offlineIdleExpiresAt),started);
+  if(!deadline)return false;
   let state=await readPendingShellMetadata(scope,loginScope);
   if(state.code==='EMPTY'){
    const activated=await changePendingShellMetadata(scope,loginScope,null,true);
@@ -77,16 +81,13 @@ export async function warmScopedPrivateResponse(scope:string,loginScope:string,u
    window.dispatchEvent(new CustomEvent('kreile-offline-shell-ready',{detail:{scope,loginScope}}));
   }
   if(state.code!=='OK'||state.metadata.scope!==loginScope||readCacheScopeMarker()!==loginScope)return false;
-  if(root.dataset.offlineIdleConfirmedAt&&root.dataset.offlineIdleExpiresAt){
-   await rememberPendingShellDeadline(scope,loginScope,{
-    confirmedAt:Number(root.dataset.offlineIdleConfirmedAt),expiresAt:Number(root.dataset.offlineIdleExpiresAt),
-   });
-  }
+  await rememberPendingShellDeadline(scope,loginScope,deadline);
   const name=qualifiedPrivateCacheName(scope,loginScope,state.metadata.cacheGeneration);
   const cache=await caches.open(name);
   await cache.put(url,response);
   const current=await readPendingShellMetadata(scope,loginScope);
-  if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration){await caches.delete(name);return false;}
+  if(readCacheScopeMarker()!==loginScope||current.code!=='OK'||current.metadata.scope!==loginScope||current.metadata.cacheGeneration!==state.metadata.cacheGeneration
+    ||remainingIdleClock(current.metadata.idleDeadline)===null){await caches.delete(name);return false;}
   return true;
  }catch{reportProtocolClientError('OFFLINE_PRIVATE_CACHE_WARM_FAILED');return false;}
 }

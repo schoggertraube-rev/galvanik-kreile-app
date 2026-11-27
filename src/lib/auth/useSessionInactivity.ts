@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { recordAppSessionActivity } from '@/app/actions/auth.actions';
+import { getAuthorizationSnapshotAction, recordAppSessionActivity } from '@/app/actions/auth.actions';
+import { readCacheScopeMarker } from '@/lib/offline/cacheScopeMarker';
 import { logoutWithReadCleanup } from '@/lib/offline/logoutWithReadCleanup';
-import { rememberPendingShellDeadline } from '@/lib/offline/pendingStore';
+import { captureIdleClock, makeConfirmedIdleClock, readPendingShellMetadata, rememberPendingShellDeadline, remainingIdleClock } from '@/lib/offline/pendingStore';
 import { INACTIVITY_COPY } from '@/ui/inaktivitaetTexte';
 import type { SessionInactivity } from './sessionInactivity';
 
@@ -18,20 +19,23 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
     let disposed = false;
     let expiring = false;
     let recording = false;
+    const root = document.documentElement;
+    const scope = root.dataset.offlineScope;
+    const loginScope = initial.sessionScope;
+    const offlineEnabled = root.getAttribute('data-offline-24h') === 'enabled';
+    let checkingCache = offlineEnabled;
 
-    const publishDeadline = (current: SessionInactivity) => {
-      const root = document.documentElement;
-      const scope = root.dataset.offlineScope;
-      const loginScope = initial.sessionScope;
-      if (!scope || !loginScope || root.dataset.offlineLoginScope !== loginScope
-        || root.getAttribute('data-offline-24h') !== 'enabled' || current.serverAt === undefined) return;
-      void rememberPendingShellDeadline(scope, loginScope, { confirmedAt: current.serverAt, expiresAt: current.expiresAt })
-        .catch(() => console.error('[OFFLINE_SHELL_DEADLINE_WRITE_FAILED]'));
-    };
-    const applyServerTime = (current: SessionInactivity) => {
+    const applyServerTime = (current: SessionInactivity, started: ReturnType<typeof captureIdleClock>) => {
       windowState = current;
       clockOffset = (current.serverAt ?? Date.now()) - performance.now();
-      publishDeadline(current);
+      if (!scope || !loginScope || current.sessionScope !== loginScope || root.dataset.offlineLoginScope !== loginScope
+        || !offlineEnabled || current.serverAt === undefined) return;
+      const deadline = makeConfirmedIdleClock(current.serverAt, current.expiresAt, started);
+      const remaining = remainingIdleClock(deadline);
+      if (!deadline || remaining === null) return;
+      clockOffset = current.expiresAt - remaining - performance.now();
+      void rememberPendingShellDeadline(scope, loginScope, deadline)
+        .catch(() => console.error('[OFFLINE_SHELL_DEADLINE_WRITE_FAILED]'));
     };
     const serverNow = () => performance.now() + clockOffset;
 
@@ -40,11 +44,12 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
       expiring = true;
       setExpired(true);
       try {
+        const started = captureIdleClock();
         const result = await logoutWithReadCleanup('inactivity', initial.sessionScope);
         if (disposed) return;
         if (!result.ok) {
           if (result.code === 'ACTIVE') {
-            applyServerTime(result.inactivity);
+            applyServerTime(result.inactivity, started);
             expiring = false;
             setExpired(false);
             schedule();
@@ -67,16 +72,17 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
     }
 
     const interact = async (event: Event) => {
-      if (!event.isTrusted || disposed || expiring || recording || !navigator.onLine) return;
+      if (!event.isTrusted || disposed || expiring || recording || checkingCache || !navigator.onLine) return;
       const now = serverNow();
       if (now >= windowState.expiresAt) return void expire();
       if (now - windowState.lastSeen < Math.min(30_000, windowState.minutes * 10_000)) return;
       recording = true;
       try {
+        const started = captureIdleClock();
         const result = await recordAppSessionActivity();
         if (disposed) return;
         if (result.code === 'OK') {
-          applyServerTime(result.inactivity);
+          applyServerTime(result.inactivity, started);
           schedule();
         } else if (result.code === 'EXPIRED') {
           void expire();
@@ -88,8 +94,49 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
       }
     };
 
-    publishDeadline(initial);
-    schedule();
+    const openScopedView = async () => {
+      setExpired(true);
+      const open = (remaining: number) => {
+        clockOffset = windowState.expiresAt - remaining - performance.now();
+        checkingCache = false;
+        setExpired(false);
+        schedule();
+      };
+      try {
+        if (!scope || !loginScope || root.dataset.offlineLoginScope !== loginScope) return;
+        if (readCacheScopeMarker() === loginScope) {
+          let state: Awaited<ReturnType<typeof readPendingShellMetadata>> | undefined;
+          try {
+            state = await readPendingShellMetadata(scope, loginScope);
+          } catch {
+            console.error('[OFFLINE_SHELL_DEADLINE_READ_FAILED]');
+          }
+          if (disposed) return;
+          const remaining = state?.code === 'OK' && state.metadata.scope === loginScope && readCacheScopeMarker() === loginScope
+            ? remainingIdleClock(state.metadata.idleDeadline) : null;
+          if (remaining !== null) return open(remaining);
+        }
+        // Without a local anchor only an authenticated server response can open this view.
+        if (!navigator.onLine) return;
+        const started = captureIdleClock();
+        const result = await getAuthorizationSnapshotAction();
+        if (disposed || !result.ok || result.data.offlineScope !== scope || result.data.offline24h !== true) return;
+        const current = result.data.inactivity;
+        if (current?.sessionScope !== loginScope || current.serverAt === undefined) return;
+        const deadline = makeConfirmedIdleClock(current.serverAt, current.expiresAt, started);
+        const remaining = remainingIdleClock(deadline);
+        if (!deadline || remaining === null) return;
+        windowState = current;
+        void rememberPendingShellDeadline(scope, loginScope, deadline).catch(() => console.error('[OFFLINE_SHELL_DEADLINE_WRITE_FAILED]'));
+        open(remaining);
+      } catch {
+        console.error('[OFFLINE_SHELL_DEADLINE_READ_FAILED]');
+      } finally {
+        if (!disposed && checkingCache) window.location.replace('/start');
+      }
+    };
+    if (checkingCache) void openScopedView();
+    else schedule();
     window.addEventListener('pointerdown', interact, { passive: true });
     window.addEventListener('wheel', interact, { passive: true });
     window.addEventListener('keydown', interact);
