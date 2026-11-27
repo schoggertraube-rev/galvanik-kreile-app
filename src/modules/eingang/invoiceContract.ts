@@ -17,8 +17,10 @@ export const EMPTY_INVOICE_FIELDS: InvoiceFields = {
 export type InvoiceSupplier = {
   id: string; name: string; iban: string | null; paymentTermDays: number | null;
 };
+export type InvoicePageRange = { from: number; to: number };
 export type IncomingInvoice = {
   id: string; nummer_intern: string; item_id: string; file_id: string;
+  seite_von: number | null; seite_bis: number | null;
   lieferant_id: string | null; nummer: string | null; datum: string | null;
   netto: string | null; ust: string | null; brutto: string | null;
   ust_saetze: InvoiceTaxRate[] | null;
@@ -50,6 +52,7 @@ export type InvoiceFailure = {
 export type InvoiceReadResult = { code: 'OK'; view: InvoiceView } | InvoiceFailure;
 export type InvoiceSaveInput = {
   itemId: string; fileId: string; version: number; clientKey: string;
+  pages?: InvoicePageRange | null;
   fields: InvoiceFields; status: Exclude<IncomingInvoiceStatus, 'ungueltig'>;
   paidDate: string | null; proofFileId: string | null;
   duplicateId: string | null; duplicateReason: string | null; unclearReason: string | null;

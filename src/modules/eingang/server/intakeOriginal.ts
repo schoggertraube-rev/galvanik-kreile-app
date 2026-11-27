@@ -31,7 +31,9 @@ async function readOriginalFile(auth:AuthorizationSnapshot,fileId:string,mime?:I
 
 function originalStorage(){return createAdminClient().storage.from('scans');}
 
-async function verifiedOriginalBytes(storage:ReturnType<typeof originalStorage>,tenantId:string,file:OriginalRow){
+type OriginalStorageReference=Pick<OriginalRow,'bytes'|'sha256'|'speicherpfad'>;
+
+async function verifiedOriginalBytes(storage:ReturnType<typeof originalStorage>,tenantId:string,file:OriginalStorageReference){
  const size=Number(file.bytes);
  if(!/^[0-9a-f]{64}$/.test(file.sha256)||file.speicherpfad!==tenantId+'/'+file.sha256||!Number.isSafeInteger(size)||size<1||size>150*1024*1024)throw Error('INTAKE_ORIGINAL_METADATA_INVALID');
  const original=await storage.download(file.speicherpfad);
@@ -39,6 +41,12 @@ async function verifiedOriginalBytes(storage:ReturnType<typeof originalStorage>,
  const bytes=new Uint8Array(await original.data.arrayBuffer());
  if(bytes.byteLength!==size||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw Error('INTAKE_ORIGINAL_HASH_MISMATCH');
  return bytes;
+}
+
+export async function countVerifiedIntakePdfPages(tenantId:string,file:OriginalStorageReference){
+ const bytes=await verifiedOriginalBytes(originalStorage(),tenantId,file);
+ const {PDFDocument}=await import('pdf-lib');
+ return (await PDFDocument.load(bytes,{updateMetadata:false})).getPageCount();
 }
 
 /** Classify the exact stored MIME without opening, signing or changing the file. */
