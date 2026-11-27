@@ -73,8 +73,9 @@ function StartContent({
   const shortCodeRef = useRef<HTMLInputElement>(null);
   const remembered = users.find((user) => user.loginHandle === rememberedHandle);
   const shortCodeRequired = mobile && (enterShortCode || !remembered);
-  const shortCodeMatches = shortCodeRequired && /^[\p{L}\p{N}]{2,4}$/u.test(shortCode)
-    ? users.filter((user) => user.shortCode.toLocaleUpperCase("de-DE") === shortCode)
+  const lookupCode = shortCode.trim();
+  const shortCodeMatches = shortCodeRequired && lookupCode
+    ? users.filter((user) => user.shortCode.trim().toUpperCase() === lookupCode)
     : [];
   const selected = mobile
     ? (shortCodeRequired ? (shortCodeMatches.length === 1 ? shortCodeMatches[0] : undefined) : remembered)
@@ -342,9 +343,9 @@ function StartContent({
         </div> : null}
         {shortCodeRequired ? <label className={styles.shortCode}>
           {PIN_LOGIN_COPY.kuerzelLabel}
-          <input ref={shortCodeRef} value={shortCode} disabled={pinDisabled} maxLength={4} autoComplete="username" autoCapitalize="characters"
+          <input ref={shortCodeRef} value={shortCode} disabled={pinDisabled} autoComplete="username" autoCapitalize="characters"
             spellCheck={false} onChange={(event) => {
-              setShortCode(event.target.value.toLocaleUpperCase("de-DE").slice(0, 4));
+              setShortCode(event.target.value.toUpperCase());
               setPin("");
               setMessage(null);
               setShowServerMessage(false);

@@ -10,6 +10,8 @@
 
 .screen {
   box-sizing: border-box;
+  overflow-y: auto;
+  align-items: safe center;
   --login-key-size: clamp(44px, min(9dvh, 18vw), 74px);
   --login-gap: clamp(6px, 2dvh, 30px);
   padding: clamp(8px, 2dvh, 22px) clamp(8px, 3vw, 24px);
@@ -87,7 +89,7 @@
   font: 1rem var(--font-body);
   padding: 4px 10px;
 }
-.shortCode input { width: 7ch; text-align: center; }
+.shortCode input { width: 9ch; text-align: center; }
 .shortCode input:focus-visible, .emailForm input:focus-visible { outline: 2px solid var(--gold-600); outline-offset: 2px; }
 
 .options { grid-area: options; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; }
@@ -113,7 +115,7 @@
 .emailForm label { font-size: .8125rem; font-weight: 600; }
 .loading { font-weight: 700; }
 
-@media (max-height: 519px) {
+@media (max-height: 519px), (max-height: 700px) and (orientation: landscape) {
   .loginPanel {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: 'heading keys' 'people keys' 'pin keys' 'options keys';
