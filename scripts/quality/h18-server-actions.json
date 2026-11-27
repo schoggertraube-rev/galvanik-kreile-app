@@ -1,7 +1,10 @@
 {
   "version": 1,
-  "inventorySha256": "9e7ed24794f87668bde2dad8760a35b66a5317833742ae3f825ee5ed80be7e1d",
+  "inventorySha256": "72ff46d2226d0bb0e56ebe0344769f34fc026c52cedb7122f7fd883abfc7f0d5",
   "testedWriteActions": {
+    "src/app/actions/orders.actions.ts#readDelayedWorkOrdersAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
     "src/app/actions/lager-material.actions.ts#leseAuftragsmaterial": [
       "src/test/acceptance/material_rechnung.integration.test.ts"
     ],

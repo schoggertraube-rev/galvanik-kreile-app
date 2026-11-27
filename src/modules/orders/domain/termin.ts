@@ -47,9 +47,12 @@ export function fertigtermin(auftrag: AuftragsTermin, kalender: TerminKalender, 
 const risikofarben = {ueberfaellig:'red', knapp:'orange', im_plan:'green', unbekannt:'unknown'} as const;
 const datumDeutsch = new Intl.DateTimeFormat('de-DE', {dateStyle:'medium', timeZone:'UTC'});
 
-export function zeigeFertigtermin(auftrag: AuftragsTermin, kalender: TerminKalender | null, heute: string, blocked: boolean) {
+export function zeigeFertigtermin(
+  auftrag: AuftragsTermin, kalender: TerminKalender | null, heute: string, blocked: boolean,
+  vorberechneterTermin = kalender && fertigtermin(auftrag, kalender, heute),
+) {
   if (blocked) return {risk:'blocked' as const,...ORDER_TERM_COPY.blocked};
-  const termin = kalender ? fertigtermin(auftrag, kalender, heute) : null;
+  const termin = vorberechneterTermin;
   const stufe = termin?.stufe ?? 'unbekannt';
   let dueValue: string = ORDER_TERM_COPY.notRecorded;
   const datum = termin?.fertigtermin;

@@ -166,7 +166,7 @@ export async function getProductionWeekAction(input?:{onDate?:string;includePosi
 }
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
-import type { ActionResult } from "@/lib/server/authHelper";
+import { readAuthorizedArea, type ActionResult } from "@/lib/server/authHelper";
 import {
   resolveAuthorization,
   type AuthorizationSnapshot,
@@ -932,6 +932,43 @@ export async function getOrdersBaseDb(): Promise<ActionResult<OrderResponse[]> &
    return {ok:false,error:'DB_ERROR',message:'Auftragsdaten konnten nicht sicher geladen werden.'};
   }
  },readLoggingSettings);
+}
+
+export async function readDelayedWorkOrdersAction() {
+  return observeAction('readDelayedWorkOrdersAction', subjectForAction('readDelayedWorkOrdersAction', undefined), async () => {
+    noStore();
+    const authorization = await readAuthorizedArea('buchhaltung');
+    if (!authorization.ok) return authorization;
+    const { tenantId } = authorization.data;
+    const [{ withPrivilegedTenantTransaction }, { leseFertigterminKalender }, { fertigtermin }, { berlinCalendarDay }, { sql }] = await Promise.all([
+      import('@/lib/server/privilegedDb'), import('@/lib/server/orderStationRead'), import('@/modules/orders/public'),
+      import('@/lib/domain/workingDays'), import('drizzle-orm'),
+    ]);
+    const today = berlinCalendarDay();
+    const data = await withPrivilegedTenantTransaction(authorization.data, async tx => {
+      const calendar = await leseFertigterminKalender(tx, tenantId, readBetriebsruheInTransaction);
+      const rows = await tx.execute<{
+        id: string; order_number: string; title: string | null; customer_id: string; customers: { name: string | null };
+        station: string | null; due_date: string; completed_date: null; status: string | null;
+        handover_mode: Parameters<typeof fertigtermin>[0]['handoverMode'];
+      }>(sql`
+        SELECT orders.id, orders.order_number, orders.title, orders.customer_id, orders.station,
+          orders.due_date::date::text AS due_date, orders.completed_date, orders.status, orders.handover_mode,
+          jsonb_build_object('name', customer.name) AS customers
+        FROM public.orders orders
+        LEFT JOIN public.customers customer ON customer.tenant_id = orders.tenant_id AND customer.id = orders.customer_id
+        WHERE orders.tenant_id = ${tenantId} AND orders.due_date IS NOT NULL
+          AND orders.completed_date IS NULL AND orders.status IS DISTINCT FROM 'storniert'
+      `);
+      const delayed = rows.flatMap(order => {
+        const term = fertigtermin({ dueDate: order.due_date, handoverMode: order.handover_mode }, calendar, today);
+        return term?.stufe === 'ueberfaellig' && term.fertigtermin ? [{ order, fertigAm: term.fertigtermin }] : [];
+      });
+      delayed.sort((a, b) => a.fertigAm.localeCompare(b.fertigAm) || a.order.id.localeCompare(b.order.id));
+      return { today, count: delayed.length, orders: delayed.slice(0, 10) };
+    });
+    return { ok: true as const, data };
+  }, readLoggingSettings);
 }
 
 /**

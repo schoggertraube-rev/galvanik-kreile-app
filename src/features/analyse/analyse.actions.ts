@@ -96,11 +96,8 @@ function toWerkstattPulsPeriod(period: string): WerkstattPulsData["period"] {
 function toAffectedOrder(
   order: AffectedOrderRow,
   status: "critical" | "missing_due_date",
+  delayDays: number | null = null,
 ): WerkstattPulsData["affectedOrders"][number] {
-  const delayDays = order.due_date
-    ? Math.round((new Date().getTime() - new Date(order.due_date).getTime()) / (1000 * 3600 * 24))
-    : null;
-
   return {
     orderId: order.id,
     orderNumber: order.order_number,
@@ -348,14 +345,10 @@ export async function getAnalyseTileDetail(
         .select('*');
       const { data: eco } = await supabase.from('v_analyse_werkstatt_puls_economics').select('*').single();
 
-      // Hole echte verspätete Aufträge
-      const { data: delayedOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
-        .select('id, order_number, title, customer_id, customers(name), station, due_date, completed_date, status')
-        .eq('tenant_id', authorization.data.tenantId)
-        .not('due_date', 'is', null)
-        .is('completed_date', null)
-        .lt('due_date', new Date().toISOString())
-        .limit(10);
+      const { readDelayedWorkOrdersAction } = await import('@/app/actions/orders.actions');
+      const delayedOrders = await readDelayedWorkOrdersAction();
+      if (!delayedOrders.ok) return { data: null, error: delayedOrders.message };
+      const today = Date.parse(delayedOrders.data.today);
 
       const { data: missingDueOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
         .select('id, order_number, title, customer_id, customers(name), station, due_date, completed_date, status')
@@ -379,7 +372,7 @@ export async function getAnalyseTileDetail(
       const wochenzielIst = w?.fertig_diese_woche ?? 0;
       const wochenzielSoll = null; 
       const offeneAuftraegeN = openOrdersCount ?? 0; 
-      const kritischeAuftraegeN = delayedOrders ? delayedOrders.length : 0;
+      const kritischeAuftraegeN = delayedOrders.data.count;
       const dokumentationsquotePct = null; // not in view yet
       const dokumentationsquoteMessbarN = 0;
       
@@ -411,10 +404,8 @@ export async function getAnalyseTileDetail(
       });
 
       // Affected Orders
-      const affectedOrdersMapped: WerkstattPulsData["affectedOrders"] = [];
-      (delayedOrders || []).forEach(order => {
-        affectedOrdersMapped.push(toAffectedOrder(order, "critical"));
-      });
+      const affectedOrdersMapped = delayedOrders.data.orders.map(({ order, fertigAm }) =>
+        toAffectedOrder(order, 'critical', (today - Date.parse(fertigAm)) / 86_400_000));
       (missingDueOrders || []).forEach(order => {
         affectedOrdersMapped.push(toAffectedOrder(order, "missing_due_date"));
       });

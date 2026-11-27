@@ -35,6 +35,45 @@ if (!DATABASE_URL || DATABASE_URL !== H18_EXPECTED_DATABASE_URL || new URL(DATAB
 
 beforeAll(invoiceCompanySettingsFixture);
 
+test('Werkstatt-Puls stuft Versand am Fertigtermin ein und lässt die Lieferzusage stehen', async () => {
+  const { readDelayedWorkOrdersAction } = await import('@/app/actions/orders.actions');
+  const kunde = await customerFixture('TEST Werkstatt-Puls');
+  const versand = await intakeOrderFixture('TEST Werkstatt-Puls Versand', kunde);
+  const abholung = await intakeOrderFixture('TEST Werkstatt-Puls Abholung', kunde);
+  const heute = berlinCalendarDay();
+  const zusage = plusWorkingDays(heute, 1);
+  const fertigAm = zusage && plusWorkingDays(zusage, -2);
+  if (!zusage || !fertigAm) throw Error('TEST_FERTIGTERMIN_FEHLT');
+
+  const [einstellungen] = await sql<{ ruhe: string | null; puffer: number; knapp: number | null }[]>`
+    SELECT betriebsruhe::text AS ruhe, versandpuffer_arbeitstage AS puffer, termin_knapp_arbeitstage AS knapp
+    FROM public.company_settings WHERE tenant_id = ${mandant}
+  `;
+  if (!einstellungen) throw Error('TEST_WERKSTATT_EINSTELLUNGEN_FEHLEN');
+  try {
+    await sql`UPDATE public.company_settings SET betriebsruhe = '[]'::jsonb,
+      versandpuffer_arbeitstage = 2, termin_knapp_arbeitstage = 2 WHERE tenant_id = ${mandant}`;
+    await sql`UPDATE public.orders SET due_date = ${zusage}::date, handover_mode = 'shipping'
+      WHERE tenant_id = ${mandant} AND id = ${versand.receipt.orderId}`;
+    await sql`UPDATE public.orders SET due_date = ${zusage}::date, handover_mode = 'pickup'
+      WHERE tenant_id = ${mandant} AND id = ${abholung.receipt.orderId}`;
+    const werkstatt = await createFixture(['auftraege'], 'werkstatt');
+    const buchhaltung = await createFixture(['buchhaltung']);
+    expect(await withSession(werkstatt, () => readDelayedWorkOrdersAction())).toMatchObject({ ok: false, error: 'FORBIDDEN' });
+    const ergebnis = await withSession(buchhaltung, () => readDelayedWorkOrdersAction());
+    expect(ergebnis).toMatchObject({ ok: true });
+    if (!ergebnis.ok) throw Error('TEST_WERKSTATT_PULS_FEHLT');
+    expect(ergebnis.data.orders).toContainEqual(expect.objectContaining({
+      fertigAm, order: expect.objectContaining({ id: versand.receipt.orderId, due_date: zusage }),
+    }));
+    expect(ergebnis.data.orders.some(({ order }) => order.id === abholung.receipt.orderId)).toBe(false);
+  } finally {
+    await sql`UPDATE public.company_settings SET betriebsruhe = ${einstellungen.ruhe}::jsonb,
+      versandpuffer_arbeitstage = ${einstellungen.puffer}, termin_knapp_arbeitstage = ${einstellungen.knapp}
+      WHERE tenant_id = ${mandant}`;
+  }
+});
+
 async function liesWerkstattKostenstellen() {
   const [firma] = await sql<{ werkstatt_zeit_kostenstellen: Record<string, string> }[]>`
     SELECT werkstatt_zeit_kostenstellen FROM public.company_settings WHERE tenant_id = ${mandant}

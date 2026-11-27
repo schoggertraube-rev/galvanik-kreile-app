@@ -3,7 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import { berlinCalendarDay, leseBetriebsruhetage } from "@/lib/domain/workingDays";
-import { zeigeFertigtermin } from "@/modules/orders/public";
+import { fertigtermin, zeigeFertigtermin } from "@/modules/orders/public";
 import type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type {
@@ -170,7 +170,9 @@ function parseParts(value: unknown, row: QueueRow): OperationalOrderItem[] {
   });
 }
 
-type TerminAnzeige = (row: QueueRow, dueDate: string) => Pick<OperationalOrder, "statusText" | "risk" | "dueLabel" | "dueValue">;
+type TerminAnzeige = (row: QueueRow, dueDate: string) => ReturnType<typeof zeigeFertigtermin> & {
+  terminStand: ReturnType<typeof fertigtermin>;
+};
 
 export type TerminEinstellungenLeser = (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
   betriebsruhe: unknown;
@@ -187,19 +189,21 @@ export async function leseFertigterminKalender(
 
 async function leseTerminAnzeige(
   tx: PrivilegedTenantTransaction, tenantId: string, rows: QueueRow[], liesEinstellungen?: TerminEinstellungenLeser,
+  fuerHeute = false,
 ): Promise<TerminAnzeige> {
   const heute = berlinCalendarDay();
   const hatLiefertermin = rows.some(row =>
-    row.status !== "blocked" && row.handover_mode && parseDateOnlyText(row.due_date_text),
+    (fuerHeute || row.status !== "blocked") && row.handover_mode && parseDateOnlyText(row.due_date_text),
   );
   if (hatLiefertermin && !liesEinstellungen) throw Error("BETRIEBSKALENDER_LESER_FEHLT");
   const kalender = hatLiefertermin && liesEinstellungen
     ? await leseFertigterminKalender(tx, tenantId, liesEinstellungen)
     : null;
-  return (row, dueDate) => zeigeFertigtermin({
-    dueDate: dueDate.slice(0, 10) || null,
-    handoverMode: row.handover_mode,
-  }, kalender, heute, row.status === "blocked");
+  return (row, dueDate) => {
+    const auftrag = { dueDate: dueDate.slice(0, 10) || null, handoverMode: row.handover_mode };
+    const terminStand = kalender && fertigtermin(auftrag, kalender, heute);
+    return { ...zeigeFertigtermin(auftrag, kalender, heute, row.status === "blocked", terminStand), terminStand };
+  };
 }
 
 function mapOperationalQueueRow(row: QueueRow, tenantId: string, zeigeTermin: TerminAnzeige): OperationalOrder {
@@ -257,6 +261,7 @@ function mapOperationalQueueRow(row: QueueRow, tenantId: string, zeigeTermin: Te
     parts,
     intakeDate: toSafeIsoDate(row.intake_date),
     dueDate,
+    terminStand: priority.terminStand,
     dueLabel: priority.dueLabel,
     dueValue: priority.dueValue,
     createdAt: toSafeIsoDate(row.created_at) || undefined,
@@ -296,7 +301,7 @@ export async function readTenantOperationalOrders(
       FROM private.v_operational_station_queue_v1 queue
       ORDER BY created_at DESC,id
     `);
-    const zeigeTermin = await leseTerminAnzeige(tx, authorization.tenantId, rows, liesEinstellungen);
+    const zeigeTermin = await leseTerminAnzeige(tx, authorization.tenantId, rows, liesEinstellungen, projection?.purpose === "today");
     return mapOperationalQueueRows(rows, authorization.tenantId, zeigeTermin);
   });
 }

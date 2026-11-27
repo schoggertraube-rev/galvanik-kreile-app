@@ -697,6 +697,7 @@
         "getExtraWorkRateReceiptAction",
         "getOrdersDb",
         "getOrdersBaseDb",
+        "readDelayedWorkOrdersAction",
         "getOrderRegisterDb",
         "getOrderCountDb",
         "createOrderDb",
