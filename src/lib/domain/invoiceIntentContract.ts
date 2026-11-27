@@ -2,10 +2,16 @@
 const UUID_PATTERN=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 function plainObject(value:unknown):value is Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value);}
 
+export type InvoicePaymentMethodAtIssue = 'bar' | 'karte' | 'ueberweisung';
+export function isInvoicePaymentMethodAtIssue(value:unknown):value is InvoicePaymentMethodAtIssue {
+  return value === 'bar' || value === 'karte' || value === 'ueberweisung';
+}
+
 export type CreateInvoiceInput = {
   orderId: string;
   expectedVersion: number;
   clientEventId: string;
+  paymentMethodAtIssue?: InvoicePaymentMethodAtIssue;
   agreement?: {
     id: string;
     version: number;
@@ -22,9 +28,10 @@ export type CreateInvoiceInput = {
 export function isCreateInvoiceInput(input: unknown,storedOriginal=false): input is CreateInvoiceInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
+  if (Object.hasOwn(value, "paymentMethodAtIssue") && !isInvoicePaymentMethodAtIssue(value.paymentMethodAtIssue)) return false;
   const expected = ["clientEventId", "expectedVersion", "orderId"];
   const expectedWithAgreement = ["agreement", ...expected].sort();
-  const actual = Object.keys(value).sort();
+  const actual = Object.keys(value).filter(key => key !== "paymentMethodAtIssue").sort();
   const hasAgreement = actual.length === expectedWithAgreement.length
     && actual.every((key, index) => key === expectedWithAgreement[index]);
   const agreement = value.agreement;

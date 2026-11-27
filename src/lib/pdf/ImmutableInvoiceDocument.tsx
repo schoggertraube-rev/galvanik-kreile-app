@@ -1,5 +1,6 @@
 import {invoiceOriginalLineMembers,type InvoiceCollectionOriginal} from '@/lib/domain/invoiceCollectionContract';
 import {invoiceCashDiscountDate,type InvoicePaymentTerms} from '@/lib/domain/invoicePaymentTerms';
+import type {InvoicePaymentMethodAtIssue} from '@/lib/domain/invoiceIntentContract';
 import {customerCountryLabel} from '@/modules/customers/public';
 import type {InvoiceVatGroup,InvoiceVatRead} from '@/modules/accounting/public';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
@@ -101,6 +102,8 @@ type InvoiceSnapshotContent = {
   };
   issuedAt: string;
   paymentTermDays: number;
+  /** The method declared when issuing the original, independent of later settlement. */
+  paymentMethodAtIssue?: InvoicePaymentMethodAtIssue;
   /** Absent only on historical originals; never inferred while reading. */
   terms?:InvoicePaymentTerms;
 };
