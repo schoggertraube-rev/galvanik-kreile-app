@@ -21,6 +21,8 @@ import {ORDER_ITEM_COMPLETION_COPY} from '@/ui/ordersCopy';
 import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
 import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
 import {readManualHandoverReceipt,type ManualHandoverReceipt} from '@/lib/server/orderHandoverSourcePort';
+import {berlinCalendarDay,berlinUhrzeit} from '@/lib/domain/workingDays';
+import type {DispatchPolicy} from '@/modules/fundament/public';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -150,11 +152,41 @@ async function writeOrderHandover<R>(tx:PrivilegedTenantTransaction,auth:Authori
  return result;
 }
 
-async function readHandoverBoundary(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,order:MailHandoverOrder){
- const shipments=await tx.execute<{carrier:string|null;label_url:string|null;status:string;shipped_at:unknown;delivered_at:unknown}>(sql`SELECT carrier,label_url,status,shipped_at,delivered_at FROM public.shipments WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY created_at,id FOR UPDATE`);
+async function readHandoverBoundary(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,order:MailHandoverOrder,lock=true){
+ const shipments=await tx.execute<{carrier:string|null;label_url:string|null;status:string;shipped_at:unknown;delivered_at:unknown}>(sql`SELECT carrier,label_url,status,shipped_at,delivered_at FROM public.shipments WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY created_at,id ${lock?sql`FOR UPDATE`:sql``}`);
  const shipped=shipments.find(row=>row.shipped_at||row.delivered_at||!['pending','created','cancelled','canceled'].includes(row.status));
  const label=shipments.some(row=>Boolean(row.label_url?.trim())),passed=['abgeholt','versendet'].includes(order.station)||order.status==='storniert';
- return {late:Boolean(shipped||label||passed),label,passed,carrier:shipped?.carrier??null};
+ const active=shipments.filter(row=>row.status!=='cancelled'&&row.status!=='canceled');
+ return {late:Boolean(shipped||label||passed),label,passed,carrier:shipped?.carrier??null,active,handedOver:Boolean(shipped||passed)};
+}
+
+export type MailShippingSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>
+ Promise<{dispatchPolicy?:Pick<DispatchPolicy,'carrierCutoffs'>|null}|null>;
+
+export async function readMailHandoverForPromise(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;customerId:string;fromPickup:boolean},readSettings:MailShippingSettingsReader,
+){
+ const [order]=await tx.execute<MailHandoverOrder>(sql`SELECT id,order_number,customer_id,version,handover_mode,station,status
+  FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} AND customer_id=${input.customerId}`);
+ if(!order||order.handover_mode!==(input.fromPickup?'pickup':'shipping'))return null;
+ if(!input.fromPickup&&(order.status==='storniert'||order.station==='abgeholt'))return null;
+ const {active,handedOver,late,label}=await readHandoverBoundary(tx,auth,order,false);
+ if(input.fromPickup){
+  // A pickup has no scheduled parcel cutoff. Use the physical and label boundary of the handover writer.
+  return {handedOver,labelBooked:label,beforeCutoff:null,pickupChangeAllowed:!late};
+ }
+ const labelBooked=active.some(row=>Boolean(row.label_url?.trim()));
+ if(order.station==='versendet'||active.some(row=>row.shipped_at||row.delivered_at||['shipped','in_transit','delivered'].includes(row.status))){
+  return {handedOver:true,labelBooked,beforeCutoff:null};
+ }
+ if(active.some(row=>!['pending','created'].includes(row.status)))return null;
+ const carrier=active[0]?.carrier?.trim().toLowerCase();
+ if(!carrier||!active.every(row=>row.carrier?.trim().toLowerCase()===carrier))return {handedOver:false,labelBooked,beforeCutoff:null};
+ const settings=await readSettings(tx,auth.tenantId);
+ const now=new Date();
+ const day=new Date(berlinCalendarDay(now)+'T00:00:00Z').getUTCDay();
+ const cutoff=settings?.dispatchPolicy?.carrierCutoffs.find(row=>row.day===day&&row.service.toLowerCase()===carrier);
+ return {handedOver:false,labelBooked,beforeCutoff:cutoff?berlinUhrzeit(now)<cutoff.time:null};
 }
 
 async function changeHandoverManually(raw:unknown,deps:MailHandoverDependencies){
