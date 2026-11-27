@@ -120,6 +120,20 @@ it('B7L-3 stellt bei freier Herausgabe den regulären Lieferschein ohne Zahlungs
  expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:0}]);
 });
 
+it('B7L-3 verwendet die Einzelquellen auch für einen gemeinsamen Vorab-Lieferschein',async()=>{
+ const released=await readyOrderForInvoice('TEST B7L-3 Herausgabe auf Rechnung im Verbund');
+ const preview=await readyInvoiceOrder('TEST B7L-3 Vorkasse im Verbund','pickup',false,released.customerId);
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:preview.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:randomUUID()})))
+  .toMatchObject({code:'OK'});
+ const input=await deliveryNoteInputFixture([released.orderId,preview.orderId]);
+ const result=await withSession(full,()=>generateDeliveryNote(input));
+ if(result.code!=='OK')throw Error('TEST_B7L3_VERBUND_LIEFERSCHEIN:'+result.code);
+ const [saved]=await sql`SELECT payload->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.receipt.originalEventId}`;
+ expect(saved.snapshot).toMatchObject({vorab:'delivery_note.preview_payment_required',orders:expect.arrayContaining([
+  expect.objectContaining({id:released.orderId}),expect.objectContaining({id:preview.orderId}),
+ ])});
+});
+
 it('N8 a missing SQL receipt retains the secured original bytes and the same request retries without a second payment',async()=>{
  const order=await readyInvoiceOrder('TEST S10 fehlender SQL-Nachbeleg');
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,expectedOpenAmountCents:order.invoice.grossAmountCents,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
