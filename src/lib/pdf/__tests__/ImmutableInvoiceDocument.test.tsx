@@ -18,7 +18,7 @@ import {
 import type {InvoiceVatRead} from '@/modules/accounting/public';
 function fixtureVat(snapshot:ImmutableInvoiceSnapshot):InvoiceVatRead{
  const t=snapshot.totals,rate=t.vatRateBasisPoints;
- const groups:InvoiceVatRead["groups"]|undefined=snapshot.schemaVersion===2?t.vatBreakdown:rate===700||rate===1900?[{rateBp:rate,netCents:t.netAmountCents,vatCents:t.vatAmountCents,grossCents:t.grossAmountCents}]:undefined;
+ const groups:InvoiceVatRead["groups"]|undefined=snapshot.schemaVersion===2||snapshot.schemaVersion===3?t.vatBreakdown:rate===700||rate===1900?[{rateBp:rate,netCents:t.netAmountCents,vatCents:t.vatAmountCents,grossCents:t.grossAmountCents}]:undefined;
  if(!groups)throw Error('TEST_VAT_FIXTURE_REQUIRED');
  return {groups,netAmountCents:t.netAmountCents,vatAmountCents:t.vatAmountCents,grossAmountCents:t.grossAmountCents,headRate:rate,reverseCharge:groups.every(row=>row.rateBp===0)};
 }
@@ -618,4 +618,27 @@ it('PL0014 schema2 PDF binds both rate-group net amounts and VAT to rendered byt
  {label:'seven net',parts:['Netto (7 %)',eur('100,00')]},
  {label:'seven VAT',parts:['zzgl. USt (7 %)',eur('7,00')]},
  {label:'gross',parts:['Rechnungsbetrag brutto',eur('226,00')]}]);
+});
+
+it('binds the measured quantity, four-place price and line amount on the original PDF', async () => {
+  const base = snapshotFor(1900);
+  const snapshot: ImmutableInvoiceSnapshot = {
+    ...base, schemaVersion: 3,
+    seller: { ...base.seller, vatId: 'DE123456789', taxNumber: null },
+    lines: [{
+      type: 'BASE', itemId: 'TEST-kg', name: 'TEST Gewichtsposition', quantity: 12.5,
+      unitNetAmountCents: 700, lineNetAmountCents: 8751, unit: 'KGM', taxCategory: 'S', vat_rate_basis_points: 1900,
+    }],
+    totals: {
+      netAmountCents: 8751, vatRateBasisPoints: null,
+      vatBreakdown: [{ rateBp: 1900, netCents: 8751, vatCents: 1663, grossCents: 10414 }],
+      vatAmountCents: 1663, grossAmountCents: 10414,
+    },
+  };
+  const original = await readPdfEvidence(await renderToBuffer(createImmutableInvoicePdfDocument({
+    invoiceNumber: ORIGINAL_INVOICE_NUMBER, dueDate: DUE_DATE, snapshot,
+  })));
+  expectBindings(original.compactText, [{
+    label: 'measured BASE line', parts: ['TEST Gewichtsposition', '12,5 kg', eur('7,0008'), eur('87,51')],
+  }]);
 });

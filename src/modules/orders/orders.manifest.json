@@ -44,6 +44,18 @@
     "@/modules/orders/public#OrderActorEvidence",
     "@/modules/orders/public#OrderActorSummary",
     "@/modules/orders/server-public#readOrderActors",
+    "@/modules/orders/server-public#hatArbeitszeitAuftragInTransaction",
+    "@/modules/orders/server-public#leseBuendelLaufTeile",
+    "@/modules/orders/server-public#leseOffeneLaeufe",
+    "@/modules/orders/server-public#starteLauf",
+    "@/modules/orders/server-public#beendeLauf",
+    "@/modules/orders/server-public#leseAusschuss",
+    "@/modules/orders/server-public#leseMehrarbeitBuchungenInTransaction",
+    "@/modules/orders/server-public#mehrarbeitStand",
+    "@/modules/orders/public#leseMehrarbeitsfreigabe",
+    "@/modules/orders/public#verteileMehrarbeit",
+    "@/modules/orders/public#Auftragsmehrarbeit",
+    "@/modules/orders/server-public#meldeAusschuss",
     "@/modules/orders/server-public#readPackageOrderCustomers",
     "@/modules/orders/server-public#readManualShipping",
     "@/modules/orders/server-public#readManualShippingBatch",
@@ -73,6 +85,8 @@
   "viewsFunctions": [
     "private.guard_goods_out_debt_override_v1",
     "private.invoice_is_overdue_v1",
+    "private.v_order_extra_work_live_v1",
+    "private.v_order_item_extra_work_receipts_v1",
     "private.order_release_allowed_v1",
     "private.lock_shipping_customer_v1"
   ],
@@ -86,6 +100,8 @@
   "storagePurposes": [],
   "events": {
     "emits": [
+      "ORDER_EXTRA_WORK_APPROVED_V1",
+      "ORDER_ITEM_SCRAP_REPORTED_V1",
       "SHIPMENT_MANUAL_TRACKING_SET_V1",
       "SHIPMENT_HANDED_OVER_V1",
       "ORDER_CUSTOMER_INFORMED_V1",
