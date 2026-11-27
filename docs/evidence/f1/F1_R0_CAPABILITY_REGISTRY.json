@@ -281,6 +281,7 @@
       "exported_functions": [
         "getAuthBootstrapAction",
         "getAuthorizationSnapshotAction",
+        "recordAppSessionActivity",
         "getRoleAction",
         "getMyPermissionsAction",
         "loginWithPin"

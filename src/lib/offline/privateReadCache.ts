@@ -1,7 +1,7 @@
 
 import {reportProtocolClientError} from '@/modules/logging/public';
 import {hasCacheScopeMarker,readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
-import {readPendingShellMetadata,changePendingShellMetadata,revokeUnmarkedPendingDeviceReads} from './pendingStore';
+import {readPendingShellMetadata,changePendingShellMetadata,rememberPendingShellDeadline,revokeUnmarkedPendingDeviceReads} from './pendingStore';
 import {privateReadCachePrefix} from './logoutReadState';
 
 export function qualifiedPrivateCacheName(scope:string,loginScope:string,generation:number):string{
@@ -77,6 +77,11 @@ export async function warmScopedPrivateResponse(scope:string,loginScope:string,u
    window.dispatchEvent(new CustomEvent('kreile-offline-shell-ready',{detail:{scope,loginScope}}));
   }
   if(state.code!=='OK'||state.metadata.scope!==loginScope||readCacheScopeMarker()!==loginScope)return false;
+  if(root.dataset.offlineIdleConfirmedAt&&root.dataset.offlineIdleExpiresAt){
+   await rememberPendingShellDeadline(scope,loginScope,{
+    confirmedAt:Number(root.dataset.offlineIdleConfirmedAt),expiresAt:Number(root.dataset.offlineIdleExpiresAt),
+   });
+  }
   const name=qualifiedPrivateCacheName(scope,loginScope,state.metadata.cacheGeneration);
   const cache=await caches.open(name);
   await cache.put(url,response);

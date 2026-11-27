@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { recordAppSessionActivity } from '@/app/actions/auth.actions';
 import { logoutWithReadCleanup } from '@/lib/offline/logoutWithReadCleanup';
+import { rememberPendingShellDeadline } from '@/lib/offline/pendingStore';
 import { INACTIVITY_COPY } from '@/ui/inaktivitaetTexte';
 import type { SessionInactivity } from './sessionInactivity';
 
@@ -12,15 +13,25 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
   useEffect(() => {
     if (!initial) return;
     let windowState = initial;
-    let clockOffset = (windowState.serverAt ?? Date.now()) - performance.now();
+    let clockOffset = Math.max(windowState.serverAt ?? 0, Date.now()) - performance.now();
     let timer: number | undefined;
     let disposed = false;
     let expiring = false;
     let recording = false;
 
+    const publishDeadline = (current: SessionInactivity) => {
+      const root = document.documentElement;
+      const scope = root.dataset.offlineScope;
+      const loginScope = initial.sessionScope;
+      if (!scope || !loginScope || root.dataset.offlineLoginScope !== loginScope
+        || root.getAttribute('data-offline-24h') !== 'enabled' || current.serverAt === undefined) return;
+      void rememberPendingShellDeadline(scope, loginScope, { confirmedAt: current.serverAt, expiresAt: current.expiresAt })
+        .catch(() => console.error('[OFFLINE_SHELL_DEADLINE_WRITE_FAILED]'));
+    };
     const applyServerTime = (current: SessionInactivity) => {
       windowState = current;
       clockOffset = (current.serverAt ?? Date.now()) - performance.now();
+      publishDeadline(current);
     };
     const serverNow = () => performance.now() + clockOffset;
 
@@ -77,6 +88,7 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
       }
     };
 
+    publishDeadline(initial);
     schedule();
     window.addEventListener('pointerdown', interact, { passive: true });
     window.addEventListener('wheel', interact, { passive: true });

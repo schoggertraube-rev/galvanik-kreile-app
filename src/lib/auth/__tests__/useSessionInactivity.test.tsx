@@ -48,3 +48,15 @@ it('only reopens the view after the server confirms its own renewed deadline', a
   expect(result.current).toBe(true);
   expect(ports.logout).toHaveBeenCalledTimes(2);
 });
+
+it('does not restart the deadline when retained HTML is opened with an older server timestamp', async () => {
+  vi.useFakeTimers();
+  const now = Date.now();
+  const initial = {
+    minutes: 1, lastSeen: now - 65_000, expiresAt: now - 5_000, serverAt: now - 60_000, sessionScope,
+  };
+  const { result } = renderHook(() => useSessionInactivity(initial));
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(result.current).toBe(true);
+  expect(ports.logout).toHaveBeenCalledExactlyOnceWith('inactivity', sessionScope);
+});

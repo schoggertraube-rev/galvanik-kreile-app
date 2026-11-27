@@ -103,7 +103,8 @@ async function database(scope: string): Promise<IDBDatabase> {
     request.onblocked = () => {abandoned=true;reject(new Error("INTAKE_PENDING_STORAGE_BLOCKED"));};
   });
 }
-export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string};
+type ConfirmedIdleDeadline={confirmedAt:number;expiresAt:number};
+export type PendingShellMetadata={scope:string|null;cacheGeneration:number;updatedAt:string;idleDeadline?:ConfirmedIdleDeadline};
 /** Exact metadata-only U2 response, already filtered by the server port. */
 type DeviceEnvelope={serverChangedAt?:string|null;portVersion:1;objectId:string;serverReadAt:string;sourceLoginScope:string};
 type DeviceDashboard={items:readonly unknown[];visibleFields:readonly unknown[];layout:readonly unknown[];defaultLayout:readonly unknown[];allowedFields:readonly unknown[];delegationTargets:readonly unknown[];outlookMessage:string|null;messageActions?:{code:'OK'|'SOURCE_INCOMPLETE';rows:readonly {messageId:string;version:number;read:import('@/lib/domain/u2ReadContract').U2Read}[];missingMessageIds:readonly string[]}};
@@ -231,10 +232,18 @@ export async function readPendingDeviceStand(scope:string,loginScope:string):Pro
  });
 }
 type ShellRead={code:'EMPTY'}|{code:'QUARANTINE'}|{code:'OK';metadata:PendingShellMetadata};
+function confirmedIdleDeadline(value:unknown):value is ConfirmedIdleDeadline{
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const row=value as Record<string,unknown>;
+ return Object.keys(row).length===2&&typeof row.confirmedAt==='number'&&Number.isSafeInteger(row.confirmedAt)
+  &&row.confirmedAt>0&&typeof row.expiresAt==='number'&&Number.isSafeInteger(row.expiresAt)&&row.expiresAt>row.confirmedAt;
+}
 function shellMetadata(value:unknown,scope:string):value is PendingShellMetadata{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const row=value as Record<string,unknown>;
- return Object.keys(row).length===3&&(row.scope===scope||row.scope===null)&&typeof row.cacheGeneration==='number'&&Number.isSafeInteger(row.cacheGeneration)&&row.cacheGeneration>0&&row.cacheGeneration<Number.MAX_SAFE_INTEGER&&typeof row.updatedAt==='string'&&Number.isFinite(Date.parse(row.updatedAt));
+ const shape=Object.keys(row).length===3&&row.idleDeadline===undefined
+  ||Object.keys(row).length===4&&row.scope===scope&&confirmedIdleDeadline(row.idleDeadline);
+ return shape&&(row.scope===scope||row.scope===null)&&typeof row.cacheGeneration==='number'&&Number.isSafeInteger(row.cacheGeneration)&&row.cacheGeneration>0&&row.cacheGeneration<Number.MAX_SAFE_INTEGER&&typeof row.updatedAt==='string'&&Number.isFinite(Date.parse(row.updatedAt));
 }
 function shellKey(loginScope:string):string{if(!/^[0-9a-f]{64}$/.test(loginScope))throw Error('OFFLINE_SHELL_LOGIN_SCOPE_REQUIRED');return 'login:'+loginScope;}
 export async function readPendingShellMetadata(scope:string,loginScope:string):Promise<ShellRead>{
@@ -244,6 +253,24 @@ export async function readPendingShellMetadata(scope:string,loginScope:string):P
   const tx=connection.transaction(SHELL_STORE,'readonly'),read=tx.objectStore(SHELL_STORE).get(key);
   tx.oncomplete=()=>{connection.close();resolve(read.result===undefined?{code:'EMPTY'}:shellMetadata(read.result,loginScope)?{code:'OK',metadata:read.result}:{code:'QUARANTINE'});};
   tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_METADATA_READ_ABORTED'));};
+ });
+}
+/** Project the server's latest confirmed time into the existing read metadata. */
+export async function rememberPendingShellDeadline(scope:string,loginScope:string,deadline:ConfirmedIdleDeadline):Promise<void>{
+ if(!confirmedIdleDeadline(deadline)||readCacheScopeMarker()!==loginScope)return;
+ const key=shellKey(loginScope),connection=await database(scope);
+ return new Promise((resolve,reject)=>{
+  const tx=connection.transaction(SHELL_STORE,'readwrite'),store=tx.objectStore(SHELL_STORE),read=store.get(key);
+  read.onsuccess=()=>{
+   const previous:unknown=read.result;
+   if(readCacheScopeMarker()!==loginScope||!shellMetadata(previous,loginScope)||previous.scope!==loginScope)return;
+   const old=previous.idleDeadline;
+   if(old&&(old.confirmedAt>deadline.confirmedAt
+      ||old.confirmedAt===deadline.confirmedAt&&old.expiresAt<=deadline.expiresAt))return;
+   store.put({...previous,idleDeadline:deadline},key);
+  };
+  tx.oncomplete=()=>{connection.close();resolve();};
+  tx.onabort=()=>{connection.close();reject(Error('OFFLINE_SHELL_DEADLINE_WRITE_ABORTED'));};
  });
 }
 /** CAS invalidates late warm responses; it grants no identity or permission. */
@@ -261,7 +288,8 @@ export async function changePendingShellMetadata(scope:string,loginScope:string,
    // Revocation is terminal for this exact server-validated login. A stale tab
    // cannot read the new generation and reactivate its old credential's cache.
    if(active&&previous!==undefined&&(previous as PendingShellMetadata).scope===null){result={code:'REVOKED'};return;}
-   const metadata={scope:active?loginScope:null,cacheGeneration:Math.min((generation??0)+1,Number.MAX_SAFE_INTEGER-1),updatedAt:new Date().toISOString()};
+   const oldDeadline=(previous as PendingShellMetadata|undefined)?.idleDeadline;
+   const metadata={scope:active?loginScope:null,cacheGeneration:Math.min((generation??0)+1,Number.MAX_SAFE_INTEGER-1),updatedAt:new Date().toISOString(),...(active&&oldDeadline?{idleDeadline:oldDeadline}:{})};
    store.put(metadata,key);result={code:'OK',metadata};
   };
   tx.oncomplete=()=>{connection.close();resolve(result);};
