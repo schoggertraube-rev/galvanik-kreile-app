@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {invoiceElectronicUnit,invoiceXmlAmount,invoiceXmlWorkHours,invoiceBaseUnitPrice,isInvoiceVatId} from '../invoiceElectronicFields';
+import {invoiceElectronicUnit,invoiceXmlAmount,invoiceXmlWorkHours,invoiceBaseUnitAmounts,invoiceBaseUnitPrice,isInvoiceVatId} from '../invoiceElectronicFields';
 
 it('K1 VAT format removes whitespace and requires the approved country-prefix and bounded identifier',()=>{
  for(const value of ['DE123456789','ATU12345678','DE 123 456 789','FRab12'])expect(isInvoiceVatId(value)).toBe(true);
@@ -18,6 +18,16 @@ it('PL19:22 formats the original per-part allocation with exact bounded precisio
  expect(invoiceBaseUnitPrice(2,1875,3750)).toBe('18.75');
  expect(()=>invoiceBaseUnitPrice(3,2501,7501)).toThrow('INVOICE_ELECTRONIC_UNIT_PRICE_SOURCE_INVALID');
  expect(()=>invoiceBaseUnitPrice(99999,1,100000)).toThrow('INVOICE_ELECTRONIC_UNIT_PRICE_ROUNDING_INVALID');
+});
+
+it('allocates the frozen cents over measured BASE quantities without changing the quantity', () => {
+  for (const unit of ['KGM', 'DMK', 'SET'] as const) {
+    expect(invoiceBaseUnitAmounts(12.5, 8751, unit)).toEqual({ unitNetAmountCents: 700, unitNetAmount: '7.0008' });
+    expect(invoiceBaseUnitPrice(12.5, 700, 8751, unit)).toBe('7.0008');
+  }
+  expect(invoiceBaseUnitPrice(0.125, 800, 100, 'KGM')).toBe('8.00');
+  expect(() => invoiceBaseUnitPrice(12.5, 700, 8751, 'C62')).toThrow('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
+  expect(() => invoiceBaseUnitAmounts(12.0005, 8751, 'KGM')).toThrow('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
 });
 
 it('S54o XML formatting keeps exact stored cents and the specified four-place hour quantity',()=>{

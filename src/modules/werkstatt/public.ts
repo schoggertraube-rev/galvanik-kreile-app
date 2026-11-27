@@ -10,3 +10,4 @@ export type {
 export { buildWerkstattData } from "./server/deriveWerkstattView";
 export { WerkstattView } from "./ui/WerkstattView";
 export { WerkstattLoading } from "./ui/WerkstattLoading";
+export type { LaufAntwort, LaufEingabe, LaufZeitverteilung } from "./server/arbeitszeit";

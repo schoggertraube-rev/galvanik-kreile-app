@@ -22,10 +22,33 @@ export const ORDER_ITEM_PHOTO_COPY={required:'Nimm für jedes Teil ein Foto auf,
 export const ORDER_CONTENT_COPY = {
   catalogMissing: 'Diese Katalogleistung gibt es nicht mehr · wähl eine aus der Liste.',
   catalogInactive: (name:string)=>`Die Katalogleistung ${name} ist nicht mehr aktiv · wähl eine andere.`,
+  invoiceAlreadyIssued: (nummer: string) => `Rechnung ${nummer} ist schon ausgestellt. Korrigiere zuerst die Rechnung.`,
+  extraWorkApprovalUnavailable: "Die Zusage zur Mehrarbeit konnte nicht gespeichert werden. Versuche es erneut.",
+  extraWorkApprovalRetry: "Erneut versuchen",
+  extraWorkApprovalConflict: "Der Auftrag wurde inzwischen geändert. Bitte neu öffnen.",
+  extraWorkApprovalReopen: "Auftrag neu öffnen",
+  extraWorkApprovalForbidden: "Dafür fehlt dir das Recht. Bitte das Büro um Freigabe.",
+  extraWorkApprovalNotFound: "Diesen Auftrag gibt es nicht mehr.",
+  extraWorkApprovalOpenList: "Auftragsliste öffnen",
+  workTimeChanged: "Die Arbeitszeit wurde inzwischen schon korrigiert. Lade die Buchungen neu.",
 };
 export const ORDER_ITEM_COMPLETION_COPY = {
   alreadyChanged: 'Der Teilstatus hat sich bereits geändert. Öffne den Auftrag erneut.',
+  forbidden: 'Diese Rolle darf den Teilstatus nicht ändern.',
+  invalid: 'Teilstatus ist ungültig.',
 };
+export const ORDER_SCRAP_COPY = {
+  allParts: "Alle Teile sind Ausschuss. Leg in der Auftragskarte fest, ob du reklamierst oder nacharbeitest.",
+  task: "Alle Teile Ausschuss – Reklamation oder Nacharbeit festlegen",
+  conflict: "Die Ausschuss-Aufgabe gehört zu einem anderen Auftrag. Lade die Auftragskarte neu.",
+} as const;
 /** PL11.11.17:05: shared wording for conflicting request identities. */
 export const ORDER_REQUEST_COPY={intentConflict:"Anfragekennung wurde bereits anders verwendet."} as const;
 export const ORDER_STATION_COPY:Readonly<Record<string,string>>={wareneingang:'Angenommen',angenommen:'Angenommen',galvanik:'In Galvanik',fertig:'Fertig',raus:'Raus / abgeholt',abgeholt:'Raus / abgeholt',versendet:'Raus / abgeholt',unknown:'Station nicht erfasst'};
+export const ORDER_BUENDEL_LAUF_COPY = {
+  started: (oberflaeche: string) => `${oberflaeche}-Lauf gestartet`,
+  completed: (oberflaeche: string) => `${oberflaeche}-Lauf abgeschlossen`,
+  itemOccupied: "Wähle ein anderes Teil. Dieses Teil gehört bereits zu einem offenen Bündel-Lauf.",
+  itemsNoLongerOpen: "Lade die Werkstatt neu. Mindestens ein Teil des Bündel-Laufs ist nicht mehr offen.",
+  runNotFound: "Wähle den Lauf erneut in der Werkstatt. Dieser Bündel-Lauf wurde nicht gefunden.",
+} as const;

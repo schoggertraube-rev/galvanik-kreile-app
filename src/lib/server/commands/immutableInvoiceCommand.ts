@@ -11,11 +11,14 @@ import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public
 import {readInvoiceVat} from '@/modules/accounting/public';
 import "server-only";
 import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
-import {invoiceElectronicUnit,InvoiceElectronicSourceError,InvoiceMaterialUnitError,invoiceMaterialLineNetCents,isInvoiceMaterialUnitCode} from '@/lib/domain/invoiceElectronicFields';
+import {invoiceBaseUnitAmounts,invoiceElectronicUnit,invoiceExtraWorkCents,InvoiceElectronicSourceError,InvoiceMaterialUnitError,invoiceMaterialLineNetCents,invoiceXmlAmount,isInvoiceMaterialUnitCode} from '@/lib/domain/invoiceElectronicFields';
 import {assertInvoiceElectronicFields} from '@/lib/pdf/invoiceXml';
 import {createInvoiceElectronicOriginal,type InvoiceOriginalReader} from '@/lib/server/invoiceElectronicOriginal';
 import {E_INVOICE_COPY} from '@/ui/situationCatalog';
 import {LAGER_MATERIAL_COPY} from '@/ui/lagerMaterialCopy';
+import {INVOICE_SCRAP_COPY} from '@/ui/accountingCopy';
+import {ORDER_SCRAP_COPY} from '@/ui/ordersCopy';
+import {verteileMehrarbeit, type Auftragsmehrarbeit} from '@/modules/orders/public';
 import {assertInvoiceGlyphs,InvoiceGlyphError} from '@/lib/pdf/invoiceFonts';
 import {CUSTOMER_CREDIT_COPY} from '@/ui/situationCatalog';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
@@ -333,6 +336,11 @@ type LockedCancellationOrder = {
  */
 class InvoiceMasterDataError extends Error {}
 class InvoiceCollectionNotDueError extends Error {}
+class InvoiceScrapError extends Error {
+  constructor(message: string, readonly fullScrapOrderId?: string) {
+    super(message);
+  }
+}
 class InvoiceMaterialPriceError extends Error {
   constructor(readonly artikel: string[]) {
     super(artikel.map(LAGER_MATERIAL_COPY.preisFehlt).join(' · '));
@@ -428,7 +436,11 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]):
   return actual.length === wanted.length && actual.every((key, index) => key === wanted[index]);
 }
 
-function parseBaseLines(value: unknown, vat?:{reverseCharge:boolean;companyRate:number|null;electronic?:true}): ImmutableInvoiceBaseLine[] {
+function isMeasuredBaseUnit(unit: unknown): unit is 'KGM' | 'DMK' | 'SET' {
+  return unit === 'KGM' || unit === 'DMK' || unit === 'SET';
+}
+
+function parseBaseLines(value: unknown, vat?:{reverseCharge:boolean;companyRate:number|null;electronic?:true}, originalUnit?:unknown): ImmutableInvoiceBaseLine[] {
   if (!Array.isArray(value)) throw new Error("INVOICE_BASE_LINES_INVALID");
   return value.map((entry) => {
     if (!plainObject(entry) || !exactKeys(entry, [
@@ -436,24 +448,33 @@ function parseBaseLines(value: unknown, vat?:{reverseCharge:boolean;companyRate:
       ...(vat ? ["vat_rate_basis_points"] : []),
       ...(vat?.electronic?["unit"]:[]),
     ])) throw new Error("INVOICE_BASE_LINE_SHAPE_INVALID");
-    const quantity = toSafeInteger(entry.quantity, "INVOICE_BASE_LINE_QUANTITY_INVALID");
-    const unitNetAmountCents = toSafeInteger(entry.unitNetAmountCents, "INVOICE_BASE_LINE_UNIT_INVALID");
-    const lineNetAmountCents = toSafeInteger(entry.lineNetAmountCents, "INVOICE_BASE_LINE_TOTAL_INVALID");
     const itemId = requiredText(entry.itemId, "INVOICE_BASE_LINE_ITEM_INVALID");
     const name = masterDataText(entry.name, "INVOICE_BASE_LINE_NAME_INVALID");
-    // Position name, quantity and price are tenant master data: fail closed as
-    // a validation outcome, never as an infrastructure error.
-    if (quantity < 1 || unitNetAmountCents < 0) {
-      throw new InvoiceMasterDataError("INVOICE_BASE_LINE_MASTER_DATA_INVALID");
-    }
-    if (lineNetAmountCents < 0 || unitNetAmountCents !== Number((BigInt(lineNetAmountCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity))) {
-      throw new Error("INVOICE_BASE_LINE_INTEGRITY_INVALID");
-    }
     // PL18Nov19:01: only an actual whole-count BASE part without a stored
     // unit receives this source marker in the new snapshot, never in the KV.
     const defaultPiece=vat?.electronic&&(entry.unit===null||entry.unit===undefined||typeof entry.unit==='string'&&!entry.unit.trim());
     const unit=vat?.electronic?(defaultPiece?{code:'C62' as const}:invoiceElectronicUnit(entry.unit)):null;
     if(vat?.electronic&&!unit)throw new InvoiceElectronicSourceError({kind:'order',itemId,field:'unit:'+name});
+    const measuredUnit = unit?.code ?? originalUnit;
+    const decimal = isMeasuredBaseUnit(measuredUnit) && typeof entry.quantity === 'number' && !Number.isInteger(entry.quantity);
+    const quantity = decimal ? entry.quantity as number : toSafeInteger(entry.quantity, "INVOICE_BASE_LINE_QUANTITY_INVALID");
+    const sourceUnitCents = toSafeInteger(entry.unitNetAmountCents, "INVOICE_BASE_LINE_UNIT_INVALID");
+    const lineNetAmountCents = toSafeInteger(entry.lineNetAmountCents, "INVOICE_BASE_LINE_TOTAL_INVALID");
+    if (quantity <= 0 || sourceUnitCents < 0) throw new InvoiceMasterDataError("INVOICE_BASE_LINE_MASTER_DATA_INVALID");
+    let unitNetAmountCents = sourceUnitCents;
+    if (decimal) {
+      try {
+        unitNetAmountCents = invoiceBaseUnitAmounts(quantity, lineNetAmountCents, measuredUnit).unitNetAmountCents;
+      } catch {
+        throw new InvoiceElectronicSourceError({kind:'order',itemId,field:'rounding'});
+      }
+      // Die DB-Quelle liefert den eingegebenen Preis, das Original den aus dem Betrag abgeleiteten Preis.
+      const originalPriceMatches = sourceUnitCents === unitNetAmountCents;
+      const sourceAmountMatches = invoiceMaterialLineNetCents(invoiceXmlAmount(sourceUnitCents)+'00', String(quantity)) === lineNetAmountCents;
+      if (vat?.electronic ? !sourceAmountMatches : !originalPriceMatches) throw Error('INVOICE_BASE_LINE_INTEGRITY_INVALID');
+    } else if (lineNetAmountCents < 0 || sourceUnitCents !== Number((BigInt(lineNetAmountCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity))) {
+      throw new Error("INVOICE_BASE_LINE_INTEGRITY_INVALID");
+    }
     return { type: "BASE" as const, itemId, name, quantity, unitNetAmountCents, lineNetAmountCents,
       ...(unit?{unit:unit.code,...(defaultPiece?{unitSource:'default_piece' as const}:{}),taxCategory:invoiceLineVat(entry.vat_rate_basis_points,name,vat!.reverseCharge,vat!.companyRate)===0?'AE' as const:'S' as const}:{}),
       ...(vat ? {vat_rate_basis_points:invoiceLineVat(entry.vat_rate_basis_points,name,vat.reverseCharge,vat.companyRate)} : {}),
@@ -478,7 +499,7 @@ function parseExtraWorkLines(value: unknown, vat?:{reverseCharge:boolean;company
       !UUID_PATTERN.test(catalogPositionId)
       || minutes < 1
       || hourlyRateCents < 1
-      || amountCents !== Math.floor((minutes * hourlyRateCents + 30) / 60)
+      || amountCents !== invoiceExtraWorkCents(minutes, hourlyRateCents).fullCents
     ) throw new Error("INVOICE_EXTRA_WORK_LINE_INTEGRITY_INVALID");
     return {
       type: "EXTRA_WORK" as const,
@@ -544,21 +565,38 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2|3): ImmutableInvoice
       name: value.name,
       quantity: value.quantity,
       unitNetAmountCents: value.unitNetAmountCents,
-    }]);
+    }], undefined, schemaVersion === 3 ? value.unit : undefined);
     const line = parsed[0];
     if (!line) throw new Error("INVOICE_SNAPSHOT_BASE_LINE_INVALID");
     return schemaVersion !== 1 ? {...value,...line} as ImmutableInvoiceLine : line;
   }
   if (value.type === "EXTRA_WORK") {
+    const hasRounding = schemaVersion === 3 && Object.hasOwn(value, "unreducedAmountCents");
+    const hasApproval = hasRounding && Object.hasOwn(value, "approvalEventIds");
     if (!exactKeys(value, [
       "amountCents", "catalogPositionId", "catalogPositionName", "hourlyRateCents",
       "itemId", "minutes", "type",
       ...(schemaVersion !== 1 ? ["vat_rate_basis_points"] : []),
       ...(schemaVersion===3?["unit","taxCategory"]:[]),
       ...(schemaVersion===3&&'sourceOrderId'in value?["sourceOrderId"]:[]),
+      ...(hasRounding ? ["unreducedAmountCents"] : []),
+      ...(hasApproval ? ["approvalEventIds"] : []),
     ])) throw new Error("INVOICE_SNAPSHOT_EXTRA_WORK_LINE_SHAPE_INVALID");
+    if (hasRounding) {
+      const minutes = toSafeInteger(value.minutes, "INVOICE_EXTRA_WORK_MINUTES_INVALID");
+      const rate = toSafeInteger(value.hourlyRateCents, "INVOICE_EXTRA_WORK_RATE_INVALID");
+      const { fullCents, cappedCents } = invoiceExtraWorkCents(minutes, rate);
+      if (value.unreducedAmountCents !== fullCents || value.amountCents !== cappedCents) {
+        throw Error("INVOICE_SNAPSHOT_EXTRA_WORK_ROUNDING_INVALID");
+      }
+      if (hasApproval && (!Array.isArray(value.approvalEventIds) || !value.approvalEventIds.length
+        || new Set(value.approvalEventIds).size !== value.approvalEventIds.length
+        || value.approvalEventIds.some(id => typeof id !== "string" || !UUID_PATTERN.test(id)))) {
+        throw Error("INVOICE_SNAPSHOT_EXTRA_WORK_APPROVAL_INVALID");
+      }
+    }
     const parsed = parseExtraWorkLines([{
-      amountCents: value.amountCents,
+      amountCents: hasRounding ? value.unreducedAmountCents : value.amountCents,
       catalogPositionId: value.catalogPositionId,
       catalogPositionName: value.catalogPositionName,
       hourlyRateCents: value.hourlyRateCents,
@@ -567,7 +605,7 @@ function parseStoredLine(value: unknown, schemaVersion: 1|2|3): ImmutableInvoice
     }]);
     const line = parsed[0];
     if (!line) throw new Error("INVOICE_SNAPSHOT_EXTRA_WORK_LINE_INVALID");
-    return schemaVersion !== 1 ? {...value,...line} as ImmutableInvoiceLine : line;
+    return schemaVersion !== 1 ? {...value, ...line, amountCents: hasRounding ? Number(value.amountCents) : line.amountCents} as ImmutableInvoiceLine : line;
   }
   throw new Error("INVOICE_SNAPSHOT_LINE_TYPE_INVALID");
 }
@@ -726,6 +764,133 @@ type InvoiceMaterialPosition = {
   eventIds: string[];
 };
 type InvoiceMaterialReader = (tx: PrivilegedTenantTransaction, auftragIds: readonly string[]) => Promise<readonly InvoiceMaterialPosition[]>;
+
+type InvoiceScrapReport = { auftragId: string; itemId: string; menge: string; gesamt: string | null };
+type InvoiceScrapPorts = {
+  readReports: (tx: PrivilegedTenantTransaction, tenantId: string, orderIds: readonly string[]) => Promise<readonly InvoiceScrapReport[]>;
+  readChargeMode: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<boolean>;
+  readWork?: (tx: PrivilegedTenantTransaction, tenantId: string, orderIds: readonly string[]) => Promise<ReadonlyMap<string, Auftragsmehrarbeit>>;
+  readWorkSettings?: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
+    spielraumBasispunkte: number; stoppBasispunkte: number;
+  } | null>;
+  createFullScrapTask?: (tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, orderId: string) => Promise<void>;
+};
+
+async function readInvoiceExtraWork(
+  tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, orderIds: readonly string[], ports?: InvoiceScrapPorts,
+) {
+  if (auth.packageSwitches?.p3_werkstatt !== true) return undefined;
+  if (!ports?.readWork || !ports.readWorkSettings) throw Error('INVOICE_EXTRA_WORK_PORTS_MISSING');
+  const settings = await ports.readWorkSettings(tx, auth.tenantId);
+  if (!settings) throw new InvoiceElectronicSourceError({kind:'settings',field:'mehrarbeit'});
+  const orders = await ports.readWork(tx, auth.tenantId, orderIds);
+  return { orders, ...settings };
+}
+
+function applyInvoiceExtraWork(
+  content: PreparedInvoiceContent,
+  source: NonNullable<Awaited<ReturnType<typeof readInvoiceExtraWork>>>,
+  basisNettoCent: number,
+): PreparedInvoiceContent {
+  const work = source.orders.get(content.order.orderId);
+  if (!work) throw Error('INVOICE_EXTRA_WORK_ORDER_SOURCE_MISSING');
+  const allocation = verteileMehrarbeit(work.positionen, basisNettoCent, source.spielraumBasispunkte, source.stoppBasispunkte, work.zusagen);
+  const byPart = new Map(allocation.positionen.map(row => [
+    JSON.stringify([row.position.itemId, row.position.catalogPositionId]), row,
+  ]));
+  const frozenCount = content.lines.filter(line => line.type === 'EXTRA_WORK').length;
+  if (byPart.size !== frozenCount || allocation.positionen.length !== frozenCount) {
+    throw Error('INVOICE_EXTRA_WORK_SOURCE_MISMATCH');
+  }
+  const lines = content.lines.flatMap((line): ImmutableInvoiceLine[] => {
+    if (line.type !== 'EXTRA_WORK') return [line];
+    const key = JSON.stringify([line.itemId, line.catalogPositionId]);
+    const share = byPart.get(key);
+    if (!share || share.position.minuten !== line.minutes || share.position.stundensatzCent !== line.hourlyRateCents) {
+      throw Error('INVOICE_EXTRA_WORK_FROZEN_SOURCE_MISMATCH');
+    }
+    byPart.delete(key);
+    const resulting: ImmutableInvoiceExtraWorkLine[] = [];
+    const roundedLine = (minutes: number) => {
+      const { fullCents, cappedCents } = invoiceExtraWorkCents(minutes, line.hourlyRateCents);
+      return {...line, minutes, amountCents: cappedCents, unreducedAmountCents: fullCents};
+    };
+    if (share.zusageEventId) {
+      resulting.push({...roundedLine(share.bestaetigteMinuten), approvalEventIds: [share.zusageEventId]});
+    }
+    const withinBudget = share.abrechenbareMinuten - share.bestaetigteMinuten;
+    if (withinBudget > 0) resulting.push(share.spielraumGekappt ? roundedLine(withinBudget) : line);
+    return resulting;
+  });
+  return {...content, lines, totals: {...invoiceLineTotals(lines), vatRateBasisPoints: null}};
+}
+
+async function readInvoiceScrap(
+  tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, orderIds: readonly string[], ports?: InvoiceScrapPorts,
+) {
+  if (auth.packageSwitches?.p3_werkstatt !== true) return new Map<string, Map<string, InvoiceScrapReport>>();
+  if (!ports) throw Error('INVOICE_SCRAP_PORTS_MISSING');
+  const byOrder = new Map(orderIds.map(id => [id, new Map<string, InvoiceScrapReport>()]));
+  if (await ports.readChargeMode(tx, auth.tenantId)) return byOrder;
+  for (const report of await ports.readReports(tx, auth.tenantId, orderIds)) {
+    const byItem = byOrder.get(report.auftragId);
+    if (!byItem || byItem.has(report.itemId)) throw Error('INVOICE_SCRAP_REPORT_INVALID');
+    byItem.set(report.itemId, report);
+  }
+  return byOrder;
+}
+
+function applyInvoiceScrap(content: PreparedInvoiceContent, reports?: ReadonlyMap<string, InvoiceScrapReport>): PreparedInvoiceContent {
+  if (!reports?.size) return content;
+  let remainingPositions = 0;
+  const lines = content.lines.flatMap((line): ImmutableInvoiceLine[] => {
+    if (line.type !== 'BASE') return [line];
+    const report = reports.get(line.itemId);
+    if (!report || report.menge === '0') {
+      remainingPositions++;
+      return [line];
+    }
+    const measured = isMeasuredBaseUnit(line.unit);
+    if (!measured && line.unit !== 'C62') throw Error('INVOICE_SCRAP_UNIT_INVALID');
+    if (measured && (!report.gesamt || !/^[1-9]\d*$/.test(report.gesamt))) {
+      throw new InvoiceScrapError(INVOICE_SCRAP_COPY.piecesMissing(line.name));
+    }
+    const total = measured ? Number(report.gesamt) : line.quantity;
+    const scrap = Number(report.menge);
+    if (!Number.isSafeInteger(total) || total < 1 || !/^[1-9]\d*$/.test(report.menge)
+      || !Number.isSafeInteger(scrap) || scrap > total) throw Error('INVOICE_SCRAP_REPORT_INVALID');
+    const remaining = total - scrap;
+    if (!measured && remaining === 0) return [];
+    if (remaining > 0) remainingPositions++;
+    const quantity = measured ? line.quantity : remaining;
+    const pieces = BigInt(total);
+    const lineNetAmountCents = Number((BigInt(line.lineNetAmountCents)*BigInt(remaining)+pieces/BigInt(2))/pieces);
+    try {
+      const {unitNetAmountCents} = invoiceBaseUnitAmounts(quantity, lineNetAmountCents, line.unit);
+      return [{...line, quantity, lineNetAmountCents, unitNetAmountCents}];
+    } catch {
+      throw new InvoiceElectronicSourceError({kind:'order',itemId:line.itemId,objectId:content.order.orderId,field:'rounding'});
+    }
+  });
+  if (!remainingPositions) throw new InvoiceScrapError(ORDER_SCRAP_COPY.allParts, content.order.orderId);
+  return {...content, lines, totals: {...invoiceLineTotals(lines), vatRateBasisPoints: null}};
+}
+
+async function applyInvoiceScrapWithinTransaction(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  content: PreparedInvoiceContent,
+  reports: ReadonlyMap<string, InvoiceScrapReport> | undefined,
+  ports?: InvoiceScrapPorts,
+) {
+  try {
+    return applyInvoiceScrap(content, reports);
+  } catch (error) {
+    if (!(error instanceof InvoiceScrapError) || !error.fullScrapOrderId || !ports?.createFullScrapTask) throw error;
+    await ports.createFullScrapTask(tx, auth, error.fullScrapOrderId);
+    return {code: 'VALIDATION_ERROR', message: error.message} as const;
+  }
+}
 
 async function readInvoiceMaterial(tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, auftragIds: readonly string[], readMaterial?: InvoiceMaterialReader) {
   if (auth.packageSwitches?.p4_lager !== true) return [];
@@ -1079,6 +1244,78 @@ async function readInvoiceIssueSourceRows(tx:PrivilegedTenantTransaction,orderId
  return rows.map(({batch_order_id,...row})=>({id:batch_order_id,row}));
 }
 
+/** Nummer des Originals, das eine Ausschusskorrektur am Auftrag sperrt. */
+export async function readOrderScrapInvoiceNumberInTransaction(
+  tx: PrivilegedTenantTransaction, tenantId: string, orderId: string,
+) {
+  return readOrderInvoiceNumberInTransaction(tx, tenantId, orderId, 'not_cancelled');
+}
+
+export async function readOrderInvoiceNumberInTransaction(
+  tx: PrivilegedTenantTransaction,
+  tenantId: string,
+  orderId: string,
+  selection: 'not_cancelled' | 'issued' | 'issued_or_cancelled',
+) {
+  const status = {
+    not_cancelled: sql`original.status IS DISTINCT FROM 'cancelled'`,
+    issued: sql`original.status = 'issued'`,
+    issued_or_cancelled: sql`original.status IN ('issued', 'cancelled')`,
+  }[selection];
+  const activeOrderFirst = selection === 'not_cancelled' ? sql`` : sql`
+    CASE WHEN original.status = 'issued' AND original.order_id = ${orderId}
+      AND original.belegart = 'auftrag' THEN 0 ELSE 1 END,
+  `;
+  const [rechnung] = await tx.execute<{ invoiceNumber: string }>(sql`
+    SELECT original.invoice_number AS "invoiceNumber"
+    FROM private.v_invoice_order_members_v1 mitglied
+    JOIN public.invoices original ON original.tenant_id = mitglied.tenant_id AND original.id = mitglied.invoice_id
+    WHERE mitglied.tenant_id = ${tenantId} AND mitglied.order_id = ${orderId}
+      AND ${status}
+    ORDER BY ${activeOrderFirst} original.issued_at DESC NULLS LAST, original.id DESC
+    LIMIT 1
+  `);
+  return rechnung?.invoiceNumber ?? null;
+}
+
+/** Read the work actually billed in issued single and collection originals. */
+export async function leseBerechneteMehrarbeitInTransaction(
+  tx: PrivilegedTenantTransaction, tenantId: string, auftragIds: readonly string[], readVat: InvoiceVatReader,
+): Promise<ReadonlyMap<string, readonly ImmutableInvoiceExtraWorkLine[]>> {
+  const ergebnis = new Map<string, ImmutableInvoiceExtraWorkLine[]>();
+  if (!auftragIds.length) return ergebnis;
+  const ids = sql.join(auftragIds.map(id => sql`${id}`), sql`, `);
+  const belege = await tx.execute<{
+    auftrag_id: string; invoice_id: string; order_id: string | null; snapshot: unknown;
+    net_amount_cents: number | string; vat_amount_cents: number | string;
+    gross_amount_cents: number | string; vat_rate_basis_points: number | null;
+  }>(sql`
+    SELECT mitglied.order_id AS auftrag_id, original.id::text AS invoice_id, original.order_id, original.snapshot,
+      original.net_amount_cents, original.vat_amount_cents, original.gross_amount_cents, original.vat_rate_basis_points
+    FROM private.v_invoice_order_members_v1 mitglied
+    JOIN public.invoices original ON original.tenant_id = mitglied.tenant_id AND original.id = mitglied.invoice_id
+    WHERE mitglied.tenant_id = ${tenantId} AND mitglied.order_id IN (${ids})
+      AND original.status = 'issued' AND original.contract_version = 1
+      AND (original.order_id IS NULL OR original.belegart = 'auftrag')
+  `);
+  const originale = new Map<string, ImmutableInvoiceSnapshot>();
+  for (const beleg of belege) {
+    let original = originale.get(beleg.invoice_id);
+    if (!original) {
+      original = parseStoredSnapshot(beleg.snapshot, beleg, readVat);
+      originale.set(beleg.invoice_id, original);
+    }
+    const positionen = ergebnis.get(beleg.auftrag_id) ?? [];
+    for (const zeile of original.lines) {
+      if (zeile.type === 'EXTRA_WORK' && (zeile.sourceOrderId ?? original.order?.orderId) === beleg.auftrag_id) {
+        positionen.push(zeile);
+      }
+    }
+    ergebnis.set(beleg.auftrag_id, positionen);
+  }
+  return ergebnis;
+}
+
 function cancellationReceiptMatchesIntent(
   receipt: ImmutableInvoiceCancellationReceipt,
   input: CancelInvoiceInput,
@@ -1389,7 +1626,7 @@ export async function lockInvoiceCreation(tx:PrivilegedTenantTransaction,tenantI
   return selected.length===1?selected[0].customer_id:null;
 }
 
-export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:InvoiceCustomerTermsReader,readMaterial?:InvoiceMaterialReader): Promise<CreateInvoiceResult> {
+export async function createInvoice(input: unknown, existingTransaction?:PrivilegedTenantTransaction,readVat?:InvoiceVatReader,readShippingSettings?:(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:InvoiceCustomerTermsReader,readMaterial?:InvoiceMaterialReader,scrapPorts?:InvoiceScrapPorts): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     const zeroShippingFee=plainObject(input)&&plainObject(input.shippingCosts)&&input.shippingCosts.expectedFeeCents===0;
     return { code: "VALIDATION_ERROR", message: zeroShippingFee?SHIPPING_FEE_COPY.noAdditionalInvoiceNeeded:"Ungültige Rechnungsanfrage." };
@@ -1549,16 +1786,24 @@ export async function createInvoice(input: unknown, existingTransaction?:Privile
         if(originalReceipt.invoiceId!==original.id)throw Error('INVOICE_SHIPPING_ORIGIN_RECEIPT_INVALID');
         originalInvoiceNumber=originalReceipt.invoiceNumber;
       }
-      const prepared=await prepareQualifiedInvoiceContent(tx,authorization.data,input,order,source,afterGoodsOut,agreement,customerInvoiceTerms,requireVatReader(readVat),readShippingSettings,false,[agreementLevels.order,agreementLevels.customer]);
+      const prepared=await prepareQualifiedInvoiceContent(tx,authorization.data,input,order,source,afterGoodsOut,agreement,customerInvoiceTerms,requireVatReader(readVat),readShippingSettings,false,[agreementLevels.order,agreementLevels.customer],
+        () => readInvoiceExtraWork(tx, authorization.data, [order.id], scrapPorts));
       if(prepared.code!=='PREPARED')return prepared;
       const {frozenInvoiceTerms,paymentTermDays}=prepared;
-      const content = input.shippingCosts ? prepared.content : appendInvoiceMaterial(prepared.content,
-        await readInvoiceMaterial(tx, authorization.data, [order.id], readMaterial), source.invoice_vat_rate_basis_points);
+      let content = prepared.content;
+      if (!input.shippingCosts) {
+        const reports = await readInvoiceScrap(tx, authorization.data, [order.id], scrapPorts);
+        const afterScrap = await applyInvoiceScrapWithinTransaction(tx, authorization.data, content, reports.get(order.id), scrapPorts);
+        // Returning commits the existing task while leaving the invoice number untouched.
+        if ('code' in afterScrap) return afterScrap;
+        content = appendInvoiceMaterial(afterScrap, await readInvoiceMaterial(tx, authorization.data, [order.id], readMaterial), source.invoice_vat_rate_basis_points);
+      }
       return persistPreparedInvoice(tx,authorization.data,input,order,content,{paymentTermDays,frozenInvoiceTerms,serviceDate:source.service_date,freezeId:source.freeze_id,afterGoodsOut,originalInvoiceNumber},requireVatReader(readVat),readOriginal);
     };
     return existingTransaction ? await write(existingTransaction) : await withPrivilegedTenantTransaction(authorization.data,write);
   } catch (error) {
     if (error instanceof InvoiceMaterialPriceError) return error.result();
+    if (error instanceof InvoiceScrapError) return {code:'VALIDATION_ERROR',message:error.message};
     if (error instanceof InvoiceMaterialUnitError) return invoiceMaterialUnitFailure(error);
     if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location.kind==='order'?{...error.location,objectId:input.orderId,orderVersion:input.expectedVersion}:error.location};
     if(error instanceof InvoiceGlyphError){
@@ -1593,7 +1838,7 @@ type InvoiceCustomerTermsReader=(tx:PrivilegedTenantTransaction,tenantId:string,
 type InvoiceShippingSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<{shippingFeeCents?:number|null}|null>;
 /** One existing per-order commercial preparation for individual and collection originals.
  * No item repricing, duplicated tax calculation, sender or number allocation. */
-async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,source:SourceRow,afterGoodsOut:boolean,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,customerInvoiceTerms:Parameters<typeof resolveInvoicePaymentTerms>[1]|(()=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]>),readVat:InvoiceVatReader,readShippingSettings:InvoiceShippingSettingsReader|undefined,collectionSource=false,paymentAgreements?:Parameters<typeof resolveInvoicePaymentTerms>[2]):Promise<Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'PREPARED';content:PreparedInvoiceContent;frozenInvoiceTerms:InvoicePaymentTerms;paymentTermDays:number}>{
+async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:CreateInvoiceInput,order:LockedOrder,source:SourceRow,afterGoodsOut:boolean,agreement:Awaited<ReturnType<typeof readEffectiveCustomerAgreement>>,customerInvoiceTerms:Parameters<typeof resolveInvoicePaymentTerms>[1]|(()=>Promise<Parameters<typeof resolveInvoicePaymentTerms>[1]>),readVat:InvoiceVatReader,readShippingSettings:InvoiceShippingSettingsReader|undefined,collectionSource=false,paymentAgreements?:Parameters<typeof resolveInvoicePaymentTerms>[2],readExtraWork?:()=>ReturnType<typeof readInvoiceExtraWork>):Promise<Exclude<CreateInvoiceResult,{code:'OK'}>|{code:'PREPARED';content:PreparedInvoiceContent;frozenInvoiceTerms:InvoicePaymentTerms;paymentTermDays:number}>{
  const tenantId=auth.tenantId;
       const commercial=source.has_quote&&input.shippingCosts===undefined?await readOrderCommercialQuote(tx,tenantId,order.id):null;
       if(commercial){
@@ -1602,7 +1847,8 @@ async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,aut
         // A07-12/14: additional parts keep the ordinary invoice source. Only
         // the actually awarded items are replaced by the canonical KV terms.
         const additional=source.base_lines.filter(line=>!awardedItems.has(line.itemId));
-        const checkedAdditional=additional.some(line=>line.unitNetAmountCents===null||line.lineNetAmountCents===null)?null:parseBaseLines(additional.map(({vat_rate_basis_points:rate,unit,...line})=>{void rate;void unit;return line;}));
+        const additionalTotal=additional.some(line=>line.unitNetAmountCents===null||line.lineNetAmountCents===null)
+          ? null : additional.reduce((sum,line)=>sum+toSafeInteger(line.lineNetAmountCents,'INVOICE_BASE_LINE_TOTAL_INVALID'),0);
         source.base_lines=[...commercial.positions.map(row=>{
           const quantity=row.quantity;
           return {itemId:row.itemId,name:row.name,unit:row.unit??null,quantity,unitNetAmountCents:Number((BigInt(row.lineTotalCents)+BigInt(quantity)/BigInt(2))/BigInt(quantity)),lineNetAmountCents:row.lineTotalCents,vat_rate_basis_points:row.vatRateBasisPoints??commercial.vatRateBasisPoints};
@@ -1615,8 +1861,8 @@ async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,aut
         });
         // The existing canonical awarded-quote port proves these prices; no price is copied into an intake intent.
         source.base_line_count=commercial.positions.length+additional.length;
-        if(checkedAdditional!==null)source.base_net_amount_cents=commercial.totalNetCents+checkedAdditional.reduce((sum,line)=>sum+line.lineNetAmountCents,0);
-        source.base_prices_complete=checkedAdditional!==null&&source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
+        if(additionalTotal!==null)source.base_net_amount_cents=commercial.totalNetCents+additionalTotal;
+        source.base_prices_complete=additionalTotal!==null&&source.base_line_count>0&&commercial.positions.every(row=>Number.isSafeInteger(row.lineTotalCents)&&row.lineTotalCents>=0);
       }
       if(commercial||input.shippingCosts||collectionSource){
         // Recompose the existing structural guards with the canonical quote price proof.
@@ -1678,6 +1924,13 @@ async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,aut
           }
         }
         content = prepareInvoiceContent(source, order,shippingFees,input.shippingCosts!==undefined);
+        if (content.lines.some(line => line.type === 'EXTRA_WORK') && readExtraWork) {
+          const mehrarbeit = await readExtraWork();
+          if (mehrarbeit) {
+            const basisNettoCent = commercial?.totalNetCents ?? toSafeInteger(source.base_net_amount_cents, 'INVOICE_BASE_AMOUNT_TOTAL_INVALID');
+            content = applyInvoiceExtraWork(content, mehrarbeit, basisNettoCent);
+          }
+        }
       } catch (error) {
         if (error instanceof InvoiceVatRateError) return {code:"VALIDATION_ERROR",message:error.missingCompany?INVOICE_VAT_COPY.missingCompanyRate(error.part):INVOICE_VAT_COPY.missingRate(error.part)};
         if (error instanceof InvoiceMasterDataError) {
@@ -1704,7 +1957,7 @@ async function prepareQualifiedInvoiceContent(tx:PrivilegedTenantTransaction,aut
 
 /** S38a E3/E14: one native collection source, same preparation and fiscal writer.
  * A representative order is never persisted, returned or used as a header. */
-export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatReader,readShippingSettings?:InvoiceShippingSettingsReader,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:InvoiceCustomerTermsReader,readMaterial?:InvoiceMaterialReader):Promise<CreateCollectionInvoiceResult>{
+export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatReader,readShippingSettings?:InvoiceShippingSettingsReader,readOriginal?:InvoiceOriginalReader,readCustomerTerms?:InvoiceCustomerTermsReader,readMaterial?:InvoiceMaterialReader,scrapPorts?:InvoiceScrapPorts):Promise<CreateCollectionInvoiceResult>{
  if(!isIssueCollectionInvoiceInput(input))return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionInvalid};
  let authorization;
  try{authorization=await resolveAuthorization();}catch{return {code:'UNAVAILABLE',message:E_INVOICE_COPY.collectionUnavailable};}
@@ -1743,13 +1996,15 @@ export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatR
   const collectionAgreement=await readEffectiveCustomerAgreement(tx,{tenantId,customerId,orderId:null,memberOrderIds:members.map(member=>member.order_id),lock:true});
   await tx.execute(sql`SELECT id FROM public.company_settings WHERE tenant_id=${tenantId} FOR SHARE`);
   const prepared:Array<{order:LockedOrder;source:SourceRow;content:PreparedInvoiceContent;terms:InvoicePaymentTerms}>=[];
+  let extraWork: ReturnType<typeof readInvoiceExtraWork> | undefined;
+  const readExtraWork = () => extraWork ??= readInvoiceExtraWork(tx, auth, orders.map(order => order.id), scrapPorts);
   for(const order of orders){
    const rows=await readInvoiceIssueSource(tx,order.id),original=rows[0];
    if(rows.length===0)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionSourceIncomplete(order.order_number,'ein Beleg')};
    if(rows.length!==1||!original||original.tenant_id!==tenantId||original.order_id!==order.id||original.customer_id!==customerId||original.current_order_version!==order.version)throw Error('INVOICE_COLLECTION_MEMBER_SOURCE_INVALID');
    if(!original.no_active_invoice)return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
    const agreement=collectionAgreement.agreement;
-   const value=await prepareQualifiedInvoiceContent(tx,auth,{orderId:order.id,expectedVersion:order.version,clientEventId:input.clientEventId},order,original,true,agreement,getCustomerTerms,requireVatReader(readVat),readShippingSettings,true);
+   const value=await prepareQualifiedInvoiceContent(tx,auth,{orderId:order.id,expectedVersion:order.version,clientEventId:input.clientEventId},order,original,true,agreement,getCustomerTerms,requireVatReader(readVat),readShippingSettings,true,undefined,readExtraWork);
    if(value.code!=='PREPARED')return value;
    prepared.push({order,source:original,content:value.content,terms:value.frozenInvoiceTerms});
   }
@@ -1758,9 +2013,19 @@ export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatR
   // Common party/terms values are accepted only when proven equal for EVERY
   // member. This reduction never creates a representative fiscal order.
   if(prepared.some(row=>canonicalJson(row.content.seller)!==canonicalJson(common.content.seller)||canonicalJson(row.content.customer)!==canonicalJson(common.content.customer)||canonicalJson(row.terms)!==canonicalJson(common.terms)))return {code:'CONFLICT',message:E_INVOICE_COPY.collectionConflict};
-  const material = await readInvoiceMaterial(tx, auth, orders.map(order => order.id), readMaterial);
+  const orderIds = orders.map(order => order.id);
+  const scrap = await readInvoiceScrap(tx, auth, orderIds, scrapPorts);
+  const adjusted: typeof prepared = [];
+  let fullScrap: {code:'VALIDATION_ERROR'; message:string} | undefined;
+  for (const row of prepared) {
+    const afterScrap = await applyInvoiceScrapWithinTransaction(tx, auth, row.content, scrap.get(row.order.id), scrapPorts);
+    if ('code' in afterScrap) fullScrap ??= afterScrap;
+    else adjusted.push({...row, content: afterScrap});
+  }
+  if (fullScrap) return fullScrap;
+  const material = await readInvoiceMaterial(tx, auth, orderIds, readMaterial);
   const lines:ImmutableInvoiceLine[]=[],shipping=new Map<string,ImmutableInvoiceShippingLine>();
-  for(const row of prepared)for(const line of appendInvoiceMaterial(row.content,
+  for(const row of adjusted)for(const line of appendInvoiceMaterial(row.content,
     material.filter(position => position.auftragId === row.order.id), row.source.invoice_vat_rate_basis_points).lines){
    if(line.type!=='SHIPPING'){lines.push({...line,sourceOrderId:row.order.id});continue;}
    const previous=shipping.get(line.shipmentGroupId);
@@ -1778,6 +2043,7 @@ export async function createCollectionInvoice(input:unknown,readVat?:InvoiceVatR
   return persistPreparedInvoice(tx,auth,input,null,content,{paymentTermDays:common.terms.ziel_tage,frozenInvoiceTerms:common.terms,serviceDate:null,freezeId:null,afterGoodsOut:true,collectionCustomerId:customerId,ignoredAgreements:collectionAgreement.ignored},requireVatReader(readVat),readOriginal);
  });}catch(error){
   if (error instanceof InvoiceMaterialPriceError) return error.result();
+  if (error instanceof InvoiceScrapError) return {code:'VALIDATION_ERROR',message:error.message};
   if (error instanceof InvoiceMaterialUnitError) return invoiceMaterialUnitFailure(error);
   if(error instanceof InvoiceCollectionNotDueError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.collectionNotDue};
   if(error instanceof InvoiceElectronicSourceError)return {code:'VALIDATION_ERROR',message:E_INVOICE_COPY.missingSource(error.location.field),source:error.location};

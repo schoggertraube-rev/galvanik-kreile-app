@@ -75,3 +75,7 @@ export const E_INVOICE_CORRECTION_COPY={
  done:(nr:string)=>`Auftrag ${nr} ist wieder offen. Korrigiere das Feld und melde ihn erneut fertig.`,
  failed:'Auftrag konnte nicht wieder geöffnet werden. Versuch es gleich noch einmal.',
 } as const;
+export const INVOICE_SCRAP_COPY = {
+  piecesMissing: (position: string) => `Ausschuss ohne Teilezahl bei Position ${position}. Trag die Gesamtzahl der Teile in der Werkstatt nach.`,
+} as const;
+export const INVOICE_EXTRA_WORK_COPY = { roundingAllowance: 'Abrundung Mehrarbeit' } as const;

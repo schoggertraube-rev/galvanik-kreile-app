@@ -13,7 +13,7 @@ import {readComplaintsForAuthorization} from '@/modules/complaints/server-public
 import {readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 
 it('keeps live results while page reads leave the projector idle until a bounded scheduled rebuild',async()=>{
- await readyInvoiceOrder('TEST scheduled model live equality');
+ const order=await readyInvoiceOrder('TEST scheduled model live equality');
  const now=new Date();
  const live=async()=>{
   const resolved=await resolveAuthorization();if(!resolved.ok)throw Error('TEST_ACTUAL_SHADOW_AUTH_REQUIRED');
@@ -25,7 +25,19 @@ it('keeps live results while page reads leave the projector idle until a bounded
   expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK'`).toEqual([{count:0}]);
   expect(output.mock.calls.filter(call=>call[0]==='[TODAY_MODEL_SHADOW]')).toHaveLength(0);
   expect((await rebuildTodayModel(tenant,undefined,{bounded:true})).code).toBe('OK');
-  expect(await sql`SELECT count(*)::integer AS count FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK'`).toEqual([{count:9}]);
+  const sources=await sql`SELECT kind,source_id FROM private.today_source_v1 WHERE tenant_id=${tenant} AND status='OK' ORDER BY kind,source_id`;
+  expect(sources).toEqual([
+   {kind:'quelle:accounting.geld',source_id:'*'},
+   {kind:'quelle:complaints.liste',source_id:'*'},
+   {kind:'quelle:eingang.nachrichten',source_id:'*'},
+   {kind:'quelle:fundament.firma',source_id:'*'},
+   {kind:'quelle:orders.auftrag',source_id:order.orderId},
+   {kind:'quelle:orders.liste',source_id:'*'},
+   {kind:'quelle:quotes.liste',source_id:'*'},
+   {kind:'quelle:quotes.nachfassen',source_id:'*'},
+   {kind:'quelle:takt.ausfall',source_id:'*'},
+   {kind:'quelle:tasks.aufgabe',source_id:'*'},
+  ]);
   expect(await withSession(full,live,true)).toEqual(before);
   expect(output.mock.calls.filter(call=>call[0]==='[TODAY_MODEL_SHADOW]')).toHaveLength(0);
  }finally{output.mockRestore();}

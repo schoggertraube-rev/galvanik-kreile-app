@@ -4,6 +4,8 @@ import {appendProductionReversals} from '@/lib/server/productionSnapshotPort';
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { ORDER_CONTENT_COPY } from "@/ui/ordersCopy";
+import { readOrderInvoiceNumberInTransaction } from "./immutableInvoiceCommand";
 
 const EVENT_TYPE = "ORDER_FREEZE_CORRECTED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
@@ -309,7 +311,15 @@ export async function reopenFrozenOrder(
         throw new Error("ORDER_INVOICE_PRESENCE_INVALID");
       }
       if (invoice.invoice_exists || invoice.invoice_count > 0) {
-        return { code: "CONFLICT", message: "Freeze kann nach Rechnungserstellung nicht korrigiert werden." };
+        const invoiceNumber = await readOrderInvoiceNumberInTransaction(
+          tx, authorization.data.tenantId, order.id, "issued_or_cancelled",
+        );
+        return {
+          code: "CONFLICT",
+          message: invoiceNumber
+            ? ORDER_CONTENT_COPY.invoiceAlreadyIssued(invoiceNumber)
+            : "Freeze kann nach Rechnungserstellung nicht korrigiert werden.",
+        };
       }
 
       const itemRows = await tx.execute<{
