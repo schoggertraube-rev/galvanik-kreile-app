@@ -233,6 +233,22 @@ const eslintConfig = defineConfig([
       }],
     },
   },
+  {
+    files: ["src/modules/metallkurs/server/abruf.ts"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        paths: [{
+          name: "@/modules/fundament/server-public",
+          allowImportNames: ["readMetallkursEinstellungenInTransaction"],
+          message: "Der Kursabruf übernimmt seine Einstellungen aus dem vorhandenen Leser.",
+        }],
+        patterns: [{
+          ...modulesFacadePattern,
+          group: [...modulesFacadePattern.group, "!@/modules/fundament/server-public"],
+        }, nonExecutableReferencePattern],
+      }],
+    },
+  },
   // ── Domain isolation: auth must not depend on business domains ──
   {
     files: ["src/lib/auth/**/*.ts", "src/lib/auth/**/*.tsx"],
