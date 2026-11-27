@@ -16,6 +16,9 @@ export function normaliseCustomerPhone(phone: string | null | undefined) {
 export function customerSortKey(value:CustomerComparisonValue) {
   return normaliseCustomerName(value.customerType==="privat"?[value.lastName,value.firstName].filter(Boolean).join(" "):value.companyName??value.name);
 }
+export function customerDuplicateQueries(name:string,phone?:string|null,email?:string|null,city?:string|null){
+  return [...new Set([name,phone,email,city].map(value=>value?.trim()??"").filter(value=>value.length>=2))];
+}
 export function customerDuplicateMatch(stored: CustomerComparisonValue,candidate: CustomerComparisonValue): {kind:"exact"|"possible";by:string}|null {
   const phone=normaliseCustomerPhone(candidate.phone);
   if(phone&&phone===normaliseCustomerPhone(stored.phone))return {kind:"exact",by:"Telefon"};

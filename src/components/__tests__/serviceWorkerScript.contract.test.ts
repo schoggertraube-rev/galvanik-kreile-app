@@ -101,6 +101,24 @@ function expectNoStorageOrFetch(metrics: Metrics) {
 }
 
 describe("service worker containment contract", () => {
+  it("keeps the server-confirmed offline lease on the device time basis", () => {
+    const now = () => 100;
+    const context = { Date: { now: () => 50_100 }, performance: { timeOrigin: 50_000, now } };
+    const source = readFileSync(resolve(process.cwd(), 'public', 'kreile-offline-queue.js'), 'utf8');
+    const result = runInNewContext(source + `
+      const q = globalThis.KreileOfflineQueue;
+      const start = {localAt:50000,monotonicAt:50000};
+      const lease = q.makeConfirmedIdleClock(1000,2000,start);
+      [
+        q.remainingIdleClock(lease),
+        q.remainingIdleClock(lease,{localAt:50010,monotonicAt:51000}),
+        q.remainingIdleClock(lease,{localAt:49999,monotonicAt:50100}),
+        q.remainingIdleClock({confirmedAt:1000,expiresAt:2000}),
+      ];
+    `, context);
+    expect(result).toEqual([900, null, null, null]);
+  });
+
   it("installs exactly the static public asset allowlist", async () => {
     const { handlers, metrics } = loadWorker();
     const work: Promise<unknown>[] = [];

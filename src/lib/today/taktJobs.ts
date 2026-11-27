@@ -18,6 +18,7 @@ export async function frischeTaktAusfallNachErgebnis(tenantId:string,signal?:Abo
   try {
     const {refreshTodayModel}=await import('@/lib/server/todayProjection');
     const result=await refreshTodayModel(tenantId,undefined,{bounded:true,signal,taktErgebnis:true});
+    if(result.code==='BUSY')return;
     if(result.code!=='OK'||result.stale>0)throw Error('TAKT_AUSFALL_AUFFRISCHUNG_INCOMPLETE');
   } catch {
     console.error('[TODAY_TAKT_SOURCE_FAILED]',{code:'SOURCE_INCOMPLETE'});

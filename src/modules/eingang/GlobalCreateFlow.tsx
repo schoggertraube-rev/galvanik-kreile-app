@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { kundeVollstaendigkeit, customerPaymentLabel, CUSTOMER_FIELD_LABELS, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
+import { kundeVollstaendigkeit, customerPaymentLabel, CUSTOMER_FIELD_LABELS, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerDuplicateQueries, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
 import type { CatalogServiceChoice } from "@/modules/katalog/public";
 import {
   intakePaymentContract,
@@ -630,11 +630,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   }, [directCustomer.paymentPreference, directCustomerId, directCustomerMode, intakeHandover,customerChoices]);
   const customerCoreComplete = Object.keys(kundeValidierung(customerDraft)).length===0;
   const customerChanged = JSON.stringify({ customerType, customerDraft, customerNote }) !== JSON.stringify(customerBaseline);
-  const customerDuplicateQueries = useMemo(() => [customerName, customerDraft.phone, customerDraft.email, customerDraft.city]
-    .map((value) => value?.trim() ?? "")
-    .filter((value, index, values) => value.length >= 2 && values.indexOf(value) === index), [customerDraft.city, customerDraft.email, customerName, customerDraft.phone]);
+  const customerDuplicateSearchTerms = useMemo(() =>
+    customerDuplicateQueries(customerName,customerDraft.phone,customerDraft.email,customerDraft.city),
+    [customerDraft.city,customerDraft.email,customerName,customerDraft.phone]);
   const customerDuplicateCandidate=useMemo<CustomerComparisonValue>(()=>({customerType:customerDraft.customerType,companyName:customerDraft.companyName,firstName:customerDraft.firstName,lastName:customerDraft.lastName,phone:customerDraft.phone,email:customerDraft.email,street:customerDraft.street,houseNumber:customerDraft.houseNumber,zipCode:customerDraft.zipCode,city:customerDraft.city}),[customerDraft.customerType,customerDraft.companyName,customerDraft.firstName,customerDraft.lastName,customerDraft.phone,customerDraft.email,customerDraft.street,customerDraft.houseNumber,customerDraft.zipCode,customerDraft.city]);
-  const customerDuplicateQuery = customerDuplicateQueries.join("|")+JSON.stringify(customerDuplicateCandidate);
+  const customerDuplicateQuery = customerDuplicateSearchTerms.join("|")+JSON.stringify(customerDuplicateCandidate);
   const customerDuplicateOpen = customerDuplicateResults.length > 0
     && customerDuplicateAcceptedFor !== customerDuplicateQuery;
   const intakeSuggestionBasisKey = useMemo(() => JSON.stringify({
@@ -773,7 +773,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   useEffect(() => {
     if (!open || step !== "customer") return;
-    const queries = customerDuplicateQueries;
+    const queries = customerDuplicateSearchTerms;
     if (queries.length === 0) {
       const clearTimer = window.setTimeout(() => {
         setCustomerDuplicateResults([]);
@@ -802,7 +802,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [customerDuplicateQueries,customerDuplicateCandidate, open, ports, step]);
+  }, [customerDuplicateSearchTerms,customerDuplicateCandidate, open, ports, step]);
 
   useEffect(() => {
     if (!intakeToast) return;

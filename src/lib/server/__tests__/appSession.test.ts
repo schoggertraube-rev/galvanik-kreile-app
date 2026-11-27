@@ -23,12 +23,17 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   getSecretKey,
+  appSessionReadScope,
+  readAppSession,
+  renewAppSessionActivity,
+  setAppSession,
   signAppSession,
   verifyAppSessionToken,
   COOKIE_NAME,
   SESSION_TTL_MS,
   type AppSession,
 } from "@/lib/server/appSession";
+import { readSessionInactivity } from '@/lib/auth/sessionInactivity';
 
 // ─── Testschlüssel ─────────────────────────────────────────────────────────
 const TEST_SECRET = "test-secret-only-for-unit-tests-not-production";
@@ -46,6 +51,7 @@ vi.mock("next/headers", () => ({
     set: mockCookieSet,
     delete: mockCookieDelete,
   }),
+  headers: vi.fn().mockResolvedValue(new Headers({ 'user-agent': 'Macintosh Safari' })),
 }));
 
 // APP_SESSION_SECRET auf Testschlüssel setzen
@@ -75,6 +81,68 @@ function makeSession(overrides?: Partial<AppSession>): AppSession {
     ...overrides,
   };
 }
+
+describe('signed inactivity and offline reading partition', () => {
+  beforeEach(() => {
+    mockCookieGet.mockReset();
+    mockCookieSet.mockReset();
+  });
+
+  it('acknowledges an interaction without extending the fixed end or changing the reading partition', async () => {
+    const now = Date.now();
+    const session = makeSession({ issuedAt: now - 120_000, lastSeen: now - 61_000, device: 'tablet' });
+    const token = signAppSession(session, TEST_SECRET);
+    const sessionScope = appSessionReadScope(token, session);
+    const jar = new Map([[COOKIE_NAME, token]]);
+    mockCookieGet.mockImplementation((name: string) => jar.has(name) ? { value: jar.get(name) } : undefined);
+
+    const settings = { devices: { tablet: 5 } };
+    const renewed = await renewAppSessionActivity({ ...session, sessionScope }, readSessionInactivity(session, settings));
+    expect(renewed).toMatchObject({ minutes: 5, sessionScope });
+    expect(renewed?.lastSeen).toBeGreaterThanOrEqual(now);
+    expect(mockCookieSet).toHaveBeenCalledOnce();
+    const [cookie, activity, options] = mockCookieSet.mock.calls[0];
+    expect(cookie).toBe('kreile_app_activity_' + sessionScope);
+    expect(options).toMatchObject({ httpOnly: true, expires: new Date(session.expiresAt) });
+    jar.set(cookie, activity);
+    expect(jar.get(COOKIE_NAME)).toBe(token);
+    expect(await readAppSession()).toMatchObject({ ok: true, session: { ...session, lastSeen: renewed?.lastSeen } });
+
+    const nextLogin = makeSession({ userId:'other-login', issuedAt:now-10 });
+    const nextToken = signAppSession(nextLogin, TEST_SECRET);
+    jar.set(COOKIE_NAME, nextToken);
+    jar.set('kreile_app_activity_' + appSessionReadScope(nextToken, nextLogin), activity);
+    expect(await readAppSession()).toEqual({ ok:true, session:nextLogin });
+    jar.delete(COOKIE_NAME);
+    expect(await readAppSession()).toEqual({ ok:false, reason:'NO_COOKIE' });
+  });
+
+  it('refuses to renew an idle session or a different actor before writing the cookie', async () => {
+    const now = Date.now();
+    const session = makeSession({ issuedAt: now - 120_000, lastSeen: now - 65_000, device: 'tablet' });
+    const token = signAppSession(session, TEST_SECRET);
+    const identity = { ...session, sessionScope: appSessionReadScope(token, session) };
+    mockCookieGet.mockReturnValue({ value: token });
+
+    const expired = readSessionInactivity(session, { minutes: 1 });
+    expect(await renewAppSessionActivity(identity, expired)).toBeNull();
+    const active = readSessionInactivity(session, { minutes: 5 });
+    expect(await renewAppSessionActivity({ ...identity, userId: 'test-other-login' }, active)).toBeNull();
+    expect(await renewAppSessionActivity({ ...identity, sessionScope: 'f'.repeat(64) }, active)).toBeNull();
+    expect(mockCookieSet).not.toHaveBeenCalled();
+  });
+
+  it('retains a tablet classification during a cookie refresh only for the same login', async () => {
+    const session = makeSession({ device: 'tablet' });
+    mockCookieGet.mockReturnValue({ value: signAppSession(session, TEST_SECRET) });
+    await setAppSession(makeSession());
+    expect(verifyAppSessionToken(mockCookieSet.mock.calls[0][1], TEST_SECRET))
+      .toMatchObject({ ok: true, session: { device: 'tablet' } });
+    await setAppSession(makeSession({ userId: 'different-login' }));
+    expect(verifyAppSessionToken(mockCookieSet.mock.calls[2][1], TEST_SECRET))
+      .toMatchObject({ ok: true, session: { device: 'desktop' } });
+  });
+});
 
 // ─── 1–7: Pure Funktionen (kein Next.js benötigt) ──────────────────────────
 
