@@ -38,7 +38,7 @@ const vertrag:ReadonlyArray<readonly [MailAnliegen,MailWirkung,string]>=[
 ];
 
 it.each(vertrag)('%s permits the office effect %s and excludes %s',(anliegen,erlaubt,verboten)=>{
-  const belegt={preisquelle:true,reklamation:true,dokumentVorhanden:true,belegDublette:false,
+  const belegt={preisquelle:true,kvAuftrag:true,reklamation:true,dokumentVorhanden:true,belegDublette:false,
     kundeOderLieferant:false,versandAenderbar:true,zuordnungBestaetigt:true};
   expect(erlaubteWirkung(anliegen,erlaubt,belegt)).toBe(true);
   expect(erlaubteWirkung(anliegen,verboten,belegt)).toBe(false);
@@ -60,6 +60,7 @@ it('does not plan an effect on a missing or negative business fact',()=>{
   expect(planeMailWirkungen('A1',['kunde_ohne_dublette_anlegen'],{dublette:true})).toEqual([]);
   expect(planeMailWirkungen('A1',['kunde_ohne_dublette_anlegen'],{dublette:false})).toEqual(['kunde_ohne_dublette_anlegen']);
   expect(planeMailWirkungen('A4',['auftrag_mit_preisquelle_anlegen','kv_entwurf_anlegen'],{})).toEqual(['kv_entwurf_anlegen']);
+  expect(planeMailWirkungen('A2',['auftrag_aus_kv_anlegen'],{})).toEqual([]);
   expect(planeMailWirkungen('A12',['mahnstopp_vormerken'],{offeneRechnung:false})).toEqual([]);
   expect(planeMailWirkungen('A14',['mahnstopp_vormerken'],{offeneRechnung:true})).toEqual(['mahnstopp_vormerken']);
   expect(planeMailWirkungen('A13',['ruecksendung_erwarten'],{})).toEqual([]);

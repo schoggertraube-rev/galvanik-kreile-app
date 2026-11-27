@@ -41,6 +41,7 @@ export type MailWirkungsKontext={
   dublette?:boolean;
   belegDublette?:boolean;
   preisquelle?:boolean;
+  kvAuftrag?:boolean;
   preisrecht?:boolean;
   reklamation?:boolean;
   offeneRechnung?:boolean;
@@ -59,6 +60,7 @@ export function erlaubteWirkung(anliegen:string,wirkung:string,kontext:MailWirku
   switch(wirkung){
     case 'kunde_ohne_dublette_anlegen': return kontext.dublette===false;
     case 'auftrag_mit_preisquelle_anlegen': return kontext.preisquelle===true;
+    case 'auftrag_aus_kv_anlegen': return kontext.kvAuftrag===true;
     case 'versandpauschale_nennen': return kontext.preisrecht===true;
     case 'ruecksendung_erwarten': return kontext.reklamation===true;
     case 'mahnstopp_vormerken': return kontext.offeneRechnung===true;

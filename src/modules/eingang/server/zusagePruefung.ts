@@ -309,6 +309,7 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
   return erlaubteWirkung(anliegen,wirkung,{
     preisrecht:hasAuthorizationArea(auth,'preise'),
     ...(input.art==='preisquelle'?{preisquelle:true}:{}),
+    ...(input.art==='auftrag_aus_kv'?{kvAuftrag:true}:{}),
     ...(input.art==='dublette'&&!input.customerId?{dublette:false}:{}),
     ...(input.art==='beleg_dublette'&&wirkung==='rechnung_im_belegzugang_ablegen'?{belegDublette:false}:{}),
   })?ergebnis:unavailable;

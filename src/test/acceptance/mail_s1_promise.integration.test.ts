@@ -231,8 +231,10 @@ it('reads the quote edition and quantity, rejecting an expired or different quot
     expectedVersion:1,edition:1,channel:'druck',evidence:'TEST bisherige Fassung gedruckt'}));
   const quote=await create();if(quote.code!=='OK')throw Error('TEST_S1_QUOTE:'+quote.code);
   const input={art:'auftrag_aus_kv' as const,quoteId:quote.quote.quoteId,customerId,menge:3,sourceItemId:await originalFixture(customerId)};
-  const read=()=>pruefeZusage(authorization.data,input);
+  const plan={...input,anliegen:'A2',wirkung:'auftrag_aus_kv_anlegen'};
+  const read=()=>pruefeZusage(authorization.data,plan);
   expect(await read()).toMatchObject({frei:false,grund:'unbekannt_kv'});
+  expect(await pruefeZusage(authorization.data,{...plan,art:'kanal_versand',kanal:'mail'})).toMatchObject({frei:false});
   expect(await send(input.quoteId)).toMatchObject({code:'OK'});
   expect(await withSession(full,()=>changeQuoteLifecycleAction({action:'accept',quoteId:input.quoteId,clientEventId:randomUUID(),
     expectedVersion:2,edition:1,evidence:'TEST aktuelle Fassung angenommen'}))).toMatchObject({code:'OK'});
