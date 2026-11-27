@@ -55,6 +55,10 @@ it('reads customer-wide debt from the actual invoice source without exposing it 
   if(!authorized.ok)throw Error('TEST_S1_AUTH_REQUIRED');
   const auth=authorized.data;
   expect(await pruefeZusage(auth,input)).toEqual({frei:true});
+  const thirdPartyPickup={...input,art:'abholer' as const,anliegen:'A10',wirkung:'abholer_vormerken'};
+  expect(await pruefeZusage(auth,thirdPartyPickup)).toEqual({
+    frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.abholer,
+  });
 
   // Explicit synthetic historical debt, matching the existing W-AUSGANG fixture.
   const invoiceId=randomUUID();
@@ -68,6 +72,8 @@ it('reads customer-wide debt from the actual invoice source without exposing it 
     data:{blocked:true,invoiceIds:[invoiceId]},oldest:{number:'R-2025-0812',openAmountCents:6000,daysOverdue:1}});
   expect(await readCustomerDeliveryBlock(auth,customerId)).toMatchObject({code:'OK',data:{blocked:true,invoiceIds:[invoiceId]}});
   expect(await pruefeZusage(auth,input)).toMatchObject({frei:false,grund:'liefersperre',
+    hinweis:expect.stringContaining('R-2025-0812')});
+  expect(await pruefeZusage(auth,thirdPartyPickup)).toMatchObject({frei:false,grund:'liefersperre',
     hinweis:expect.stringContaining('R-2025-0812')});
   expect(await pruefeZusage(auth,input)).not.toHaveProperty('ausweg');
   const unrelated=await originalFixture(customerId,{sender:'test-fremd@example.invalid'});

@@ -241,11 +241,15 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
       return request&&prices&&request.positions.every(position=>prices.some(price=>price.positionKey===position.key))
         ?{frei:true}:{frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unknownPriceSource};
     }
+    if(input.art==='herausgabe'||input.art==='abholer'){
+      if(!input.customerId||!input.orderId)return unavailable;
+      const {customerId,orderId}=input;
+      const result=await withPrivilegedTenantTransaction(auth,tx=>pruefeHerausgabe(tx,auth,{customerId,orderId}));
+      return input.art==='abholer'&&result.frei?{...unavailable,text:MAIL_PROMISE_COPY.pending.abholer}:result;
+    }
     if(Object.hasOwn(MAIL_PROMISE_COPY.pending,input.art)) return {frei:false,grund:'unbekannt',
       text:MAIL_PROMISE_COPY.pending[input.art as keyof typeof MAIL_PROMISE_COPY.pending]};
-    if(input.art!=='herausgabe'||!input.customerId||!input.orderId)return unavailable;
-    const {customerId,orderId}=input;
-    return await withPrivilegedTenantTransaction(auth,tx=>pruefeHerausgabe(tx,auth,{customerId,orderId}));
+    return unavailable;
   }catch(error){
     console.error('[MAIL_PROMISE_SOURCE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
     return input.art==='termin'?unknownTerm:input.art==='auftrag_aus_kv'?unknownQuote:unavailable;
