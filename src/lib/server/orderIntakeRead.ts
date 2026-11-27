@@ -8,9 +8,11 @@ import { orderPositionQuantityError } from "@/lib/orderPositionContract";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem, OrderIntakeSource, OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
-import { customerContactLabel, normaliseCustomerName, normaliseCustomerPhone, customerDuplicateMatch, customerSortKey, type CustomerComparisonValue } from "@/modules/customers/public";
+import { customerContactLabel, normaliseCustomerName, normaliseCustomerPhone, customerDuplicateMatch, customerSortKey,
+  customerDisplayName, customerDuplicateQueries, customerFieldError, EMPTY_CUSTOMER_FORM,
+  type CustomerComparisonValue, type CustomerFormValue } from "@/modules/customers/public";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -268,7 +270,7 @@ function mapReceipt(
 
 export async function searchOrderIntakeCustomers(
   authorization: Pick<AuthorizationSnapshot,"tenantId"> & Partial<Pick<AuthorizationSnapshot,"areas">>,input:unknown,
-  options:{nameAlternatives?:boolean;exactSupplier?:'vat'|'name'}={},
+  options:{nameAlternatives?:boolean;exactSupplier?:'vat'|'name'}={},transaction?:PrivilegedTenantTransaction,
 ):Promise<OrderIntakeCustomerOption[]> {
   if(!validSearchInput(input))throw new Error("ORDER_INTAKE_CUSTOMER_SEARCH_INPUT_INVALID");
   if(input.query.length<(options.exactSupplier?1:2))return [];
@@ -278,7 +280,7 @@ export async function searchOrderIntakeCustomers(
   // Only global search opts in. Intake/customer confirmation keeps strict matching.
   const alternative=options.nameAlternatives&&!input.candidate?alternativeNameQuery(input.query):null;
   const initialPattern=alternative?alternativeNameInitialPattern(alternative):null;
-  return withPrivilegedTenantTransaction(authorization,async tx=>{
+  const read=async(tx:PrivilegedTenantTransaction)=>{
     const searchable=foldedSqlText(sql`customer.search_text`);
     const textSearch=tokens.length?sql.join(tokens.map(token=>sql`strpos(${searchable},${token})>0`),sql` OR `):sql`false`;
     const nameText=sql`lower(concat_ws(' ',customer.name,customer.company_name,customer.first_name,customer.last_name))`;
@@ -310,7 +312,39 @@ export async function searchOrderIntakeCustomers(
       return names.some(value=>nameSearchAlternative(value,alternative)==='phonetic')?1:2;
     };
     return values.sort((a,b)=>(a.duplicateMatch?.kind==="exact"?0:1)-(b.duplicateMatch?.kind==="exact"?0:1)||nameRank(a)-nameRank(b)||customerSortKey(a).localeCompare(customerSortKey(b),"de")||a.id.localeCompare(b.id)).slice(0,10);
-  });
+  };
+  return transaction?read(transaction):withPrivilegedTenantTransaction(authorization,read);
+}
+
+const duplicateFields=['companyName','firstName','lastName','phone','email','street','houseNumber','zipCode','city'] as const;
+export type IntakeCustomerDuplicateDraft=Pick<CustomerComparisonValue,'customerType'|typeof duplicateFields[number]>
+  & Partial<Pick<CustomerFormValue,'country'>>;
+
+/** Match the same form fields and contact search used for ordinary customer creation. */
+export async function readIntakeCustomerDuplicate(
+  auth:Pick<AuthorizationSnapshot,'tenantId'>,input:unknown,suggestedEmail:string|null,tx?:PrivilegedTenantTransaction,
+):Promise<'missing'|'match'|'clear'>{
+  if(!plainObject(input)||input.customerType!=='business'&&input.customerType!=='privat')return 'missing';
+  if(input.country!==undefined&&input.country!==null&&typeof input.country!=='string')return 'missing';
+  const fields:CustomerFormValue={...EMPTY_CUSTOMER_FORM,customerType:input.customerType,
+    country:typeof input.country==='string'?input.country.trim():''};
+  for(const field of duplicateFields){
+    const value=input[field];
+    if(value!==undefined&&value!==null&&typeof value!=='string')return 'missing';
+    fields[field]=typeof value==='string'?value.trim():'';
+  }
+  const sourceAddress=suggestedEmail?.trim()||'';
+  if(!fields.email&&sourceAddress&&!customerFieldError('email',{...fields,email:sourceAddress}))fields.email=sourceAddress;
+  if(!fields.phone||customerFieldError('country',fields)||duplicateFields.some(field=>customerFieldError(field,fields)!==null))
+    return 'missing';
+  const candidate:CustomerComparisonValue={customerType:fields.customerType};
+  for(const field of duplicateFields)candidate[field]=fields[field];
+  const queries=customerDuplicateQueries(customerDisplayName(fields),fields.phone,fields.email,fields.city);
+  for(const query of queries){
+    const candidates=await searchOrderIntakeCustomers(auth,{query,candidate},{},tx);
+    if(candidates.some(value=>value.duplicateMatch))return 'match';
+  }
+  return 'clear';
 }
 
 export async function readOrderIntakeReceipt(

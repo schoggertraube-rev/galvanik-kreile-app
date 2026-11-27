@@ -10,9 +10,11 @@ import {readSelectedReplyTaskEnd} from '@/lib/server/dispatchReplyPort';
 import {lockIntakeConfirmationForAssignment} from '@/lib/server/intakeDraftEvents';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import type {CustomerWriter} from '@/lib/server/commands/orderIntakeCommand';
+import {readIntakeCustomerDuplicate} from '@/lib/server/orderIntakeRead';
 import type {CustomerCreateCommandResult} from '@/modules/customers/public';
 import type {AssignmentReadResult,AssignmentFailure,AssignmentCustomer,AssignmentInput,AssignmentResult,NoBusinessInput,NoBusinessResult} from '../assignmentContract';
 import {intakeInvoiceReviewRequired,intakeRequiredEffect} from '../intakeLifecycleContract';
+import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 
 type CustomerReader=(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<CustomerStoredProfile|null>;
 type Source={id:string;version:number;kanal:string;richtung:string;zuordnung:string;einsatz:string;erstellt_von:string;geaendert_von:string|null;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;gruppe_adresse:string|null;absender_name:string|null;absender_adresse:string|null;betreff:string|null;text:string|null;at:string;anliegen:string[];anliegen_offen:string[]};
@@ -69,7 +71,7 @@ type ThreadAssignment=Omit<AssignmentInput,'mode'>&{mode:'thread';binding:SavedM
 
 export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:AssignmentInput|ThreadAssignment,readCustomer:CustomerReader,propagate=true):Promise<Exclude<AssignmentResult,AssignmentFailure>>{
    // Serializes group propagation before row locks; all assignment writers use this order.
-   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${auth.tenantId},0))`);
+   await lockIntakeAssignment(tx,auth.tenantId);
    const row=await source(tx,auth,value.itemId,true),target=await customer(tx,auth,value.customerId,readCustomer),intent={command:'eingang.zuordnen',customerId:value.customerId,mode:value.mode,version:value.version};
    if(target.type!=='lieferant'&&!hasAuthorizationArea(auth,'kunden'))reject('FORBIDDEN','Kunde zuordnen benötigt Kunden.');
    const receipts=await tx.execute<{von:string;nachher:{intent:unknown;version:number;additional:number}}>(sql`SELECT von,nachher FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND art IN ('zugeordnet','umgehaengt') AND befehl_id=${value.clientEventId}::uuid`);
@@ -103,7 +105,6 @@ export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:Au
    }
    return {code:'OK' as const,customer:target,version:row.version+1,additional:additional.length,replayed:false};
 }
-
 /** Only the server-side importer can supply a previously qualified provider result. */
 export async function assignIntakeMailThread(auth:AuthorizationSnapshot,binding:SavedMailReplyBinding,version:number,readCustomer:CustomerReader){
  if(!canSynchronizeIntakeMailbox(auth)||!canAssignIntakeCustomer(auth))return {code:'FORBIDDEN' as const};
@@ -130,7 +131,7 @@ export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTas
   const auth=await session();
   if(!canUndoIntakeCustomerAssignment(auth))reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
   return await withPrivilegedTenantTransaction(auth,async tx=>{
-   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${auth.tenantId},0))`);
+   await lockIntakeAssignment(tx,auth.tenantId);
    const selected=await source(tx,auth,value.itemId);
    if(selected.version===value.version&&selected.kanal==='mail'&&selected.kunde_id&&selected.vorgang_art==='auftrag'){
     // Acquire the same customer boundary as the forward handover before locking the intake row.
@@ -167,6 +168,10 @@ export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTas
   });
  }catch(error){return failed(error);}
 }
+
+async function lockIntakeAssignment(tx:PrivilegedTenantTransaction,tenantId:string){
+ await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${tenantId},0))`);
+}
 /** 3.1 from 3.4 composes the existing customer writer and the same assignment writer atomically. */
 export async function createCustomerForIntake(input:unknown,writeCustomer:CustomerWriter,readCustomer:CustomerReader):Promise<CustomerCreateCommandResult|AssignmentFailure>{
  if(!object(input)||Object.keys(input).sort().join(',')!=='customer,itemId,version'||!uuid(input.itemId)||!Number.isSafeInteger(input.version)||(input.version as number)<1||!object(input.customer)||!uuid(input.customer.clientEventId))return {code:'VALIDATION_ERROR',message:'Kunde oder Eingangsstand ist ungültig.'};
@@ -174,6 +179,14 @@ export async function createCustomerForIntake(input:unknown,writeCustomer:Custom
   if(!canAssignIntakeCustomer(auth))reject('FORBIDDEN','Neukunde aus Absender benötigt Eingang sowie das Recht des Ziels.');
   return await withPrivilegedTenantTransaction(auth,async tx=>{
    const row=await source(tx,auth,input.itemId as string);
+   if(!isSupplier&&!row.kunde_id&&row.anliegen.includes('kv_anfrage')){
+    await lockIntakeAssignment(tx,auth.tenantId);
+    const current=await source(tx,auth,row.id,true);
+    if(current.version!==input.version||current.kunde_id)reject('CONFLICT','Eingang wurde inzwischen geändert.');
+    const duplicate=await readIntakeCustomerDuplicate(auth,input.customer,null,tx);
+    if(duplicate==='missing')reject('VALIDATION_ERROR',MAIL_PROMISE_COPY.pending.dublette);
+    if(duplicate==='match')reject('CONFLICT',MAIL_PROMISE_COPY.duplicateCustomer);
+   }
    const missingInvoiceSupplier=isSupplier&&row.vorgang_art==='rechnung'&&row.vorgang_id!==null&&row.kunde_id===null&&(await tx.execute(sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND id=${row.vorgang_id}::uuid AND item_id=${row.id}::uuid AND lieferant_id IS NULL AND zahlstatus='unklar' AND unklar_grund='Lieferant fehlt'`)).length===1;
    if(missingInvoiceSupplier){const locked=await source(tx,auth,row.id,true);if(locked.version!==input.version)reject('CONFLICT','Eingang wurde inzwischen geändert.');}
    const saved=await writeCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:true,canManageMoney:hasAuthorizationArea(auth,'zahlungen'),canManageSupplierBank:hasAuthorizationArea(auth,'buchhaltung'),canDecide:hasAuthorizationArea(auth,'entscheiden')}},input.customer);
