@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   getSecretKey,
   appSessionReadScope,
-  cacheScopeFromCredential,
+  readAppSession,
   renewAppSessionActivity,
   setAppSession,
   signAppSession,
@@ -92,31 +92,43 @@ describe('signed inactivity and offline reading partition', () => {
     const now = Date.now();
     const session = makeSession({ issuedAt: now - 120_000, lastSeen: now - 61_000, device: 'tablet' });
     const token = signAppSession(session, TEST_SECRET);
-    mockCookieGet.mockReturnValue({ value: token });
+    const sessionScope = appSessionReadScope(token, session);
+    const jar = new Map([[COOKIE_NAME, token]]);
+    mockCookieGet.mockImplementation((name: string) => jar.has(name) ? { value: jar.get(name) } : undefined);
 
     const settings = { devices: { tablet: 5 } };
-    const renewed = await renewAppSessionActivity(session, readSessionInactivity(session, settings));
-    expect(renewed).toMatchObject({ minutes: 5, sessionScope: cacheScopeFromCredential(token) });
+    const renewed = await renewAppSessionActivity({ ...session, sessionScope }, readSessionInactivity(session, settings));
+    expect(renewed).toMatchObject({ minutes: 5, sessionScope });
     expect(renewed?.lastSeen).toBeGreaterThanOrEqual(now);
     expect(mockCookieSet).toHaveBeenCalledOnce();
-    const [cookie, newToken, options] = mockCookieSet.mock.calls[0];
-    expect(cookie).toBe(COOKIE_NAME);
+    const [cookie, activity, options] = mockCookieSet.mock.calls[0];
+    expect(cookie).toBe('kreile_app_activity_' + sessionScope);
     expect(options).toMatchObject({ httpOnly: true, expires: new Date(session.expiresAt) });
-    const decoded = verifyAppSessionToken(newToken, TEST_SECRET);
-    expect(decoded).toMatchObject({ ok: true, session: { ...session, lastSeen: renewed?.lastSeen } });
-    if (!decoded.ok) throw new Error('Expected signed inactivity receipt');
-    expect(appSessionReadScope(newToken, decoded.session)).toBe(cacheScopeFromCredential(token));
+    jar.set(cookie, activity);
+    expect(jar.get(COOKIE_NAME)).toBe(token);
+    expect(await readAppSession()).toMatchObject({ ok: true, session: { ...session, lastSeen: renewed?.lastSeen } });
+
+    const nextLogin = makeSession({ userId:'other-login', issuedAt:now-10 });
+    const nextToken = signAppSession(nextLogin, TEST_SECRET);
+    jar.set(COOKIE_NAME, nextToken);
+    jar.set('kreile_app_activity_' + appSessionReadScope(nextToken, nextLogin), activity);
+    expect(await readAppSession()).toEqual({ ok:true, session:nextLogin });
+    jar.delete(COOKIE_NAME);
+    expect(await readAppSession()).toEqual({ ok:false, reason:'NO_COOKIE' });
   });
 
   it('refuses to renew an idle session or a different actor before writing the cookie', async () => {
     const now = Date.now();
     const session = makeSession({ issuedAt: now - 120_000, lastSeen: now - 65_000, device: 'tablet' });
-    mockCookieGet.mockReturnValue({ value: signAppSession(session, TEST_SECRET) });
+    const token = signAppSession(session, TEST_SECRET);
+    const identity = { ...session, sessionScope: appSessionReadScope(token, session) };
+    mockCookieGet.mockReturnValue({ value: token });
 
     const expired = readSessionInactivity(session, { minutes: 1 });
-    expect(await renewAppSessionActivity(session, expired)).toBeNull();
+    expect(await renewAppSessionActivity(identity, expired)).toBeNull();
     const active = readSessionInactivity(session, { minutes: 5 });
-    expect(await renewAppSessionActivity({ ...session, userId: 'test-other-login' }, active)).toBeNull();
+    expect(await renewAppSessionActivity({ ...identity, userId: 'test-other-login' }, active)).toBeNull();
+    expect(await renewAppSessionActivity({ ...identity, sessionScope: 'f'.repeat(64) }, active)).toBeNull();
     expect(mockCookieSet).not.toHaveBeenCalled();
   });
 

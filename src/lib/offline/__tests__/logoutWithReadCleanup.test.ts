@@ -69,6 +69,23 @@ it('reopens the same confirmed read partition without clearing its pending origi
  expect(ports.cleanup).not.toHaveBeenCalled();
  expect(ports.sync).not.toHaveBeenCalled();
 });
+
+it('ignores the old expiry response after the browser switches login',async()=>{
+ const state=document.documentElement.dataset;
+ const scope='a'.repeat(64),previous='b'.repeat(64),current='c'.repeat(64);
+ state.authStatus='authenticated';state.offlineScope=scope;state.offlineLoginScope=previous;
+ setLoginScope(previous);
+ ports.logout.mockImplementationOnce(async()=>{
+  setLoginScope(current);
+  state.authStatus='authenticated';state.offlineScope=scope;state.offlineLoginScope=current;
+  return {ok:true,remoteSignOut:'success'};
+ });
+ expect(await logoutWithReadCleanup('inactivity',previous)).toEqual({ok:false,code:'SESSION_CHANGED'});
+ expect(ports.cleanup).not.toHaveBeenCalled();
+ expect(state.authStatus).toBe('authenticated');
+ expect(state.offlineLoginScope).toBe(current);
+ expect(readCacheScopeMarker()).toBe(current);
+});
 it('leaves a newer login alone when the old ACTIVE response arrives late',async()=>{
  const state=document.documentElement.dataset;
  const scope='a'.repeat(64),sessionScope='b'.repeat(64),newLogin='c'.repeat(64);

@@ -71,12 +71,13 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
 }
 
 /** Only the currently authorized signed session can acknowledge an interaction. */
-export async function recordAppSessionActivity(): Promise<SessionActivityResult> {
+export async function recordAppSessionActivity(sessionScope: string): Promise<SessionActivityResult> {
+  if (typeof sessionScope !== 'string' || !/^[a-f0-9]{64}$/.test(sessionScope)) return { code: 'EXPIRED' };
   const authorization = await resolveAuthorization();
   if (!authorization.ok) return { code: authorization.reason === 'AUTHORIZATION_UNAVAILABLE' ? 'UNAVAILABLE' : 'EXPIRED' };
   const current = authorization.data.sessionInactivity;
   if (!current) return { code: 'UNAVAILABLE' };
-  const now = await renewAppSessionActivity({ userId: authorization.data.userId, issuedAt: current.issuedAt }, current);
+  const now = await renewAppSessionActivity({ userId: authorization.data.userId, issuedAt: current.issuedAt, sessionScope }, current);
   return now ? { code: 'OK', inactivity: now } : { code: 'EXPIRED' };
 }
 

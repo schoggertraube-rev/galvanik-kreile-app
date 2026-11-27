@@ -83,11 +83,15 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       expect(saved).toMatchObject({ code: 'OK', drafts: [draft] });
 
       clock.mockReturnValue(now + 45_000);
-      expect(await recordAppSessionActivity()).toMatchObject({ code: 'OK', inactivity: { expiresAt: now + 165_000, lastSeen: now + 45_000 } });
+      expect(await recordAppSessionActivity('f'.repeat(64))).toEqual({code:'EXPIRED'});
+      expect(await recordAppSessionActivity(scope)).toMatchObject({ code: 'OK',
+        inactivity: { expiresAt: now + 165_000, lastSeen: now + 45_000, sessionScope:scope } });
       const refreshed = await readAppSession();
       if (!refreshed.ok) throw new Error('TEST signed session unavailable');
       expect(refreshed.session.expiresAt).toBe(original.expiresAt);
-      expect(appSessionReadScope(store.get(COOKIE_NAME)!.value, refreshed.session)).toBe(scope);
+      expect(refreshed.session.lastSeen).toBe(now + 45_000);
+      expect(store.get(COOKIE_NAME)?.value).toBe(token);
+      expect(store.get('kreile_app_activity_' + scope)?.value).toBeTruthy();
       clock.mockReturnValue(now + 120_000);
       const renewedToken = store.get(COOKIE_NAME)!.value;
       store.set(CACHE_SCOPE_COOKIE, 'TEST-browser-marker-already-changed');
@@ -106,7 +110,7 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       clock.mockReturnValue(now + 165_000);
       const expiredToken = store.get(COOKIE_NAME)!.value;
       expect(await getAuthorizationSnapshotAction()).toMatchObject({ ok: false });
-      expect(await recordAppSessionActivity()).toEqual({ code: 'EXPIRED' });
+      expect(await recordAppSessionActivity(scope)).toEqual({ code: 'EXPIRED' });
       expect(await getIntakeDraftsAction()).toMatchObject({ code: 'UNAUTHENTICATED' });
       expect(await replayOfflineWorkshopAction(partition, pending)).toEqual({code:'UNAUTHENTICATED'});
       expect(store.get(COOKIE_NAME)?.value).toBe(expiredToken);

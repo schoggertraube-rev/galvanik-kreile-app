@@ -4,7 +4,7 @@ import {reportProtocolClientError} from '@/modules/logging/public';
 import {logout,type InactivityLogoutResult,type LogoutResult} from '@/app/actions/auth';
 import {clearLoggedOutReadState} from './logoutReadState';
 import {OFFLINE_LOGOUT_COPY} from '@/ui/situationCatalog';
-import {endCacheScopePause,pauseCacheScopeMarker,removeCacheScopeMarker,resumeCacheScopeMarker} from './cacheScopeMarker';
+import {endCacheScopePause,hasCacheScopeMarker,pauseCacheScopeMarker,removeCacheScopeMarker,resumeCacheScopeMarker} from './cacheScopeMarker';
 import {syncOriginals} from './syncOriginals';
 import {readServerReachability} from './serverReachability';
 
@@ -36,6 +36,9 @@ export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual
  let result:InactivityLogoutResult|undefined;
  let failure:unknown;
  try{result=await (reason==='inactivity'?logout({sessionScope}):logout());}catch(error){failure=error;}
+ if(reason==='inactivity'&&sessionScope&&hasCacheScopeMarker()&&!hasCacheScopeMarker(sessionScope)){
+  return {ok:false,code:'SESSION_CHANGED'} as const;
+ }
  if(result&&!result.ok){
   if(result.code==='ACTIVE'){
    if(!sessionScope||result.inactivity.sessionScope!==sessionScope||readState.offlineLoginScope&&readState.offlineLoginScope!==sessionScope||!resumeCacheScopeMarker(sessionScope)){

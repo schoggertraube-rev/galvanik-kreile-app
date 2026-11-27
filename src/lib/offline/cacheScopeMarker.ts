@@ -13,8 +13,8 @@ function currentScopeMarker(jar=document.cookie):string|null{
  return values.length===1&&validScope.test(values[0])?values[0]:null;
 }
 /** A paused marker still owns its caches, but cannot be used to read them. */
-export function hasCacheScopeMarker():boolean{
- try{return currentScopeMarker()!==null;}catch{return false;}
+export function hasCacheScopeMarker(scope?:string):boolean{
+ try{const current=currentScopeMarker();return current!==null&&(scope===undefined||current===scope);}catch{return false;}
 }
 export function readCacheScopeMarker():string|null{
  try{

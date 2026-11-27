@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getAuthorizationSnapshotAction, recordAppSessionActivity } from '@/app/actions/auth.actions';
-import { readCacheScopeMarker } from '@/lib/offline/cacheScopeMarker';
+import { hasCacheScopeMarker, readCacheScopeMarker } from '@/lib/offline/cacheScopeMarker';
 import { logoutWithReadCleanup } from '@/lib/offline/logoutWithReadCleanup';
 import { captureIdleClock, makeConfirmedIdleClock, readPendingShellMetadata, rememberPendingShellDeadline, remainingIdleClock } from '@/lib/offline/pendingStore';
 import { INACTIVITY_COPY } from '@/ui/inaktivitaetTexte';
@@ -48,7 +48,7 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
       try {
         const started = captureIdleClock();
         const result = await logoutWithReadCleanup('inactivity', initial.sessionScope);
-        if (disposed) return;
+        if (disposed || loginScope && hasCacheScopeMarker() && !hasCacheScopeMarker(loginScope)) return;
         if (!result.ok) {
           if (result.code === 'ACTIVE' && (!offlineEnabled
             || (result.inactivity.sessionScope === loginScope && sameLogin()))) {
@@ -75,21 +75,25 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
     }
 
     const interact = async (event: Event) => {
-      if (!event.isTrusted || disposed || expiring || recording || checkingCache || !navigator.onLine) return;
+      if (!event.isTrusted || disposed || expiring || recording || checkingCache || !navigator.onLine
+        || !loginScope || !sameLogin() || !navigator.locks) return;
       const now = serverNow();
       if (now >= windowState.expiresAt) return void expire();
       if (now - windowState.lastSeen < Math.min(30_000, windowState.minutes * 10_000)) return;
       recording = true;
       try {
-        const started = captureIdleClock();
-        const result = await recordAppSessionActivity();
-        if (disposed) return;
-        if (result.code === 'OK') {
-          applyServerTime(result.inactivity, started);
-          schedule();
-        } else if (result.code === 'EXPIRED') {
-          void expire();
-        }
+        await navigator.locks.request('kreile-app-activity:' + loginScope, { ifAvailable: true }, async lock => {
+          if (!lock || disposed || expiring || !sameLogin()) return;
+          const started = captureIdleClock();
+          const result = await recordAppSessionActivity(loginScope);
+          if (disposed || !sameLogin()) return;
+          if (result.code === 'OK' && result.inactivity.sessionScope === loginScope) {
+            applyServerTime(result.inactivity, started);
+            schedule();
+          } else if (result.code === 'EXPIRED') {
+            void expire();
+          }
+        });
       } catch {
         console.error('[APP_SESSION_ACTIVITY_FAILED]');
       } finally {
