@@ -3,6 +3,7 @@ import {ACTOR_COPY} from '@/ui/situationCatalog';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button,Dialog,Feld,Eingabe,Textfeld,Segment,Auswahl,FormRaster,Hinweis,Rueckfrage,Zustandskette,Zustand,Verlauf} from '@/ui/kr';
 import {isWorkingDay,berlinCalendarDay} from '@/lib/domain/workingDays';
+import {KALENDER_COPY} from '@/ui/kalenderCopy';
 import type {ComplaintCommand} from '../writeContract';
 import {QUOTE_CYCLE_COPY} from '@/ui/situationCatalog';
 import {COMPLAINT_DEFECTS} from '../writeContract';
@@ -82,7 +83,12 @@ export function ComplaintDialog({request,ports,onClose,onMessage}:{request:Compl
     if(!draft.assessment)errors.bewertung='Bewertung';
     if(draft.assessment==='abgelehnt'&&draft.reason.trim().length<3)errors.begruendung='Begründung fehlt (mindestens 3 Zeichen).';
     if(draft.assessment!=='abgelehnt'&&!draft.measure)errors.massnahme='Maßnahme';
-    if(draft.measure==='nacharbeit'&&draft.assessment!=='abgelehnt'&&(!draft.date||draft.date<berlinCalendarDay(new Date())||!isWorkingDay(draft.date)))errors.liefertermin='Liefertermin fehlt oder ist kein Arbeitstag ab heute.';
+    if(draft.measure==='nacharbeit'&&draft.assessment!=='abgelehnt'){
+      if(!data.betriebsruhetage)errors.liefertermin=KALENDER_COPY.format;
+      else if(!draft.date||draft.date<berlinCalendarDay()||!isWorkingDay(draft.date,new Set(data.betriebsruhetage))){
+        errors.liefertermin='Liefertermin fehlt oder ist kein Arbeitstag ab heute.';
+      }
+    }
     if(draft.measure==='gutschrift'&&draft.credit&&(!amount(draft.credit)||(amount(draft.credit)??0)<=0))errors.gutschrift_betrag='Gutschrift muss größer als 0 sein.';
     if(Object.keys(errors).length){missing(errors);return;}
     if(draft.assessment!=='abgelehnt'&&draft.measure==='nacharbeit'){

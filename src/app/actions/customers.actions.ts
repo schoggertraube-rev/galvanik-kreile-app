@@ -1,6 +1,6 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
 
@@ -53,7 +53,7 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   const auth=authorization.data;
-  const result=await readCustomerSummary(auth, input,openIntakePredicate(),()=>readPageReadSettings(auth));
+  const result=await readCustomerSummary(auth, input,openIntakePredicate(),readBetriebsruheInTransaction,()=>readPageReadSettings(auth));
   return result.code==="OK"?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
 
  },readLoggingSettings);
@@ -205,7 +205,7 @@ export async function getCustomersDb(): Promise<ActionResult<CustomerListRespons
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
-    const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id),openIntakePredicate());
+    const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id),openIntakePredicate(),readBetriebsruheInTransaction);
     const data = dbCustomers.map((record) => {
       const customer=mapDbCustomer(record),signal=signals.get(record.id);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');
       const readiness=kundeVollstaendigkeit({...customer,customerType:customer.type as CustomerStoredProfile['customerType']},{geld:hasAuthorizationArea(authRes.data,'zahlungen')});

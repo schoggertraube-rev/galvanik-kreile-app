@@ -9,6 +9,7 @@ export type ComplaintDialogData = {
   source:{ id:string; number:string; customerName:string; items:Array<{id:string;name:string;quantity:number;unit:string|null}> };
   initial:{description:string;defect:string;photoIds:string[];intakeItemId:string|null;intakeVersion:number|null};
   suggestedDate:string|null;
+  betriebsruhetage:readonly string[]|null;
   resultMail?:{subject:string;body:string}|null;
   rework:{station:string;goods:string|null}|null;
 };

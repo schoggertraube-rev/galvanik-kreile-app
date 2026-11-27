@@ -15,14 +15,23 @@ import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligib
 import {COLLECTION_REMINDER_COPY,STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
 import {readCollectionMoneyAccess} from '@/lib/server/storageLetterRead';
 import {readStorageFinalTaskState} from '@/lib/server/storageFinalStagePort';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {berechneNichtBerechneteMehrarbeit} from '../domain/mehrarbeitSpielraum';
+import {leseMehrarbeitBuchungenInTransaction} from './mehrarbeitBuchungen';
 
-export type FinishedDispatch={collectionSend?:{allowed:boolean;requiresMoney:boolean;message:string|null};orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true};
+type MehrarbeitNachkalkulation=ReturnType<typeof berechneNichtBerechneteMehrarbeit>;
+type AusgangLeser={
+ readHasMail?:(customerId:string)=>Promise<boolean>;
+ readBilledWork?:(tx:PrivilegedTenantTransaction,tenantId:string,orderIds:readonly string[])=>Promise<ReadonlyMap<string,Parameters<typeof berechneNichtBerechneteMehrarbeit>[1]>>;
+};
+
+export type FinishedDispatch={collectionSend?:{allowed:boolean;requiresMoney:boolean;message:string|null};orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true;mehrarbeitNachkalkulation?:MehrarbeitNachkalkulation};
 function safeDispatchReadError(error:unknown){
  return {name:error instanceof Error&&/^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(error.name)?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/.test(error.message)?error.message:'DISPATCH_READ_FAILED'};
 }
 
 /** Enrich existing operational rows; never a second saved queue or release rule. */
-export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:{readHasMail?:(customerId:string)=>Promise<boolean>}){
+export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,orders:readonly OperationalOrder[],policy:DispatchPolicy|null,ports?:AusgangLeser){
  if(!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
  const result:FinishedDispatch[]=[];
  const appointments=new Map<string,NonNullable<FinishedDispatch['pickupAppointment']>&{recordedAt:string}>();
@@ -31,14 +40,39 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
  const groups=new Map<string,{customerId:string;handover:'pickup'|'shipping';members:DispatchNoticeMember[];threads:Set<string>;deliveryFailedAt:string|null;responseSince:string|null}>();
  const finished=orders.filter(row=>row.station==='fertig');
  const notifications=await readOrdersInformed(auth,finished.map(order=>order.id));
+ const readBilledWork=ports?.readBilledWork;
+ const berechneteAuftraege=readBilledWork&&auth.packageSwitches?.p3_werkstatt===true&&hasAuthorizationArea(auth,'preise')
+  ?finished.filter(order=>{
+    const status=notifications.get(order.id);
+    return status?.code==='OK'&&status.orderVersion===order.version&&status.invoiceState==='issued';
+   }).map(order=>order.id):[];
+ let nachkalkulation:ReadonlyMap<string,MehrarbeitNachkalkulation>=new Map();
+ if(readBilledWork&&berechneteAuftraege.length){
+  try{
+   nachkalkulation=await withPrivilegedTenantTransaction(auth,async tx=>{
+    const belege=await readBilledWork(tx,auth.tenantId,berechneteAuftraege);
+    const zeit=await leseMehrarbeitBuchungenInTransaction(tx,auth.tenantId,[...belege.keys()]);
+    const werte=new Map<string,MehrarbeitNachkalkulation>();
+    for(const [id,abgerechnet] of belege){
+     const gebucht=zeit.get(id);
+     if(gebucht)werte.set(id,berechneNichtBerechneteMehrarbeit(gebucht.positionen,abgerechnet));
+    }
+    return werte;
+   });
+  }catch(error){console.error('[DISPATCH_EXTRA_WORK_READ_FAILED]',safeDispatchReadError(error));}
+ }
+ const nachkalkulationErwartet=new Set(berechneteAuftraege);
  for(const order of finished){
   const notification=notifications.get(order.id);
   if(notification?.code!=='OK'||notification.orderVersion!==order.version){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['INFORMED_RECEIPT_UNAVAILABLE'],unavailable:true});continue;}
   const workingDays=policy===null||!notification.frozenAt?null:workingDaysBetween(berlinCalendarDay(new Date(notification.frozenAt)),berlinCalendarDay(),policy.holidays);
   if(workingDays!==null&&workingDays<0){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['DISPATCH_CALENDAR_INVALID'],unavailable:true});continue;}
+  const mehrarbeit=nachkalkulation.get(order.id);
   result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,
    informedAt:notification.informed?.recordedAt??null,channel:notification.informed?.channel??null,blockReason:notification.blockReason,
-   workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[])]});
+   ...(mehrarbeit?{mehrarbeitNachkalkulation:mehrarbeit}:{}),
+   workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[]),
+    ...(nachkalkulationErwartet.has(order.id)&&!mehrarbeit?['DISPATCH_EXTRA_WORK_SOURCE_UNAVAILABLE']:[])]});
   if(notification.handover==='pickup'){
    const read=await readOrderPickupAppointment(auth,order.id),row=result.at(-1)!;
    if(read.code!=='OK'){row.unavailable=true;row.gaps.push('PICKUP_APPOINTMENT_UNAVAILABLE');continue;}

@@ -17,6 +17,7 @@ import {canTransportInvoiceDocument,hasAuthorizationArea} from "@/lib/auth/autho
 import {hasAnyAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
+import type { TerminEinstellungenLeser } from "@/lib/server/orderStationRead";
 import {TAG_QUELLEN,TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
 import type {HeuteZeile} from '@/lib/today/todaySourceRegistry';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
@@ -349,7 +350,7 @@ function readTodayTaskCalendar(){
  return withPageReadPhase('today.tasks',()=>getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]})));
 }
 
-export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
+export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readTerminEinstellungen:TerminEinstellungenLeser,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
   const diagnosticStarted=Date.now();
   const calendar=readTodayCalendar(readNow),today=calendar.today;
   const access=todaySourceAccess(authorizationReadContext(auth));
@@ -357,7 +358,7 @@ export async function collectTodaySources(auth: AuthorizationSnapshot,readCompla
   const quotesRead=readTodayQuoteSources(graphAllowed,readNow);
   const tasksRead=graphAllowed?readTodayTaskCalendar():null;
   const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
-    withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'})).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
+    withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'},readTerminEinstellungen)).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
     withPageReadPhase('today.graph',()=>graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
     withPageReadPhase('today.support',()=>readTodaySupport(auth,today,access)),
     withPageReadPhase('today.complaints',()=>access.complaints?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]})),
@@ -670,10 +671,10 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
   };
 }
 
-export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>,tagQuellenPorts?:TodayTagQuellenPorts): Promise<TodayDashboard> {
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readTerminEinstellungen:TerminEinstellungenLeser,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>,tagQuellenPorts?:TodayTagQuellenPorts): Promise<TodayDashboard> {
   const diagnosticStarted=Date.now();
   const [sources,tagQuellen]=await Promise.all([
-   collectTodaySources(auth,readComplaints,readQuoteFollowups,readNow,operationalSource),
+   collectTodaySources(auth,readComplaints,readQuoteFollowups,readTerminEinstellungen,readNow,operationalSource),
    tagQuellenPorts&&readLiveTodayTagQuellen(auth,readNow,tagQuellenPorts),
   ]);
   const dashboard=composeTodayDashboard(auth,{...sources,tagQuellen},sources.calendar);
@@ -821,6 +822,7 @@ export type TodayModelReadPorts={
  liveFollowups:()=>Promise<TodayDashboardSources['quoteFollowups']>;
  liveCompanyLetter:(auth:AuthorizationSnapshot)=>Promise<TodayDashboardSources['companyLetter']>;
  readSettings:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<{today:TodayReadSettings;page:PageReadSettings|null}>;
+ readTerminEinstellungen:TerminEinstellungenLeser;
  messages:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['graph'];
  tagQuellen:TodayTagQuellenPorts;
  taskCalendar:(auth:AuthorizationSnapshot,value:unknown)=>NonNullable<TodayDashboardSources['taskRead']>;
@@ -872,7 +874,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const taskCalendar=access.messages?live('tasks',project('tasks',unknownTasks,payload=>ports.taskCalendar(auth,payload)),()=>getIntakeTaskAction({calendar:true})):null;
   const storedOrders=value('orders');
   const cachedOperationalSource:TodayDashboardSources['orderSource']=Array.isArray(storedOrders)&&storedOrders.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version))?{code:'OK',data:storedOrders as Extract<TodayDashboardSources['orderSource'],{code:'OK'}>['data']}:{code:'SOURCE_INCOMPLETE'};
-  const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'})})):cachedOperationalSource;
+  const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'},ports.readTerminEinstellungen)})):cachedOperationalSource;
   const unknownGraph:TodayDashboardSources['graph']={code:'SOURCE_INCOMPLETE',message:PAGE_READ_COPY.sourceIncomplete};
   const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)),()=>getIntakeMessagesAction('offen')):{code:'FORBIDDEN' as const,message:''};
   const unknownMoney=unknownTodayMoneySupport();

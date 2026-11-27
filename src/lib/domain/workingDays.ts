@@ -1,6 +1,9 @@
 const DAY_MS = 86_400_000;
+const FIRST_DAY = Date.UTC(100, 0, 1) / DAY_MS;
+const LAST_DAY = Date.UTC(9999, 11, 31) / DAY_MS;
 
 type CalendarDay = { year: number; month: number; day: number };
+type Ruhetage = readonly string[] | ReadonlySet<string>;
 
 function parseDay(value: string): CalendarDay | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -24,6 +27,29 @@ function ordinal(value: CalendarDay): number {
 function fromOrdinal(value: number): CalendarDay {
   const date = new Date(value * DAY_MS);
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+export function leseBetriebsruhetage(wert: unknown): ReadonlySet<string> | null {
+  if (!Array.isArray(wert)) return null;
+  const zeitraeume: { von: number; bis: number }[] = [];
+  for (const eintrag of wert) {
+    if (typeof eintrag !== "object" || eintrag === null
+      || typeof eintrag.von !== "string" || typeof eintrag.bis !== "string") return null;
+    const von = parseDay(eintrag.von);
+    const bis = parseDay(eintrag.bis);
+    if (!von || !bis || eintrag.von > eintrag.bis) return null;
+    zeitraeume.push({ von: ordinal(von), bis: ordinal(bis) });
+  }
+
+  const tage = new Set<string>();
+  let letztesEnde = FIRST_DAY - 1;
+  for (const { von, bis } of zeitraeume.sort((links, rechts) => links.von - rechts.von)) {
+    for (let tag = Math.max(von, letztesEnde + 1); tag <= bis; tag += 1) {
+      tage.add(formatDay(fromOrdinal(tag)));
+    }
+    letztesEnde = Math.max(letztesEnde, bis);
+  }
+  return tage;
 }
 
 function easterSunday(year: number): CalendarDay {
@@ -59,56 +85,70 @@ function nationwideGermanHolidays(year: number): Set<number> {
   ]);
 }
 
-export function isWorkingDay(value: string): boolean {
+export function isWorkingDay(value: string, betriebsruhe?: ReadonlySet<string>): boolean {
   const day = parseDay(value);
-  if (!day) return false;
+  if (!day || betriebsruhe?.has(value)) return false;
   const dayOrdinal = ordinal(day);
   const weekday = new Date(dayOrdinal * DAY_MS).getUTCDay();
   return weekday !== 0 && weekday !== 6 && !nationwideGermanHolidays(day.year).has(dayOrdinal);
 }
 
-export function plusWorkingDays(value: string, count: number, additionalHolidays: readonly string[] = []): string | null {
+function alsRuhetage(wert: Ruhetage): ReadonlySet<string> | null {
+  if (Array.isArray(wert)) {
+    return wert.every(tag => typeof tag === "string" && parseDay(tag) !== null) ? new Set(wert) : null;
+  }
+  return wert && typeof wert === "object" && "has" in wert ? wert : null;
+}
+
+export function plusWorkingDays(value: string, count: number, betriebsruhe: Ruhetage = []): string | null {
   const day = parseDay(value);
-  if (!day || !Number.isSafeInteger(count) || count < 0 || !Array.isArray(additionalHolidays) || !additionalHolidays.every(value=>typeof value==='string'&&parseDay(value)!==null)) return null;
-  const closedDays=new Set(additionalHolidays);
-  const working=(value:string)=>isWorkingDay(value)&&!closedDays.has(value);
+  const ruhetage = alsRuhetage(betriebsruhe);
+  if (!day || !Number.isSafeInteger(count) || !ruhetage) return null;
   let current = ordinal(day);
   if (count === 0) {
-    while (!working(formatDay(fromOrdinal(current)))) current += 1;
+    while (!isWorkingDay(formatDay(fromOrdinal(current)), ruhetage)) {
+      if (current === LAST_DAY) return null;
+      current += 1;
+    }
     return formatDay(fromOrdinal(current));
   }
-  let remaining = count;
+  const direction = Math.sign(count);
+  let remaining = Math.abs(count);
+  if (remaining > (direction < 0 ? current - FIRST_DAY : LAST_DAY - current)) return null;
   while (remaining > 0) {
-    current += 1;
-    if (working(formatDay(fromOrdinal(current)))) remaining -= 1;
+    current += direction;
+    if (current < FIRST_DAY || current > LAST_DAY) return null;
+    if (isWorkingDay(formatDay(fromOrdinal(current)), ruhetage)) remaining -= 1;
   }
   return formatDay(fromOrdinal(current));
 }
 
-export function previousWorkingDay(value: string): string | null {
+export function previousWorkingDay(value: string, betriebsruhe?: ReadonlySet<string>): string | null {
   const day = parseDay(value);
   if (!day) return null;
   let current = ordinal(day);
-  while (!isWorkingDay(formatDay(fromOrdinal(current)))) current -= 1;
+  while (!isWorkingDay(formatDay(fromOrdinal(current)), betriebsruhe)) {
+    if (current === FIRST_DAY) return null;
+    current -= 1;
+  }
   return formatDay(fromOrdinal(current));
 }
 
-export function workingDaysBetween(from: string, to: string, additionalHolidays: readonly string[] = []): number | null {
+export function workingDaysBetween(from: string, to: string, betriebsruhe: Ruhetage = []): number | null {
   const fromDay = parseDay(from);
   const toDay = parseDay(to);
-  if (!fromDay || !toDay || !Array.isArray(additionalHolidays) || !additionalHolidays.every(value=>typeof value==='string'&&parseDay(value)!==null)) return null;
-  const closedDays=new Set(additionalHolidays);
+  const ruhetage = alsRuhetage(betriebsruhe);
+  if (!fromDay || !toDay || !ruhetage) return null;
   const start = ordinal(fromDay);
   const end = ordinal(toDay);
   if (start === end) return 0;
   if (end < start) {
-    const reverse = workingDaysBetween(to, from,additionalHolidays);
+    const reverse = workingDaysBetween(to, from, ruhetage);
     return reverse === null ? null : -reverse;
   }
   let total = 0;
   for (let current = start + 1; current <= end; current += 1) {
-    const value=formatDay(fromOrdinal(current));
-    if (isWorkingDay(value)&&!closedDays.has(value)) total += 1;
+    if (isWorkingDay(formatDay(fromOrdinal(current)), ruhetage)) total += 1;
   }
   return total;
 }

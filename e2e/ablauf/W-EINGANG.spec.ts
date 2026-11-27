@@ -1,3 +1,4 @@
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {randomUUID} from 'node:crypto';
 import {expect,it,vi} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
@@ -110,7 +111,7 @@ it('W-EINGANG E1 rereads an imported original in the same U2/U3 source before an
   const {getComplaints}=await import('@/app/actions/complaints.actions');
   const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
   const auth=await resolveAuthorization();if(!auth.ok)throw Error('S12_E1_AUTH');
-  return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);
+  return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);
  });
  const beforeDay=await day();
  expect(beforeDay.messageActions?.rows.find(row=>row.messageId===itemId)).toEqual({messageId:itemId,version:before.version,read:before.nextActionRule});

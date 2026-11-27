@@ -1,6 +1,7 @@
 // @vitest-environment node
 // Fixed TEST worker for L1 qualified-source checks. Original case bodies and
 // assertions stay unchanged; unrelated corrupt fixtures/settings live elsewhere.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {createFixture,full,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {withRestoredTestSource} from '../fixtures/restoredTestSource';
@@ -62,7 +63,7 @@ it('batches actual Today facts once and keeps the same qualified full-card value
  const base=await withSession(full,()=>getOrdersBaseDb());
  expect(base.ok).toBe(true);
  if(!base.ok)throw Error('TEST_L1_BASE_READ_FAILED');
- const source=await getOperationalOrders(authorization.data,{purpose:'today'});
+ const source=await getOperationalOrders(authorization.data,{purpose:'today'}, readBetriebsruheInTransaction);
  for(const id of ids)expect(base.data.find(row=>row.id===id)).toEqual(source.find(row=>row.id===id));
  expect(await readTodayOrderCards(authorization.data,[])).toEqual(new Map());
  expect(await withSession(full,()=>getTodayOrderReadAction({orderIds:[]}))).toEqual({code:'OK',data:{rows:[]}});
@@ -87,10 +88,10 @@ it('batches actual Today facts once and keeps the same qualified full-card value
  expect(fresh.kind).toBe('data');
  if(fresh.kind!=='data')throw Error('TEST_L1_BATCH_HOME');
  for(const id of ids){const card=await withSession(full,()=>getLiveOrderCardAction({orderId:id}));if(card.code!=='OK')throw Error('TEST_L1_BATCH_CARD');expect(fresh.dashboard.orderActions?.rows.find(row=>row.orderId===id)?.read).toEqual(card.data.nextActionRule);}
- const oldList=await getOperationalOrders(authorization.data,{purpose:'today'});
+ const oldList=await getOperationalOrders(authorization.data,{purpose:'today'}, readBetriebsruheInTransaction);
  const changed=await withSession(full,()=>changeOrderContentAction({orderId:ids[0],expectedVersion:first.receipt.orderVersion,clientEventId:randomUUID(),note:'TEST L1 actual changed content',items:[{id:first.receipt.items[0].id,catalogServiceId:null,name:'TEST L1 updated item',quantity:1,material:'Messing',surface:'Verchromen',unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900}]}));
  expect(changed).toMatchObject({code:'OK'});
- const stale=await withSession(full,()=>readTodayDashboard(authorization.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(),Promise.resolve(oldList)));
+ const stale=await withSession(full,()=>readTodayDashboard(authorization.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,new Date(),Promise.resolve(oldList)));
  expect(stale.orderActions?.missingOrderIds).toContain(ids[0]);
  const readRow=async()=>{const [row]=await sql`SELECT to_jsonb(orders) AS original FROM public.orders orders WHERE tenant_id=${tenant} AND id=${ids[0]}`;return row.original as Record<string,unknown>;};
  await withRestoredTestSource({label:'TEST L1 qualified batch content row',read:readRow,restore:async original=>{

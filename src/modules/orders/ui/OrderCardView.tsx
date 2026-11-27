@@ -1,6 +1,7 @@
 "use client";
 import {formatEuro} from '@/lib/domain/formatEuro';
 import {ORDER_POSITION_SURFACES,orderPositionSurfaceLabel,suggestOrderPositionSurface} from '@/lib/orderPositionContract';
+import { ORDER_TERM_COPY } from "@/ui/ordersCopy";
 import {ACTOR_COPY,QUOTE_CANCELLED_ORDER_COPY as cancelledCopy,ORDER_HANDOVER_COPY,CUSTOMER_CREDIT_COPY,E_INVOICE_COPY,E_INVOICE_CORRECTION_COPY} from "@/ui/situationCatalog";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
@@ -61,19 +62,6 @@ function dueLabel(value: string | null) {
   if (!value) return "Kein Termin belegt";
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric" }) : "Termin nicht lesbar";
-}
-
-function dueStatus(value: string | null) {
-  if (!value) return { relative: "Kein Termin belegt", overdue: false };
-  const target = new Date(`${value.slice(0, 10)}T12:00:00`);
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  if (!Number.isFinite(target.getTime())) return { relative: "Termin nicht lesbar", overdue: false };
-  const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
-  if (days < 0) return { relative: `${Math.abs(days)} ${Math.abs(days) === 1 ? "Tag" : "Tage"} überfällig`, overdue: true };
-  if (days === 0) return { relative: "Heute fällig", overdue: false };
-  if (days === 1) return { relative: "Morgen fällig", overdue: false };
-  return { relative: `In ${days} Tagen`, overdue: false };
 }
 
 function readDevice(): Geraet {
@@ -229,7 +217,6 @@ export function OrderCardView({
     : null;
   const payment = card.payment.kind === "available" ? card.payment.value : null;
   const current = card.station === "abgeholt" ? 4 : payment?.status === "bezahlt" ? 3 : Math.max(0, STATIONS.indexOf(card.station as (typeof STATIONS)[number]));
-  const deadline = dueStatus(card.dueAt);
   const paymentFree = payment?.status === "bezahlt" || payment?.mode === "rechnung" || payment?.mode === "keiner";
   const missingInvoicePrices = card.items.filter((item) => item.unitPriceCents === null || item.unitPriceCents === undefined);
   const contentEnabled = Boolean(actions.content?.enabled && actions.onSaveContent);
@@ -308,13 +295,15 @@ export function OrderCardView({
     { key: "intake", zeit: formatMoment(card.intakeAt), text: `Angenommen · ${card.items.length} ${card.items.length === 1 ? "Position" : "Positionen"}`, icon: "box" as IconName },
   ];
 
+  const termin = card.terminAnzeige;
+  const terminText = termin && termin.dueValue !== ORDER_TERM_COPY.notRecorded ? termin.dueValue : ORDER_TERM_COPY.deliveryDate;
   const head = (
     <Kartenkopf
       nummer={card.orderNumber}
       titel={card.title}
       sub={`${card.items.length} ${card.items.length === 1 ? "Position" : "Positionen"} · ${card.status}`}
-      meta={<><Chip text={card.station} ton={deadline.overdue ? "rot" : "info"} /><button type="button" className="kr-pill kr-pill--kunde" onClick={() => onOpenCustomer(card.customerId)}><Icon name="user" />{card.customerName} · Kundenakte <Icon name="arrow" /></button></>}
-      termin={<><TerminBox relativ={deadline.relative} datum={dueLabel(card.dueAt)} status={<Chip text={deadline.overdue ? "überfällig" : "bestätigt"} ton={deadline.overdue ? "rot" : "ok"} />} dringend={deadline.overdue} />{actions.dueDate?.visible ? <Button art="leise" icon="calendar" text="Termin ändern" disabled={!actions.dueDate.enabled} onClick={() => setDueOpen(true)} /> : null}</>}
+      meta={<><Chip text={card.station} ton="info" /><button type="button" className="kr-pill kr-pill--kunde" onClick={() => onOpenCustomer(card.customerId)}><Icon name="user" />{card.customerName} · Kundenakte <Icon name="arrow" /></button></>}
+      termin={<><TerminBox relativ={terminText} datum={dueLabel(card.dueAt)} status={card.dueAt ? termin?.statusText : undefined} />{actions.dueDate?.visible ? <Button art="leise" icon="calendar" text="Termin ändern" disabled={!actions.dueDate.enabled} onClick={() => setDueOpen(true)} /> : null}</>}
       onSchliessen={onClose}
     />
   );

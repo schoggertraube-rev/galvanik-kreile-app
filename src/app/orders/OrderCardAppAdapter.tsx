@@ -199,6 +199,7 @@ function mapCard(
     status: card.status,
     cancellation:card.cancellation,
     dueAt: card.dueAt,
+    terminAnzeige: card.terminAnzeige,
     intakeAt: card.intakeAt,
     assignedTo: card.assignment?.assignedToName ?? null,
     dueDateChanges: card.dueDateChanges,
@@ -500,6 +501,7 @@ export function OrderCardAppAdapter({
       },
       "Liefertermin und Grund wurden gespeichert.",
     );
+    window.dispatchEvent(new Event('kreile-sync-orders'));
   }, [fail, load, orderId, snapshot, success]);
   const onHandoff = useCallback(async () => {
     if (!snapshot) return;

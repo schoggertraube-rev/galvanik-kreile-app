@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { format } from "date-fns";
 import { EntityDecisionOverlay } from "@/components/entities/EntityDecisionOverlay";
 import { FocusOverlay } from "@/components/entities/FocusOverlay";
 import { OrderFocusView } from "@/components/entities/OrderFocusView";
 import { CustomerFocusView } from "@/components/entities/CustomerFocusView";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
-import { getUrgency } from "@/modules/orders/public";
+import { getRiskConfig } from "@/constants/status";
 
 interface GalvanikOrderRowProps {
   order: OperationalOrder;
@@ -17,16 +16,7 @@ export function GalvanikOrderRow({ order }: GalvanikOrderRowProps) {
   const [showDecision, setShowDecision] = useState(false);
   const [focusType, setFocusType] = useState<"order" | "customer" | null>(null);
 
-  // Dringlichkeitslogik
-  const urgencyLevel = getUrgency(order.dueDate);
-  const due = order.dueDate && !Number.isNaN(new Date(order.dueDate).getTime()) ? new Date(order.dueDate) : null;
-
-  const urgencyColors = {
-    kritisch: "bg-danger-red",
-    gefaehrdet: "bg-accent-orange",
-    im_plan: "bg-success-green",
-    unknown: "bg-slate-500"
-  };
+  const terminfarbe = getRiskConfig(order.risk).accentColor;
 
   return (
     <>
@@ -34,7 +24,7 @@ export function GalvanikOrderRow({ order }: GalvanikOrderRowProps) {
         onClick={() => setShowDecision(true)}
         className="flex items-center gap-4 bg-white border border-neutral-gray-100 rounded-2xl p-4 shadow-sm hover:border-neutral-gray-300 transition-colors cursor-pointer active:scale-[0.98]"
       >
-        <div className={`w-3 h-3 rounded-full shrink-0 ${urgencyColors[urgencyLevel]}`} />
+        <div aria-hidden="true" className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: terminfarbe }} />
         
         <div className="flex-1 flex justify-between items-center min-w-0">
           <div className="flex items-center gap-4 truncate">
@@ -47,7 +37,7 @@ export function GalvanikOrderRow({ order }: GalvanikOrderRowProps) {
           </div>
           
           <div className="text-xs font-bold text-navy-500 whitespace-nowrap shrink-0 ml-4">
-            {due ? format(due, "dd.MM.yy") : "Nicht erfasst"}
+            {order.risk === "blocked" ? order.statusText : order.dueValue}
           </div>
         </div>
       </div>

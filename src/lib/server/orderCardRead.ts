@@ -1,6 +1,6 @@
 import {withPageReadPhase,logPageReadPhase} from '@/db/readBudget';
 import {reportOrderSourceIssue} from './orderSourceIssueLog';
-import type {OrderActorSummary} from "@/modules/orders/public";
+import type {OrderActorSummary, zeigeFertigtermin} from "@/modules/orders/public";
 import "server-only";
 import {readManualHandoverReceipt,readInvoiceHandoverSource} from './orderHandoverSourcePort';
 
@@ -80,6 +80,7 @@ export type LiveOrderCard = {
   station: string;
   status: string;
   dueAt: string | null;
+  terminAnzeige?: ReturnType<typeof zeigeFertigtermin>;
   intakeAt: string;
   intakeSource?: OrderIntakeSource | null;
   handoverMode: "pickup" | "shipping" | null;
@@ -573,11 +574,9 @@ function mapLabelPrint(row: LabelPrintRow, tenantId: string, orderId: string) {
   return { eventId: row.event_id, occurredAt: toIso(row.occurred_at) };
 }
 
-function canView(authorization: Pick<AuthorizationSnapshot,'permissions'>): boolean {
+export function canViewOrderCard(authorization: Pick<AuthorizationSnapshot,'permissions'>): boolean {
   return authorization.permissions.includes("perm_view_leitstand");
 }
-
-export { canView as canViewOrderCard };
 
 type OrderPriceEvent={aggregate_version:number;payload:{prices:unknown}};
 function qualifyCurrentOrderItems(authorization:Pick<AuthorizationSnapshot,'tenantId'>,queue:QueueRow,isReworkOrder:boolean,intakeRows:IntakeRow[],currentRows:CurrentItemRow[],contentEvent:ContentEventRow|null,priceEvents:OrderPriceEvent[]){
@@ -783,7 +782,7 @@ type TodayCardRow={kind:string;order_id:string;position:number;data:unknown};
 export async function readTodayOrderCards(authorization:TodayOrderReadAuthorization,orderIds:readonly string[]):Promise<Map<string,OrderCardReadResult<TodayOrderCard>>>{
  const diagnosticStarted=Date.now();
  const results=new Map<string,OrderCardReadResult<TodayOrderCard>>();
- if(!canView(authorization)||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
+ if(!canViewOrderCard(authorization)||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
   logPageReadPhase('cards.denied',diagnosticStarted,{requested:orderIds.length,failed:1});
   for(const id of orderIds)results.set(id,{code:'FORBIDDEN',message:'Auftragskarte ist nicht erlaubt.'});
   return results;
@@ -917,7 +916,7 @@ export async function readLiveOrderCardSource(
   if (!hasExactKeys(input, ["orderId"]) || !validId(input.orderId)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Auftragskennung." };
   }
-  if (!canView(authorization)) {
+  if (!canViewOrderCard(authorization)) {
     return { code: "FORBIDDEN", message: "Auftragskarte ist nicht erlaubt." };
   }
 
@@ -1159,7 +1158,7 @@ export async function readLiveOrderCardSource(
 export async function readExtraWorkMasterData(
   authorization: AuthorizationSnapshot,
 ): Promise<OrderCardReadResult<ExtraWorkMasterData>> {
-  if (!canView(authorization)) {
+  if (!canViewOrderCard(authorization)) {
     return { code: "FORBIDDEN", message: "Mehrarbeitsstammdaten sind nicht erlaubt." };
   }
   try {

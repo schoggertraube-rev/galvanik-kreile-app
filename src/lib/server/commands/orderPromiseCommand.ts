@@ -1,14 +1,18 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { isWorkingDay } from "@/lib/domain/workingDays";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import { leseFertigterminKalender, type TerminEinstellungenLeser } from "@/lib/server/orderStationRead";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {ORDER_LIFECYCLE_STATUS} from '@/modules/orders/public';
+import { KALENDER_COPY } from "@/ui/kalenderCopy";
 import {ORDER_TERMINAL_COPY} from '@/ui/situationCatalog';
 
 const EVENT_TYPE = "ORDER_PROMISED_DUE_DATE_CHANGED_V1" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const INVALID_INPUT = { code: "VALIDATION_ERROR", message: "Liefertermin und Grund sind nicht gültig." } as const;
 
 export type ChangeOrderPromisedDueDateInput = {
   orderId: string;
@@ -129,9 +133,10 @@ function receiptMatches(
 
 export async function changeOrderPromisedDueDate(
   input: ChangeOrderPromisedDueDateInput,
+  liesEinstellungen: TerminEinstellungenLeser,
 ): Promise<ChangeOrderPromisedDueDateResult> {
   if (!exactInput(input)) {
-    return { code: "VALIDATION_ERROR", message: "Liefertermin und Grund sind nicht gültig." };
+    return INVALID_INPUT;
   }
   const reason = normalizeReason(input.reason)!;
 
@@ -204,6 +209,9 @@ export async function changeOrderPromisedDueDate(
       if (order.version !== input.expectedVersion) {
         return { code: "CONFLICT" as const, message: "Auftrag wurde bereits geändert." };
       }
+      const { betriebsruhe } = await leseFertigterminKalender(tx, authorization.data.tenantId, liesEinstellungen);
+      if (!betriebsruhe) return { code: "UNAVAILABLE" as const, message: KALENDER_COPY.format };
+      if (!isWorkingDay(input.dueDate, betriebsruhe)) return INVALID_INPUT;
 
       const resultRows = await tx.execute<{
         result_code: string;
@@ -211,7 +219,7 @@ export async function changeOrderPromisedDueDate(
         replayed: boolean;
       }>(sql`
         SELECT result_code, result_version, replayed
-        FROM private.update_order_promised_due_date_v1(
+        FROM private.update_order_delivery_date_v1(
           ${authorization.data.tenantId}, ${authorization.data.userId}::uuid,
           ${input.clientEventId}::uuid, ${input.orderId}, ${input.dueDate}::date, ${reason}
         )

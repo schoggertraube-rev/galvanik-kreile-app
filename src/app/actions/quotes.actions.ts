@@ -1,6 +1,6 @@
 "use server";
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {openIntakePredicate} from '@/modules/eingang/server-public';
@@ -450,7 +450,7 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
   const quoteResult = await readQuoteCommand(quoteCommandContext(authorization.data), input);
   if (quoteResult.code !== "OK") return quoteResult;
   const [customerResult, companyResult] = await Promise.all([
-    readCustomerSummary(authorization.data, { customerId: quoteResult.quote.customerId },openIntakePredicate()),
+    readCustomerSummary(authorization.data, { customerId: quoteResult.quote.customerId },openIntakePredicate(),readBetriebsruheInTransaction),
     readCompanyDocumentSettings({
       tenantId: authorization.data.tenantId,
       actorId: authorization.data.userId,
@@ -508,7 +508,7 @@ export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;cu
   const customerId=source.customer?.id??input.customerId??null;
   const customer=customerId?await withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,customerId)):null;
   if(customerId&&!customer)return {code:'NOT_FOUND' as const,message:'Gewählter Kunde ist nicht verfügbar.'};
-  const hints=customerId?(await readCustomerListSignals(auth,[customerId],openIntakePredicate())).get(customerId)?.hints.filter(hint=>hint.kind==='agreement').map(hint=>hint.text)??[]:[];
+  const hints=customerId?(await readCustomerListSignals(auth,[customerId],openIntakePredicate(),readBetriebsruheInTransaction)).get(customerId)?.hints.filter(hint=>hint.kind==='agreement').map(hint=>hint.text)??[]:[];
   const specialRequests=[...hints,...(recognition.instructions??[]).map(value=>value.text)];
   return {code:'OK' as const,preparation:{source:{itemId:source.itemId,version:source.version,message:source.channel==='mail'},text,files:source.files,customer:customer?{id:customer.id,name:customer.name}:null,customerQuery:matches.query,proposals:matches.customers.map(value=>({id:value.id,name:value.name,reason:'Treffer im Original: '+matches.query})),recognition,confirmedCustomerHints:hints,specialRequests:specialRequests.length?[...new Set(specialRequests)].join('\n'):null}};
  }catch(error){console.error('[QUOTE_INTAKE_PREPARATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Vorbereitung konnte nicht sicher gelesen werden. Original bleibt erhalten.'};}

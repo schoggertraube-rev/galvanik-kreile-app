@@ -45,7 +45,7 @@ type AffectedOrderRow = {
   customer_id: string;
   customers: CustomerNameRow | CustomerNameRow[] | null;
   station: string | null;
-  promised_due_date: string | null;
+  due_date: string | null;
   completed_date: string | null;
   status: string | null;
 };
@@ -97,8 +97,8 @@ function toAffectedOrder(
   order: AffectedOrderRow,
   status: "critical" | "missing_due_date",
 ): WerkstattPulsData["affectedOrders"][number] {
-  const delayDays = order.promised_due_date
-    ? Math.round((new Date().getTime() - new Date(order.promised_due_date).getTime()) / (1000 * 3600 * 24))
+  const delayDays = order.due_date
+    ? Math.round((new Date().getTime() - new Date(order.due_date).getTime()) / (1000 * 3600 * 24))
     : null;
 
   return {
@@ -108,7 +108,7 @@ function toAffectedOrder(
     customerId: order.customer_id,
     customerName: getCustomerName(order.customers),
     stationName: order.station || "Unbekannt",
-    promisedDueDate: order.promised_due_date,
+    dueDate: order.due_date,
     completedDate: order.completed_date,
     delayDays: status === "critical" ? delayDays : null,
     status,
@@ -350,17 +350,17 @@ export async function getAnalyseTileDetail(
 
       // Hole echte verspätete Aufträge
       const { data: delayedOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
-        .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
+        .select('id, order_number, title, customer_id, customers(name), station, due_date, completed_date, status')
         .eq('tenant_id', authorization.data.tenantId)
-        .not('promised_due_date', 'is', null)
+        .not('due_date', 'is', null)
         .is('completed_date', null)
-        .lt('promised_due_date', new Date().toISOString())
+        .lt('due_date', new Date().toISOString())
         .limit(10);
 
       const { data: missingDueOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
-        .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
+        .select('id, order_number, title, customer_id, customers(name), station, due_date, completed_date, status')
         .eq('tenant_id', authorization.data.tenantId)
-        .is('promised_due_date', null)
+        .is('due_date', null)
         .neq('status', 'storniert')
         .limit(10);
 

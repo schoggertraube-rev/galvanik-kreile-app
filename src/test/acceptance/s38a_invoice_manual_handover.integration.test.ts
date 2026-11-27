@@ -1,5 +1,6 @@
 // @vitest-environment node
 // Real Actions/Auth/DB/PDF. No mail provider is called by a paper handover.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {expect,it,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -44,7 +45,7 @@ it('H4 persists the actual actor/original/time once, removes only that invoice f
   expect(await readInvoiceMailOpenRemainder(tx,tenant,customerId,[input.invoiceId])).toEqual([]);
   expect(await readInvoiceMailUnacknowledged(tx,tenant,customerId,[input.invoiceId])).toEqual([input.invoiceId]);
  });
- const today=await withSession(prices,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction));
+ const today=await withSession(prices,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction));
  expect(today.items.filter(row=>row.invoiceMail?.customerId===customerId).map(row=>row.invoiceId)).toEqual([second.invoice.invoiceId]);
  const send=await withSession(prices,()=>sendCustomerMailAction({targetType:'CUSTOMER',targetId:customerId,clientRequestId:randomUUID(),subject:'TEST stale paper original',body:'TEST do not send',attachment:{kind:'INVOICE',documentId:input.invoiceId},expectedInvoiceIds:[input.invoiceId],singleInvoice:true}));
  expect(send).toMatchObject({code:'CONFLICT',message:expect.stringContaining('übergeben')});
