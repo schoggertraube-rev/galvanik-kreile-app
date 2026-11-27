@@ -35,6 +35,8 @@ import {
   type PrivilegedTenantTransaction,
 } from "@/lib/server/privilegedDb";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import { createDomainAttachmentUploadGrant, DomainAttachmentStorageError, goodsOutSignaturePath } from '@/lib/server/domainAttachmentStorage';
+import { isGoodsOutCollector, readGoodsOutCollector, verifyCollectorSignature, writeGoodsOutCollector, type GoodsOutCollector } from '@/lib/server/goodsOutCollector';
 
 const EVENT_TYPE_V1 = "ORDER_PICKED_UP_V1" as const;
 const EVENT_TYPE_V2 = "ORDER_PICKED_UP_V2" as const;
@@ -73,6 +75,7 @@ export type RecordGoodsOutInput = {
   clientEventId: string;
   agreement?: GoodsOutAgreement;
   overdueReleaseReason?: string;
+  collector?: GoodsOutCollector;
 };
 
 type GoodsOutReceiptBase = {
@@ -139,6 +142,7 @@ type LockedOrder = {
   status: string | null;
   version: number | string;
   payment_mode: string | null;
+  handover_mode: string | null;
   nacharbeit_zu: string | null;
 };
 
@@ -236,7 +240,7 @@ function isValidInput(input: unknown): input is RecordGoodsOutInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
   const expectedKeys = ["clientEventId", "expectedVersion", "mode", "orderId"];
-  const allowedKeys = [...expectedKeys, "agreement", "overdueReleaseReason"];
+  const allowedKeys = [...expectedKeys, "agreement", "overdueReleaseReason", "collector"];
   return expectedKeys.every(key => Object.hasOwn(value, key))
     && Object.keys(value).every(key => allowedKeys.includes(key))
     && typeof value.orderId === "string"
@@ -250,7 +254,8 @@ function isValidInput(input: unknown): input is RecordGoodsOutInput {
     && typeof value.clientEventId === "string"
     && UUID_PATTERN.test(value.clientEventId)
     && (!Object.hasOwn(value, "agreement") || isGoodsOutAgreement(value.agreement))
-    && (!Object.hasOwn(value, "overdueReleaseReason") || validOverdueReleaseReason(value.overdueReleaseReason));
+    && (!Object.hasOwn(value, "overdueReleaseReason") || validOverdueReleaseReason(value.overdueReleaseReason))
+    && (!Object.hasOwn(value, 'collector') || (value.mode === 'abholung' && isGoodsOutCollector(value.collector)));
 }
 
 function validOverdueReleaseReason(value: unknown): value is string {
@@ -297,7 +302,7 @@ async function readOrder(
 ): Promise<LockedOrder[]> {
   const query = sql`
     SELECT id, tenant_id, customer_id, station, current_station,
-      current_station_id, status, version, payment_mode, nacharbeit_zu,
+      current_station_id, status, version, payment_mode, handover_mode, nacharbeit_zu,
       private.order_release_allowed_v1(tenant_id,id,true,true) AS release_ready
     FROM public.orders
     WHERE id = ${orderId} AND tenant_id = ${tenantId}
@@ -858,6 +863,17 @@ export async function authorizeGoodsOutInput(input: unknown): Promise<
     return { code: "VALIDATION_ERROR", message: reasonInvalid ? GOODS_OUT_DEBT_COPY.reasonMissing : "Ungültiger Warenausgang." };
   }
 
+  const actor = await authorizeGoodsOutActor();
+  if (actor.code !== 'AUTHORIZED') return actor;
+  if (input.overdueReleaseReason !== undefined && !hasAuthorizationArea(actor.authorization.data, "entscheiden")) {
+    return { code: "FORBIDDEN", message: GOODS_OUT_DEBT_COPY.overrideForbidden };
+  }
+  return { ...actor, input };
+}
+
+async function authorizeGoodsOutActor(): Promise<
+  { code: 'AUTHORIZED'; authorization: { data: AuthorizationSnapshot } } | Exclude<RecordGoodsOutResult, {code:'OK'}>
+> {
   let authorization;
   try {
     authorization = await resolveAuthorization();
@@ -876,10 +892,28 @@ export async function authorizeGoodsOutInput(input: unknown): Promise<
     return { code: "FORBIDDEN", message: "Warenausgang ist mit dieser Rolle nicht erlaubt." };
   }
 
-  if (input.overdueReleaseReason !== undefined && !hasAuthorizationArea(authorization.data, "entscheiden")) {
-    return { code: "FORBIDDEN", message: GOODS_OUT_DEBT_COPY.overrideForbidden };
+  return {code: 'AUTHORIZED', authorization};
+}
+
+export async function prepareGoodsOutSignatureUpload(input: Pick<RecordGoodsOutInput, 'orderId' | 'expectedVersion' | 'clientEventId'>) {
+  if (!input || !isCanonicalTextId(input.orderId) || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1
+    || typeof input.clientEventId !== 'string' || !UUID_PATTERN.test(input.clientEventId)) {
+    return { code: 'VALIDATION_ERROR' as const, message: 'Ungültiger Warenausgang.' };
   }
-  return {code: 'AUTHORIZED', input, authorization};
+  const actor = await authorizeGoodsOutActor();
+  if (actor.code !== 'AUTHORIZED') return actor;
+  const auth = actor.authorization.data;
+  try {
+    const [order] = await withPrivilegedTenantTransaction(auth, tx => readOrder(tx, auth.tenantId, input.orderId, false));
+    if (!order) return { code: 'NOT_FOUND' as const, message: 'Auftrag nicht verfügbar.' };
+    if (order.handover_mode !== 'pickup' || order.station !== SOURCE_STATION || toNonNegativeInteger(order.version) !== input.expectedVersion) {
+      return { code: 'CONFLICT' as const, message: 'Auftrag wurde bereits geändert.' };
+    }
+    const grant = await createDomainAttachmentUploadGrant(goodsOutSignaturePath(auth.tenantId, input.clientEventId));
+    return { code: 'OK' as const, storagePath: grant.path, token: grant.token };
+  } catch {
+    return { code: 'UNAVAILABLE' as const, message: 'Warenausgang konnte nicht sicher gebucht werden.' };
+  }
 }
 
 export type GoodsOutComposition={
@@ -928,6 +962,12 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
         const orders = await readOrder(tx, tenantId, receipt.orderId, false);
         if (orders.length !== 1 || !orders[0] || !await orderMatchesReceipt(tx,orders[0], receipt, tenantId)) {
           throw new Error("GOODS_OUT_REPLAY_READBACK_INVALID");
+        }
+        if (input.mode === 'abholung') {
+          const saved = await readGoodsOutCollector(tx, tenantId, receipt.orderId, receipt.eventId);
+          if (canonicalJson(saved?.collector ?? null) !== canonicalJson(input.collector ?? null)) {
+            return { code: 'CONFLICT', message: 'Anfragekennung wurde bereits anders verwendet.' };
+          }
         }
         return { code: "OK", receipt, replayed: true };
       }
@@ -1029,6 +1069,18 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
       // and above (including explicit agreement/override). Never trust the cache.
       if (order.release_ready !== true) {
         return { code: "CONFLICT", message: "Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt." };
+      }
+
+      if (input.collector) {
+        if (order.handover_mode !== 'pickup') return { code: 'VALIDATION_ERROR', message: 'Ungültiger Warenausgang.' };
+        try {
+          if (!await verifyCollectorSignature(tenantId, input.clientEventId, input.collector.unterschrift)) {
+            return { code: 'VALIDATION_ERROR', message: 'Ungültiger Warenausgang.' };
+          }
+        } catch (error) {
+          if (!(error instanceof DomainAttachmentStorageError) || error.kind === 'UNAVAILABLE') throw error;
+          return { code: 'VALIDATION_ERROR', message: 'Ungültiger Warenausgang.' };
+        }
       }
 
       if(input.mode==='versand'){
@@ -1323,6 +1375,8 @@ async function prepareGoodsOut(tx:PrivilegedTenantTransaction,authorized:GoodsOu
         !receiptMatchesIntent(receipt, input, actorId)
         || !await orderMatchesReceipt(tx,persistedOrders[0], receipt, tenantId)
       ) throw new Error("GOODS_OUT_READBACK_INVALID");
+
+      if (input.collector) await writeGoodsOutCollector(tx, authorization.data, receipt, input.collector);
 
       if(selection)await handOverGroupParcels(tx,authorization.data,input,selection,receipt);
       else if(input.mode==='versand'){
