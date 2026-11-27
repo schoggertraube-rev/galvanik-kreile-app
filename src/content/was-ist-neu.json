@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-27",
+    "pr": 335,
+    "seite": "nachrichten",
+    "ziel": "/nachrichten",
+    "punkte": [
+      "Du kannst eine falsche Mail-Zuordnung zurücknehmen. Betroffene Abholvereinbarungen werden berichtigt, und das Mailoriginal bleibt im Eingang."
+    ]
+  },
+  {
+    "datum": "2026-11-27",
     "pr": 332,
     "seite": "heute",
     "ziel": "/",
