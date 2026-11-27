@@ -6,6 +6,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture,readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
+import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {randomUUID} from 'node:crypto';
 import {setOrderPickupAppointmentAction,changeOrderPromisedDueDateAction,transitionWareneingangToGalvanikAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
@@ -17,9 +18,13 @@ it('W-TAG reads the exact same three real versioned U2 order actions into U3 and
  expect(empty).toMatchObject({hauptaktion:null,hauptaktionsQuelle:null,challenges:{groups:[]},orderSchedule:{code:'OK',today:0,upcoming:0},invoiceMoney:{code:'OK',openCount:0,openCents:0},assignmentMetric:{code:'OK',count:0}});
  const customerId=await customerFixture('TEST S05 U2 U3');
  const orders:Awaited<ReturnType<typeof intakeOrderFixture>>[]=[];for(let index=0;index<3;index++)orders.push(await intakeOrderFixture('TEST S05 Naht '+index,customerId));
- const [dates]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+1)::text AS tomorrow,((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+8)::text AS later`;
- for(const [index,dueDate] of [dates.today,dates.tomorrow,dates.later].entries())expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:orders[index].receipt.orderId,expectedVersion:1,dueDate,reason:'TEST S05 Kalendertag',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
- const read=(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
+ const today=plusWorkingDays(berlinCalendarDay(),0);
+ const upcoming=today&&plusWorkingDays(today,1);
+ const later=today&&plusWorkingDays(today,8);
+ if(!today||!upcoming||!later)throw Error('TEST_S05_ARBEITSTAGE_FEHLEN');
+ const readAt=new Date(`${today}T12:00:00Z`);
+ for(const [index,dueDate] of [today,upcoming,later].entries())expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:orders[index].receipt.orderId,expectedVersion:1,dueDate,reason:'TEST S05 Arbeitstag',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const read=(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,readBetriebsruheInTransaction,readAt);});
  const day=await read(full);expect(day.orderSchedule).toMatchObject({code:'OK',today:1,upcoming:1});expect(day.orderActions).toMatchObject({code:'OK',missingOrderIds:[]});
  expect(day.orderActions?.rows).toHaveLength(3);
  // PL12.11.18:23: a due date alone does not override the same U2 colour.

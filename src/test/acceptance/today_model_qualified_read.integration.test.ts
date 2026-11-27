@@ -526,9 +526,10 @@ it('meldet den echten Takt ohne Sitzung bei Teilausfall als fehlgeschlagen und f
 
 it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende Automatik', async () => {
   const bediener = await createFixture(['wartung'],'developer');
-  // Der vorherige Cron-Aufruf kann den aktuellen Tag für diesen Betrieb bereits abgeschlossen haben.
-  const zeit = new Date(readTodayCalendar(new Date()).today+'T12:00:00Z');
-  zeit.setUTCDate(zeit.getUTCDate()+1);
+  // Um 02:30 Uhr Berliner Zeit ist der Neuaufbau fällig. Die Protokollaufbewahrung
+  // ab 03:00 Uhr würde bei ihrem Abschluss dieselbe im Test gehaltene Zeile sperren.
+  const zeit = new Date('2027-02-01T01:30:00Z');
+  const naechsterTag = new Date('2027-02-02T01:30:00Z');
   const tag = readTodayCalendar(zeit).today;
   const vorhandene = await sql<{id:string}[]>`SELECT id::text FROM public.takt_job_runs
     WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau'`;
@@ -560,8 +561,8 @@ it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende
       }
       expect(await laeufe()).toEqual([{faellig_fuer:tag,status:'ok'}, {faellig_fuer:expect.stringMatching(/^hand:/),status:'läuft'}]);
       expect((await manuell()).status).toBe(409);
-      const naechsterTag = new Date(zeit.getTime()+86_400_000);
-      await fuehreTaktAus({tenantId:tenant,jetzt:naechsterTag});
+      expect(await fuehreTaktAus({tenantId:tenant,jetzt:naechsterTag}))
+        .toEqual({mandanten:1,laeufe:0,restOffen:false});
       expect(await laeufe()).toHaveLength(2);
     });
     expect((await erster)?.status).toBe(204);
