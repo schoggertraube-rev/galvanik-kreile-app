@@ -102,10 +102,11 @@ async function privateLoginMarker() {
 }
 async function existingShell(scope, login) {
   if (!indexedDB.databases) return null;
-  const name = "kreile-pending-originals-v1-" + scope;
-  if (!(await indexedDB.databases()).some(db => db.name === name && db.version === 2)) return null;
+  const { databasePrefix, databaseVersion } = globalThis.KreileOfflineQueue;
+  const name = databasePrefix + scope;
+  if (!(await indexedDB.databases()).some(db => db.name === name && db.version === databaseVersion)) return null;
   return new Promise((resolve, reject) => {
-    const open = indexedDB.open(name, 2);
+    const open = indexedDB.open(name, databaseVersion);
     open.onupgradeneeded = () => { open.transaction.abort(); };
     open.onerror = () => reject(Error("OFFLINE_WORKER_METADATA_UNAVAILABLE"));
     open.onblocked = () => reject(Error("OFFLINE_WORKER_METADATA_BLOCKED"));
