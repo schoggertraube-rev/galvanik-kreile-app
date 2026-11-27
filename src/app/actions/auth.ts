@@ -75,7 +75,7 @@ export async function login(formData: FormData) {
     displayName: dbUser.fullName,
     issuedAt: now,
     expiresAt: now + SESSION_TTL_MS,
-  });
+  }, formData.get('tabletInput') === 'tablet' ? 'tablet' : undefined);
 
   const lastSeen = await recordUserLastSeenForLogin();
   if (lastSeen.code !== "OK") {
@@ -91,11 +91,14 @@ export async function login(formData: FormData) {
 /**
  * Logout always clears the app cookie, even if remote Supabase logout fails.
  */
-export async function logout(): Promise<LogoutResult> {
+export async function logout(reason: 'manual' | 'inactivity' = 'manual'): Promise<LogoutResult> {
   let remoteSignOut: "success" | "failed" = "success";
   try {
     const supabase = await createClient();
-    await supabase.auth.signOut();
+    const result = reason === 'inactivity'
+      ? await supabase.auth.signOut({ scope: 'local' })
+      : await supabase.auth.signOut();
+    if (result.error) return { ok: true, remoteSignOut: "failed" };
   } catch {
     remoteSignOut = "failed";
     console.warn("Supabase signOut failed; app session cookie will still be cleared.");

@@ -101,13 +101,13 @@ const readAuthorizationRow = cache(async (userId:string,sessionTenantId:string) 
           ELSE flag.enabled END,'roles',flag.roles_allowed))
           FROM public.feature_flags flag WHERE flag.id IN (${sql.join(PACKAGE_SWITCHES.map(({id})=>sql`${id}`),sql`,`)}))`,
         updatedAt: appUsers.updatedAt,
-        inactivitySettings: sql<SessionInactivitySettings | null>`(
+        inactivitySettings: sql<SessionInactivitySettings>`COALESCE((
           SELECT jsonb_build_object(
             'minutes', to_jsonb(settings)->'inaktivitaet_abmelden_minuten',
             'devices', to_jsonb(settings)->'inaktivitaet_abmelden_geraete',
             'roles', to_jsonb(settings)->'inaktivitaet_abmelden_rollen'
           ) FROM public.company_settings settings WHERE settings.tenant_id = ${sessionTenantId}
-        )`,
+        ), jsonb_build_object('minutes', private.s16d_inaktivitaet_standard()))`,
         areas: sql<string[]>`(
           SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
           FROM public.app_user_rights rights
@@ -244,7 +244,16 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     };
   }
 
-  const sessionInactivity = readSessionInactivity({ ...sessionResult.session, role: dbRole }, dbUser.inactivitySettings);
+  let sessionInactivity: SessionInactivity;
+  try {
+    sessionInactivity = readSessionInactivity({ ...sessionResult.session, role: dbRole }, dbUser.inactivitySettings);
+  } catch {
+    return {
+      ok: false,
+      reason: 'AUTHORIZATION_UNAVAILABLE',
+      message: 'AUTH_SESSION_INACTIVITY_SETTINGS_UNAVAILABLE',
+    };
+  }
   const serverAt = Date.now();
   if (serverAt >= sessionInactivity.expiresAt) {
     return { ok: false, reason: 'INVALID_SESSION', message: 'AUTH_SESSION_INACTIVE' };

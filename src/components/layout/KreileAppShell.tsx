@@ -11,6 +11,7 @@ import {
   type Geraet,
 } from "@/ui/kr";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { sessionLayoutDevice } from '@/lib/auth/sessionInactivity';
 import { useSessionInactivity } from '@/lib/auth/useSessionInactivity';
 import { SessionWarningBanner } from "./SessionWarningBanner";
 import { EntityOverlayStack } from "./EntityOverlayStack";
@@ -24,9 +25,7 @@ import {NAVIGATION,sichtbareNavigation} from '@/ui/navigation/register';
 import {ORDER_WEEK_NAVIGATION, ORDER_WEEK_ROUTE} from '@/ui/navigation/orders';
 
 function readDevice(): Geraet {
-  if (window.innerWidth < 768) return "handy";
-  if (window.innerWidth < 1280) return "tablet";
-  return "desktop";
+  return sessionLayoutDevice(window.innerWidth);
 }
 
 function subscribeDevice(onChange: () => void) {

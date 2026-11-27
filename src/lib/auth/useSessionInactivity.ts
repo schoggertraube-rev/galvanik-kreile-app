@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getAuthorizationSnapshotAction, recordAppSessionActivity } from '@/app/actions/auth.actions';
+import { recordAppSessionActivity } from '@/app/actions/auth.actions';
 import { logoutWithReadCleanup } from '@/lib/offline/logoutWithReadCleanup';
 import { INACTIVITY_COPY } from '@/ui/inaktivitaetTexte';
 import type { SessionInactivity } from './sessionInactivity';
@@ -27,21 +27,6 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
     const expire = async () => {
       if (disposed || expiring) return;
       expiring = true;
-      if (navigator.onLine) {
-        try {
-          const current = await getAuthorizationSnapshotAction();
-          if (disposed) return;
-          if (current.ok && current.data.inactivity && current.data.inactivity.expiresAt > (current.data.inactivity.serverAt ?? Date.now())) {
-            applyServerTime(current.data.inactivity);
-            expiring = false;
-            schedule();
-            return;
-          }
-        } catch {
-          console.error('[APP_SESSION_INACTIVITY_READ_FAILED]');
-        }
-      }
-      if (disposed) return;
       setExpired(true);
       try {
         await logoutWithReadCleanup('inactivity');

@@ -192,17 +192,7 @@ export async function proxy(request: NextRequest) {
     )
   }
 
-  // Verhindere, dass eingeloggte Nutzer die Start-Seite (Login) erneut aufrufen
-  if (hasValidAppSession && request.nextUrl.pathname.startsWith('/start')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/'
-    return withAuthCookieCleanup(
-      NextResponse.redirect(url),
-      request,
-      clearInvalidAppSession,
-    )
-  }
-
+  // The start page checks the full session, including inactivity and revocation.
   return withAuthCookieCleanup(
     supabaseResponse,
     request,

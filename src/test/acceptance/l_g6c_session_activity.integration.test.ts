@@ -9,6 +9,7 @@ vi.mock('@/lib/tenant', () => ({ KREILE_TENANT_SLUG: tenant }));
 import { customerFixture, intakeOrderFixture } from '../../../e2e/ablauf/orderFixture';
 import { createFixture, full, sql, withRequest, withSession } from '../../../e2e/ablauf/replayHarness';
 import { cookies } from 'next/headers';
+import { NextRequest } from 'next/server';
 import { getAuthorizationSnapshotAction, loginWithPin, recordAppSessionActivity } from '@/app/actions/auth.actions';
 import { getIntakeDraftsAction, saveIntakeDraftAction } from '@/app/actions/eingang.actions';
 import { replayOfflineWorkshopAction } from '@/app/actions/offlineWorkshop.actions';
@@ -18,6 +19,9 @@ import type { PendingPhysicalWorkshopOriginal } from '@/lib/offline/pendingStore
 import { appSessionReadScope, COOKIE_NAME, readAppSession } from '@/lib/server/appSession';
 import { offlinePartition } from '@/lib/server/offlinePartition';
 import { createPinLoginHandle } from '@/lib/server/pinLoginHandle';
+import { proxy } from '@/proxy';
+
+const desktopAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15';
 
 it('expires a tablet session and resumes the same login’s saved draft and original', async () => {
   const actor = await createFixture(['auftraege', 'eingang'], 'meister');
@@ -28,9 +32,13 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
     userId: actor.actorId, fullName: 'TEST Sitzung', shortCode: 'V6', designation: 'TEST Tablet', active: true, pin,
   }));
   expect(managed).toMatchObject({code:'OK'});
+  const [standard] = await sql<{minutes:number}[]>`SELECT private.s16d_inaktivitaet_standard() AS minutes`;
+  expect(await withSession(full, () => getAuthorizationSnapshotAction())).toMatchObject({
+    ok:true, data:{inactivity:{minutes:standard.minutes}},
+  });
   await sql`INSERT INTO public.company_settings (id, tenant_id, company_name, material_aufschlag_prozent,
     lager_regelversion, inaktivitaet_abmelden_minuten, inaktivitaet_abmelden_geraete, inaktivitaet_abmelden_rollen)
-    VALUES (${randomUUID()}::uuid, ${tenant}, 'TEST Sitzung', 0, 'TEST-G6C', 60, '{"tablet":3}'::jsonb, '{"meister":2}'::jsonb)`;
+    VALUES (${randomUUID()}::uuid, ${tenant}, 'TEST Sitzung', 0, 'TEST-G6C', 60, '{"tablet":2}'::jsonb, '{"meister":3}'::jsonb)`;
   const customerId = await customerFixture('TEST Inaktivität');
   const created = await intakeOrderFixture('TEST Inaktivität', customerId);
   const orderId = created.receipt.orderId;
@@ -47,7 +55,7 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
 
   const handle = createPinLoginHandle(actor.actorId);
   await withRequest('', async () => {
-    expect(await loginWithPin(handle, pin)).toMatchObject({ok:true});
+    expect(await loginWithPin(handle, pin, 'tablet')).toMatchObject({ok:true});
     const initial = await readAppSession();
     if (!initial.ok) throw Error('TEST_ACTUAL_TABLET_LOGIN_REQUIRED');
     const original = initial.session;
@@ -87,6 +95,11 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       expect(await getIntakeDraftsAction()).toMatchObject({ code: 'UNAUTHENTICATED' });
       expect(await replayOfflineWorkshopAction(partition, pending)).toEqual({code:'UNAUTHENTICATED'});
       expect(store.get(COOKIE_NAME)?.value).toBe(expiredToken);
+      const staleStart = await proxy(new NextRequest('http://127.0.0.1/start', {
+        headers: {cookie: `${COOKIE_NAME}=${expiredToken}`, 'user-agent': desktopAgent},
+      }));
+      expect(staleStart.status).toBe(200);
+      expect(staleStart.headers.get('location')).toBeNull();
       await withSession(other, async () => {
         expect(await replayOfflineWorkshopAction(partition, pending)).toEqual({code:'FORBIDDEN'});
         expect(await getIntakeDraftsAction()).toEqual({code:'OK',drafts:[]});
@@ -94,7 +107,7 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       expect(await orderReceipts()).toEqual([]);
 
       await withRequest('', async () => {
-        expect(await loginWithPin(handle, pin)).toMatchObject({ok:true});
+        expect(await loginWithPin(handle, pin, 'tablet')).toMatchObject({ok:true});
         expect((await cookies()).get(COOKIE_NAME)?.value).not.toBe(expiredToken);
         expect(await getIntakeDraftsAction()).toEqual(saved);
         const applied = await replayOfflineWorkshopAction(partition, structuredClone(pending));
@@ -106,7 +119,7 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
           code:'OK', offlineReceipt: applied.offlineReceipt,
         });
         expect(await orderReceipts()).toEqual([{id: applied.offlineReceipt.eventId, user_id: actor.actorId}]);
-      }, false, {'user-agent':'TEST iPad'});
+      }, false, {'user-agent':desktopAgent});
     } finally { clock.mockRestore(); }
-  }, false, {'user-agent':'TEST iPad'});
+  }, false, {'user-agent':desktopAgent});
 }, 60_000);

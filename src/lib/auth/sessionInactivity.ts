@@ -17,7 +17,16 @@ export type SessionActivityResult =
   | { code: 'OK'; inactivity: SessionInactivity }
   | { code: 'EXPIRED' | 'UNAVAILABLE' };
 
-const DEFAULT_MINUTES = 60;
+export function sessionLayoutDevice(width: number): Geraet {
+  if (width < 768) return 'handy';
+  return width < 1280 ? 'tablet' : 'desktop';
+}
+
+export function reportTabletInput(): 'tablet' | undefined {
+  return navigator.maxTouchPoints > 0 && sessionLayoutDevice(window.innerWidth) === 'tablet'
+    ? 'tablet'
+    : undefined;
+}
 
 function minutes(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
@@ -37,7 +46,8 @@ export function readSessionInactivity(
   const overrideLimit = deviceLimit !== undefined && roleLimit !== undefined
     ? Math.min(deviceLimit, roleLimit)
     : deviceLimit ?? roleLimit;
-  const limit = overrideLimit ?? minutes(settings?.minutes) ?? DEFAULT_MINUTES;
+  const limit = overrideLimit ?? minutes(settings?.minutes);
+  if (limit === undefined) throw Error('SESSION_INACTIVITY_SETTINGS_UNAVAILABLE');
   const lastSeen = session.lastSeen ?? session.issuedAt;
   return { lastSeen, expiresAt: Math.min(session.expiresAt, lastSeen + limit * 60_000), minutes: limit };
 }

@@ -26,6 +26,7 @@ import {
   appSessionReadScope,
   cacheScopeFromCredential,
   renewAppSessionActivity,
+  setAppSession,
   signAppSession,
   verifyAppSessionToken,
   COOKIE_NAME,
@@ -50,6 +51,7 @@ vi.mock("next/headers", () => ({
     set: mockCookieSet,
     delete: mockCookieDelete,
   }),
+  headers: vi.fn().mockResolvedValue(new Headers({ 'user-agent': 'Macintosh Safari' })),
 }));
 
 // APP_SESSION_SECRET auf Testschlüssel setzen
@@ -116,6 +118,17 @@ describe('signed inactivity and offline reading partition', () => {
     const active = readSessionInactivity(session, { minutes: 5 });
     expect(await renewAppSessionActivity({ ...session, userId: 'test-other-login' }, active)).toBeNull();
     expect(mockCookieSet).not.toHaveBeenCalled();
+  });
+
+  it('retains a tablet classification during a cookie refresh only for the same login', async () => {
+    const session = makeSession({ device: 'tablet' });
+    mockCookieGet.mockReturnValue({ value: signAppSession(session, TEST_SECRET) });
+    await setAppSession(makeSession());
+    expect(verifyAppSessionToken(mockCookieSet.mock.calls[0][1], TEST_SECRET))
+      .toMatchObject({ ok: true, session: { device: 'tablet' } });
+    await setAppSession(makeSession({ userId: 'different-login' }));
+    expect(verifyAppSessionToken(mockCookieSet.mock.calls[2][1], TEST_SECRET))
+      .toMatchObject({ ok: true, session: { device: 'desktop' } });
   });
 });
 

@@ -186,7 +186,8 @@ export async function readAppSession(): Promise<SessionReadResult> {
 }
 
 // ─── Cookie I/O: Setzen ──────────────────────────────────────────────────────
-export async function setAppSession(session: AppSession): Promise<void> {
+export async function setAppSession(session: AppSession, tabletInput?: 'tablet'): Promise<void> {
+  const cookieStore = await cookies();
   let device = session.device;
   if (!device) {
     try {
@@ -195,10 +196,18 @@ export async function setAppSession(session: AppSession): Promise<void> {
     } catch {
       console.error('[APP_SESSION_DEVICE_UNAVAILABLE]');
     }
+    if (device === 'desktop' || device === undefined) {
+      const previousToken = cookieStore.get(COOKIE_NAME)?.value;
+      const previous = previousToken && verifyAppSessionToken(previousToken, getSecretKey());
+      if (previous && previous.ok && previous.session.userId === session.userId
+        && previous.session.tenantId === session.tenantId && previous.session.device === 'tablet') {
+        device = 'tablet';
+      }
+    }
   }
+  if ((device === 'desktop' || device === undefined) && tabletInput === 'tablet') device = 'tablet';
   const initialized = { ...session, device, lastSeen: session.lastSeen ?? session.issuedAt };
   const token = signAppSession(initialized, getSecretKey());
-  const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, getCookieOptions(new Date(session.expiresAt)));
   // Persistent reading fence, not a session lease. Offline contact age and
   // online authorization remain independently checked at their existing ports.

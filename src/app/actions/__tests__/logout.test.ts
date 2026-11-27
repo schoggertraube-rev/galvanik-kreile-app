@@ -10,10 +10,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { logout } from "@/app/actions/auth";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
-const mockSignOut = vi.fn();
-const mockClearAppSession = vi.fn();
+const { mockSignOut, mockClearAppSession } = vi.hoisted(() => ({
+  mockSignOut: vi.fn(),
+  mockClearAppSession: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn().mockResolvedValue({
@@ -46,12 +49,6 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-async function importLogout() {
-  vi.resetModules();
-  const mod = await import("@/app/actions/auth");
-  return mod.logout;
-}
-
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe("logout() – Cookie-Bereinigung (A-10)", () => {
@@ -62,7 +59,6 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
 
   it("10b – erfolgreicher Supabase-Logout → ok: true, remoteSignOut: 'success'", async () => {
     mockSignOut.mockResolvedValueOnce({ error: null });
-    const logout = await importLogout();
     const result = await logout();
 
     expect(result).toEqual({ ok: true, remoteSignOut: "success" });
@@ -72,7 +68,6 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
 
   it("10c – Supabase-Logout wirft → ok: true, remoteSignOut: 'failed', Cookie trotzdem gelöscht", async () => {
     mockSignOut.mockRejectedValueOnce(new Error("Supabase network failure"));
-    const logout = await importLogout();
     const result = await logout();
 
     expect(result).toEqual({ ok: true, remoteSignOut: "failed" });
@@ -83,10 +78,16 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
 
   it("10a – Supabase gibt Error-Objekt zurück → Cookie trotzdem gelöscht", async () => {
     mockSignOut.mockResolvedValueOnce({ error: { message: "JWT expired" } });
-    const logout = await importLogout();
     const result = await logout();
 
     expect(result.ok).toBe(true);
+    expect(mockClearAppSession).toHaveBeenCalledOnce();
+  });
+
+  it("revokes only the current Supabase session after inactivity", async () => {
+    mockSignOut.mockResolvedValueOnce({ error: null });
+    expect(await logout('inactivity')).toEqual({ ok: true, remoteSignOut: "success" });
+    expect(mockSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' });
     expect(mockClearAppSession).toHaveBeenCalledOnce();
   });
 });

@@ -32,7 +32,7 @@ it('fences the expired session immediately and keeps the original queue for the 
  ports.cleanup.mockResolvedValue({cacheCleared:true,pendingCount:2});
  await logoutWithReadCleanup('inactivity');
  expect(ports.sync).not.toHaveBeenCalled();
- expect(ports.logout).toHaveBeenCalledOnce();
+ expect(ports.logout).toHaveBeenCalledExactlyOnceWith('inactivity');
  expect(ports.cleanup).toHaveBeenCalledWith(scope);
  expect(state.authStatus).toBe('unauthenticated');
  expect(readLogoutNotice()).toContain('sobald du wieder angemeldet und online bist');

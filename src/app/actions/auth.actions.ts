@@ -185,6 +185,7 @@ function pinLoginFailureDetails(error: unknown): { name: string; code: string | 
 export async function loginWithPin(
   loginHandle: string,
   pin: string,
+  tabletInput?: 'tablet',
 ): Promise<
   | { ok: true; role: AppRole }
   | { ok: false; message: string; supportReference?: string }
@@ -248,7 +249,7 @@ export async function loginWithPin(
       displayName: user.fullName,
       issuedAt: now,
       expiresAt: now + SESSION_TTL_MS,
-    });
+    }, tabletInput === 'tablet' ? tabletInput : undefined);
 
     const lastSeen = await withPageReadPhase('auth.last_seen',()=>recordUserLastSeenForLogin());
     if (lastSeen.code !== "OK") {

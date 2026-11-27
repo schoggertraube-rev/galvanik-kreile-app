@@ -29,7 +29,7 @@ export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual
  // Start the server action before touching potentially broken local storage.
  let result:Awaited<ReturnType<typeof logout>>|undefined;
  let failure:unknown;
- try{result=await logout();}catch(error){failure=error;}
+ try{result=await (reason==='inactivity'?logout('inactivity'):logout());}catch(error){failure=error;}
  // A lost server response is not a confirmed logout. Still fence local reads
  // and retain originals; do not publish the successful-logout wording.
  readState.authStatus=result?'unauthenticated':'error';
