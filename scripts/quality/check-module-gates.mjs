@@ -523,9 +523,27 @@ function validTodayTagComposition(source) {
   return true;
 }
 
+function validWeekPlanCalendarReader(file, source) {
+  const tree = todayReadCompositionTree(file, source);
+  if (!tree) return false;
+  const imports = tree.statements.filter(statement =>
+    ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) &&
+    (resolveSpec(file, statement.moduleSpecifier.text) ?? '').endsWith('/server-public'));
+  if (imports.length !== 1) return false;
+  const [statement] = imports;
+  const clause = statement.importClause;
+  const bindings = clause?.namedBindings;
+  if (statement.moduleSpecifier.text !== '@/modules/fundament/server-public' ||
+      !clause || clause.name || clause.isTypeOnly ||
+      !bindings || !ts.isNamedImports(bindings) || bindings.elements.length !== 1) return false;
+  const [binding] = bindings.elements;
+  return !binding.isTypeOnly && (binding.propertyName ?? binding.name).text === 'readBetriebsruheInTransaction';
+}
+
 export function allowedServerFacadeConsumer(file, source) {
   if(file===TODAY_PROJECTOR_FILE)return validTodayProjectorComposition(source);
   if(file===TODAY_TAG_COMPOSITION_FILE)return validTodayTagComposition(source);
+  if(file==='src/lib/server/weekPlanPort.ts')return validWeekPlanCalendarReader(file, source);
   const taktJobsFile = 'src/modules/takt/jobs.ts';
   const taktRoutes = new Set([
     'src/app/api/takt/route.ts',

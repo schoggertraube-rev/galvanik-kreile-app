@@ -1,12 +1,22 @@
-.editor { display: grid; gap: var(--kr-tag-luecke); }
+.editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; }
 .editor textarea {
-  min-block-size: 4em;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 4.5em;
   padding: var(--kr-tag-band-padding);
   border: 1px solid var(--kr-tag-band-kante);
-  border-radius: var(--kr-tag-kartenradius);
+  border-radius: var(--kr-tag-platte-radius);
   resize: vertical;
   font: inherit;
+  line-height: 1.5;
   color: inherit;
   background: var(--kr-tag-band-grund);
+}
+.editor textarea:focus-visible { outline: 2px solid var(--kr-tag-blau); outline-offset: 2px; }
+.editor [role="status"] { min-block-size: 1.5em; color: var(--kr-tag-aux); font-size: .875rem; line-height: 1.5; }
+.editor button { justify-self: start; min-block-size: 44px; }
+@media (max-width: 767px) {
+  .editor textarea { font-size: max(1rem, 16px); }
 }
 .label { position: absolute; block-size: 1px; inline-size: 1px; overflow: hidden; clip-path: inset(50%); }

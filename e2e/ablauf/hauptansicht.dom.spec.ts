@@ -25,6 +25,8 @@ const areas=[
 ] as const;
 
 function erwarteteHauptansicht(ids: string[], role: string, area: string) {
+ // U1: Die drei Tagesansichten zeigen den Wochenumsatz am Platz der geplanten Anpassung.
+ if(area==='tag')ids=ids.map(id=>id==='tag.anpassen'?'kopf.wochenumsatz':id);
  if(role==='werkstatt'){
   const plus=ids.indexOf('navigation.plus');
   if(plus<0)throw Error('S14A_U0_WERKSTATT_BASIS');
