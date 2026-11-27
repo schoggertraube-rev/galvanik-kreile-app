@@ -44,7 +44,7 @@ export type IntakePriceCase = {
   unitPriceCents: number;
 };
 
-export type IntakeSuggestionReadOptions = { documentedPricesOnly?: true };
+export type IntakeSuggestionReadOptions = { documentedPricesOnly?: true; existingOrderId?: string };
 
 export type IntakePriceSuggestion = {
   positionKey: string;

@@ -42,7 +42,7 @@ const ORDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 type CustomerDeliveryBlock = {blocked:boolean;reason:'overdue_invoice';invoiceIds:string[]};
 type CustomerDeliveryBlockRead =
-  | {code:'OK';data:CustomerDeliveryBlock;paymentMode:OrderPaymentMode|null;handover:'pickup'|'shipping'|null;oldest?:{number:string;openAmountCents:number;daysOverdue:number}}
+  | {code:'OK';data:CustomerDeliveryBlock;paymentMode:OrderPaymentMode|null;handover:'pickup'|'shipping'|null;oldest?:{id:string;number:string;openAmountCents:number;daysOverdue:number}}
   | {code:'FORBIDDEN'|'NOT_FOUND'|'VALIDATION_ERROR'|'UNAVAILABLE'};
 
 function customerDeliveryBlock(paymentMode:string|null,invoiceIds:string[]):CustomerDeliveryBlock{
@@ -94,7 +94,7 @@ export async function readCustomerDeliveryBlockInTransaction(
   if(invoices.length!==scope.overdue_ids.length)return {code:'UNAVAILABLE'};
   const oldest=invoices[0];
   return {code:'OK',paymentMode,handover,data:visible?data:{...data,invoiceIds:[]},...(visible&&oldest&&oldest.number?{
-    oldest:{number:oldest.number,openAmountCents:oldest.open_amount,daysOverdue:oldest.days_overdue},
+    oldest:{id:oldest.id,number:oldest.number,openAmountCents:oldest.open_amount,daysOverdue:oldest.days_overdue},
   }:{})};
 }
 
@@ -266,9 +266,10 @@ export async function getPaymentState(authorization:AuthorizationSnapshot|Paymen
 export async function readMailPaymentReleaseInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
  if(!auth.active||!canChangeOrderHandover(auth,'mail')||!ORDER_ID_PATTERN.test(orderId))return null;
  const showAmount=hasAuthorizationArea(auth,'zahlungen');
- const rows=await tx.execute<{mode:string;paid:boolean;ready:boolean;amount:number|null;orderNumber:string}>(sql`
+ const rows=await tx.execute<{mode:string;paid:boolean;ready:boolean;amount:number|null;invoiceId:string|null;orderNumber:string}>(sql`
    SELECT state.payment_mode AS mode,state.all_invoice_payments_allowed AS paid,state.goods_out_allowed AS ready,
      CASE WHEN ${showAmount} AND state.active_invoice_count=1 THEN state.payment_open_amount_cents END AS amount,
+     CASE WHEN ${showAmount} AND state.active_invoice_count=1 THEN state.invoice_id::text END AS "invoiceId",
      orders.order_number AS "orderNumber"
    FROM private.read_order_payment_states_v1(${auth.tenantId},ARRAY[${orderId}]::text[]) state
    JOIN public.orders orders ON orders.tenant_id=${auth.tenantId} AND orders.id=state.order_id

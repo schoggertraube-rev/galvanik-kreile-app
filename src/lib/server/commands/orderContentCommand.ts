@@ -157,19 +157,24 @@ async function readHandoverBoundary(tx:PrivilegedTenantTransaction,auth:Authoriz
  const shipped=shipments.find(row=>row.shipped_at||row.delivered_at||!['pending','created','cancelled','canceled'].includes(row.status));
  const label=shipments.some(row=>Boolean(row.label_url?.trim())),passed=['abgeholt','versendet'].includes(order.station)||order.status==='storniert';
  const active=shipments.filter(row=>row.status!=='cancelled'&&row.status!=='canceled');
- return {late:Boolean(shipped||label||passed),label,passed,carrier:shipped?.carrier??null,active};
+ return {late:Boolean(shipped||label||passed),label,passed,carrier:shipped?.carrier??null,active,handedOver:Boolean(shipped||passed)};
 }
 
 export type MailShippingSettingsReader=(tx:PrivilegedTenantTransaction,tenantId:string)=>
  Promise<{dispatchPolicy?:Pick<DispatchPolicy,'carrierCutoffs'>|null}|null>;
 
 export async function readMailHandoverForPromise(
- tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;customerId:string},readSettings:MailShippingSettingsReader,
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;customerId:string;fromPickup:boolean},readSettings:MailShippingSettingsReader,
 ){
  const [order]=await tx.execute<MailHandoverOrder>(sql`SELECT id,order_number,customer_id,version,handover_mode,station,status
   FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} AND customer_id=${input.customerId}`);
- if(!order||order.handover_mode!=='shipping'||order.status==='storniert'||order.station==='abgeholt')return null;
- const {active}=await readHandoverBoundary(tx,auth,order,false);
+ if(!order||order.handover_mode!==(input.fromPickup?'pickup':'shipping'))return null;
+ if(!input.fromPickup&&(order.status==='storniert'||order.station==='abgeholt'))return null;
+ const {active,handedOver,late,label}=await readHandoverBoundary(tx,auth,order,false);
+ if(input.fromPickup){
+  // A pickup has no scheduled parcel cutoff. Use the physical and label boundary of the handover writer.
+  return {handedOver,labelBooked:label,beforeCutoff:null,pickupChangeAllowed:!late};
+ }
  const labelBooked=active.some(row=>Boolean(row.label_url?.trim()));
  if(order.station==='versendet'||active.some(row=>row.shipped_at||row.delivered_at||['shipped','in_transit','delivered'].includes(row.status))){
   return {handedOver:true,labelBooked,beforeCutoff:null};

@@ -8,9 +8,10 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {createFixture,full,nativeFetch,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture,readyInvoiceOrder,readyOrderForInvoice} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
-import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
+import {formatEuro} from '@/lib/domain/formatEuro';
 import {readIntakeSuggestions} from '@/lib/server/intakeSuggestions';
-import {readCustomerDeliveryBlock} from '@/lib/server/paymentSummaryRead';
+import {readCustomerDeliveryBlock,readMailPaymentReleaseInTransaction} from '@/lib/server/paymentSummaryRead';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readBetriebsruheInTransaction,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
@@ -125,20 +126,29 @@ it('uses the actual order and planning sources to return the earliest possible a
     VALUES(${randomUUID()}::uuid,${tenant},'TEST S-1 Kapazität',1200,80,100,130,20,'TEST-S1')`;
   const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
   const wish=berlinCalendarDay();
-  const position={catalogServiceId:catalogId,name,quantity:1,material:'Messing',surfaceRequested:'Verchromen',
+  const position={catalogServiceId:catalogId,name,quantity:10,material:'Messing',surfaceRequested:'Verchromen',
     executionRequested:'offen' as const,unit:'Stück',unitPriceCents:10000,vatRateBasisPoints:1900 as const};
   const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),
-    customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',
+    customer:{mode:'EXISTING',customerId},dueDate:plusWorkingDays(wish,8),termStatus:'bestaetigt',intakeSource:'persoenlich',
     handoverMode:'pickup',paymentMode:'rechnung',note:'TEST S-1 Terminzusage',items:[position]}));
   if(created.code!=='OK')throw Error('TEST_S1_TERM_ORDER:'+created.code);
   const authorized=await withSession(full,()=>resolveAuthorization());
   if(!authorized.ok)throw Error('TEST_S1_TERM_AUTH_REQUIRED');
-  const terms=await leser.termin(authorized.data,{kind:'ORDER',customerId,wishDate:wish,handoverMode:'pickup',
-    positions:[{...position,key:created.receipt.items[0].id}]});
+  const termInput={kind:'ORDER' as const,customerId,wishDate:wish,handoverMode:'pickup' as const,
+    positions:[{...position,key:created.receipt.items[0].id}]};
+  const terms=await leser.termin(authorized.data,termInput,{existingOrderId:created.receipt.orderId});
   expect(terms.term?.rating).toBe('unmoeglich');
   const earliest=terms.term?.achievableDate;
   if(!earliest)throw Error('TEST_S1_TERM_COUNTEROFFER_REQUIRED');
   const input={art:'termin' as const,orderId:created.receipt.orderId,customerId,termin:wish,sourceItemId:await originalFixture(customerId)};
+  const countedTwice=await leser.termin(authorized.data,termInput);
+  const singleLoad=terms.term?.proposals?.[0],doubleLoad=countedTwice.term?.proposals?.[0];
+  expect(singleLoad?.date).toBe(doubleLoad?.date);
+  expect(singleLoad?.utilization).toBeLessThan(doubleLoad?.utilization??0);
+  const termin=vi.fn(leser.termin);
+  await zusage(authorized.data,input,{...leser,termin});
+  expect(termin).toHaveBeenCalledWith(authorized.data,expect.objectContaining({kind:'ORDER'}),
+    {existingOrderId:created.receipt.orderId});
   expect(await pruefeZusage(authorized.data,input)).toEqual({frei:false,grund:'termin',text:MAIL_PROMISE_COPY.earliestTerm(wish,earliest)});
   expect(await pruefeZusage(authorized.data,{...input,termin:earliest})).toEqual({frei:true});
   expect(await pruefeZusage(authorized.data,{...input,customerId:randomUUID()})).toMatchObject({frei:false,grund:'absender_fremd'});
@@ -612,4 +622,17 @@ it('blocks unpaid prepayment and allows it after the real payment with or withou
     expectedVersion:0,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await pruefeZusage(authorized.data,input)).toEqual({frei:true});
   expect(await pruefeZusage(limited.data,input)).toEqual({frei:true});
+
+  // Reuse the isolated older invoice to make the selected order's own balance overdue.
+  const selected=previous.receipt.orderId;
+  expect(await withSession(full,()=>setPaymentModeAction({orderId:selected,paymentMode:'abholung',expectedVersion:0,
+    clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  await sql`UPDATE public.invoices SET due_date=(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1
+    WHERE tenant_id=${tenant} AND id=${earlierInvoiceId}::uuid`;
+  const sameInvoice=await withPrivilegedTenantTransaction(authorized.data,
+    tx=>readMailPaymentReleaseInTransaction(tx,authorized.data,selected));
+  expect(sameInvoice).toMatchObject({invoiceId:earlierInvoiceId,mode:'abholung',paid:false,amount:6000});
+  const single={number:'R-2025-0813',amount:formatEuro(6000)};
+  expect(await pruefeZusage(authorized.data,{...input,orderId:selected})).toEqual({frei:false,grund:'liefersperre',
+    text:MAIL_PROMISE_COPY.overdue('pickup',single,null),hinweis:MAIL_PROMISE_COPY.overdueHint('pickup',single,null)});
 });

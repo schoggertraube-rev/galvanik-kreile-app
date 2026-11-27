@@ -311,6 +311,7 @@ export async function readIntakeSuggestions(
       tx.execute<{intakeDate:string;dueDate:string;valueCents:number|string}>(sql`SELECT coalesce(order_record.intake_date::date,order_record.created_at::date)::text AS "intakeDate",order_record.due_date::date::text AS "dueDate",coalesce(sum(round(position.quantity*position.preis_netto*100)),0)::bigint AS "valueCents"
        FROM public.orders order_record LEFT JOIN public.items position ON position.tenant_id=order_record.tenant_id AND position.order_id=order_record.id
        WHERE order_record.tenant_id=${authorization.tenantId} AND order_record.due_date IS NOT NULL AND order_record.station IN ('angenommen','galvanik') AND order_record.status<>'storniert'
+       ${options?.existingOrderId&&input.kind==='ORDER'?sql`AND order_record.id<>${options.existingOrderId}`:sql``}
        GROUP BY order_record.id,order_record.intake_date,order_record.created_at,order_record.due_date`),
       input.customerId?tx.execute<{vorrang:boolean}>(sql`SELECT vorrang FROM public.customers WHERE tenant_id=${authorization.tenantId} AND id=${input.customerId}`):Promise.resolve([]),
     ]);

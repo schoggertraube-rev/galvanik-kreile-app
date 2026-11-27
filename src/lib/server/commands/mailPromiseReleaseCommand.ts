@@ -26,13 +26,13 @@ const unavailable={frei:false,grund:'unbekannt_zahlung',text:MAIL_PROMISE_COPY.u
 
 export async function pruefeVersand(
   tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
-  input:{customerId:string;orderId:string;art:'zu_spaet'|'etikett';wiedervorlage:boolean},
+  input:{customerId:string;orderId:string;art:'zu_spaet'|'etikett';wiedervorlage:boolean;fromPickup:boolean},
   readSettings:MailShippingSettingsReader,
 ):Promise<ZusageErgebnis>{
   const boundary=await readMailHandoverForPromise(tx,auth,input,readSettings);
   if(boundary?.handedOver||boundary?.beforeCutoff===false)return {frei:false,grund:'zu_spaet',text:MAIL_PROMISE_COPY.tooLate};
   if(boundary?.labelBooked&&!input.wiedervorlage)return {frei:false,grund:'etikett',text:MAIL_PROMISE_COPY.labelBooked};
-  if(boundary?.beforeCutoff===true)return {frei:true};
+  if(boundary?.beforeCutoff===true||boundary?.pickupChangeAllowed===true)return {frei:true};
   return {frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending[input.art]};
 }
 
@@ -53,7 +53,8 @@ export async function pruefeHerausgabe(
     if(!invoice||!debt.handover)return {frei:false,grund:'liefersperre',text:MAIL_PROMISE_COPY.overdueWithoutAmounts(debt.handover)};
     const older={number:invoice.number,amount:formatEuro(invoice.openAmountCents)};
     const payment=debt.paymentMode==='rechnung'?null:await readMailPaymentReleaseInTransaction(tx,auth,orderId);
-    const current=payment&&payment.mode===debt.paymentMode&&!payment.paid&&payment.amount!==null&&payment.amount>0
+    const current=payment&&payment.invoiceId&&payment.invoiceId!==invoice.id&&
+      payment.mode===debt.paymentMode&&!payment.paid&&payment.amount!==null&&payment.amount>0
       ? {number:payment.orderNumber,amount:formatEuro(payment.amount),total:formatEuro(invoice.openAmountCents+payment.amount)}:null;
     return {frei:false,grund:'liefersperre',text:MAIL_PROMISE_COPY.overdue(debt.handover,older,current),
       hinweis:MAIL_PROMISE_COPY.overdueHint(debt.handover,older,current)};

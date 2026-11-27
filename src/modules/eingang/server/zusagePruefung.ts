@@ -191,7 +191,7 @@ async function pruefeTermin(auth:AuthorizationSnapshot,input:ZusageInput,leser:Z
   if(!input.termin)return unknownTerm;
   const request=await readSuggestionInput(auth,input,leser.kv);
   if(!request)return unknownTerm;
-  const suggested=await leser.termin(auth,request);
+  const suggested=await leser.termin(auth,request,input.orderId?{existingOrderId:input.orderId}:undefined);
   const term=suggested.term;
   if(!term?.achievableDate||!term.rating)return unknownTerm;
   if(term.rating==='nicht_machbar'||term.rating==='unmoeglich')return {
@@ -306,7 +306,8 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
       const {art,customerId,orderId}=input;
       if(!customerId||!orderId)return {frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending[art]};
       const wiedervorlage=input.anliegen==='A21'&&input.wirkung==='wiedervorlage_vor_annahmeschluss';
-      return await withPrivilegedTenantTransaction(auth,tx=>pruefeVersand(tx,auth,{art,customerId,orderId,wiedervorlage},leser.versandEinstellungen));
+      const fromPickup=input.anliegen==='A9b'&&input.wirkung==='uebergabeart_aendern';
+      return await withPrivilegedTenantTransaction(auth,tx=>pruefeVersand(tx,auth,{art,customerId,orderId,wiedervorlage,fromPickup},leser.versandEinstellungen));
     }
     if(input.art==='menge')return await pruefeMenge(auth,input);
     if(input.art==='auftrag_aus_kv')return await pruefeKVAuftrag(auth,input,leser.kv);
@@ -355,7 +356,7 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
     ...(input.art==='auftrag_aus_kv'?{kvAuftrag:true}:{}),
     ...(input.art==='dublette'&&!input.customerId?{dublette:false}:{}),
     ...(input.art==='beleg_dublette'&&wirkung==='rechnung_im_belegzugang_ablegen'?{belegDublette:false}:{}),
-    ...(versandBelegt&&anliegen==='A9'?{versandAenderbar:true}:{}),
+    ...(versandBelegt&&(anliegen==='A9'||anliegen==='A9b')?{versandAenderbar:true}:{}),
     ...(versandBelegt&&anliegen==='A21'?{wiedervorlageVorAnnahmeschluss:true}:{}),
   })?ergebnis:unavailable;
 }
