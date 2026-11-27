@@ -317,14 +317,17 @@ export async function searchOrderIntakeCustomers(
 }
 
 const duplicateFields=['companyName','firstName','lastName','phone','email','street','houseNumber','zipCode','city'] as const;
-export type IntakeCustomerDuplicateDraft=Partial<Pick<CustomerComparisonValue,'customerType'|typeof duplicateFields[number]>>;
+export type IntakeCustomerDuplicateDraft=Pick<CustomerComparisonValue,'customerType'|typeof duplicateFields[number]>
+  & Partial<Pick<CustomerFormValue,'country'>>;
 
 /** Match the same form fields and contact search used for ordinary customer creation. */
 export async function readIntakeCustomerDuplicate(
   auth:Pick<AuthorizationSnapshot,'tenantId'>,input:unknown,suggestedEmail:string|null,tx?:PrivilegedTenantTransaction,
 ):Promise<'missing'|'match'|'clear'>{
   if(!plainObject(input)||input.customerType!=='business'&&input.customerType!=='privat')return 'missing';
-  const fields:CustomerFormValue={...EMPTY_CUSTOMER_FORM,customerType:input.customerType};
+  if(input.country!==undefined&&input.country!==null&&typeof input.country!=='string')return 'missing';
+  const fields:CustomerFormValue={...EMPTY_CUSTOMER_FORM,customerType:input.customerType,
+    country:typeof input.country==='string'?input.country.trim():''};
   for(const field of duplicateFields){
     const value=input[field];
     if(value!==undefined&&value!==null&&typeof value!=='string')return 'missing';
@@ -332,7 +335,8 @@ export async function readIntakeCustomerDuplicate(
   }
   const sourceAddress=suggestedEmail?.trim()||'';
   if(!fields.email&&sourceAddress&&!customerFieldError('email',{...fields,email:sourceAddress}))fields.email=sourceAddress;
-  if(!fields.phone||duplicateFields.some(field=>customerFieldError(field,fields)!==null))return 'missing';
+  if(!fields.phone||customerFieldError('country',fields)||duplicateFields.some(field=>customerFieldError(field,fields)!==null))
+    return 'missing';
   const candidate:CustomerComparisonValue={customerType:fields.customerType};
   for(const field of duplicateFields)candidate[field]=fields[field];
   const queries=customerDuplicateQueries(customerDisplayName(fields),fields.phone,fields.email,fields.city);

@@ -407,6 +407,7 @@ it('only offers a new customer from a secured inquiry and checks the confirmed d
   expect(await pruefeZusage(auth.data,{...plan,kundenentwurf:{...draft,phone:''}})).toMatchObject({frei:false,grund:'unbekannt'});
   expect(await pruefeZusage(auth.data,{...plan,sourceVersion:row.version+1})).toMatchObject({frei:false,grund:'unbekannt'});
   expect(await pruefeZusage(auth.data,plan)).toEqual({frei:true});
+  expect(await pruefeZusage(auth.data,{...plan,kundenentwurf:{...draft,city:'Salzburg',zipCode:'5020',country:'AT'}})).toEqual({frei:true});
   const known=await withSession(full,()=>createCustomerAction({...draft,clientEventId:randomUUID(),country:'DE'}));
   if(known.code!=='OK')throw Error('TEST_S1_EXISTING_CUSTOMER_MISSING');
   const customer={...draft,clientEventId:randomUUID(),country:'DE',email:address};
