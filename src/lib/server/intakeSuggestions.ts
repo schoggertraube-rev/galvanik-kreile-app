@@ -13,6 +13,7 @@ import type {
   IntakePriceCase,
   IntakePriceSuggestion,
   IntakeSuggestionPositionInput,
+  IntakeSuggestionReadOptions,
   IntakeSuggestions,
   IntakeSuggestionsInput,
   IntakeTermSuggestion,
@@ -122,6 +123,7 @@ export function choosePriceSuggestion(
   customerId: string | null,
   history: PriceCandidate[],
   catalog: CatalogRow | null,
+  documentedOnly = false,
 ): IntakePriceSuggestion | null {
   const equal = customerId
     ? history.filter((candidate) => candidate.customerId === customerId && sameSurfaceAndUnit(position, candidate) && samePart(position, candidate))
@@ -143,7 +145,7 @@ export function choosePriceSuggestion(
     && (position.catalogServiceId
       ? position.catalogServiceId === candidate.catalogServiceId
       : candidate.catalogServiceId === null && sharedWord(position.name, candidate.name)));
-  if (similar.length >= 3) {
+  if (!documentedOnly && similar.length >= 3) {
     const prices = similar.map((candidate) => candidate.unitPriceCents).sort((a, b) => a - b);
     const middle = Math.floor(prices.length / 2);
     const unitPriceCents = prices.length % 2 === 1 ? prices[middle] : Math.round((prices[middle - 1] + prices[middle]) / 2);
@@ -321,6 +323,7 @@ export async function readIntakeSuggestions(
     knappAbArbeitstagen: number | null;
     terminKapazitaet: { tagesleistungEur: number | string; passtProzent: number; knappProzent: number; vorrangProzent: number } | null;
   }>,
+  options?: IntakeSuggestionReadOptions,
 ): Promise<IntakeSuggestions> {
   if (!validInput(input)) throw new Error("INTAKE_SUGGESTION_INPUT_INVALID");
   const canReadMoney = hasAuthorizationArea(authorization,"preise");
@@ -364,6 +367,7 @@ export async function readIntakeSuggestions(
       tx.execute<{intakeDate:string;dueDate:string;valueCents:number|string}>(sql`SELECT coalesce(order_record.intake_date::date,order_record.created_at::date)::text AS "intakeDate",order_record.due_date::date::text AS "dueDate",coalesce(sum(round(position.quantity*position.preis_netto*100)),0)::bigint AS "valueCents"
        FROM public.orders order_record LEFT JOIN public.items position ON position.tenant_id=order_record.tenant_id AND position.order_id=order_record.id
        WHERE order_record.tenant_id=${authorization.tenantId} AND order_record.due_date IS NOT NULL AND order_record.station IN ('angenommen','galvanik') AND order_record.status<>'storniert'
+       ${options?.existingOrderId&&input.kind==='ORDER'?sql`AND order_record.id<>${options.existingOrderId}`:sql``}
        GROUP BY order_record.id,order_record.intake_date,order_record.created_at,order_record.due_date`),
       input.customerId?tx.execute<{vorrang:boolean}>(sql`SELECT vorrang FROM public.customers WHERE tenant_id=${authorization.tenantId} AND id=${input.customerId}`):Promise.resolve([]),
     ]);
@@ -417,6 +421,7 @@ export async function readIntakeSuggestions(
               input.customerId,
               history,
               position.catalogServiceId ? catalogById.get(position.catalogServiceId) ?? null : null,
+              options?.documentedPricesOnly,
             );
             return suggestion ? [suggestion] : [];
           })

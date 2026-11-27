@@ -3,15 +3,52 @@ import "server-only";
 import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
 import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
+import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {recordIntakeFileBlocked} from "@/lib/server/intakeOriginalAudit";
 import {readLiveOrderCard} from "@/lib/server/orderCardRead";
-import {allowedOriginalExtension,safeOriginalBytes} from "../originalSafety";
+import {allowedOriginalExtension,automaticMimeReply,safeOriginalBytes} from "../originalSafety";
 import type {IntakeCapture} from '../captureContract';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:string;mime:string;bytes:string;sha256:string;speicherpfad:string;geoeffnet:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;invoice_context:boolean};
+
+type IncomingMime={itemId:string;version:number};
+
+async function readOriginalFile(auth:AuthorizationSnapshot,fileId:string,mime?:IncomingMime){
+ const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<OriginalRow>(sql`
+  SELECT file.id::text,file.item_id::text,file.art,source.kanal,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.geoeffnet,source.kunde_id,source.vorgang_id,source.vorgang_art,
+   (source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context
+  FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
+  WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid
+   ${mime?sql`AND source.id=${mime.itemId}::uuid AND source.version=${mime.version} AND source.kanal='mail' AND source.richtung='rein'
+    AND file.mime='message/rfc822' AND file.art='mime'
+    AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
+     AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text AND original.nachher->>'sha256'=file.sha256)`:sql``}`));
+ return rows.length===1?rows[0]:null;
+}
+
+function originalStorage(){return createAdminClient().storage.from('scans');}
+
+async function verifiedOriginalBytes(storage:ReturnType<typeof originalStorage>,tenantId:string,file:OriginalRow){
+ const size=Number(file.bytes);
+ if(!/^[0-9a-f]{64}$/.test(file.sha256)||file.speicherpfad!==tenantId+'/'+file.sha256||!Number.isSafeInteger(size)||size<1||size>150*1024*1024)throw Error('INTAKE_ORIGINAL_METADATA_INVALID');
+ const original=await storage.download(file.speicherpfad);
+ if(original.error||!original.data)throw Error('INTAKE_ORIGINAL_NOT_SECURED');
+ const bytes=new Uint8Array(await original.data.arrayBuffer());
+ if(bytes.byteLength!==size||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw Error('INTAKE_ORIGINAL_HASH_MISMATCH');
+ return bytes;
+}
+
+/** Classify the exact stored MIME without opening, signing or changing the file. */
+export async function readIntakeAutomaticReply(auth:AuthorizationSnapshot,input:IncomingMime&{fileId:string}){
+ if(!auth.active||!hasAuthorizationArea(auth,'mails')||!UUID.test(input.fileId)||!UUID.test(input.itemId)||!Number.isSafeInteger(input.version)||input.version<1)return null;
+ const file=await readOriginalFile(auth,input.fileId,input);
+ if(!file||!/\.eml$/i.test(file.dateiname))return null;
+ const bytes=await verifiedOriginalBytes(originalStorage(),auth.tenantId,file);
+ return automaticMimeReply(bytes);
+}
 
 /** P103: project the same stored originals onto their associated order, without copying. */
 export async function readOrderIntakeOriginals(orderId:unknown){
@@ -49,11 +86,8 @@ export async function openIntakeOriginal(input:unknown){
   const order=await readLiveOrderCard(auth.data,{orderId:value.orderId});if(order.code!=='OK')return {code:order.code,message:order.message};
  }
  try{
-  const rows=await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<OriginalRow>(sql`SELECT file.id::text,file.item_id::text,file.art,source.kanal,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.geoeffnet,source.kunde_id,source.vorgang_id,source.vorgang_art,
-    (source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context
-    FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.data.tenantId} AND file.id=${value.fileId}::uuid`));
-  if(rows.length!==1)return {code:"NOT_FOUND" as const,message:"Original wurde nicht gefunden."};
-  const file=rows[0];
+  const file=await readOriginalFile(auth.data,value.fileId);
+  if(!file)return {code:"NOT_FOUND" as const,message:"Original wurde nicht gefunden."};
   const orderAccess=value.orderId&&auth.data.permissions.includes('perm_view_leitstand')?await withPrivilegedTenantTransaction(auth.data,async tx=>{
    const linked=await tx.execute(sql`SELECT source.id FROM public.intake_item source
     WHERE source.tenant_id=${auth.data.tenantId} AND source.vorgang_art='auftrag' AND source.vorgang_id=${value.orderId}
@@ -69,12 +103,7 @@ export async function openIntakeOriginal(input:unknown){
   const restricted=!orderAccess&&(file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth.data,'mails');
   if(restricted)return {code:'OK' as const,original:{id:file.id,itemId:file.item_id,name:file.dateiname,mime:file.mime,bytes:Number(file.bytes),sha256:file.sha256,customerId:file.kunde_id,orderId:file.vorgang_art==='auftrag'?file.vorgang_id:null,previewable:false,url:null,downloadUrl:null,restricted:true}};
   if(!allowedOriginalExtension(file.dateiname)){await recordIntakeFileBlocked(auth.data,file.id,value.clientEventId,'Dateityp nicht freigegeben');return {code:"FILE_BLOCKED" as const,message:"Dateityp wird nicht geöffnet oder heruntergeladen. Fehlercode: FILE_BLOCKED."};}
-  if(file.speicherpfad!==auth.data.tenantId+'/'+file.sha256||!Number.isSafeInteger(Number(file.bytes))||Number(file.bytes)<1||Number(file.bytes)>150*1024*1024)throw Error('INTAKE_ORIGINAL_METADATA_INVALID');
-  const storage=createAdminClient().storage.from('scans');
-  const original=await storage.download(file.speicherpfad);
-  if(original.error||!original.data)throw Error('INTAKE_ORIGINAL_NOT_SECURED');
-  const bytes=new Uint8Array(await original.data.arrayBuffer());
-  if(bytes.byteLength!==Number(file.bytes)||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw Error('INTAKE_ORIGINAL_HASH_MISMATCH');
+  const storage=originalStorage(),bytes=await verifiedOriginalBytes(storage,auth.data.tenantId,file);
   if(!safeOriginalBytes(file.dateiname,bytes)){await recordIntakeFileBlocked(auth.data,file.id,value.clientEventId,'Dateiinhalt passt nicht zum sicheren Format');return {code:"FILE_BLOCKED" as const,message:"Dateiformat wurde nicht sicher bestätigt. Nicht geöffnet. Fehlercode: FILE_BLOCKED."};}
   const previewable=['image/jpeg','image/png','image/webp','application/pdf'].includes(file.mime);
   const [preview,download]=await Promise.all([storage.createSignedUrl(file.speicherpfad,300,previewable?{}:{download:file.dateiname}),storage.createSignedUrl(file.speicherpfad,300,{download:file.dateiname})]);

@@ -25,6 +25,7 @@
     "@/modules/customers/public#normaliseCustomerName",
     "@/modules/customers/public#normaliseCustomerPhone",
     "@/modules/customers/public#customerDuplicateMatch",
+    "@/modules/customers/public#customerDuplicateQueries",
     "@/modules/customers/public#customerSortKey",
     "@/modules/customers/public#normaliseIban",
     "@/modules/customers/public#validIban",

@@ -8,19 +8,19 @@ export function StartAppAdapter({
   users,
   loginUnavailable,
   supportReference,
-  maintenanceNotice,
+  skippedLogins,
 }: {
   users: ProductStartProfile[];
   loginUnavailable: boolean;
   supportReference?: string;
-  maintenanceNotice?: boolean;
+  skippedLogins?: number;
 }) {
   return (
     <StartScreenClient
       users={users}
       loginUnavailable={loginUnavailable}
       supportReference={supportReference}
-      maintenanceNotice={maintenanceNotice}
+      skippedLogins={skippedLogins}
     />
   );
 }

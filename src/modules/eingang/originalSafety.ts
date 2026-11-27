@@ -1,6 +1,27 @@
 import {inflateRawSync} from "node:zlib";
 
 export function allowedOriginalExtension(name:string):boolean{return /\.(?:jpe?g|png|heic|webp|pdf|xml|xlsx|csv|eml)$/iu.test(name);}
+
+/** Read the bounded MIME header, excluding the body and any quoted message. */
+export function mimeHeaderLines(bytes:Uint8Array):string[]|null{
+ const prefix=Buffer.from(bytes.subarray(0,65536)).toString('latin1'),end=prefix.search(/\r?\n\r?\n/);
+ if(end<0)return null;
+ return prefix.slice(0,end).replace(/\r?\n[ \t]+/g,' ').split(/\r?\n/);
+}
+
+/** RFC 3834 §5. A single explicit marking can rule out a party's confirmation. */
+export function automaticMimeReply(bytes:Uint8Array):boolean|null{
+ const lines=mimeHeaderLines(bytes);
+ if(!lines)return null;
+ const marked=lines.flatMap(line=>{
+  const match=/^auto-submitted:\s*(.*)$/i.exec(line);
+  return match?[match[1]]:[];
+ });
+ if(marked.length!==1)return null;
+ const keyword=/^([a-z][a-z-]*)(?:\s*;|\s*$)/i.exec(marked[0])?.[1].toLowerCase();
+ if(keyword==='no')return false;
+ return keyword==='auto-replied'||keyword==='auto-generated'?true:null;
+}
 function safeWorkbook(bytes:Buffer):boolean{
  let end=-1;for(let i=bytes.length-22;i>=Math.max(0,bytes.length-65557);i--)if(bytes.readUInt32LE(i)===0x06054b50){end=i;break;}
  if(end<0||bytes.readUInt16LE(end+4)!==0||bytes.readUInt16LE(end+6)!==0)return false;

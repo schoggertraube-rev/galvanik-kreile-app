@@ -41,6 +41,15 @@ const history = (overrides: Partial<{
 });
 
 describe("intake suggestions", () => {
+  it('uses only the catalogue or matching customer prices for a documented proposal', () => {
+    const codedPosition={...position,catalogServiceId:catalogId};
+    const comparison=Array.from({length:3},()=>history({catalogServiceId:catalogId,unitPriceCents:900}));
+    expect(choosePriceSuggestion(codedPosition,null,comparison,catalog)?.source).toBe('aehnlich');
+    expect(choosePriceSuggestion(codedPosition,null,comparison,catalog,true)).toMatchObject({source:'katalog',unitPriceCents:1200});
+    expect(choosePriceSuggestion(codedPosition,null,comparison,null,true)).toBeNull();
+    expect(choosePriceSuggestion(codedPosition,comparison[0].customerId,comparison,catalog,true)).toMatchObject({source:'gleich',unitPriceCents:900});
+  });
+
   it("uses the shared German working-day calendar", () => {
     expect(plusWorkingDays("2026-12-23", 1)).toBe("2026-12-24");
     expect(plusWorkingDays("2026-12-24", 1)).toBe("2026-12-28");

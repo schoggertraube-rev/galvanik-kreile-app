@@ -103,7 +103,7 @@ describe("loginWithPin() active app user security", () => {
       role: "werkstatt",
       tenantId: KREILE_TENANT_SLUG,
       userId: "synthetic-phillip-id",
-    }));
+      }), undefined);
   });
 
   it("clears the new session when last-seen confirmation fails", async () => {
@@ -163,6 +163,7 @@ describe("loginWithPin() active app user security", () => {
       .resolves.toEqual({ ok: true, role: "werkstatt" });
     expect(ports.setAppSession).toHaveBeenCalledWith(
       expect.objectContaining({ displayName: "Neue Nutzerin" }),
+      undefined,
     );
   });
 

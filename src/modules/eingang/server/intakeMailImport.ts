@@ -9,6 +9,7 @@ import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {createAdminClient} from '@/lib/supabase/admin';
 import {recognizeNoteConcerns} from '../captureContract';
+import {mimeHeaderLines} from '../originalSafety';
 import {prepareIntakeFile,finishIntakeFile} from './intakeFile';
 import {bindIntakeOriginalToOrder} from './intakeOrderBinding';
 import {assignInTransaction,assignIntakeCustomer} from './intakeAssignment';
@@ -22,9 +23,8 @@ export function intakeMailIdentity(value:string){const b=createHash('sha256').up
 /** A reply header is evidence from the secured original, never a guessed quote edition. */
 function replyChainFromOriginal(bytes:Uint8Array):ReplyChain{
  const chain:ReplyChain={source:'original_mime',originalSha256:createHash('sha256').update(bytes).digest('hex'),status:'missing',inReplyTo:[],references:[]};
- const prefix=Buffer.from(bytes.subarray(0,65536)).toString('latin1'),boundary=prefix.search(/\r?\n\r?\n/);
- if(boundary<0)return {...chain,status:'invalid'};
- const lines=prefix.slice(0,boundary).replace(/\r?\n[ \t]+/g,' ').split(/\r?\n/);
+ const lines=mimeHeaderLines(bytes);
+ if(!lines)return {...chain,status:'invalid'};
  for(const line of lines){
   const colon=line.indexOf(':');if(colon<1)continue;const name=line.slice(0,colon).toLowerCase();if(name!=='in-reply-to'&&name!=='references')continue;
   const value=line.slice(colon+1).trim(),ids=value.match(/<[^<>\s]{1,998}>/g)??[];
