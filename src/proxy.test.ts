@@ -200,4 +200,22 @@ describe("proxy auth boundary", () => {
     expect(mockGetSession).toHaveBeenCalledTimes(1);
     expect(mockGetUser).not.toHaveBeenCalled();
   });
+
+  it('keeps proxy refresh and cookie expiry out of a delayed Server Action response',async()=>{
+    const {proxy}=await import('@/proxy');
+    const valid=signAppSession(validSession(),TEST_SECRET);
+    const expired=signAppSession({...validSession(),expiresAt:Date.now()-1},TEST_SECRET);
+    for(const [token,status] of [[valid,200],[expired,307]] as const){
+      const response=await proxy(new NextRequest('https://werkstatt.example/orders',{
+        method:'POST',
+        headers:{
+          'next-action':'TEST-inactivity',
+          cookie:`kreile_app_session=${token}; sb-project-auth-token=TEST-old-session; bypass-auth=true`,
+        },
+      }));
+      expect(response.status).toBe(status);
+      expect(response.headers.get('set-cookie')).toBeNull();
+    }
+    expect(mockGetSession).not.toHaveBeenCalled();
+  });
 });

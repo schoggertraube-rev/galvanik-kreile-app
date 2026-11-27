@@ -12,16 +12,27 @@
     "@/modules/werkstatt/public#WerkstattViewPorts",
     "@/modules/werkstatt/public#buildWerkstattData",
     "@/modules/werkstatt/public#WerkstattView",
-    "@/modules/werkstatt/public#WerkstattLoading"
+    "@/modules/werkstatt/public#WerkstattLoading",
+    "@/modules/werkstatt/public#LaufAntwort",
+    "@/modules/werkstatt/public#LaufEingabe",
+    "@/modules/werkstatt/public#LaufZeitverteilung",
+    "@/modules/werkstatt/server-public#ArbeitszeitStand",
+    "@/modules/werkstatt/server-public#bookLaufZeit",
+    "@/modules/werkstatt/server-public#bookWorkTime",
+    "@/modules/werkstatt/server-public#leseArbeitszeitZumAuftrag",
+    "@/modules/werkstatt/server-public#readWorkMinutes",
+    "@/modules/werkstatt/server-public#verteileLaufMinuten"
   ],
   "capabilities": [],
   "migrations": [
-    "20260908101500_werkstatt_kpi_view.sql"
+    "20260908101500_werkstatt_kpi_view.sql",
+    "20261126093909_b2a_werkstatt_daten.sql"
   ],
   "viewsFunctions": [
-    "public.v_werkstatt_kpis_v1"
+    "public.v_werkstatt_kpis_v1",
+    "private.arbeitszeit_buchung_unveraenderlich"
   ],
-  "ownsTables": [],
+  "ownsTables": ["public.arbeitszeit_buchung"],
   "storagePurposes": [],
   "events": {
     "emits": [],

@@ -191,6 +191,8 @@ import type {
 import type {
   ChangeOrderItemExtraWorkInput,
   ChangeOrderItemExtraWorkResult,
+  RecordPhoneExtraWorkApprovalInput,
+  RecordPhoneExtraWorkApprovalResult,
 } from "@/lib/server/commands/orderExtraWorkCommand";
 import type {
   FreezeOrderInput,
@@ -289,6 +291,15 @@ export async function changeOrderItemExtraWorkAction(
  },readLoggingSettings);
 }
 
+export async function recordPhoneExtraWorkApprovalAction(
+  input: RecordPhoneExtraWorkApprovalInput,
+): Promise<RecordPhoneExtraWorkApprovalResult> {
+  return observeAction("recordPhoneExtraWorkApprovalAction", subjectForAction("recordPhoneExtraWorkApprovalAction", input), async () => {
+    const { recordPhoneExtraWorkApproval } = await import("@/lib/server/commands/orderExtraWorkCommand");
+    return recordPhoneExtraWorkApproval(input);
+  }, readLoggingSettings);
+}
+
 export async function freezeOrderAction(input: FreezeOrderInput): Promise<FreezeOrderResult> {
  return observeAction('freezeOrderAction',subjectForAction('freezeOrderAction',input),async()=>{
   const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
@@ -356,16 +367,93 @@ export async function changeOrderContentAction(
  },readLoggingSettings);
 }
 
+async function productionPricingComposition() {
+  const [{createProductionPricingRetryTask,settleProductionPricingRetryTasks},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const effect:import('@/modules/tasks/server-public').TaskEffects=(tx,auth,value)=>recordIntakeTaskEffect(tx,auth,value,readCustomerProfile);
+  const ports: NonNullable<Parameters<typeof import("@/lib/server/commands/orderContentCommand").setOrderItemFinished>[1]> = {
+    failed: async (tx, auth, id) => { await createProductionPricingRetryTask(tx, auth, id, { effect }); },
+    settled: async (tx, auth, eventId) => { await settleProductionPricingRetryTasks(tx, auth, eventId, { effect }); },
+  };
+  return ports;
+}
+
 export async function setOrderItemFinishedAction(
   input: SetOrderItemFinishedInput,
 ): Promise<OrderContentResult> {
  return observeAction('setOrderItemFinishedAction',subjectForAction('setOrderItemFinishedAction',input),async()=>{
   const { setOrderItemFinished } = await import("@/lib/server/commands/orderContentCommand");
-  const [{createProductionPricingRetryTask,settleProductionPricingRetryTasks},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
-  const effect:import('@/modules/tasks/server-public').TaskEffects=(tx,auth,value)=>recordIntakeTaskEffect(tx,auth,value,readCustomerProfile);
-  return setOrderItemFinished(input,{failed:async(tx,auth,id)=>{await createProductionPricingRetryTask(tx,auth,id,{effect});},settled:async(tx,auth,eventId)=>{await settleProductionPricingRetryTasks(tx,auth,eventId,{effect});}});
+  return setOrderItemFinished(input, await productionPricingComposition());
 
  },readLoggingSettings);
+}
+
+export async function starteBuendelLaufAction(input: Parameters<typeof import("@/modules/orders/server-public").starteLauf>[1]) {
+  return observeAction("starteBuendelLaufAction", subjectForAction("starteBuendelLaufAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const { starteLauf } = await import("@/modules/orders/server-public");
+    return starteLauf(auth.data, input);
+  }, readLoggingSettings);
+}
+
+export async function meldeAusschussAction(input: Parameters<typeof import("@/modules/orders/server-public").meldeAusschuss>[1]) {
+  return observeAction("meldeAusschussAction", subjectForAction("meldeAusschussAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const [orders, invoices, tasks, settings, intake, customers, copy] = await Promise.all([
+      import("@/modules/orders/server-public"), import("@/lib/server/commands/immutableInvoiceCommand"),
+      import("@/modules/tasks/server-public"), import("@/modules/fundament/server-public"),
+      import("@/modules/eingang/server-public"), import("@/modules/customers/server-public"), import("@/ui/ordersCopy"),
+    ]);
+    return orders.meldeAusschuss(auth.data, input, {
+      sperrendeRechnung: invoices.readOrderScrapInvoiceNumberInTransaction,
+      aktualisiereAnliegen: async (tx, actor, { auftragId, vollstaendig }) => {
+        await tasks.synchronizeFullScrapTask(tx, actor, { orderId: auftragId, vollstaendig, titel: copy.ORDER_SCRAP_COPY.task }, {
+          readChargeScrap: settings.readAusschussBerechnenInTransaction,
+          effect: (writeTx, taskActor, request) => intake.recordIntakeTaskEffect(writeTx, taskActor, request, customers.readCustomerProfile),
+        });
+      },
+    });
+  }, readLoggingSettings);
+}
+
+export async function bookWorkTimeAction(input: unknown) {
+  return observeAction("bookWorkTimeAction", subjectForAction("bookWorkTimeAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const [{ hatArbeitszeitAuftragInTransaction }, { bookWorkTime }, settings, { readQuoteCurrentRate }] = await Promise.all([
+      import("@/modules/orders/server-public"), import("@/modules/werkstatt/server-public"),
+      import("@/modules/fundament/server-public"), import("@/lib/server/quoteJournalPort"),
+    ]);
+    return bookWorkTime(auth.data, input, {
+      auftrag: hatArbeitszeitAuftragInTransaction,
+      station: settings.readWerkstattZeitstationInTransaction,
+      personensatz: settings.readWerkstattKostensatzInTransaction,
+      standardsatz: readQuoteCurrentRate,
+    });
+  }, readLoggingSettings);
+}
+
+export async function beendeBuendelLaufAction(input: Parameters<typeof import("@/modules/orders/server-public").beendeLauf>[1]) {
+  return observeAction("beendeBuendelLaufAction", subjectForAction("beendeBuendelLaufAction", input), async () => {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) return { code: "UNAUTHENTICATED" as const, message: auth.message };
+    const [{ beendeLauf }, { bookLaufZeit, verteileLaufMinuten }, settings, { setOrderItemFinishedInTransaction }, pricing, { readQuoteCurrentRate }] = await Promise.all([
+      import("@/modules/orders/server-public"), import("@/modules/werkstatt/server-public"),
+      import("@/modules/fundament/server-public"), import("@/lib/server/commands/orderContentCommand"),
+      productionPricingComposition(),
+      import("@/lib/server/quoteJournalPort"),
+    ]);
+    return beendeLauf(auth.data, input, {
+      verteileMinuten: verteileLaufMinuten,
+      zeitBuchen: (tx, login, zeit) => bookLaufZeit(tx, login, zeit, {
+        station: settings.readWerkstattZeitstationInTransaction,
+        personensatz: settings.readWerkstattKostensatzInTransaction,
+        standardsatz: readQuoteCurrentRate,
+      }),
+      teilFertigMelden: (tx, login, teil) => setOrderItemFinishedInTransaction(tx, login, teil, pricing),
+    });
+  }, readLoggingSettings);
 }
 
 export async function configureExtraWorkCatalogPositionAction(

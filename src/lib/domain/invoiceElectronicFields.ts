@@ -88,18 +88,56 @@ export function invoiceXmlAmount(cents:number):string{
  const magnitude=BigInt(cents<0?-cents:cents);
  return `${cents<0?'-':''}${magnitude/BigInt(100)}.${String(magnitude%BigInt(100)).padStart(2,'0')}`;
 }
-/** PL18Nov19:22: exact presentation of the original line allocation only. */
-export function invoiceBaseUnitPrice(quantity:number,roundedUnitCents:number,lineNetCents:number):string{
- if(!Number.isSafeInteger(quantity)||quantity<1||!Number.isSafeInteger(roundedUnitCents)||roundedUnitCents<0||!Number.isSafeInteger(lineNetCents)||lineNetCents<0)throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
- const count=BigInt(quantity),total=BigInt(lineNetCents);
- if((total+count/BigInt(2))/count!==BigInt(roundedUnitCents))throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_SOURCE_INVALID');
- const precise=(total*BigInt(100)+count/BigInt(2))/count;
- if((precise*count+BigInt(50))/BigInt(100)!==total)throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_ROUNDING_INVALID');
- const fraction=String(precise%BigInt(10000)).padStart(4,'0').replace(/0+$/,'').padEnd(2,'0');
- return `${precise/BigInt(10000)}.${fraction}`;
+/** The BASE unit price is an exact allocation of the stored line total. */
+export function invoiceBaseUnitAmounts(quantity: number, lineNetCents: number, unit?: InvoiceElectronicUnitCode) {
+  if (!Number.isSafeInteger(lineNetCents) || lineNetCents < 0 || typeof quantity !== 'number' || quantity <= 0) {
+    throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
+  }
+  let count: bigint;
+  let scale = BigInt(1);
+  if (Number.isSafeInteger(quantity)) {
+    count = BigInt(quantity);
+  } else {
+    const decimal = /^([0-9]+)\.([0-9]{1,3})$/.exec(String(quantity));
+    if (!decimal || quantity > 99_999 || (unit !== 'KGM' && unit !== 'DMK' && unit !== 'SET')) {
+      throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
+    }
+    count = BigInt(decimal[1] + decimal[2]);
+    scale = BigInt(10) ** BigInt(decimal[2].length);
+  }
+  const lineCents = BigInt(lineNetCents);
+  const rounded = (lineCents * scale + count / BigInt(2)) / count;
+  const precise = (lineCents * scale * BigInt(100) + count / BigInt(2)) / count;
+  const centDivisor = scale * BigInt(100);
+  if ((precise * count + centDivisor / BigInt(2)) / centDivisor !== lineCents) {
+    throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_ROUNDING_INVALID');
+  }
+  const unitNetAmountCents = Number(rounded);
+  if (!Number.isSafeInteger(unitNetAmountCents)) throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
+  const fraction = String(precise % BigInt(10000)).padStart(4, '0').replace(/0+$/, '').padEnd(2, '0');
+  return { unitNetAmountCents, unitNetAmount: `${precise / BigInt(10000)}.${fraction}` };
 }
-export function invoiceXmlWorkHours(minutes:number):string{
+
+export function invoiceBaseUnitPrice(quantity: number, roundedUnitCents: number, lineNetCents: number, unit?: InvoiceElectronicUnitCode): string {
+  if (!Number.isSafeInteger(roundedUnitCents) || roundedUnitCents < 0) throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_INVALID');
+  const allocation = invoiceBaseUnitAmounts(quantity, lineNetCents, unit);
+  if (allocation.unitNetAmountCents !== roundedUnitCents) throw Error('INVOICE_ELECTRONIC_UNIT_PRICE_SOURCE_INVALID');
+  return allocation.unitNetAmount;
+}
+export function invoiceExtraWorkCents(minutes: number, hourlyRateCents: number) {
+  if (!Number.isSafeInteger(minutes) || minutes < 0 || !Number.isSafeInteger(hourlyRateCents) || hourlyRateCents < 1) {
+    throw Error('INVOICE_EXTRA_WORK_AMOUNT_INVALID');
+  }
+  const dividend = BigInt(minutes) * BigInt(hourlyRateCents);
+  const fullCents = Number((dividend + BigInt(30)) / BigInt(60));
+  if (!Number.isSafeInteger(fullCents)) throw Error('INVOICE_EXTRA_WORK_AMOUNT_INVALID');
+  return { fullCents, cappedCents: Number(dividend / BigInt(60)) };
+}
+
+export function invoiceXmlWorkHours(minutes:number, precise=false):string{
  if(!Number.isSafeInteger(minutes)||minutes<1)throw Error('INVOICE_ELECTRONIC_MINUTES_INVALID');
- const scaled=(BigInt(minutes)*BigInt(10000)+BigInt(30))/BigInt(60);
- return `${scaled/BigInt(10000)}.${String(scaled%BigInt(10000)).padStart(4,'0')}`;
+ const digits = precise ? 10 : 4;
+ const scale = BigInt(10) ** BigInt(digits);
+ const scaled = (BigInt(minutes) * scale + BigInt(precise ? 59 : 30)) / BigInt(60);
+ return `${scaled / scale}.${String(scaled % scale).padStart(digits, '0')}`;
 }

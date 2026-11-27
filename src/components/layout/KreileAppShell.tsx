@@ -11,6 +11,8 @@ import {
   type Geraet,
 } from "@/ui/kr";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { sessionLayoutDevice } from '@/lib/auth/sessionInactivity';
+import { useSessionInactivity } from '@/lib/auth/useSessionInactivity';
 import { SessionWarningBanner } from "./SessionWarningBanner";
 import { EntityOverlayStack } from "./EntityOverlayStack";
 import { GlobalSearch } from "./GlobalSearch";
@@ -23,9 +25,7 @@ import {NAVIGATION,sichtbareNavigation} from '@/ui/navigation/register';
 import {ORDER_WEEK_NAVIGATION, ORDER_WEEK_ROUTE} from '@/ui/navigation/orders';
 
 function readDevice(): Geraet {
-  if (window.innerWidth < 768) return "handy";
-  if (window.innerWidth < 1280) return "tablet";
-  return "desktop";
+  return sessionLayoutDevice(window.innerWidth);
 }
 
 function subscribeDevice(onChange: () => void) {
@@ -66,8 +66,10 @@ export function KreileAppShell({ children, globalCreate,loginHandle,vorfinalStyl
   const [moreMenu, setMoreMenu] = useState<{oeffner?: HTMLButtonElement} | null>(null);
   const loginOnly = pathname === "/start" || pathname === "/login";
   const sessionInvalid = !permissions.loading && permissions.status !== "authenticated";
+  const inactive = useSessionInactivity(loginOnly ? undefined : permissions.inactivity);
 
   if (loginOnly) return <div className={styles.loginRoot}>{children}</div>;
+  if (inactive) return null;
 
   const financial=(['preise','zahlungen','buchhaltung'] as const).some(area=>permissions.hasArea(area));
   const workshop = permissions.hasArea("auftraege")

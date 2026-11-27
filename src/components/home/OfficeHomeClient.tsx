@@ -14,6 +14,7 @@ import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } fr
 import { deriveTodayReminder, type TodayProductionWeek, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
 import { OfficeDaySchedule } from "./OfficeDaySchedule";
 import {OfficeInvoiceControl} from './OfficeInvoiceControl';
+import weekStyles from './OfficeWeekControl.module.css';
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { IntakeDraftList, type IntakeDraftResult } from "@/modules/eingang/public";
 import { discardIntakeDraftAction } from "@/app/actions/eingang.actions";
@@ -292,7 +293,7 @@ export function OfficeHomeClient({ model:initialModel, ports, weekControl }: { m
       ansicht="blatt" groesse="breit" oeffner={calendarOpener} dataSpecId="kalender"
       schliessenText={TODAY_PLAN_COPY.closeCalendar} schliessenSymbol={<Icon name="x" />}
       onSchliessen={()=>setCalendarOpen(false)} onGeschlossen={finishCalendar}>
-      {canWorkOrders?<CalendarOrders initialView="woche" />:null}
+      {canWorkOrders ? <div className={weekStyles.calendarWeek}><CalendarOrders initialView="woche" /></div> : null}
     </GlasDialog> : null}
     {mailId ? <Dialog titel="Mail" icon="mail" groesse="breit" onSchliessen={() => setMailId(null)}><div className="kr-stapel">
       {!mailPreview && !mailMessage ? <Hinweis>Mail wird gelesen …</Hinweis> : null}

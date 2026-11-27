@@ -27,7 +27,7 @@ vi.mock('@/lib/server/privilegedDb',()=>({
 }));
 
 const session=()=>({ok:true as const,session:{userId:'TEST-cache-user',tenantId:KREILE_TENANT_SLUG,role:'werkstatt',displayName:'TEST Cache',issuedAt:1000,expiresAt:Date.now()+10000}});
-const user=()=>({id:'TEST-cache-user',tenantId:KREILE_TENANT_SLUG,fullName:'TEST Cache',role:'werkstatt',active:true,areas:['auftraege'],updatedAt:new Date(0),packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]}))});
+const user=()=>({id:'TEST-cache-user',tenantId:KREILE_TENANT_SLUG,fullName:'TEST Cache',role:'werkstatt',active:true,areas:['auftraege'],updatedAt:new Date(0),inactivitySettings:{minutes:60},packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]}))});
 async function render<T>(work:()=>Promise<T>):Promise<T>{
  if(!test.server)throw Error('TEST_REACT_SERVER_REQUIRED');
  const internals=test.server.__SERVER_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,previous=internals.A;
@@ -37,10 +37,12 @@ async function render<T>(work:()=>Promise<T>):Promise<T>{
 }
 beforeEach(()=>{
  vi.clearAllMocks();
+ vi.useFakeTimers({toFake:['Date']});
+ vi.setSystemTime(1500);
  test.session.mockResolvedValue(session());test.where.mockResolvedValue([user()]);
  test.settings.mockResolvedValue([{page_read_source:{hasQueryTimeout:true,hasInvoiceBatchLimit:true,queryTimeoutMs:10000,invoiceMailBatchLimit:101}}]);
 });
-afterEach(()=>vi.restoreAllMocks());
+afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();});
 
 it('shares only the raw rights row within an RSC request and still checks every session and role',async()=>{
  await render(async()=>{

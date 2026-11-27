@@ -1,5 +1,6 @@
 import {isOrderCommandBase as validBase,isManualHandoverInput} from '@/lib/domain/orderHandoverContract';
 import {orderTitleSource} from '@/lib/domain/orderTitle';
+import { isOfflineOriginal, normalizeOfflineOriginal, offlineOccurrenceTime } from '@/lib/domain/offlineOriginal';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import "server-only";
 import {recordObservedFailure} from "@/lib/server/actionObservation";
@@ -15,7 +16,8 @@ import {
 } from "@/lib/server/authorization";
 import { type PrivilegedTenantTransaction, withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 import {intakeHandoverDirective} from '@/modules/eingang/public';
-import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY,ORDER_CONTENT_COPY} from '@/ui/situationCatalog';
+import {ORDER_HANDOVER_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY,ORDER_CONTENT_COPY} from '@/ui/situationCatalog';
+import {ORDER_ITEM_COMPLETION_COPY} from '@/ui/ordersCopy';
 import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
 import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
 import {readAssignedMailHandoverSource,readManualHandoverReceipt,readPreviousMailHandoverPreference,type HandoverPreferenceBefore,type ManualHandoverReceipt} from '@/lib/server/orderHandoverSourcePort';
@@ -362,7 +364,7 @@ async function authorization(permission: "content" | "status") {
   const allowed = permission === "content"
     ? getAuthorizationActionGrants(result.data).editOrderContent
     : result.data.permissions.includes("perm_op_status");
-  if (!allowed) return { ok: false as const, result: { code: "FORBIDDEN" as const, message: permission === "content" ? "Diese Rolle darf Auftragsdaten nicht ändern." : "Diese Rolle darf den Teilstatus nicht ändern." } };
+  if (!allowed) return { ok: false as const, result: { code: "FORBIDDEN" as const, message: permission === "content" ? "Diese Rolle darf Auftragsdaten nicht ändern." : ORDER_ITEM_COMPLETION_COPY.forbidden } };
   return { ok: true as const, data: result.data };
 }
 
@@ -456,64 +458,113 @@ export async function changeOrderContent(input: ChangeOrderContentInput,readCust
 }
 
 type ProductionPricingComposition={failed:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,markerId:string)=>Promise<void>;settled:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eventId:string)=>Promise<void>};
-export async function setOrderItemFinished(input: SetOrderItemFinishedInput,composition?:ProductionPricingComposition): Promise<OrderContentResult> {
-  if (!validBase(input) || !UUID.test(input.itemId) || typeof input.finished !== "boolean") return { code: "VALIDATION_ERROR", message: "Teilstatus ist ungültig." };
-  const {isOfflineOriginal,normalizeOfflineOriginal,offlineOccurrenceTime}=await import('@/lib/domain/offlineOriginal');
-  if(input.offlineOriginal!==undefined&&!isOfflineOriginal(input.offlineOriginal))return {code:'VALIDATION_ERROR',message:'Teilstatus ist ungültig.'};
+export async function setOrderItemFinished(input: SetOrderItemFinishedInput, composition?: ProductionPricingComposition): Promise<OrderContentResult> {
+  if (!validOrderItemFinishInput(input)) return { code: "VALIDATION_ERROR", message: ORDER_ITEM_COMPLETION_COPY.invalid };
   const auth = await authorization("status");
   if (!auth.ok) return auth.result;
-  if(input.offlineOriginal&&(input.offlineOriginal.actorId!==auth.data.userId||input.offlineOriginal.clientEventId!==input.clientEventId))return {code:'CONFLICT',message:ORDER_REQUEST_COPY.intentConflict};
-  if(input.offlineOriginal)input={...input,offlineOriginal:normalizeOfflineOriginal(input.offlineOriginal)};
-  const requestHash = hash(input);
-  let followupMessage:string|null=null;
-  const pricing=async(tx:PrivilegedTenantTransaction,eventId:string,work:()=>Promise<void>)=>{
-   try{await work();}
-   catch(error){
-    if(!(error instanceof ProductionPricingRetryNeeded))throw error;
-    const markerId=await recordProductionPricingRetry(tx,auth.data,error.source);
-    const source=await readProductionPricingRetrySource(tx,auth.data,markerId);
-    try{if(!composition)throw Error('PRODUCTION_PRICING_TASK_PORT_MISSING');await withTenantSavepoint(tx,nested=>composition.failed(nested,auth.data,markerId));}
-    catch{recordObservedFailure('ORDER_CONTENT_SIDE_EFFECT_FAILED');followupMessage=source?.title??PRODUCTION_PRICING_RETRY_COPY.taskPending;}
-    return;
-   }
-   if(composition){try{await withTenantSavepoint(tx,nested=>composition.settled(nested,auth.data,eventId));}catch{recordObservedFailure('ORDER_CONTENT_SIDE_EFFECT_FAILED');followupMessage=PRODUCTION_PRICING_RETRY_COPY.taskPending;}}
-  };
+  if (input.offlineOriginal && (input.offlineOriginal.actorId !== auth.data.userId || input.offlineOriginal.clientEventId !== input.clientEventId)) {
+    return { code: "CONFLICT", message: ORDER_REQUEST_COPY.intentConflict };
+  }
   try {
-    const result=await withPrivilegedTenantTransaction(auth.data, async (tx) => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('order-item-finished:' || ${auth.data.tenantId} || ':' || ${input.clientEventId}, 0))`);
-      const replay = await tx.execute<EventRow>(sql`SELECT id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id FROM public.events WHERE tenant_id=${auth.data.tenantId} AND client_event_id=${input.clientEventId}::uuid LIMIT 2`);
-      if (replay.length) {
-        const row = replay[0]; const payload = row?.payload as { requestHash?: unknown } | null;
-        if(!(replay.length===1&&row&&row.user_id===auth.data.userId&&row.event_type==="ORDER_ITEM_FINISHED_CHANGED_V1"&&row.order_id===input.orderId&&payload?.requestHash===requestHash))return {code:"CONFLICT" as const,message:ORDER_REQUEST_COPY.intentConflict};
-        if(input.offlineOriginal&&input.finished)await pricing(tx,row.id,()=>repairProductionCompletionPricing(tx,auth.data,input.orderId,row.id));
-        return {code:"OK" as const,receipt:receipt(row),replayed:true};
-      }
-      const orders = await tx.execute<OrderRow>(sql`SELECT id, customer_id, version, station, status FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} FOR UPDATE`);
-      const order = orders[0];
-      if (orders.length !== 1 || !order) return { code: "NOT_FOUND" as const, message: "Auftrag nicht verfügbar." };
-      if (order.version !== input.expectedVersion) return { code: "CONFLICT" as const, message: "Auftrag wurde bereits geändert." };
-      if (order.status === "fertig" || order.station === "abgeholt") return { code: "CONFLICT" as const, message: "Der Teilstatus ist bereits abgeschlossen." };
-      // A fresh request identifier is not a new completion edge. The order lock
-      // serializes competing requests; genuine same-key retries returned above.
-      const current = await tx.execute<{ current_station_id: string }>(sql`SELECT current_station_id FROM public.items WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} AND id=${input.itemId} FOR UPDATE`);
-      if (current.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
-      if ((current[0]!.current_station_id === "fertig") === input.finished) return { code: "CONFLICT" as const, message: ORDER_ITEM_COMPLETION_COPY.alreadyChanged };
-      const changed = await tx.execute<{ id: string }>(sql`UPDATE public.items SET current_station_id=${input.finished ? "fertig" : order.station} WHERE tenant_id=${auth.data.tenantId} AND order_id=${input.orderId} AND id=${input.itemId} RETURNING id`);
-      if (changed.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
-      const updated = await tx.execute<{ version: number }>(sql`UPDATE public.orders SET version=version+1 WHERE tenant_id=${auth.data.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`);
-      if (updated.length !== 1 || updated[0]?.version !== input.expectedVersion + 1) throw new Error("ORDER_ITEM_FINISHED_VERSION_INVALID");
-      const eventId = randomUUID(); const payload = JSON.stringify({ requestHash, itemId: input.itemId, finished: input.finished,...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal,...(offlineOccurrenceTime(input.offlineOriginal.deviceCapturedAt).geraetezeit_abweichend?{geraetezeit_abweichend:true}:{})}:{}) });
-      const events = await tx.execute<EventRow>(sql`INSERT INTO public.events (id, tenant_id, order_id, item_id, event_type, description, payload, status, user_id, station, client_event_id, event_schema_version, aggregate_version) VALUES (${eventId}, ${auth.data.tenantId}, ${input.orderId}, ${input.itemId}, 'ORDER_ITEM_FINISHED_CHANGED_V1', ${input.finished ? "Teil fertig gemeldet" : "Teil wieder geöffnet"}, ${payload}::jsonb, 'success', ${auth.data.userId}::uuid, ${order.station}, ${input.clientEventId}::uuid, 1, ${updated[0]!.version}) RETURNING id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id`);
-      if (events.length !== 1 || !events[0]) throw new Error("ORDER_ITEM_FINISHED_EVENT_MISSING");
-      if(input.finished)await pricing(tx,events[0].id,()=>appendProductionCompletion(tx,auth.data.tenantId,input.orderId,events[0].id,[input.itemId]));
-      else await appendProductionReversals(tx,auth.data.tenantId,events[0].id,[input.itemId]);
-      return { code: "OK" as const, receipt: receipt(events[0]), replayed: false };
-    });
-    return result.code==='OK'&&followupMessage?{code:'UNAVAILABLE',message:followupMessage}:result;
-  } catch(error) {
-    console.error('[ORDER_ITEM_FINISHED_WRITE_FAILED]',error instanceof Error?error.message:'UnknownError');
+    return await withPrivilegedTenantTransaction(auth.data, tx => writeOrderItemFinished(tx, auth.data, input, composition));
+  } catch (error) {
+    console.error('[ORDER_ITEM_FINISHED_WRITE_FAILED]', error instanceof Error ? error.message : 'UnknownError');
     return { code: "UNAVAILABLE", message: "Teilstatus konnte nicht sicher gespeichert werden." };
   }
+}
+
+function validOrderItemFinishInput(input: SetOrderItemFinishedInput) {
+  return validBase(input) && UUID.test(input.itemId) && typeof input.finished === "boolean"
+    && (input.offlineOriginal === undefined || isOfflineOriginal(input.offlineOriginal));
+}
+
+/** Nutzt beim Bündel-Lauf dieselbe Fertigmeldung innerhalb der Lauftransaktion. */
+export function setOrderItemFinishedInTransaction(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  input: Omit<SetOrderItemFinishedInput, "offlineOriginal">,
+  composition?: ProductionPricingComposition,
+): Promise<OrderContentResult> {
+  if (!auth.active || !auth.permissions.includes("perm_op_status")) {
+    return Promise.resolve({ code: "FORBIDDEN", message: ORDER_ITEM_COMPLETION_COPY.forbidden });
+  }
+  const onlineInput = { ...input, offlineOriginal: undefined };
+  if (!validOrderItemFinishInput(onlineInput)) {
+    return Promise.resolve({ code: "VALIDATION_ERROR", message: ORDER_ITEM_COMPLETION_COPY.invalid });
+  }
+  return writeOrderItemFinished(tx, auth, onlineInput, composition);
+}
+
+async function writeOrderItemFinished(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  input: SetOrderItemFinishedInput,
+  composition?: ProductionPricingComposition,
+): Promise<OrderContentResult> {
+  if (input.offlineOriginal) input = { ...input, offlineOriginal: normalizeOfflineOriginal(input.offlineOriginal) };
+  const requestHash = hash(input);
+  const pricing = async (eventId: string, work: () => Promise<void>): Promise<string | null> => {
+    try {
+      await work();
+    } catch (error) {
+      if (!(error instanceof ProductionPricingRetryNeeded)) throw error;
+      const markerId = await recordProductionPricingRetry(tx, auth, error.source);
+      const source = await readProductionPricingRetrySource(tx, auth, markerId);
+      try {
+        if (!composition) throw Error("PRODUCTION_PRICING_TASK_PORT_MISSING");
+        await withTenantSavepoint(tx, nested => composition.failed(nested, auth, markerId));
+      } catch {
+        recordObservedFailure("ORDER_CONTENT_SIDE_EFFECT_FAILED");
+        return source?.title ?? PRODUCTION_PRICING_RETRY_COPY.taskPending;
+      }
+      return null;
+    }
+    if (composition) {
+      try {
+        await withTenantSavepoint(tx, nested => composition.settled(nested, auth, eventId));
+      } catch {
+        recordObservedFailure("ORDER_CONTENT_SIDE_EFFECT_FAILED");
+        return PRODUCTION_PRICING_RETRY_COPY.taskPending;
+      }
+    }
+    return null;
+  };
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('order-item-finished:' || ${auth.tenantId} || ':' || ${input.clientEventId}, 0))`);
+  const replay = await tx.execute<EventRow>(sql`SELECT id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id FROM public.events WHERE tenant_id=${auth.tenantId} AND client_event_id=${input.clientEventId}::uuid LIMIT 2`);
+  if (replay.length) {
+    const row = replay[0]; const payload = row?.payload as { requestHash?: unknown } | null;
+    if(!(replay.length===1&&row&&row.user_id===auth.userId&&row.event_type==="ORDER_ITEM_FINISHED_CHANGED_V1"&&row.order_id===input.orderId&&payload?.requestHash===requestHash))return {code:"CONFLICT" as const,message:ORDER_REQUEST_COPY.intentConflict};
+    const hinweis = input.offlineOriginal && input.finished
+      ? await pricing(row.id, () => repairProductionCompletionPricing(tx, auth, input.orderId, row.id))
+      : null;
+    return hinweis ? { code: "UNAVAILABLE", message: hinweis }
+      : { code: "OK", receipt: receipt(row), replayed: true };
+  }
+  const orders = await tx.execute<OrderRow>(sql`SELECT id, customer_id, version, station, status FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} FOR UPDATE`);
+  const order = orders[0];
+  if (orders.length !== 1 || !order) return { code: "NOT_FOUND" as const, message: "Auftrag nicht verfügbar." };
+  if (order.version !== input.expectedVersion) return { code: "CONFLICT" as const, message: "Auftrag wurde bereits geändert." };
+  if (order.status === "fertig" || order.station === "abgeholt") return { code: "CONFLICT" as const, message: "Der Teilstatus ist bereits abgeschlossen." };
+  // A fresh request identifier is not a new completion edge. The order lock
+  // serializes competing requests; genuine same-key retries returned above.
+  const current = await tx.execute<{ current_station_id: string }>(sql`SELECT current_station_id FROM public.items WHERE tenant_id=${auth.tenantId} AND order_id=${input.orderId} AND id=${input.itemId} FOR UPDATE`);
+  if (current.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
+  if ((current[0]!.current_station_id === "fertig") === input.finished) return { code: "CONFLICT" as const, message: ORDER_ITEM_COMPLETION_COPY.alreadyChanged };
+  const changed = await tx.execute<{ id: string }>(sql`UPDATE public.items SET current_station_id=${input.finished ? "fertig" : order.station} WHERE tenant_id=${auth.tenantId} AND order_id=${input.orderId} AND id=${input.itemId} RETURNING id`);
+  if (changed.length !== 1) return { code: "NOT_FOUND" as const, message: "Teil nicht verfügbar." };
+  const updated = await tx.execute<{ version: number }>(sql`UPDATE public.orders SET version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${input.orderId} AND version=${input.expectedVersion} RETURNING version`);
+  if (updated.length !== 1 || updated[0]?.version !== input.expectedVersion + 1) throw new Error("ORDER_ITEM_FINISHED_VERSION_INVALID");
+  const eventId = randomUUID(); const payload = JSON.stringify({ requestHash, itemId: input.itemId, finished: input.finished,...(input.offlineOriginal?{offlineOriginal:input.offlineOriginal,...(offlineOccurrenceTime(input.offlineOriginal.deviceCapturedAt).geraetezeit_abweichend?{geraetezeit_abweichend:true}:{})}:{}) });
+  const events = await tx.execute<EventRow>(sql`INSERT INTO public.events (id, tenant_id, order_id, item_id, event_type, description, payload, status, user_id, station, client_event_id, event_schema_version, aggregate_version) VALUES (${eventId}, ${auth.tenantId}, ${input.orderId}, ${input.itemId}, 'ORDER_ITEM_FINISHED_CHANGED_V1', ${input.finished ? "Teil fertig gemeldet" : "Teil wieder geöffnet"}, ${payload}::jsonb, 'success', ${auth.userId}::uuid, ${order.station}, ${input.clientEventId}::uuid, 1, ${updated[0]!.version}) RETURNING id, user_id::text AS user_id, aggregate_version, created_at, payload, event_type, order_id`);
+  if (events.length !== 1 || !events[0]) throw new Error("ORDER_ITEM_FINISHED_EVENT_MISSING");
+  if (input.finished) {
+    const event = events[0];
+    const hinweis = await pricing(event.id, () => appendProductionCompletion(tx, auth.tenantId, input.orderId, event.id, [input.itemId]));
+    if (hinweis) return { code: "UNAVAILABLE", message: hinweis };
+  } else {
+    await appendProductionReversals(tx, auth.tenantId, events[0].id, [input.itemId]);
+  }
+  return { code: "OK", receipt: receipt(events[0]), replayed: false };
 }
 
 function handoverCustomerEventKey(id:string){const h=createHash('sha256').update('mail-handover-customer:'+id).digest().subarray(0,16);h[6]=(h[6]&15)|80;h[8]=(h[8]&63)|128;const s=h.toString('hex');return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20)}`;}

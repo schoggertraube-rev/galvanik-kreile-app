@@ -18,7 +18,7 @@ it('creates only private tenant-keyed derived sources with no public read or del
  expect(tables).toEqual([{relname:'today_source_v1',relrowsecurity:true},{relname:'today_tenant_v1',relrowsecurity:true}]);
  expect(await sql`SELECT has_table_privilege('anon','private.today_source_v1','SELECT') AS anon_read,has_table_privilege('authenticated','private.today_source_v1','SELECT') AS authenticated_read,has_table_privilege('service_role','private.today_source_v1','DELETE') AS can_delete,has_table_privilege('service_role','private.today_source_v1','UPDATE') AS can_refresh`).toEqual([{anon_read:false,authenticated_read:false,can_delete:false,can_refresh:true}]);
  const triggers=await sql`SELECT n.nspname AS schema,c.relname AS name,count(*)::integer AS operations FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE NOT t.tgisinternal AND t.tgname IN ('today_mark_insert_v1','today_mark_update_v1','today_mark_delete_v1') GROUP BY n.nspname,c.relname ORDER BY n.nspname,c.relname`;
- expect(triggers).toHaveLength(53);expect(triggers.every(row=>row.operations===3)).toBe(true);
+ expect(triggers).toHaveLength(55);expect(triggers.every(row=>row.operations===3)).toBe(true);
  expect(triggers).toEqual(expect.arrayContaining([{schema:'public',name:'events',operations:3},{schema:'public',name:'orders',operations:3},{schema:'public',name:'intake_item',operations:3},{schema:'private',name:'evidence_domain_links',operations:3}]));
  expect(triggers).toEqual(expect.arrayContaining([
   {schema:'public',name:'stock_movements',operations:3},
@@ -27,9 +27,32 @@ it('creates only private tenant-keyed derived sources with no public read or del
   {schema:'public',name:'inventory_counts',operations:3},
   {schema:'public',name:'inventory_lines',operations:3},
   {schema:'public',name:'lager_material_nachbewertungen',operations:3},
+  {schema:'public',name:'supplier_invoice',operations:3},
+  {schema:'public',name:'print_jobs',operations:3},
   {schema:'private',name:'quote_create_receipts',operations:3},
   {schema:'private',name:'quote_number_counters',operations:3},
  ]));
+});
+
+it('marks the linked order once per print job insert, update and delete',async()=>{
+ const order=await readyInvoiceOrder('TEST print job invalidation');
+ const jobId=randomUUID();
+ const source=async()=>{
+  const [row]=await sql`SELECT source_seq::integer AS seq FROM private.today_source_v1
+   WHERE tenant_id=${tenant} AND kind='quelle:orders.auftrag' AND source_id=${order.orderId}`;
+  return row.seq as number;
+ };
+ const before=await source();
+ // Isolated schema probe using a synthetic queue row, without printing or changing role grants.
+ await sql`INSERT INTO public.print_jobs(id,tenant_id,order_id,kind,sheet_kind,content_version,request_key,created_by,snapshot)
+  VALUES(${jobId},${tenant},${order.orderId},'laufzettel','gesamt',1,${randomUUID()},${full.actorId},'{}'::jsonb)`;
+ expect(await source()).toBe(before+1);
+ await sql`UPDATE public.print_jobs SET status='gedruckt',attempts=1 WHERE tenant_id=${tenant} AND id=${jobId}`;
+ expect(await source()).toBe(before+2);
+ // This probe runs as the local schema owner; the service still cannot delete jobs.
+ expect(await sql`SELECT has_table_privilege('service_role','public.print_jobs','DELETE') AS allowed`).toEqual([{allowed:false}]);
+ await sql`DELETE FROM public.print_jobs WHERE tenant_id=${tenant} AND id=${jobId}`;
+ expect(await source()).toBe(before+3);
 });
 
 it('marks actual intake, completion, freeze, invoice and settings writes in the same tenant without caching invented payloads',async()=>{

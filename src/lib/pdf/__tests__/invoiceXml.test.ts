@@ -52,6 +52,31 @@ it('B3-a schreibt Materialmenge, vierstelligen VK und Positionscent aus dem TEST
  expect(refusal(snapshot).location.field).toBe('rounding');
 });
 
+it('B2-a schreibt 60,31 € je Stunde, einen Cent Nachlass und 1,00 € für eine bestätigte Minute', () => {
+ const snapshot = source();
+ snapshot.lines.push({
+  type: 'EXTRA_WORK', itemId: 'TEST-item', catalogPositionId: 'TEST-mehrarbeit',
+  catalogPositionName: 'TEST Mehrarbeit', minutes: 1, hourlyRateCents: 6031,
+  amountCents: 100, unreducedAmountCents: 101, approvalEventIds: ['22222222-2222-4222-8222-222222222222'],
+  unit: 'HUR', taxCategory: 'S', vat_rate_basis_points: 1900,
+ });
+ snapshot.totals = {
+  netAmountCents: 10100, vatRateBasisPoints: null, vatAmountCents: 1919, grossAmountCents: 12019,
+  vatBreakdown: [{rateBp: 1900, netCents: 10100, vatCents: 1919, grossCents: 12019}],
+ };
+ const input = {snapshot, invoiceNumber: 'R-2026-0001', dueDate: '2026-12-02'};
+ const xml = new TextDecoder().decode(createInvoiceXml(input));
+ expect(xml).toContain('<ram:ChargeAmount>60.31</ram:ChargeAmount>');
+ expect(xml).toContain('<ram:BilledQuantity unitCode="HUR">0.0166666667</ram:BilledQuantity>');
+ expect(xml).toContain('<ram:ActualAmount>0.01</ram:ActualAmount><ram:Reason>Abrundung Mehrarbeit</ram:Reason>');
+ expect(xml).toContain('<ram:LineTotalAmount>1.00</ram:LineTotalAmount>');
+ const storno = new TextDecoder().decode(createInvoiceXml({...input,
+  cancellation: {number: 'R-2026-0002', at: '2026-11-19T12:00:00.000Z', reason: 'TEST Storno'},
+ }));
+ expect(storno).toContain('<ram:ActualAmount>-0.01</ram:ActualAmount>');
+ expect(storno).toContain('<ram:LineTotalAmount>-1.00</ram:LineTotalAmount>');
+});
+
 it('S38a A2b writes the frozen discount as structured BT-20 without changing invoice cents',()=>{
  const snapshot=source();snapshot.terms={quelle:'kunde',ziel_tage:14,skonto_prozent:2,skonto_tage:8};
  const before=structuredClone(snapshot);
@@ -87,6 +112,22 @@ describe('S54o C6/A14 source consistency before existing number allocation',()=>
   line.quantity=3;line.unitNetAmountCents=3333;const original=structuredClone(snapshot);
   expect(assertInvoiceElectronicFields(snapshot)).toMatchObject({netAmountCents:10000,vatAmountCents:1900,grossAmountCents:11900});
   expect(snapshot).toEqual(original);
+ });
+ it('writes the original measured quantity and the apportioned net price to the same XML line', () => {
+  const snapshot = source();
+  snapshot.lines = [{
+   type: 'BASE', itemId: 'TEST-kg', name: 'TEST Gewichtsposition', quantity: 12.5,
+   unitNetAmountCents: 700, lineNetAmountCents: 8751, unit: 'KGM', taxCategory: 'S', vat_rate_basis_points: 1900,
+  }];
+  snapshot.totals = {
+   netAmountCents: 8751, vatRateBasisPoints: null,
+   vatBreakdown: [{ rateBp: 1900, netCents: 8751, vatCents: 1663, grossCents: 10414 }],
+   vatAmountCents: 1663, grossAmountCents: 10414,
+  };
+  const xml = new TextDecoder().decode(createInvoiceXml({ snapshot, invoiceNumber: 'R-2026-0001', dueDate: '2026-12-02' }));
+  expect(xml).toContain('<ram:BilledQuantity unitCode="KGM">12.5</ram:BilledQuantity>');
+  expect(xml).toContain('<ram:ChargeAmount>7.0008</ram:ChargeAmount>');
+  expect(xml).toContain('<ram:LineTotalAmount>87.51</ram:LineTotalAmount>');
  });
  it('still refuses an original allocation that four-place precision cannot represent to the exact line cent',()=>{
   const snapshot=source();const line=snapshot.lines[0];if(line.type!=='BASE')throw Error('SYNTHETIC_BASE_REQUIRED');

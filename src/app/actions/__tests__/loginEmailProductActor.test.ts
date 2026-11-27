@@ -88,6 +88,7 @@ describe("developer email product login", () => {
         role: "developer",
         displayName: "Technical DB Name",
       }),
+        undefined,
     );
     expect(ports.revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
@@ -107,7 +108,7 @@ describe("developer email product login", () => {
     });
 
     await expect(login(formData())).rejects.toThrow("REDIRECT:/");
-    expect(ports.setAppSession).toHaveBeenCalledWith(expect.objectContaining({ role: "admin" }));
+    expect(ports.setAppSession).toHaveBeenCalledWith(expect.objectContaining({ role: "admin" }), undefined);
   });
 
   it("rejects an authenticated role without settings access", async () => {

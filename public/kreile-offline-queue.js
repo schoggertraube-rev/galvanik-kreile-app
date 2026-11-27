@@ -111,8 +111,38 @@
     });
   }
 
+  function idleClockSample() {
+    const localAt = Date.now();
+    const clock = globalThis.performance;
+    if (!clock) return null;
+    const monotonicAt = Math.floor(clock.timeOrigin + clock.now());
+    return Number.isSafeInteger(localAt) && localAt > 0 && Number.isSafeInteger(monotonicAt) && monotonicAt > 0
+      ? {localAt, monotonicAt} : null;
+  }
+
+  function isConfirmedIdleClock(value) {
+    return value && typeof value === 'object' && Object.keys(value).length === 4
+      && [value.serverAt,value.localAt,value.monotonicAt,value.expiresAt].every(v => Number.isSafeInteger(v) && v > 0)
+      && value.expiresAt > value.localAt;
+  }
+
+  function makeConfirmedIdleClock(serverAt, expiresAt, started) {
+    if (!started || !Number.isSafeInteger(serverAt) || !Number.isSafeInteger(expiresAt)) return null;
+    // Use the request start so waiting for the server cannot extend the lease.
+    const deadline = {serverAt, ...started, expiresAt: started.localAt + (expiresAt - serverAt)};
+    return isConfirmedIdleClock(deadline) && remainingIdleClock(deadline) !== null ? deadline : null;
+  }
+
+  function remainingIdleClock(value, now = idleClockSample()) {
+    if (!isConfirmedIdleClock(value) || !now || now.localAt < value.localAt || now.monotonicAt < value.monotonicAt) return null;
+    const elapsed = Math.max(now.localAt - value.localAt, now.monotonicAt - value.monotonicAt);
+    const remaining = value.expiresAt - value.localAt - elapsed;
+    return remaining > 0 ? remaining : null;
+  }
+
   globalThis.KreileOfflineQueue = Object.freeze({
     storeName, databaseVersion, databasePrefix, isMailOriginal, isMailAcknowledgement,
     claimOrWithdraw, acknowledgeMail, openExisting, requestReplay,
+    idleClockSample, isConfirmedIdleClock, makeConfirmedIdleClock, remainingIdleClock,
   });
 })();

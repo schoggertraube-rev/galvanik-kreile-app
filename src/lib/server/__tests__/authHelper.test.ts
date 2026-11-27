@@ -131,6 +131,7 @@ describe("checkAppSession() – typisierte Fehlergründe (A-11)", () => {
       {
         id: "user-xyz",
         // Synthetic rows for the same canonical authorization SQL source.
+        inactivitySettings:{minutes:60},
         packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "meister",
@@ -161,6 +162,7 @@ describe("readAuthorizedArea – kanonische Bereiche (A10)", () => {
       {
         id: "user-xyz",
         // Synthetic rows for the same canonical authorization SQL source.
+        inactivitySettings:{minutes:60},
         packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "meister",
@@ -180,6 +182,7 @@ describe("readAuthorizedArea – kanonische Bereiche (A10)", () => {
       {
         id: "user-xyz",
         // Synthetic rows for the same canonical authorization SQL source.
+        inactivitySettings:{minutes:60},
         packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "readonly",
@@ -207,6 +210,7 @@ describe("readAuthorizedArea – kanonische Bereiche (A10)", () => {
       {
         id: "user-xyz",
         // Synthetic rows for the same canonical authorization SQL source.
+        inactivitySettings:{minutes:60},
         packageFlags:PACKAGE_SWITCHES.map(({id})=>({id,enabled:false,roles:[]})),
         fullName: "Klaus Meister",
         role: "admin",
