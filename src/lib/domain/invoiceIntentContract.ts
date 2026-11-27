@@ -2,10 +2,16 @@
 const UUID_PATTERN=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 function plainObject(value:unknown):value is Record<string,unknown>{return value!==null&&typeof value==='object'&&!Array.isArray(value);}
 
+export type InvoicePaymentMethodAtIssue = 'bar' | 'karte' | 'ueberweisung';
+export function isInvoicePaymentMethodAtIssue(value:unknown):value is InvoicePaymentMethodAtIssue {
+  return value === 'bar' || value === 'karte' || value === 'ueberweisung';
+}
+
 export type CreateInvoiceInput = {
   orderId: string;
   expectedVersion: number;
   clientEventId: string;
+  paymentMethodAtIssue?: InvoicePaymentMethodAtIssue;
   agreement?: {
     id: string;
     version: number;
@@ -29,9 +35,10 @@ export function isCreateInvoiceInput(input: unknown,storedOriginal=false): input
     && actual.every((key, index) => key === expectedWithAgreement[index]);
   const agreement = value.agreement;
   const hasShipping = actual.join(',') === [...expected,'shippingCosts'].sort().join(',');
+  const hasPaymentMethod = actual.join(',') === [...expected,'paymentMethodAtIssue'].sort().join(',');
   return (actual.length === expected.length
       && actual.every((key, index) => key === expected[index])
-      || hasAgreement || hasShipping)
+      || hasAgreement || hasShipping || hasPaymentMethod)
     && typeof value.orderId === "string"
     && value.orderId.trim() === value.orderId
     && value.orderId.length > 0
@@ -41,6 +48,7 @@ export function isCreateInvoiceInput(input: unknown,storedOriginal=false): input
     && typeof value.expectedVersion === "number"
     && Number.isSafeInteger(value.expectedVersion)
     && value.expectedVersion > 0
+    && (!hasPaymentMethod || isInvoicePaymentMethodAtIssue(value.paymentMethodAtIssue))
     && (!hasShipping || isInvoiceShippingCostsInput(value.shippingCosts,value.orderId as string,storedOriginal))
     && (!hasAgreement || (
       agreement !== null

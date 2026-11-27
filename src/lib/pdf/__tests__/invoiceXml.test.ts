@@ -27,12 +27,12 @@ it.each([
  ['karte','48'],
 ] as const)('schreibt die belegte Zahlungsart in der E-Rechnung (%s)',(paymentMethod,code)=>{
  const invoice=source();
+ if(paymentMethod!==undefined)invoice.paymentMethodAtIssue=paymentMethod;
  const xml=new TextDecoder().decode(createInvoiceXml({
-  snapshot:invoice,invoiceNumber:'R-2026-0001',dueDate:'2026-12-02',paymentMethod,
+  snapshot:invoice,invoiceNumber:'R-2026-0001',dueDate:'2026-12-02',
  }));
  expect(xml).toContain('<ram:SpecifiedTradeSettlementPaymentMeans><ram:TypeCode>'+code+'</ram:TypeCode>');
- if(code==='58')expect(xml).toContain('<ram:IBANID>'+invoice.seller.iban+'</ram:IBANID>');
- else expect(xml).not.toContain('<ram:IBANID>');
+ expect(xml).toContain('<ram:IBANID>'+invoice.seller.iban+'</ram:IBANID>');
 });
 
 it('B3-a schreibt Materialmenge, vierstelligen VK und Positionscent aus dem TEST-Original', () => {
