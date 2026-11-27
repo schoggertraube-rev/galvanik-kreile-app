@@ -50,9 +50,10 @@ function requireBookkeeping(auth:AuthorizationSnapshot){
  if(!auth.active||!hasAuthorizationArea(auth,'buchhaltung'))reject('FORBIDDEN',FINANCIAL_ACCESS_COPY.bookkeepingMissing);
  return auth;
 }
-async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,byItem=false,lock=false){
+async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,byItem=false,lock=false,fileId?:string){
  const rows=await tx.execute<IncomingInvoice>(sql`SELECT ${columns} FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId}
-  AND ${byItem?sql`item_id=${id}::uuid`:sql`id=${id}::uuid`} LIMIT 2 ${lock?sql`FOR UPDATE`:sql``}`);
+  AND ${byItem?sql`item_id=${id}::uuid`:sql`id=${id}::uuid`}
+  ${fileId?sql`AND file_id=${fileId}::uuid`:sql``} LIMIT 2 ${lock?sql`FOR UPDATE`:sql``}`);
  if(rows.length>1)reject('CONFLICT',invalidInvoiceRequest);
  return rows[0]??null;
 }
@@ -88,10 +89,10 @@ async function duplicate(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsh
  return rows.length?{...rows[0],exact:rows[0].exact===true}:null;
 }
 /** One read model for a fresh source and every stored invoice/status. */
-async function invoiceSuggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,fileId:string|null,pages:InvoicePageRange|null){
+async function invoiceSuggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,fileId:string|null,pages:InvoicePageRange|null,includeItemHints=true){
  const original=pages?sql`file_id=${fileId}::uuid AND CASE WHEN jsonb_typeof(fundstelle->'page')='number'
    THEN (fundstelle->>'page')::numeric BETWEEN ${pages.from} AND ${pages.to} ELSE false END`
-  :sql`(file_id=${fileId}::uuid OR file_id IS NULL)`;
+  :sql`(file_id=${fileId}::uuid OR ${includeItemHints} AND file_id IS NULL)`;
  return tx.execute<{feld:string;wert:unknown;sicherheit:string;verified:boolean}>(sql`SELECT feld,wert,sicherheit,geprueft_am IS NOT NULL AS verified FROM public.intake_suggestion
   WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND ${original}
   AND feld IN ('rechnung.nummer','rechnung.datum','rechnung.betrag','rechnung.faellig','rechnung.iban','rechnung.absender','rechnung.steuersaetze')
@@ -105,16 +106,21 @@ function taxRates(suggestions:readonly {feld:string;wert:unknown}[],totalTax:str
  return invoiceTaxBreakdown(original?original.wert:stored?.ust_saetze,totalTax);
 }
 export async function readIncomingInvoice(input:unknown,deps:InvoiceReadDependencies,caller?:AuthorizationSnapshot):Promise<InvoiceReadResult>{
- if(!object(input)||!keys(input,['id'])||!uuid(input.id))return {code:'VALIDATION_ERROR',message:invalidInvoiceRequest};
+ if(!object(input)||(!keys(input,['id'])&&!keys(input,['id','fileId']))||!uuid(input.id)||(Object.hasOwn(input,'fileId')&&!uuid(input.fileId)))
+  return {code:'VALIDATION_ERROR',message:invalidInvoiceRequest};
+ const id=input.id,requestedFile=typeof input.fileId==='string'?input.fileId:undefined;
  try{const auth=caller?requireBookkeeping(caller):await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const invoice=await findInvoice(tx,auth,input.id as string)??await findInvoice(tx,auth,input.id as string,true);
-  const row=await source(tx,auth,invoice?.item_id??input.id as string);
+  const invoice=await findInvoice(tx,auth,id)??await findInvoice(tx,auth,id,true,false,requestedFile);
+  if(requestedFile&&invoice&&invoice.file_id!==requestedFile)reject('NOT_FOUND','Gesichertes Original dieser Rechnung fehlt.');
+  const row=await source(tx,auth,invoice?.item_id??id);
   const originals=await tx.execute<{id:string;name:string;mime:string;sha256:string}>(sql`SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256 FROM public.intake_file file
    WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND ${invoiceOriginal} ORDER BY file.reihenfolge,file.id`);
-  const primaryFileId=invoice?.file_id??originals[0]?.id??null;
-  let selected=await supplier(tx,auth,invoice?(invoice.lieferant_id??''):(row.kunde_id??''),deps);
+  if(requestedFile&&!originals.some(file=>file.id===requestedFile))reject('NOT_FOUND','Gesichertes Original dieser Rechnung fehlt.');
+  const primaryFileId=invoice?.file_id??requestedFile??originals[0]?.id??null;
+  const supplierId=invoice?invoice.lieferant_id:requestedFile&&row.vorgang_art==='rechnung'?null:row.kunde_id;
+  let selected=await supplier(tx,auth,supplierId??'',deps);
   const fields=invoice?fieldsFrom(invoice):{...EMPTY_INVOICE_FIELDS,lieferantId:selected?.id??''};
-  const suggestions=await invoiceSuggestions(tx,auth,row.id,primaryFileId,storedPages(invoice));
+  const suggestions=await invoiceSuggestions(tx,auth,row.id,primaryFileId,storedPages(invoice),!requestedFile&&(!invoice||row.vorgang_id===invoice.id));
   if(!invoice)for(const suggestion of suggestions){
    const value=suggestion.wert;
    if(suggestion.feld==='rechnung.betrag'&&object(value))for(const key of ['netto','ust','brutto'] as const){if(typeof value[key]==='number'||typeof value[key]==='string')fields[key]=String(value[key]);}
@@ -237,7 +243,7 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
    SELECT (coalesce(max(substring(nummer_intern from '[0-9]+$')::bigint),0)+1)::text AS next_value FROM public.supplier_invoice
    WHERE tenant_id=${auth.tenantId} AND nummer_intern LIKE 'ER-'||to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY')||'-%') next_number`);
   const id=randomUUID(),f=input.fields,money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
-  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,input.fileId,pages),f.ust,null);
+  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,input.fileId,pages,existingInvoice===null),f.ust,null);
   await tx.execute(sql`INSERT INTO public.supplier_invoice(id,tenant_id,nummer_intern,item_id,file_id,seite_von,seite_bis,lieferant_id,nummer,datum,netto,ust,brutto,faellig_am,iban,iban_geprueft,ust_saetze,zahlstatus,bezahlt_am,nachweis_file_id,verweis_id,dublette_grund,unklar_grund,erfasst_von)
    VALUES(${id}::uuid,${auth.tenantId},${number.value},${row.id}::uuid,${input.fileId}::uuid,${pages?.from??null},${pages?.to??null},${selected?.id??null},${f.nummer.trim()||null},${f.datum||null}::date,${money(f.netto)}::numeric,${money(f.ust)}::numeric,${money(f.brutto)}::numeric,
     ${f.faelligAm||null}::date,${normaliseIban(f.iban)||null},${f.ibanGeprueft},${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,${savedStatus},${input.status==='bezahlt'?input.paidDate:null}::date,${input.proofFileId}::uuid,${input.status==='doppelt'?input.duplicateId:null}::uuid,${input.duplicateReason?.trim()||null},${savedStatus==='unklar'?unclearReason!.trim():null},${auth.userId}::uuid)`);
@@ -281,7 +287,7 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   await validate(tx,auth,fields,input.result,input.paidDate,input.proofFileId,row.id,deps);
   await verifyDuplicate(tx,auth,fields,input.result,input.duplicateId,before.dublette_grund,before.id);
   const money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
-  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,before.file_id,storedPages(before)),fields.ust,before);
+  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,before.file_id,storedPages(before),row.vorgang_id===before.id),fields.ust,before);
   await tx.execute(sql`UPDATE public.supplier_invoice SET lieferant_id=${fields.lieferantId||null},nummer=${fields.nummer.trim()||null},datum=${fields.datum||null}::date,
    netto=${money(fields.netto)}::numeric,ust=${money(fields.ust)}::numeric,brutto=${money(fields.brutto)}::numeric,ust_saetze=${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,faellig_am=${fields.faelligAm||null}::date,iban=${normaliseIban(fields.iban)||null},iban_geprueft=${fields.ibanGeprueft},
    zahlstatus=${input.result},bezahlt_am=${input.result==='bezahlt'?input.paidDate:null}::date,nachweis_file_id=${input.proofFileId}::uuid,verweis_id=${input.result==='doppelt'?input.duplicateId:null}::uuid,
