@@ -42,6 +42,7 @@
     "@/modules/eingang/public#MailSelectionPorts",
     "@/modules/eingang/public#INTAKE_MAIL_ADOPT_EVENT",
     "@/modules/eingang/public#IntakeMailSummary",
+    "@/modules/eingang/public#IntakePickupProposal",
     "@/modules/eingang/public#IntakeMailSelectionResult",
     "@/modules/eingang/server-public#readOpenIntakeMails",
     "@/modules/eingang/public#GLOBAL_CREATE_OPEN_EVENT",
