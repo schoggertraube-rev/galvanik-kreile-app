@@ -371,6 +371,54 @@ it('holds the reply open only for an automatic marking in the secured MIME heade
   }finally{fetchMock.mockRestore();}
 });
 
+it('only offers a new customer from a secured inquiry and checks the confirmed data again on save',async()=>{
+  const {getOpenIntakeMailsAction,createCustomerForIntakeAction}=await import('@/app/actions/eingang.actions');
+  const {createCustomerAction}=await import('@/app/actions/customers.actions');
+  const address=`test-anfrage@firma-${randomUUID()}.invalid`,id=`TEST-S1-${randomUUID()}`;
+  const body='Angebotsanfrage: Bitte erstellen Sie ein Angebot für fünf Halter.';
+  const original={id,internetMessageId:`<${id}@example.invalid>`,subject:'TEST S-1 Angebotsanfrage',
+    from:{emailAddress:{name:'TEST Neue Anfrage',address}},receivedDateTime:new Date().toISOString(),
+    bodyPreview:body,body:{contentType:'text',content:body},hasAttachments:false};
+  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
+    SELECT ${randomUUID()},${tenant},'TEST S-1 Mail',20,'TEST-S1'
+    WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
+  // The provider fixture delivers real MIME to the existing import and storage boundary.
+  const provider=vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+    const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+    if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-S1-mail-provider-token'.repeat(3)});
+    if(url.hostname!=='graph.microsoft.com')return nativeFetch(input,init);
+    if(url.pathname.includes('/mailFolders/inbox/messages'))return Response.json({value:[original]});
+    if(url.pathname.endsWith('/attachments'))return Response.json({value:[]});
+    if(url.pathname.endsWith('/$value'))return new Response(`From: ${address}\r\nMessage-ID: ${original.internetMessageId}\r\nSubject: ${original.subject}\r\n\r\n${body}`);
+    return Response.json(original);
+  });
+  try{expect(await withSession(full,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK'});}finally{provider.mockRestore();}
+  const [row]=await sql<{id:string;version:number;anliegen_offen:string[]}[]>`SELECT id::text,version,anliegen_offen
+    FROM public.intake_item WHERE tenant_id=${tenant} AND graph_message_id=${id}`;
+  if(!row)throw Error('TEST_S1_INQUIRY_ORIGINAL_MISSING');
+  expect(row.anliegen_offen).toContain('kv_anfrage');
+  const auth=await withSession(full,()=>resolveAuthorization());
+  if(!auth.ok)throw Error('TEST_S1_INQUIRY_AUTH_MISSING');
+  const draft={customerType:'business' as const,companyName:'TEST Neue Anfrage Alpha',phone:'06101 713042'};
+  const plan={art:'dublette' as const,anliegen:'A1',wirkung:'kunde_ohne_dublette_anlegen',
+    sourceItemId:row.id,sourceVersion:row.version,kundenentwurf:draft};
+  expect(await pruefeZusage(auth.data,{...plan,kundenentwurf:{...draft,phone:''}})).toMatchObject({frei:false,grund:'unbekannt'});
+  expect(await pruefeZusage(auth.data,{...plan,sourceVersion:row.version+1})).toMatchObject({frei:false,grund:'unbekannt'});
+  expect(await pruefeZusage(auth.data,plan)).toEqual({frei:true});
+  const known=await withSession(full,()=>createCustomerAction({...draft,clientEventId:randomUUID(),country:'DE'}));
+  if(known.code!=='OK')throw Error('TEST_S1_EXISTING_CUSTOMER_MISSING');
+  const customer={...draft,clientEventId:randomUUID(),country:'DE',email:address};
+  expect(await withSession(full,()=>createCustomerForIntakeAction({itemId:row.id,version:row.version,customer}))).toMatchObject({code:'CONFLICT'});
+  expect(await pruefeZusage(auth.data,plan)).toEqual({frei:false,grund:'dublette',text:MAIL_PROMISE_COPY.duplicateCustomer});
+  expect(await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${tenant} AND id=${row.id}::uuid`).toEqual([{kunde_id:null}]);
+  const distinct={...customer,companyName:'TEST Neuanfrage Zeta',phone:'06201 217034'};
+  const saved=await withSession(full,()=>createCustomerForIntakeAction({itemId:row.id,version:row.version,customer:distinct}));
+  if(saved.code!=='OK')throw Error('TEST_S1_DISTINCT_CUSTOMER:'+saved.code);
+  expect(await sql`SELECT kunde_id FROM public.intake_item WHERE tenant_id=${tenant} AND id=${row.id}::uuid`).toEqual([{kunde_id:saved.receipt.customerId}]);
+  expect(await withSession(full,()=>createCustomerForIntakeAction({itemId:row.id,version:row.version,customer:distinct})))
+    .toMatchObject({code:'OK',replayed:true,receipt:{customerId:saved.receipt.customerId}});
+});
+
 it('uses the existing cancellation receipt to explain a pending replacement and keeps the reply date',async()=>{
   const {changeOrderPickupNoticeAction}=await import('@/app/actions/orders.actions');
   const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');

@@ -1,12 +1,12 @@
 import 'server-only';
 
-import {ACCESS_AREA_LABELS,ROLE_LABELS,canChangeOrderHandover,hasAuthorizationArea,hasLagerCapability,type AccessArea} from '@/lib/auth/authorizationContract';
+import {ACCESS_AREA_LABELS,ROLE_LABELS,canAssignIntakeCustomer,canChangeOrderHandover,hasAuthorizationArea,hasLagerCapability,type AccessArea} from '@/lib/auth/authorizationContract';
 import {formatEuro} from '@/lib/domain/formatEuro';
 import type {IntakeSuggestionsInput,IntakeTermSuggestion,IntakePriceSuggestion,IntakeSuggestionReadOptions} from '@/lib/intakeSuggestionsContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {pruefeHerausgabe,type ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
 import {readLiveOrderCard} from '@/lib/server/orderCardRead';
-import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
+import {readIntakeCustomerDuplicate,searchOrderIntakeCustomers,type IntakeCustomerDuplicateDraft} from '@/lib/server/orderIntakeRead';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {normaliseOrderPositionUnit,orderPositionQuantityError,orderPositionUnitLabel} from '@/lib/orderPositionContract';
@@ -35,6 +35,7 @@ export type ZusageInput={
   kanal?:string;
   anliegen?:string;
   wirkung?:string;
+  kundenentwurf?:IntakeCustomerDuplicateDraft;
   /** Positionen der vorhandenen Anfrage, sofern es noch keinen Auftrag oder KV gibt. */
   positionen?:IntakeSuggestionsInput['positions'];
 };
@@ -53,6 +54,8 @@ const unknownQuote={frei:false,grund:'unbekannt_kv',text:MAIL_PROMISE_COPY.unkno
 const unknownChannel={frei:false,grund:'unbekannt_kanal',text:MAIL_PROMISE_COPY.unknownChannel} as const;
 const unknownAbsence={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.abwesenheit} as const;
 const unknownDocument={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.beleg_dublette} as const;
+const unknownCustomer={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.dublette} as const;
+const duplicateCustomer={frei:false,grund:'dublette',text:MAIL_PROMISE_COPY.duplicateCustomer} as const;
 const foreignSender={frei:false,grund:'absender_fremd',text:MAIL_PROMISE_COPY.foreignSender} as const;
 const optionalCustomer = (input:ZusageInput) => input.art==='preis_im_text'||input.art==='kanal_versand'||
   (input.art==='termin'&&!input.orderId&&!input.quoteId);
@@ -72,6 +75,8 @@ function fehlendesRecht(auth:AuthorizationSnapshot,art:ZusageInput['art']):Acces
       return hasAuthorizationArea(auth,'zahlungen')?null:'zahlungen';
     case 'beleg_dublette':
       return hasAuthorizationArea(auth,'buchhaltung')?null:'buchhaltung';
+    case 'dublette':
+      return canAssignIntakeCustomer(auth)?null:hasAuthorizationArea(auth,'kunden')?'eingang':'kunden';
     default: return null;
   }
 }
@@ -115,6 +120,15 @@ async function pruefeBelegDublette(auth:AuthorizationSnapshot,original:NonNullab
     !view.fileId||!view.originals.some(file=>file.id===view.fileId)||!view.fields.nummer.trim())return unknownDocument;
   if(view.invoice||view.duplicate)return {frei:false,grund:'beleg_dublette',text:MAIL_PROMISE_COPY.duplicateDocument};
   return view.uncertain===0&&!view.conflict?{frei:true}:unknownDocument;
+}
+
+async function pruefeNeukundenDublette(auth:AuthorizationSnapshot,input:ZusageInput):Promise<ZusageErgebnis>{
+  if(!Number.isSafeInteger(input.sourceVersion)||!input.kundenentwurf)return unknownCustomer;
+  const original=await readIncomingOriginal(auth,input);
+  if(!original||original.customerId||original.assignment!=='offen'||!original.openConcerns.includes('kv_anfrage'))return unknownCustomer;
+  const observed=await readIntakeCustomerDuplicate(auth,input.kundenentwurf,original.senderAddress);
+  if(observed==='missing')return unknownCustomer;
+  return observed==='match'?duplicateCustomer:{frei:true};
 }
 
 async function readPromiseOrder(auth:AuthorizationSnapshot,input:ZusageInput){
@@ -241,9 +255,11 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
   if(input.art==='preis_im_text')return {frei:true};
   if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unknownChannel;
   try{
+    if(input.art==='dublette'&&!input.customerId)return await pruefeNeukundenDublette(auth,input);
     const customerRequired=!optionalCustomer(input);
     const original=customerRequired?await qualifyCustomer(auth,input,leser):null;
     if(customerRequired&&!original)return foreignSender;
+    if(input.art==='dublette')return duplicateCustomer;
     if(input.art==='stammdaten'&&original)return pruefeStammdaten(original);
     if(input.art==='beleg_dublette'&&original)return await pruefeBelegDublette(auth,original);
     if(input.art==='abwesenheit'){
@@ -275,6 +291,7 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
     console.error('[MAIL_PROMISE_SOURCE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
     if(input.art==='abwesenheit')return unknownAbsence;
     if(input.art==='beleg_dublette')return unknownDocument;
+    if(input.art==='dublette')return unknownCustomer;
     return input.art==='termin'?unknownTerm:input.art==='auftrag_aus_kv'?unknownQuote:unavailable;
   }
 }
@@ -292,6 +309,7 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
   return erlaubteWirkung(anliegen,wirkung,{
     preisrecht:hasAuthorizationArea(auth,'preise'),
     ...(input.art==='preisquelle'?{preisquelle:true}:{}),
+    ...(input.art==='dublette'&&!input.customerId?{dublette:false}:{}),
     ...(input.art==='beleg_dublette'&&wirkung==='rechnung_im_belegzugang_ablegen'?{belegDublette:false}:{}),
   })?ergebnis:unavailable;
 }

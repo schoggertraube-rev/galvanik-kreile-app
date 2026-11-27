@@ -14,6 +14,7 @@ export const MAIL_PROMISE_COPY = {
   paymentNotice: 'Danke, wir ordnen Ihre Zahlung zu.',
   automaticReply: 'Automatische Antwort. Die Rückfrage bleibt offen.',
   duplicateDocument: 'Zu dieser Belegnummer ist schon ein Beleg erfasst.',
+  duplicateCustomer: 'Ein ähnlicher Kunde ist erfasst. Vergleiche die Kundendaten.',
   foreignSender: 'Wir haben Ihre Nachricht erhalten und stimmen das mit Ihrem hinterlegten Ansprechpartner ab.',
   tooLate: 'Ihr Paket ist bereits unterwegs.',
   labelBooked: 'Das Etikett ist gebucht. Der Versand muss die Änderung übernehmen.',

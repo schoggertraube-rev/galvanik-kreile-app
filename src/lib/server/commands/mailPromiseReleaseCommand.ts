@@ -11,7 +11,7 @@ import {readPendingInvoiceReissue} from './immutableInvoiceCommand';
 
 export type ZusageGrund='unbekannt'|'unbekannt_zahlung'|'recht'|'preisrecht'|'liefersperre'|'vorkasse'|'abholzahlung'|'reklamation'|'neuausstellung'|'termin'|
   'unbekannt_termin'|'unbekannt_kv'|'unbekannt_kanal'|'absender_fremd'|'zu_spaet'|'etikett'|
-  'menge'|'kv_abgelaufen'|'kv_schon_auftrag'|'storno'|'stammdaten'|'abwesenheit'|'beleg_dublette'|'zahlungsavis';
+  'menge'|'kv_abgelaufen'|'kv_schon_auftrag'|'storno'|'stammdaten'|'abwesenheit'|'dublette'|'beleg_dublette'|'zahlungsavis';
 export type ZusageErgebnis={frei:true}|{
   frei:false;
   grund:ZusageGrund;
