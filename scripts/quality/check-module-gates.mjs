@@ -1035,7 +1035,6 @@ function tableRefs(source) {
     const afterReference = source.slice((m.index ?? 0) + m[0].length);
     refs.push({
       ref: `${m[1]}.${m[2]}`.toLowerCase(),
-      operation: m[0].split(/\s/, 1)[0].toLowerCase(),
       index: m.index,
       functionCall: /^(?:from|join)\b/i.test(m[0]) && /^\s*\(/.test(afterReference),
     });
@@ -1069,28 +1068,52 @@ function sqlDdlText(source) {
   return result + source.slice(start);
 }
 
-// B6-K reads and appends the course originals in the existing stock journal.
-const metallkursTableAccess = new Map([
-  ['src/modules/metallkurs/server/lesen.ts', {'public.metallkurse': ['from']}],
-  ['src/modules/metallkurs/server/schreiben.ts', {
-    'public.metallkurse': ['from', 'into'],
-    'public.events': ['from', 'into', 'update'],
+// B6-K: nur belegte vollständige Abfragen in den freigegebenen Dateien.
+// Jede Prüfsumme umfasst den gesamten SQL-Text samt Mandant und Ereignisart.
+const metallkursSqlStatements = new Map([
+  ['src/modules/metallkurs/server/lesen.ts', {
+    'public.metallkurse': ['ffca605663a79568e02ee74cd440d76d4a418bb2ecdcd4491824929a949b2bf0'],
   }],
-  ['src/modules/metallkurs/server/__tests__/lesen.integration.test.ts', {'public.metallkurse': ['into']}],
-  ['src/modules/metallkurs/server/__tests__/schreiben.integration.test.ts', {'public.metallkurse': ['from']}],
+  ['src/modules/metallkurs/server/schreiben.ts', {
+    'public.metallkurse': [
+      'cb1cd823f4bd973dffd19af6b9ebe3a59ab3e6f135a896412ec96284f2f29336', // Originalkurse einfügen
+      'fa32f45a338c95080d16a63101f5faaad45db7c27ff6efce5a3cd8b70eac0087', // Wiederholung am Original erkennen
+      'b3c1a79bdbf123a047cdffc5c36ff906c38f9bbf34f33cbaed232528e0e76535', // vorhandenen Handkurs lesen
+    ],
+    'public.events': [
+      '7fb8edaa5f9b4c380cdffe5f6da2eaa80f2cc0600f308678589833f1d8ea7fbb', // Monatsabrufe zählen
+      '6c253615af1d8300f66d967a6d50b85f895b1bffcb5905419b4c4aacc3cd9d7c', // abgeschlossenen Abruf lesen
+      '959132d3c12bee8b9b7b2b3ae837efbbadffde3a0c67670b38023ae93eef2da1', // offenen Abruf anlegen
+      '1c1b27da83771f4ffb49d7503db977b7291ace7439d3d72469024baed51f73c9', // genau diesen offenen Abruf abschließen
+      '9c707e7a47695c5b42e0cb142bcfcb1eb3be369fcb5efbf9408fd0c59e78a82d', // fehlenden Zugang belegen
+    ],
+  }],
+  ['src/modules/metallkurs/server/__tests__/lesen.integration.test.ts', {
+    'public.metallkurse': ['22fd115547175774fec6b8cf7455d16d669e3edc11174f2fe8a46c28df61ac63'],
+  }],
+  ['src/modules/metallkurs/server/__tests__/schreiben.integration.test.ts', {
+    'public.metallkurse': ['f5b18e8d7487be64cb9b032a66a31fdc559cbb914234e1109f8537b08ea8c6a0'],
+  }],
 ]);
 
-// The only update allowed here finishes the matching pending attempt in one transaction.
-const metallkursAbrufabschlussHash = '61eb849ee0c5d4ac6ff208aaff07583b6bccd1ffe5092900258391b20d79c205';
-
 function allowedMetallkursTableRef(file, source, reference) {
-  if (reference.functionCall || !metallkursTableAccess.get(file)?.[reference.ref]?.includes(reference.operation)) return false;
-  if (reference.operation !== 'update') return true;
-  if (!/\bconst\s+abrufart\s*=\s*(['"])metallkurs\.abruf\1\s*;/u.test(source)) return false;
-  const end = source.indexOf('`', reference.index);
-  if (end === -1) return false;
-  const statement = source.slice(reference.index, end).replace(/\s+/g, ' ').trim();
-  return createHash('sha256').update(statement).digest('hex') === metallkursAbrufabschlussHash;
+  const allowed = metallkursSqlStatements.get(file)?.[reference.ref];
+  if (!allowed || reference.functionCall) return false;
+
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  function findTemplate(node) {
+    if (reference.index < node.getFullStart() || reference.index >= node.end) return undefined;
+    if (ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && node.tag.text === 'sql' &&
+        reference.index > node.template.getStart(tree)) {
+      return node.template;
+    }
+    return ts.forEachChild(node, findTemplate);
+  }
+
+  const template = findTemplate(tree);
+  if (!template) return false;
+  const statement = source.slice(template.getStart(tree) + 1, template.end - 1).replace(/\s+/gu, ' ').trim();
+  return allowed.includes(createHash('sha256').update(statement).digest('hex'));
 }
 
 function gateData(root, findings, manifests) {
