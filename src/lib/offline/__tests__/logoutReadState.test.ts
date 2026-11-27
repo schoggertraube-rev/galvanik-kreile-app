@@ -18,3 +18,14 @@ it('reports local failure instead of blocking logout or inventing an empty queue
  vi.stubGlobal('caches',{keys:async()=>{throw Error('TEST-cache');}});
  expect(await clearLoggedOutReadState('a'.repeat(64))).toEqual({cacheCleared:false,pendingCount:null});
 });
+it('limits a delayed inactivity cleanup to the expired login even for the same person',async()=>{
+ const scope='a'.repeat(64),oldLogin='b'.repeat(64),newLogin='c'.repeat(64);
+ const oldCache=privateReadCachePrefix(scope,oldLogin)+'1',newCache=privateReadCachePrefix(scope,newLogin)+'1';
+ const remove=vi.fn(async()=>true);
+ ports.revoke.mockResolvedValue({loginScopes:[oldLogin],quarantined:0});
+ ports.read.mockResolvedValue([{id:'TEST-original'}]);
+ vi.stubGlobal('caches',{keys:async()=>[oldCache,newCache],delete:remove});
+ expect(await clearLoggedOutReadState(scope,oldLogin)).toEqual({cacheCleared:true,pendingCount:1});
+ expect(ports.revoke).toHaveBeenCalledExactlyOnceWith(scope,false,oldLogin);
+ expect(remove).toHaveBeenCalledExactlyOnceWith(oldCache);
+});

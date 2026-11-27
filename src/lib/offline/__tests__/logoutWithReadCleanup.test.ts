@@ -4,7 +4,17 @@ vi.mock('../syncOriginals',()=>({syncOriginals:ports.sync}));
 vi.mock('@/app/actions/auth',()=>({logout:ports.logout}));
 vi.mock('../logoutReadState',()=>({clearLoggedOutReadState:ports.cleanup}));
 import {logoutWithReadCleanup,readLogoutNotice} from '../logoutWithReadCleanup';
-afterEach(()=>{vi.clearAllMocks();vi.useRealTimers();delete document.documentElement.dataset.offlineScope;});
+import {CACHE_SCOPE_COOKIE,readCacheScopeMarker} from '../cacheScopeMarker';
+function setLoginScope(scope:string){document.cookie=`${CACHE_SCOPE_COOKIE}=${scope}; Path=/`;}
+afterEach(()=>{
+ vi.clearAllMocks();vi.useRealTimers();
+ delete document.documentElement.dataset.offlineScope;
+ delete document.documentElement.dataset.offlineLoginScope;
+ for(const cookie of document.cookie.split(';')){
+  const name=cookie.trim().split('=')[0];
+  if(name.startsWith('kreile_offline_'))document.cookie=`${name}=; Path=/; Max-Age=0`;
+ }
+});
 it('ends the actual session before local cleanup and publishes the exact queue notice',async()=>{
  const scope='a'.repeat(64);document.documentElement.dataset.offlineScope=scope;
  ports.logout.mockResolvedValue({ok:true,remoteSignOut:'success'});
@@ -23,10 +33,12 @@ it('fences the expired session immediately and keeps the original queue for the 
  const scope='d'.repeat(64);
  const state=document.documentElement.dataset;
  state.authStatus='authenticated';state.offlineScope=scope;state.offlineLoginScope='e'.repeat(64);
+ setLoginScope('e'.repeat(64));
  ports.logout.mockImplementation(async()=>{
   expect(state.authStatus).toBe('error');
   expect(state.offlineScope).toBeUndefined();
   expect(state.offlineLoginScope).toBeUndefined();
+  expect(readCacheScopeMarker()).toBeNull();
   return {ok:true};
  });
  ports.cleanup.mockResolvedValue({cacheCleared:true,pendingCount:2});
@@ -34,7 +46,7 @@ it('fences the expired session immediately and keeps the original queue for the 
  await logoutWithReadCleanup('inactivity',sessionScope);
  expect(ports.sync).not.toHaveBeenCalled();
  expect(ports.logout).toHaveBeenCalledExactlyOnceWith({sessionScope});
- expect(ports.cleanup).toHaveBeenCalledWith(scope);
+ expect(ports.cleanup).toHaveBeenCalledWith(scope,sessionScope);
  expect(state.authStatus).toBe('unauthenticated');
  expect(readLogoutNotice()).toContain('sobald du wieder angemeldet und online bist');
 });
@@ -42,17 +54,35 @@ it('reopens the same confirmed read partition without clearing its pending origi
  const state=document.documentElement.dataset;
  const scope='a'.repeat(64),sessionScope='b'.repeat(64);
  state.authStatus='authenticated';state.offlineScope=scope;state.offlineLoginScope=sessionScope;
+ setLoginScope(sessionScope);
  ports.logout.mockImplementationOnce(async()=>{
   expect(state.authStatus).toBe('error');
   expect(state.offlineScope).toBeUndefined();
+  expect(readCacheScopeMarker()).toBeNull();
   return {ok:false,code:'ACTIVE',inactivity:{minutes:2,lastSeen:50000,expiresAt:170000,sessionScope}};
  });
  expect(await logoutWithReadCleanup('inactivity',sessionScope)).toMatchObject({ok:false,code:'ACTIVE'});
  expect(state.authStatus).toBe('authenticated');
  expect(state.offlineScope).toBe(scope);
  expect(state.offlineLoginScope).toBe(sessionScope);
+ expect(readCacheScopeMarker()).toBe(sessionScope);
  expect(ports.cleanup).not.toHaveBeenCalled();
  expect(ports.sync).not.toHaveBeenCalled();
+});
+it('leaves a newer login alone when the old ACTIVE response arrives late',async()=>{
+ const state=document.documentElement.dataset;
+ const scope='a'.repeat(64),sessionScope='b'.repeat(64),newLogin='c'.repeat(64);
+ state.authStatus='authenticated';state.offlineScope=scope;state.offlineLoginScope=sessionScope;
+ setLoginScope(sessionScope);
+ ports.logout.mockImplementationOnce(async()=>{
+  expect(readCacheScopeMarker()).toBeNull();
+  setLoginScope(newLogin);
+  return {ok:false,code:'ACTIVE',inactivity:{minutes:2,lastSeen:50000,expiresAt:170000,sessionScope}};
+ });
+ expect(await logoutWithReadCleanup('inactivity',sessionScope)).toEqual({ok:false,code:'SESSION_CHANGED'});
+ expect(readCacheScopeMarker()).toBe(newLogin);
+ expect(state.offlineLoginScope).toBeUndefined();
+ expect(ports.cleanup).not.toHaveBeenCalled();
 });
 it('a failed flush retains the pending notice and still allows logout',async()=>{
  document.documentElement.dataset.offlineScope='c'.repeat(64);ports.sync.mockRejectedValue(Error('TEST_NETWORK_LOST'));

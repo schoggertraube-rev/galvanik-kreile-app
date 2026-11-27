@@ -1,6 +1,6 @@
 
 import {reportProtocolClientError} from '@/modules/logging/public';
-import {readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
+import {hasCacheScopeMarker,readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
 import {readPendingShellMetadata,changePendingShellMetadata,revokeUnmarkedPendingDeviceReads} from './pendingStore';
 import {privateReadCachePrefix} from './logoutReadState';
 
@@ -10,7 +10,7 @@ export function qualifiedPrivateCacheName(scope:string,loginScope:string,generat
 }
 /** Retry failed deletion before any cached content is considered. Originals are in IDB. */
 export async function clearUnmarkedPrivateCaches():Promise<void>{
- if(readCacheScopeMarker())return;
+ if(hasCacheScopeMarker())return;
  await revokeUnmarkedPendingDeviceReads();
  if(typeof caches==='undefined')return;
  const known=/^kreile-private-[a-f0-9]{64}-[a-f0-9]{64}-[1-9][0-9]*$/;
@@ -22,7 +22,7 @@ export async function clearUnmarkedPrivateCaches():Promise<void>{
 export async function clearPrivateReadStateBeforeLogin():Promise<{code:'CLEARED'|'UNAVAILABLE'}>{
  try{
   removeCacheScopeMarker();
-  if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CACHE_MARKER_REVOKE_NOT_CONFIRMED');
+  if(hasCacheScopeMarker())throw Error('OFFLINE_CACHE_MARKER_REVOKE_NOT_CONFIRMED');
   await clearUnmarkedPrivateCaches();
   return {code:'CLEARED'};
  }catch{

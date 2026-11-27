@@ -5,7 +5,7 @@ import type {CustomerListResponse} from '@/app/actions/customers.actions';
 import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
-import {readCacheScopeMarker} from './cacheScopeMarker';
+import {hasCacheScopeMarker,readCacheScopeMarker} from './cacheScopeMarker';
 import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
 import type {cancelInvoiceAction} from '@/app/actions/invoices.actions';
@@ -288,17 +288,30 @@ export async function readPendingShellInventory(scope:string):Promise<ShellInven
 }
 /** One atomic privacy fence for all known cached logins of this actor.
  * Originals and unknown metadata are never deleted or reassigned. */
-export async function revokePendingShells(scope:string,unmarkedOnly=false):Promise<{loginScopes:string[];quarantined:number}>{
+export async function revokePendingShells(scope:string,unmarkedOnly=false,loginScope?:string):Promise<{loginScopes:string[];quarantined:number}>{
+ if(loginScope!==undefined)shellKey(loginScope);
  const connection=await database(scope);
  return new Promise((resolve,reject)=>{
   const tx=connection.transaction([SHELL_STORE,DEVICE_STORE],'readwrite'),store=tx.objectStore(SHELL_STORE),keys=store.getAllKeys(),values=store.getAll();
   let keysReady=false,valuesReady=false,result:{loginScopes:string[];quarantined:number}={loginScopes:[],quarantined:0};
   const revoke=()=>{
    if(!keysReady||!valuesReady)return;
-   if(unmarkedOnly&&readCacheScopeMarker()!==null){tx.abort();return;}
-   tx.objectStore(DEVICE_STORE).clear();
-   const inventory=shellInventory(keys.result,values.result);result={loginScopes:inventory.entries.map(entry=>entry.loginScope),quarantined:inventory.quarantined};
-   for(const entry of inventory.entries)if(entry.metadata.scope!==null)store.put({scope:null,cacheGeneration:Math.min(entry.metadata.cacheGeneration+1,Number.MAX_SAFE_INTEGER-1),updatedAt:new Date().toISOString()},shellKey(entry.loginScope));
+   if(unmarkedOnly&&hasCacheScopeMarker()){tx.abort();return;}
+   const device=tx.objectStore(DEVICE_STORE);
+   if(loginScope===undefined)device.clear();
+   else{
+    const requests=device.openCursor();
+    requests.onsuccess=()=>{
+     const cursor=requests.result;
+     if(!cursor)return;
+     if(cursor.value?.sourceLoginScope===loginScope)cursor.delete();
+     cursor.continue();
+    };
+   }
+   const inventory=shellInventory(keys.result,values.result);
+   const targets=loginScope===undefined?inventory.entries:inventory.entries.filter(entry=>entry.loginScope===loginScope);
+   result={loginScopes:targets.map(entry=>entry.loginScope),quarantined:inventory.quarantined};
+   for(const entry of targets)if(entry.metadata.scope!==null)store.put({scope:null,cacheGeneration:Math.min(entry.metadata.cacheGeneration+1,Number.MAX_SAFE_INTEGER-1),updatedAt:new Date().toISOString()},shellKey(entry.loginScope));
   };
   keys.onsuccess=()=>{keysReady=true;revoke();};values.onsuccess=()=>{valuesReady=true;revoke();};
   tx.oncomplete=()=>{connection.close();resolve(result);};
@@ -307,13 +320,13 @@ export async function revokePendingShells(scope:string,unmarkedOnly=false):Promi
 }
 /** Retry reading-state deletion before a new login; original stores are untouched. */
 export async function revokeUnmarkedPendingDeviceReads():Promise<void>{
- if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CLEANUP_SCOPE_CHANGED');
+ if(hasCacheScopeMarker())throw Error('OFFLINE_CLEANUP_SCOPE_CHANGED');
  if(typeof indexedDB==='undefined'||typeof indexedDB.databases!=='function')throw Error('OFFLINE_DEVICE_INVENTORY_UNAVAILABLE');
  const databases=await indexedDB.databases();
  for(const entry of databases){
   const match=entry.name?.match(/^kreile-pending-originals-v1-([a-f0-9]{64})$/);
   if(!match)continue;
-  if(readCacheScopeMarker()!==null)throw Error('OFFLINE_CLEANUP_SCOPE_CHANGED');
+  if(hasCacheScopeMarker())throw Error('OFFLINE_CLEANUP_SCOPE_CHANGED');
   await revokePendingShells(match[1],true);
  }
 }

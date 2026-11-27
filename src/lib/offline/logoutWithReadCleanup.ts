@@ -4,7 +4,7 @@ import {reportProtocolClientError} from '@/modules/logging/public';
 import {logout,type InactivityLogoutResult,type LogoutResult} from '@/app/actions/auth';
 import {clearLoggedOutReadState} from './logoutReadState';
 import {OFFLINE_LOGOUT_COPY} from '@/ui/situationCatalog';
-import {readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
+import {endCacheScopePause,pauseCacheScopeMarker,removeCacheScopeMarker,resumeCacheScopeMarker} from './cacheScopeMarker';
 import {syncOriginals} from './syncOriginals';
 import {readServerReachability} from './serverReachability';
 
@@ -29,7 +29,8 @@ export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual
  }else if(scope&&readServerReachability())try{await syncOriginals(scope,()=>readState.offlineScope??null,{flushDelayed:true,workshopOnly:true});}
  catch{reportProtocolClientError('OFFLINE_LOGOUT_FLUSH_FAILED');}
  try{
-  if(reason==='manual'||sessionScope&&readCacheScopeMarker()===sessionScope)removeCacheScopeMarker();
+  if(reason==='manual')removeCacheScopeMarker();
+  else if(sessionScope)pauseCacheScopeMarker(sessionScope);
  }catch{reportProtocolClientError('OFFLINE_CACHE_MARKER_REVOKE_FAILED');}
  // Start the server action before touching potentially broken local storage.
  let result:InactivityLogoutResult|undefined;
@@ -37,11 +38,17 @@ export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual
  try{result=await (reason==='inactivity'?logout({sessionScope}):logout());}catch(error){failure=error;}
  if(result&&!result.ok){
   if(result.code==='ACTIVE'){
+   if(!sessionScope||result.inactivity.sessionScope!==sessionScope||readState.offlineLoginScope&&readState.offlineLoginScope!==sessionScope||!resumeCacheScopeMarker(sessionScope)){
+    return {ok:false,code:'SESSION_CHANGED'};
+   }
    readState.authStatus='authenticated';
    if(scope)readState.offlineScope=scope;
    if(previousLoginScope)readState.offlineLoginScope=previousLoginScope;
   }
   return result;
+ }
+ if(reason==='inactivity'&&sessionScope){
+  try{endCacheScopePause(sessionScope);}catch{reportProtocolClientError('OFFLINE_CACHE_MARKER_REVOKE_FAILED');}
  }
  // A lost server response is not a confirmed logout. Still fence local reads
  // and retain originals; do not publish the successful-logout wording.
@@ -49,8 +56,11 @@ export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual
  delete readState.offlineScope;
  delete readState.offlineLoginScope;
  let timer:ReturnType<typeof setTimeout>|undefined;
+ const clearReads=reason==='manual'
+  ?clearLoggedOutReadState(scope)
+  :clearLoggedOutReadState(sessionScope&&previousLoginScope===sessionScope?scope:null,sessionScope);
  const cleanup=await Promise.race([
-  clearLoggedOutReadState(scope),
+  clearReads,
   new Promise<{cacheCleared:false;pendingCount:null}>(resolve=>{timer=setTimeout(()=>{reportProtocolClientError('OFFLINE_LOGOUT_CLEANUP_TIMEOUT');resolve({cacheCleared:false,pendingCount:null});},1500);}),
  ]);
  if(timer)clearTimeout(timer);

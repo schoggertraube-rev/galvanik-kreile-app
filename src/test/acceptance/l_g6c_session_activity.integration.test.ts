@@ -17,6 +17,7 @@ import { replayOfflineWorkshopAction } from '@/app/actions/offlineWorkshop.actio
 import { getLiveOrderCardAction, transitionWareneingangToGalvanikAction } from '@/app/actions/orders.actions';
 import { saveManagedUserAction } from '@/app/actions/settings.actions';
 import type { PendingPhysicalWorkshopOriginal } from '@/lib/offline/pendingStore';
+import { CACHE_SCOPE_COOKIE } from '@/lib/offline/cacheScopeMarker';
 import { appSessionReadScope, COOKIE_NAME, readAppSession } from '@/lib/server/appSession';
 import { offlinePartition } from '@/lib/server/offlinePartition';
 import { createPinLoginHandle } from '@/lib/server/pinLoginHandle';
@@ -89,10 +90,12 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       expect(appSessionReadScope(store.get(COOKIE_NAME)!.value, refreshed.session)).toBe(scope);
       clock.mockReturnValue(now + 120_000);
       const renewedToken = store.get(COOKIE_NAME)!.value;
+      store.set(CACHE_SCOPE_COOKIE, 'TEST-browser-marker-already-changed');
       expect(await logout({ sessionScope: scope })).toMatchObject({
         ok: false, code: 'ACTIVE', inactivity: { expiresAt: now + 165_000, sessionScope: scope },
       });
       expect(store.get(COOKIE_NAME)?.value).toBe(renewedToken);
+      expect(store.get(CACHE_SCOPE_COOKIE)?.value).toBe('TEST-browser-marker-already-changed');
 
       const pending: PendingPhysicalWorkshopOriginal = {
         id: commandId, kind: 'workshop', itemId: orderId, command: 'item.finished',

@@ -1,7 +1,7 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import crypto from "crypto";
 import { cookies, headers } from "next/headers";
-import {CACHE_SCOPE_COOKIE} from '@/lib/offline/cacheScopeMarker';
+import {CACHE_SCOPE_COOKIE,CACHE_SCOPE_MAX_AGE_SECONDS} from '@/lib/offline/cacheScopeMarker';
 import { readSessionInactivity, type SessionInactivity } from '@/lib/auth/sessionInactivity';
 import type { Geraet } from '@/ui/kr/typen';
 
@@ -215,7 +215,7 @@ export async function setAppSession(session: AppSession, tabletInput?: 'tablet')
 }
 
 function setSessionReadScopeCookie(store: Awaited<ReturnType<typeof cookies>>, scope: string) {
-  store.set(CACHE_SCOPE_COOKIE, scope, { ...getCookieOptions(), httpOnly: false, maxAge: 365 * 24 * 60 * 60 });
+  store.set(CACHE_SCOPE_COOKIE, scope, { ...getCookieOptions(), httpOnly: false, maxAge: CACHE_SCOPE_MAX_AGE_SECONDS });
 }
 
 /** Updates only this signed session. The fixed end and its offline reading partition stay the same. */
@@ -247,17 +247,6 @@ export async function renewAppSessionActivity(
 export async function clearAppSession(): Promise<void> {
   const cookieStore = await cookies();
   try{cookieStore.delete(COOKIE_NAME);}finally{cookieStore.delete(CACHE_SCOPE_COOKIE);}
-}
-
-/** Reopen the read fence only for the credential already validated by the caller. */
-export async function restoreAppSessionReadScope(expectedScope: string): Promise<boolean> {
-  const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (!token) return false;
-  const current = verifyAppSessionToken(token, getSecretKey());
-  if (!current.ok || appSessionReadScope(token, current.session) !== expectedScope) return false;
-  setSessionReadScopeCookie(store, expectedScope);
-  return true;
 }
 
 // ─── Backward-compat: getAppSession() ────────────────────────────────────────

@@ -6,7 +6,6 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import {
   clearAppSession,
-  restoreAppSessionReadScope,
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
@@ -108,7 +107,7 @@ export async function logout(input?: { sessionScope: string | undefined }): Prom
     const current = await resolveAuthorization();
     if (current.ok) {
       const inactivity = current.data.sessionInactivity;
-      if (!inactivity || !await restoreAppSessionReadScope(expected)) return changed;
+      if (!inactivity) return changed;
       return { ok: false, code: 'ACTIVE', inactivity: {
         lastSeen: inactivity.lastSeen, expiresAt: inactivity.expiresAt, minutes: inactivity.minutes,
         serverAt: inactivity.serverAt, sessionScope: expected,

@@ -94,8 +94,11 @@ self.addEventListener("fetch", (event) => {
 // creates a database, changes metadata, grants authentication or touches originals.
 async function privateLoginMarker() {
   if (!self.cookieStore) return null;
-  const values = await self.cookieStore.getAll("kreile_offline_cache_scope");
-  return values.length === 1 && /^[a-f0-9]{64}$/.test(values[0].value) ? values[0].value : null;
+  const cookies = await self.cookieStore.getAll();
+  const values = cookies.filter(({ name }) => name === "kreile_offline_cache_scope");
+  if (values.length !== 1 || !/^[a-f0-9]{64}$/.test(values[0].value)) return null;
+  const login = values[0].value;
+  return cookies.some(({ name }) => name === "kreile_offline_pause_" + login) ? false : login;
 }
 async function existingShell(scope, login) {
   if (!indexedDB.databases) return null;
@@ -123,7 +126,8 @@ async function readPrivateNavigation(request) {
   try {
     const login = await privateLoginMarker(), names = await caches.keys();
     const pattern = /^kreile-private-([a-f0-9]{64})-([a-f0-9]{64})-([1-9][0-9]*)$/;
-    if (!login) {
+    if (login === false) return null;
+    if (login === null) {
       for (const name of names) if (pattern.test(name)) await caches.delete(name);
       return null;
     }
