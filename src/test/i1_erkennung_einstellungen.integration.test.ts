@@ -37,15 +37,10 @@ it("reads stored company models and threshold, with the existing default layout"
 });
 
 it.each([
-  { text: "TEST Rechnung", configured: "test-belegmodell", model: "test-belegmodell", damagedArchive: true },
-  { text: null, configured: null, model: "prebuilt-layout", damagedArchive: false },
-])("stores the original, pages and position using $model", async ({ text, configured, model, damagedArchive }) => {
-  await sql`INSERT INTO public.company_settings (id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
-    SELECT ${randomUUID()},${tenant},'TEST I1 Einstellungen',0,'TEST-I1'
-    WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
-  await sql`UPDATE public.company_settings
-    SET erkennung_modelle=erkennung_modelle || jsonb_build_object('dokument',${configured}::text)
-    WHERE tenant_id=${tenant}`;
+  { text: "TEST Rechnung", damagedArchive: true },
+  { text: null, damagedArchive: false },
+])("stores the original, pages and position (damagedArchive=$damagedArchive)", async ({ text, damagedArchive }) => {
+  const model = "prebuilt-layout";
   const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
     modelId: model, content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
     keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" } }],

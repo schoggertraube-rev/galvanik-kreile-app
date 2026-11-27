@@ -249,22 +249,6 @@ const eslintConfig = defineConfig([
       }],
     },
   },
-  {
-    files: ["src/modules/eingang/server/intakeFile.ts"],
-    rules: {
-      "no-restricted-imports": ["error", {
-        paths: [{
-          name: "@/modules/fundament/server-public",
-          allowImportNames: ["readErkennungsEinstellungenInTransaction"],
-          message: "Der Klickweg übernimmt das Dokumentmodell aus dem vorhandenen Einstellungsleser.",
-        }],
-        patterns: [{
-          ...modulesFacadePattern,
-          group: [...modulesFacadePattern.group, "!@/modules/fundament/server-public"],
-        }, nonExecutableReferencePattern],
-      }],
-    },
-  },
   // ── Domain isolation: auth must not depend on business domains ──
   {
     files: ["src/lib/auth/**/*.ts", "src/lib/auth/**/*.tsx"],

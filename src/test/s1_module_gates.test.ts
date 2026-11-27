@@ -29,19 +29,6 @@ import {
 } from "../../scripts/quality/check-module-gates.mjs";
 
 const REAL_SCHEMA = readFileSync(path.resolve(process.cwd(), SCHEMA_PATH), "utf8");
-
-it("erlaubt im Klickweg ausschließlich den vorhandenen Dokumentmodell-Leser", () => {
-  const file = "src/modules/eingang/server/intakeFile.ts";
-  const source = 'import "server-only";\nimport { readErkennungsEinstellungenInTransaction } from "@/modules/fundament/server-public";';
-  expect(allowedServerFacadeConsumer(file, source)).toBe(true);
-  expect(allowedServerFacadeConsumer(file, source.replace(
-    "readErkennungsEinstellungenInTransaction", "readKanalFristenInTransaction",
-  ))).toBe(false);
-  expect(allowedServerFacadeConsumer(file, source.replace(
-    "readErkennungsEinstellungenInTransaction", "readErkennungsEinstellungenInTransaction, readKanalFristenInTransaction",
-  ))).toBe(false);
-  expect(allowedServerFacadeConsumer("src/modules/eingang/server/intakeCapture.ts", source)).toBe(false);
-});
 // Verworfene Bausteine/Texte werden zusammengesetzt, damit DIESE Datei den Naht-5-Scan
 // des echten Repos nicht selbst ausloest.
 const NAV = ["Warendurchlauf", "StationNav"].join("");
