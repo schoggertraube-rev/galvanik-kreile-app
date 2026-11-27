@@ -264,8 +264,8 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
     }
     if(input.art==='herausgabe'||input.art==='abholer'){
       if(!input.customerId||!input.orderId)return unavailable;
-      const {customerId,orderId}=input;
-      const result=await withPrivilegedTenantTransaction(auth,tx=>pruefeHerausgabe(tx,auth,{customerId,orderId}));
+      const {customerId,orderId,antwortBis}=input;
+      const result=await withPrivilegedTenantTransaction(auth,tx=>pruefeHerausgabe(tx,auth,{customerId,orderId,antwortBis}));
       return input.art==='abholer'&&result.frei?{...unavailable,text:MAIL_PROMISE_COPY.pending.abholer}:result;
     }
     if(Object.hasOwn(MAIL_PROMISE_COPY.pending,input.art)) return {frei:false,grund:'unbekannt',

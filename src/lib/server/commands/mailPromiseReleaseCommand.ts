@@ -23,14 +23,14 @@ export type ZusageErgebnis={frei:true}|{
 const unavailable={frei:false,grund:'unbekannt_zahlung',text:MAIL_PROMISE_COPY.unknownPayment} as const;
 
 export async function pruefeHerausgabe(
-  tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{customerId:string;orderId:string},
+  tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{customerId:string;orderId:string;antwortBis?:string},
 ):Promise<ZusageErgebnis>{
   const {customerId,orderId}=input;
   const debt=await readCustomerDeliveryBlockInTransaction(tx,auth,customerId,orderId);
   if(debt.code!=='OK')return unavailable;
   const reissue=await readPendingInvoiceReissue(tx,auth.tenantId,orderId);
   if(reissue!==null)return {frei:false,grund:'neuausstellung',
-    text:MAIL_PROMISE_COPY.reissue(reissue,debt.handover),hinweis:MAIL_PROMISE_COPY.reissueHint(debt.handover)};
+    text:MAIL_PROMISE_COPY.reissue(reissue,debt.handover,input.antwortBis),hinweis:MAIL_PROMISE_COPY.reissueHint(debt.handover)};
   const complaint=await readOpenOrderComplaint(tx,auth.tenantId,orderId);
   if(complaint)return {frei:false,grund:'reklamation',text:COMPLAINT_ORDER_COPY.releaseBlocked(complaint.number)};
 

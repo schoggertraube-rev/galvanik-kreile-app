@@ -38,9 +38,10 @@ export const MAIL_PROMISE_COPY = {
     return mode==='vorkasse'?`Abholung erst nach Zahlungseingang${value}.`
       : amount?`Bei Abholung ${amount} kassieren.`:'Zahlung bei Abholung.';
   },
-  reissue: (order:string,handover:Handover) =>
-    `Die Rechnung zu ${order} stellen wir gerade neu aus. ${handover==='shipping'?'Wir melden uns zum Versand.':
-      handover==='pickup'?'Wir melden uns zur Abholung.':'Wir melden uns zur Herausgabe.'}`,
+  reissue: (order:string,handover:Handover,replyBy?:string) => {
+    const subject=handover==='shipping'?'zum Versand':handover==='pickup'?'zur Abholung':'zur Herausgabe';
+    return `Die Rechnung zu ${order} stellen wir gerade neu aus. Wir melden uns ${subject}${replyBy?` bis ${replyBy}`:''}.`;
+  },
   reissueHint: (handover:Handover) => handover==='shipping'
     ? 'Im Ausgang: Versand erst nach neuer Rechnung.':
     handover==='pickup'?'Im Ausgang: Abholung erst nach neuer Rechnung.':'Im Ausgang: Herausgabe erst nach neuer Rechnung.',

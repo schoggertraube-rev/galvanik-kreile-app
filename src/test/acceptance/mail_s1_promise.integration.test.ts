@@ -31,6 +31,13 @@ const leser:ZusageLeser={
 };
 const pruefeZusage=(auth:Parameters<typeof zusage>[0],input:Parameters<typeof zusage>[1])=>zusage(auth,input,leser);
 
+async function completeInvoiceSettingsFixture(){
+  // Extend the isolated company row if a previous mail case already created it.
+  await sql`UPDATE public.company_settings SET street='TEST Weg 1',zip='70176',city='Stuttgart',country='Deutschland',
+    iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE123456789',
+    invoice_vat_rate_basis_points=1900,invoice_payment_term_days=14,versand_pauschale_netto_cents=1000 WHERE tenant_id=${tenant}`;
+}
+
 // Isolated synthetic incoming notes. Rights, customer, order, quote and payment readers are real.
 async function originalFixture(customerId:string,options:{sender?:string;type?:'auftrag'|'kv';target?:string}={}){
   const row=await withSession(full,async()=>{const authorized=await resolveAuthorization();
@@ -364,6 +371,52 @@ it('holds the reply open only for an automatic marking in the secured MIME heade
   }finally{fetchMock.mockRestore();}
 });
 
+it('uses the existing cancellation receipt to explain a pending replacement and keeps the reply date',async()=>{
+  const {changeOrderPickupNoticeAction}=await import('@/app/actions/orders.actions');
+  const {cancelInvoiceAction}=await import('@/app/actions/invoices.actions');
+  const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
+  await completeInvoiceSettingsFixture();
+  const order=await readyInvoiceOrder('TEST S-1 neue Rechnung','shipping',false,undefined,10000);
+  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,
+    expectedVersion:0,expectedOpenAmountCents:order.invoice.grossAmountCents,method:'ueberweisung',clientEventId:randomUUID()})))
+    .toMatchObject({code:'OK'});
+  await createFixture(['entscheiden'],'buero');
+  const handover=await withSession(full,()=>changeOrderPickupNoticeAction({command:'handover_manual',orderId:order.orderId,
+    expectedVersion:order.version,handoverMode:'pickup',clientEventId:randomUUID()}));
+  if(handover.code!=='OK'||!handover.receipt||typeof handover.receipt!=='object'||
+    !('eventId'in handover.receipt)||typeof handover.receipt.eventId!=='string')
+    throw Error('TEST_S1_REISSUE_HANDOVER_REQUIRED');
+  const replacementKey=randomUUID();
+  const input={invoiceId:order.invoice.invoiceId,expectedVersion:1,reason:'Übergabeart Versand → Abholung',clientEventId:randomUUID(),
+    reissueWithoutShipping:{handoverEventId:handover.receipt.eventId,replacementClientEventId:replacementKey}};
+  const authorization=await withSession(full,()=>resolveAuthorization());
+  if(!authorization.ok)throw Error('TEST_S1_REISSUE_AUTH_REQUIRED');
+  const plan={art:'herausgabe' as const,customerId:order.customerId,orderId:order.orderId,
+    sourceItemId:await originalFixture(order.customerId),antwortBis:'30.11.2026'};
+  // Inject only a TEST SQL failure on the real replacement insert so the existing cancellation remains pending.
+  const fault='test_s1_reissue_'+randomUUID().replaceAll('-','');
+  await sql.unsafe(`CREATE FUNCTION private.${fault}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.tenant_id='${tenant}' AND NEW.client_event_id='${replacementKey}'::uuid THEN PERFORM 1/0; END IF; RETURN NEW; END $$`);
+  await sql.unsafe(`CREATE TRIGGER ${fault} BEFORE INSERT ON public.invoices FOR EACH ROW EXECUTE FUNCTION private.${fault}()`);
+  try{
+    expect(await withSession(full,()=>cancelInvoiceAction(input))).toMatchObject({code:'UNAVAILABLE'});
+    const [current]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`;
+    expect(current?.order_number).toBeTruthy();
+    expect(await pruefeZusage(authorization.data,plan)).toEqual({
+      frei:false,grund:'neuausstellung',
+      text:`Die Rechnung zu ${current.order_number} stellen wir gerade neu aus. Wir melden uns zur Abholung bis 30.11.2026.`,
+      hinweis:'Im Ausgang: Abholung erst nach neuer Rechnung.',
+    });
+    expect(await pruefeZusage(authorization.data,{...plan,antwortBis:undefined})).toMatchObject({
+      frei:false,grund:'neuausstellung',text:expect.stringMatching(/Wir melden uns zur Abholung\.$/),
+    });
+  }finally{
+    await sql.unsafe(`DROP TRIGGER ${fault} ON public.invoices`);
+    await sql.unsafe(`DROP FUNCTION private.${fault}()`);
+  }
+  expect(await withSession(full,()=>cancelInvoiceAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK'});
+  expect(await pruefeZusage(authorization.data,plan)).toEqual({frei:true});
+});
+
 it('uses the same incoming invoice evidence to stop a second registration',async()=>{
   const {createCustomerAction}=await import('@/app/actions/customers.actions');
   const {prepareIntakeFileAction,finishIntakeFileAction,getIncomingInvoiceAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
@@ -473,10 +526,7 @@ it('reads the actual station and authorized material value without cancelling th
 });
 
 it('blocks unpaid prepayment and allows it after the real payment with or without amount visibility',async()=>{
-  // Reuse the company row from the planning case in a full file run.
-  await sql`UPDATE public.company_settings SET street='TEST Weg 1',zip='70176',city='Stuttgart',country='Deutschland',
-    iban='DE02120300000000202051',bic='BYLADEM1001',bank_name='TEST Bank',tax_id='DE123456789',
-    invoice_vat_rate_basis_points=1900,invoice_payment_term_days=14 WHERE tenant_id=${tenant}`;
+  await completeInvoiceSettingsFixture();
   const {customerId,orderId,invoice}=await readyInvoiceOrder('TEST S-1 Vorkasse');
   const {setPaymentModeAction,confirmPaymentAction}=await import('@/app/actions/payments.actions');
   expect(await withSession(full,()=>setPaymentModeAction({orderId,paymentMode:'vorkasse',expectedVersion:0,
