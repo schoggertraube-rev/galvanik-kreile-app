@@ -77,6 +77,14 @@ it('plans an interim reply and a workshop follow-up until the document is availa
   expect(planeMailWirkungen('A17',requested,{dokumentVorhanden:true})).toEqual(['vorhandenes_dokument_senden']);
 });
 
+it('keeps the shipment on its existing path while the customer has not agreed',()=>{
+  const requested=['auf_kundenantwort_warten','wiedervorlage_vor_annahmeschluss','versand_stoppen','abholtermin_vormerken'] as const;
+  expect(planeMailWirkungen('A21',requested,{versandAenderbar:true})).toEqual(['auf_kundenantwort_warten']);
+  expect(planeMailWirkungen('A21',requested,{wiedervorlageVorAnnahmeschluss:false})).toEqual(['auf_kundenantwort_warten']);
+  expect(planeMailWirkungen('A21',requested,{wiedervorlageVorAnnahmeschluss:true})).toEqual(
+    ['auf_kundenantwort_warten','wiedervorlage_vor_annahmeschluss']);
+});
+
 it.each([
   ['pickup','vorkasse','Abholung erst nach Zahlungseingang 10 €.' ],
   ['shipping','vorkasse','Versand nach Zahlung 10 €.' ],

@@ -48,6 +48,7 @@ export type MailWirkungsKontext={
   dokumentVorhanden?:boolean;
   antwortfristVorhanden?:boolean;
   versandAenderbar?:boolean;
+  wiedervorlageVorAnnahmeschluss?:boolean;
   zuordnungBestaetigt?:boolean;
   kundeOderLieferant?:boolean;
   neueMailadresseBestaetigt?:boolean;
@@ -69,6 +70,7 @@ export function erlaubteWirkung(anliegen:string,wirkung:string,kontext:MailWirku
     case 'aufgabe_werkstatt': return kontext.dokumentVorhanden===false;
     case 'versand_stoppen':
     case 'uebergabeart_aendern': return kontext.versandAenderbar===true;
+    case 'wiedervorlage_vor_annahmeschluss': return kontext.wiedervorlageVorAnnahmeschluss===true;
     case 'rechnung_im_belegzugang_ablegen':
     case 'lieferschein_an_bestellung_ablegen':
     case 'ab_an_bestellung_ablegen': return kontext.belegDublette===false;
