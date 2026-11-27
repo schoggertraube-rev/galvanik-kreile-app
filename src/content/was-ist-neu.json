@@ -1,6 +1,16 @@
 [
   {
     "datum": "2026-11-27",
+    "pr": 332,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Die Anmeldung bleibt auch auf flachen Bildschirmen vollständig im Sichtfeld.",
+      "Am Desktop wählst du deinen Namen mit der Tastatur. Am Handy meldest du dich mit deinem Kürzel oder der gemerkten Person an."
+    ]
+  },
+  {
+    "datum": "2026-11-27",
     "pr": 328,
     "seite": "heute",
     "ziel": "/",
