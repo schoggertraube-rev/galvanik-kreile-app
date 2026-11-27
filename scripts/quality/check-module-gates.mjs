@@ -497,6 +497,7 @@ export function validTodayProjectorComposition(source) {
     if(!ts.isImportDeclaration(statement)||!ts.isStringLiteral(statement.moduleSpecifier))continue;
     const facade=(resolveSpec(TODAY_PROJECTOR_FILE,statement.moduleSpecifier.text)??'').match(/^src\/modules\/([^/]+)\/server-public$/);
     if(!facade)continue;
+    if(facade[1]==='metallkurs')return false;
     const allowed=TODAY_PROJECTOR_READ_FACADES.get(facade[1])??new Set(),bindings=statement.importClause?.namedBindings;
     if(!bindings||!ts.isNamedImports(bindings)||statement.importClause.name)return false;
     if(bindings.elements.some(binding=>{
@@ -515,7 +516,9 @@ function validTodayTagComposition(source) {
     const facade=(resolveSpec(TODAY_TAG_COMPOSITION_FILE,statement.moduleSpecifier.text)??'').match(/^src\/modules\/([^/]+)\/server-public$/);
     if(!facade)continue;
     const clause=statement.importClause,bindings=clause?.namedBindings;
-    if(!TODAY_TAG_SOURCE_MODULES.has(facade[1])||!clause||clause.name||clause.isTypeOnly||
+    const allowed = TODAY_TAG_SOURCE_MODULES.has(facade[1]) ||
+      statement.moduleSpecifier.text === '@/modules/metallkurs/server-public';
+    if(!allowed||!clause||clause.name||clause.isTypeOnly||
         !bindings||!ts.isNamedImports(bindings)||bindings.elements.length!==1)return false;
     const [binding]=bindings.elements;
     if(binding.isTypeOnly||(binding.propertyName??binding.name).text!=='tagQuellen')return false;
@@ -523,7 +526,7 @@ function validTodayTagComposition(source) {
   return true;
 }
 
-function validWeekPlanCalendarReader(file, source) {
+function validNamedServerFacadeReader(file, source, facadePath, readerName) {
   const tree = todayReadCompositionTree(file, source);
   if (!tree) return false;
   const imports = tree.statements.filter(statement =>
@@ -533,17 +536,22 @@ function validWeekPlanCalendarReader(file, source) {
   const [statement] = imports;
   const clause = statement.importClause;
   const bindings = clause?.namedBindings;
-  if (statement.moduleSpecifier.text !== '@/modules/fundament/server-public' ||
+  if (statement.moduleSpecifier.text !== facadePath ||
       !clause || clause.name || clause.isTypeOnly ||
       !bindings || !ts.isNamedImports(bindings) || bindings.elements.length !== 1) return false;
   const [binding] = bindings.elements;
-  return !binding.isTypeOnly && (binding.propertyName ?? binding.name).text === 'readBetriebsruheInTransaction';
+  return !binding.isTypeOnly && (binding.propertyName ?? binding.name).text === readerName;
 }
 
 export function allowedServerFacadeConsumer(file, source) {
   if(file===TODAY_PROJECTOR_FILE)return validTodayProjectorComposition(source);
   if(file===TODAY_TAG_COMPOSITION_FILE)return validTodayTagComposition(source);
-  if(file==='src/lib/server/weekPlanPort.ts')return validWeekPlanCalendarReader(file, source);
+  if(file==='src/lib/server/weekPlanPort.ts')return validNamedServerFacadeReader(
+    file, source, '@/modules/fundament/server-public', 'readBetriebsruheInTransaction',
+  );
+  if(file==='src/modules/metallkurs/server/abruf.ts')return validNamedServerFacadeReader(
+    file, source, '@/modules/fundament/server-public', 'readMetallkursEinstellungenInTransaction',
+  );
   const taktJobsFile = 'src/modules/takt/jobs.ts';
   const taktRoutes = new Set([
     'src/app/api/takt/route.ts',
@@ -574,6 +582,7 @@ export function allowedServerFacadeConsumer(file, source) {
       'isFeatureEnabled', 'readTenantFeatures', 'readPackageSwitches',
       'readPackageSwitchValuesForTakt',
       'readErkennungsEinstellungenInTransaction',
+      'stelleTaktSystemakteurBereitInTransaction',
     ]);
     for (const statement of tree.statements) {
       if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -1026,6 +1035,7 @@ function tableRefs(source) {
     const afterReference = source.slice((m.index ?? 0) + m[0].length);
     refs.push({
       ref: `${m[1]}.${m[2]}`.toLowerCase(),
+      operation: m[0].split(/\s/, 1)[0].toLowerCase(),
       index: m.index,
       functionCall: /^(?:from|join)\b/i.test(m[0]) && /^\s*\(/.test(afterReference),
     });
@@ -1057,6 +1067,30 @@ function sqlDdlText(source) {
     start = ignored.lastIndex;
   }
   return result + source.slice(start);
+}
+
+// B6-K reads and appends the course originals in the existing stock journal.
+const metallkursTableAccess = new Map([
+  ['src/modules/metallkurs/server/lesen.ts', {'public.metallkurse': ['from']}],
+  ['src/modules/metallkurs/server/schreiben.ts', {
+    'public.metallkurse': ['from', 'into'],
+    'public.events': ['from', 'into', 'update'],
+  }],
+  ['src/modules/metallkurs/server/__tests__/lesen.integration.test.ts', {'public.metallkurse': ['into']}],
+  ['src/modules/metallkurs/server/__tests__/schreiben.integration.test.ts', {'public.metallkurse': ['from']}],
+]);
+
+// The only update allowed here finishes the matching pending attempt in one transaction.
+const metallkursAbrufabschlussHash = '61eb849ee0c5d4ac6ff208aaff07583b6bccd1ffe5092900258391b20d79c205';
+
+function allowedMetallkursTableRef(file, source, reference) {
+  if (reference.functionCall || !metallkursTableAccess.get(file)?.[reference.ref]?.includes(reference.operation)) return false;
+  if (reference.operation !== 'update') return true;
+  if (!/\bconst\s+abrufart\s*=\s*(['"])metallkurs\.abruf\1\s*;/u.test(source)) return false;
+  const end = source.indexOf('`', reference.index);
+  if (end === -1) return false;
+  const statement = source.slice(reference.index, end).replace(/\s+/g, ' ').trim();
+  return createHash('sha256').update(statement).digest('hex') === metallkursAbrufabschlussHash;
 }
 
 function gateData(root, findings, manifests) {
@@ -1094,6 +1128,7 @@ function gateData(root, findings, manifests) {
       for (const m of tableRefs(source)) {
         const ref = m.ref;
         if (owned.has(ref) && !m.functionCall) continue;
+        if (allowedMetallkursTableRef(file, source, m)) continue;
         if (/^public\.v_/.test(ref)) {
           if (!declaredPublicViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
           continue;
