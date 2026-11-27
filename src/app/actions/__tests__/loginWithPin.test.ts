@@ -19,8 +19,9 @@ function handleFor(userId: string): string {
   return `synthetic-handle-${userId}`;
 }
 
-vi.mock("bcryptjs", () => ({
-  default: { compare: ports.bcryptCompare, hash: ports.bcryptHash },
+vi.mock('@/lib/server/pinHash', () => ({
+  comparePinHash: ports.bcryptCompare,
+  hashPin: ports.bcryptHash,
 }));
 vi.mock("@/lib/server/pinRateLimit", () => ({ runPinAttempt: ports.runPinAttempt }));
 vi.mock("@/lib/server/appSession", () => ({

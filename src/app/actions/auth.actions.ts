@@ -4,7 +4,7 @@ import {logTechnical} from '@/modules/logging/server-public';
 import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
 import {getAuthBootstrapState,readCacheLoginScope,type AuthBootstrapState} from '@/lib/server/authBootstrap';
 
-import bcrypt from "bcryptjs";
+import { comparePinHash, hashPin } from '@/lib/server/pinHash';
 import {withPageReadPhase} from '@/db/readBudget';
 import {PIN_LOGIN_COPY} from "@/ui/situationCatalog";
 import { offlinePartition } from "@/lib/server/offlinePartition";
@@ -141,12 +141,12 @@ async function verifyAndMigratePin(
   if (!storedHash) return false;
 
   if (storedHash.startsWith("$2")) {
-    return withPageReadPhase('auth.bcrypt',()=>bcrypt.compare(pin, storedHash));
+    return withPageReadPhase('auth.bcrypt',()=>comparePinHash(pin, storedHash));
   }
 
   if (storedHash !== pin) return false;
 
-  const hashed = await withPageReadPhase('auth.bcrypt',()=>bcrypt.hash(pin, 12));
+  const hashed = await withPageReadPhase('auth.bcrypt',()=>hashPin(pin, 12));
   const updatedAt = new Date();
   await tx
     .update(appUsers)
