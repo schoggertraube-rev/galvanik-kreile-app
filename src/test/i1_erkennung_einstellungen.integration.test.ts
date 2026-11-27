@@ -34,9 +34,9 @@ it("reads stored company models and threshold, with the existing default layout"
   });
 });
 
-it("stores the unchanged OCR response, both pages and one stable position when reread", async () => {
+it.each(["TEST Rechnung", null])("stores the OCR response, pages and position when the read text is %s", async text => {
   const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
-    modelId: "prebuilt-layout", content: "TEST Rechnung", pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
+    modelId: "prebuilt-layout", content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
     keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" }, confidence: 0.8 }],
     tables: [{ cells: [
       { rowIndex: 0, columnIndex: 0, kind: "columnHeader", content: "Artikelnummer" },
@@ -58,11 +58,12 @@ it("stores the unchanged OCR response, both pages and one stable position when r
   });
 
   try {
-    const bytes = new Uint8Array(Buffer.from(
+    const image = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3l8AAAAASUVORK5CYII=", "base64",
-    ));
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    );
     const fileId = randomUUID();
+    const bytes = new Uint8Array(Buffer.concat([image, Buffer.from(fileId)]));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
     const grant = await withSession(full, () => prepareIntakeFileAction({
       itemId: randomUUID(), fileId, name: "TEST-i1.png", mime: "image/png", bytes: bytes.length, sha256,
     }));
@@ -72,10 +73,17 @@ it("stores the unchanged OCR response, both pages and one stable position when r
       grant.upload.path, grant.upload.token, bytes, { contentType: "image/png" },
     );
     expect(saved.error).toBeNull();
+    // A previously read TEST file before the canonical raw archive existed.
+    await sql`UPDATE public.intake_file SET erkannter_text='TEST früherer Volltext'
+      WHERE tenant_id=${tenant} AND id=${fileId}`;
 
-    expect(await withSession(full, () => finishIntakeFileAction(fileId))).toMatchObject({ code: "OK" });
+    const result = await withSession(full, () => finishIntakeFileAction(fileId));
+    if (result.code !== "OK") throw Error("TEST_I1_RECOGNITION_FAILED");
+    if (text !== null) expect(result.capture.recognition?.text).toBe(text);
+    expect(result.capture.recognition?.text).not.toContain("TEST früherer Volltext");
     const retry = { fileId, clientEventId: randomUUID() };
-    expect(await withSession(full, () => retryIntakeRecognitionAction(retry))).toMatchObject({ code: "OK" });
+    const reread = await withSession(full, () => retryIntakeRecognitionAction(retry));
+    expect(reread).toMatchObject({ code: "OK", capture: { recognition: { text: result.capture.recognition?.text } } });
     expect(await withSession(full, () => retryIntakeRecognitionAction(retry))).toMatchObject({ code: "OK" });
     expect(providerResults).toBe(2);
 
@@ -83,11 +91,13 @@ it("stores the unchanged OCR response, both pages and one stable position when r
       WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
     expect(file).toMatchObject({
       erkennung_roh_pfad: `${tenant}/${sha256}.erkennung.prebuilt-layout.json`,
-      erkannter_text: "TEST Rechnung", seiten: 2,
+      erkannter_text: text, seiten: 2,
     });
     const original = await storage.from("scans").download(file.erkennung_roh_pfad);
     expect(original.error).toBeNull();
     expect(await original.data!.text()).toBe(rawReply);
+    expect(await sql`SELECT id FROM public.intake_suggestion
+      WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='DOCUMENT_TEXT'`).toEqual([]);
     const positions = await sql`SELECT wert,modell,sicherheit_wert::float8 AS confidence,status FROM public.intake_suggestion
       WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position'`;
     expect(positions).toHaveLength(2);

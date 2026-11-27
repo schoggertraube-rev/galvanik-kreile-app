@@ -52,8 +52,10 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot|Authoriz
     if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,itemId))return failure("FORBIDDEN","Original der Fortsetzung ist für diesen Login nicht freigegeben.");
     if (ctx?.customerId && row.kunde_id !== ctx.customerId || ctx?.orderId && row.vorgang_id !== ctx.orderId) return failure("FORBIDDEN", "Eingang gehört nicht zu diesem Kontext.");
     if(row.importFailure&&!pendingOriginalImport&&!invoiceOnly)return failure("UNAVAILABLE",MAIL_IMPORT_COPY.detail(row.importFailure));
-    const files = await tx.execute<{ id: string; name: string; mime: string; bytes: string; readable: boolean; status: string; secured: boolean; errorCode:string|null; captureOrigin:"warenfoto"|"dokument" }>(sql`
+    const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||readAuth.canReadArea('mails'));
+    const files = await tx.execute<{ id: string; name: string; mime: string; bytes: string; readable: boolean; status: string; secured: boolean; errorCode:string|null; captureOrigin:"warenfoto"|"dokument"; recognizedText: string | null }>(sql`
       SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,file.lesbar AS readable,file.erkennung_status AS status,file.aufnahme_herkunft AS "captureOrigin",
+        CASE WHEN ${contentAllowed} THEN file.erkannter_text END AS "recognizedText",
         EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text) AS secured,
         (SELECT event.nachher->>'code' FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
           AND event.art='erkannt' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1) AS "errorCode"
@@ -66,7 +68,10 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot|Authoriz
       feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt"
       FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid
         AND feld<>'position' AND (${!invoiceOnly} OR feld LIKE 'rechnung.%') ORDER BY id`);
-    const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||readAuth.canReadArea('mails'));
+    const documentsWithText = new Set(files.filter(file => file.recognizedText !== null).map(file => file.id));
+    const displaySuggestions = suggestions.filter(suggestion => suggestion.field !== "DOCUMENT_TEXT"
+      || suggestion.fileId === null || !documentsWithText.has(suggestion.fileId));
+    const documentTexts = files.flatMap(file => file.recognizedText === null ? [] : [file.recognizedText]);
     const continuations = await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${itemId}::uuid ORDER BY erstellt_am,id`);
     const sourceText = row.fortsetzung_von ? await tx.execute<{text:string|null;source_id:string}>(sql`SELECT original.nachher->>'text' AS text,created.nachher->>'textSourceId' AS source_id
       FROM public.intake_event created JOIN public.intake_event original ON original.tenant_id=created.tenant_id
@@ -77,8 +82,14 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot|Authoriz
     const capture: IntakeCapture = { id: row.id, version: row.version, text: contentAllowed?(row.fortsetzung_von?row.text??sourceText[0]?.text??null:row.text):null, customerId: row.kunde_id,
       continuation:{sourceId:row.fortsetzung_von,childIds:continuations.map(value=>value.id),textSourceId:contentAllowed?sourceText[0]?.source_id??null:null},
       orderId: invoiceOnly?null:row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: invoiceOnly?row.anliegen.filter(value=>value==='rechnung'):contentAllowed?row.anliegen:[],dismissedConcerns:contentAllowed?row.anliegen_abgewaehlt:[],openConcerns:contentAllowed?row.anliegen_offen:[],
-      files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions:contentAllowed||invoiceOnly?suggestions:[] };
-    capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition(capture);
+      files: files.map(({ recognizedText: _recognizedText, ...file }) => ({ ...file, bytes: Number(file.bytes) })),
+      suggestions:contentAllowed||invoiceOnly?displaySuggestions:[] };
+    const listText = capture.text;
+    const mailOriginalContainsListText = listText !== null && files.some(file =>
+      file.mime === "message/rfc822" && file.recognizedText?.startsWith(listText));
+    capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition({
+      ...capture, text: mailOriginalContainsListText ? null : listText, documentTexts,
+    });
     if (!invoiceOnly && readAuth.canReadArea('auftraege') && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
       capture.expectedOrders=await readExpectedPackageOrders(tx,auth,row.kunde_id);
     }

@@ -6,6 +6,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {sql,full,withSession,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {createAdminClient} from '@/lib/supabase/admin';
+import {getIntakeCaptureAction} from '@/app/actions/eingang.actions';
 import {importOutlookMailAction} from '@/app/actions/communications.actions';
 
 it('I1-a preserves the complete text and bytes of a long Outlook original on retry',async()=>{
@@ -42,6 +43,8 @@ it('I1-a preserves the complete text and bytes of a long Outlook original on ret
   FROM public.intake_file file JOIN public.intake_item item ON item.tenant_id=file.tenant_id AND item.id=file.item_id
   WHERE item.tenant_id=${tenant} AND item.id=${imported.itemId}::uuid AND file.mime='message/rfc822'`;
  expect(file).toMatchObject({text:first20k,erkannter_text:text});
+ expect(await withSession(full,()=>getIntakeCaptureAction(imported.itemId)))
+  .toMatchObject({code:'OK',capture:{text:first20k,recognition:{text}}});
  const stored=await createAdminClient().storage.from('scans').download(file.speicherpfad);
  expect(stored.error).toBeNull();
  expect(new Uint8Array(await stored.data!.arrayBuffer())).toEqual(original);

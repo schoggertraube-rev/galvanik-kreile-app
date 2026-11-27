@@ -13,6 +13,7 @@ type CaptureEvidence = {
   text: string | null;
   concerns?: readonly string[];
   suggestions?: ReadonlyArray<{ field: string; value: unknown; status?: string }>;
+  documentTexts?: readonly string[];
 };
 
 export function concernForCaptureKind(kind: DocumentCaptureKind): IntakeSelectableConcern | null {
@@ -21,8 +22,9 @@ export function concernForCaptureKind(kind: DocumentCaptureKind): IntakeSelectab
 
 export function recognizeCaptureDocument(capture: CaptureEvidence): { kind: DocumentCaptureKind; text: string; source?: "hand" } {
   const suggestions = (capture.suggestions ?? []).filter(value => value.status !== "verworfen");
-  const documentText = suggestions.filter(value => value.field === "DOCUMENT_TEXT" && typeof value.value === "string")
-    .map(value => String(value.value)).join("\n");
+  const legacyTexts = suggestions.filter(value => value.field === "DOCUMENT_TEXT" && typeof value.value === "string")
+    .map(value => String(value.value));
+  const documentText = [...(capture.documentTexts ?? []), ...legacyTexts].join("\n");
   const fields = new Set(suggestions.map(value => value.field));
   const text = [capture.text, documentText || suggestions.filter(value => value.field !== "art" && typeof value.value === "string").map(value => String(value.value)).join("\n")]
     .filter(Boolean).join("\n").trim();

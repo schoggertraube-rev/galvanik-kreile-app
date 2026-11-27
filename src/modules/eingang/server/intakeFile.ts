@@ -188,11 +188,14 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       const pages = ocr?.original?.pages ?? null;
       const model = ocr?.original?.model ?? null;
       await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${successful ? "fertig" : "fehler"},
-          erkannter_text=coalesce(${documentText},erkannter_text), seiten=coalesce(${pages},seiten),
+          erkannter_text=CASE WHEN ${ocr !== null} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
           erkennung_roh_pfad=coalesce(${rawPath},erkennung_roh_pfad)
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
       if(successful)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
-      const suggestions=xmlResult?.code==='OK'?xmlResult.suggestions:ocr?[...ocr.data.suggestions,...recognizeInvoiceFields(ocr.data.suggestions)]:[];
+      const suggestions=xmlResult?.code==='OK'?xmlResult.suggestions:ocr?[
+        ...ocr.data.suggestions.filter(suggestion => suggestion.field !== "DOCUMENT_TEXT"),
+        ...recognizeInvoiceFields(ocr.data.suggestions),
+      ]:[];
       const existingPositions = positionRows.length === 0 ? [] : await tx.execute<{
         fileId: string; positionKey: string; tableIndex: string | null; rowIndex: string | null;
       }>(sql`SELECT file_id::text AS "fileId", wert->>'positionKey' AS "positionKey",
