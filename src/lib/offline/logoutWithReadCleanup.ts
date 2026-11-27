@@ -13,11 +13,17 @@ const listeners=new Set<()=>void>();
 export const subscribeLogoutNotice=(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};};
 export const readLogoutNotice=()=>notice;
 /** The existing action ends the session first; local storage is never authority. */
-export async function logoutWithReadCleanup(){
- const scope=document.documentElement.dataset.offlineScope??null;
+export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual'){
+ const readState=document.documentElement.dataset;
+ const scope=readState.offlineScope??null;
  // PL11:25/13:29: finish delayed commands with the original session before
  // ending it. Unavailable network/storage must not consume originals or stop logout.
- if(scope&&readServerReachability())try{await syncOriginals(scope,()=>document.documentElement.dataset.offlineScope??null,{flushDelayed:true,workshopOnly:true});}
+ if(reason==='inactivity'){
+  // The expired session cannot send a command. The next valid login can resume its queue.
+  readState.authStatus='error';
+  delete readState.offlineScope;
+  delete readState.offlineLoginScope;
+ }else if(scope&&readServerReachability())try{await syncOriginals(scope,()=>readState.offlineScope??null,{flushDelayed:true,workshopOnly:true});}
  catch{reportProtocolClientError('OFFLINE_LOGOUT_FLUSH_FAILED');}
  try{removeCacheScopeMarker();}catch{reportProtocolClientError('OFFLINE_CACHE_MARKER_REVOKE_FAILED');}
  // Start the server action before touching potentially broken local storage.
@@ -26,9 +32,9 @@ export async function logoutWithReadCleanup(){
  try{result=await logout();}catch(error){failure=error;}
  // A lost server response is not a confirmed logout. Still fence local reads
  // and retain originals; do not publish the successful-logout wording.
- document.documentElement.dataset.authStatus=result?'unauthenticated':'error';
- delete document.documentElement.dataset.offlineScope;
- delete document.documentElement.dataset.offlineLoginScope;
+ readState.authStatus=result?'unauthenticated':'error';
+ delete readState.offlineScope;
+ delete readState.offlineLoginScope;
  let timer:ReturnType<typeof setTimeout>|undefined;
  const cleanup=await Promise.race([
   clearLoggedOutReadState(scope),

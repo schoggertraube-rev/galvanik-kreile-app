@@ -44,7 +44,7 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
       if (disposed) return;
       setExpired(true);
       try {
-        await logoutWithReadCleanup();
+        await logoutWithReadCleanup('inactivity');
       } catch {
         console.error('[APP_SESSION_INACTIVITY_LOGOUT_FAILED]');
       } finally {

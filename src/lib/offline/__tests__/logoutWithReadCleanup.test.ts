@@ -19,6 +19,24 @@ it('flushes delayed originals under the current session before logout, without k
  ports.logout.mockResolvedValue({ok:true});ports.cleanup.mockResolvedValue({cacheCleared:true,pendingCount:0});
  await logoutWithReadCleanup();expect(ports.sync).toHaveBeenCalledOnce();expect(ports.logout).toHaveBeenCalledOnce();
 });
+it('fences the expired session immediately and keeps the original queue for the next valid login',async()=>{
+ const scope='d'.repeat(64);
+ const state=document.documentElement.dataset;
+ state.authStatus='authenticated';state.offlineScope=scope;state.offlineLoginScope='e'.repeat(64);
+ ports.logout.mockImplementation(async()=>{
+  expect(state.authStatus).toBe('error');
+  expect(state.offlineScope).toBeUndefined();
+  expect(state.offlineLoginScope).toBeUndefined();
+  return {ok:true};
+ });
+ ports.cleanup.mockResolvedValue({cacheCleared:true,pendingCount:2});
+ await logoutWithReadCleanup('inactivity');
+ expect(ports.sync).not.toHaveBeenCalled();
+ expect(ports.logout).toHaveBeenCalledOnce();
+ expect(ports.cleanup).toHaveBeenCalledWith(scope);
+ expect(state.authStatus).toBe('unauthenticated');
+ expect(readLogoutNotice()).toContain('sobald du wieder angemeldet und online bist');
+});
 it('a failed flush retains the pending notice and still allows logout',async()=>{
  document.documentElement.dataset.offlineScope='c'.repeat(64);ports.sync.mockRejectedValue(Error('TEST_NETWORK_LOST'));
  ports.logout.mockResolvedValue({ok:true});ports.cleanup.mockResolvedValue({cacheCleared:true,pendingCount:1});
