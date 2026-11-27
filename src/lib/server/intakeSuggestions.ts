@@ -11,6 +11,7 @@ import type {
   IntakePriceCase,
   IntakePriceSuggestion,
   IntakeSuggestionPositionInput,
+  IntakeSuggestionReadOptions,
   IntakeSuggestions,
   IntakeSuggestionsInput,
   IntakeTermSuggestion,
@@ -120,6 +121,7 @@ export function choosePriceSuggestion(
   customerId: string | null,
   history: PriceCandidate[],
   catalog: CatalogRow | null,
+  documentedOnly = false,
 ): IntakePriceSuggestion | null {
   const equal = customerId
     ? history.filter((candidate) => candidate.customerId === customerId && sameSurfaceAndUnit(position, candidate) && samePart(position, candidate))
@@ -141,7 +143,7 @@ export function choosePriceSuggestion(
     && (position.catalogServiceId
       ? position.catalogServiceId === candidate.catalogServiceId
       : candidate.catalogServiceId === null && sharedWord(position.name, candidate.name)));
-  if (similar.length >= 3) {
+  if (!documentedOnly && similar.length >= 3) {
     const prices = similar.map((candidate) => candidate.unitPriceCents).sort((a, b) => a - b);
     const middle = Math.floor(prices.length / 2);
     const unitPriceCents = prices.length % 2 === 1 ? prices[middle] : Math.round((prices[middle - 1] + prices[middle]) / 2);
@@ -265,6 +267,7 @@ export async function readIntakeSuggestions(
     versandpufferArbeitstage: number;
     terminKapazitaet: { tagesleistungEur: number | string; passtProzent: number; knappProzent: number; vorrangProzent: number } | null;
   }>,
+  options?: IntakeSuggestionReadOptions,
 ): Promise<IntakeSuggestions> {
   if (!validInput(input)) throw new Error("INTAKE_SUGGESTION_INPUT_INVALID");
   const canReadMoney = hasAuthorizationArea(authorization,"preise");
@@ -355,6 +358,7 @@ export async function readIntakeSuggestions(
               input.customerId,
               history,
               position.catalogServiceId ? catalogById.get(position.catalogServiceId) ?? null : null,
+              options?.documentedPricesOnly,
             );
             return suggestion ? [suggestion] : [];
           })

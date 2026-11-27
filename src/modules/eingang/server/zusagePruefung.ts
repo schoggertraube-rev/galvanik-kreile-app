@@ -2,7 +2,7 @@ import 'server-only';
 
 import {ACCESS_AREA_LABELS,ROLE_LABELS,canChangeOrderHandover,hasAuthorizationArea,hasLagerCapability,type AccessArea} from '@/lib/auth/authorizationContract';
 import {formatEuro} from '@/lib/domain/formatEuro';
-import type {IntakeSuggestionsInput,IntakeTermSuggestion,IntakePriceSuggestion} from '@/lib/intakeSuggestionsContract';
+import type {IntakeSuggestionsInput,IntakeTermSuggestion,IntakePriceSuggestion,IntakeSuggestionReadOptions} from '@/lib/intakeSuggestionsContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {pruefeHerausgabe,type ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
 import {readLiveOrderCard} from '@/lib/server/orderCardRead';
@@ -37,7 +37,7 @@ export type ZusageInput={
 };
 export type {ZusageGrund,ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
 export type ZusageLeser={
-  termin:(auth:AuthorizationSnapshot,input:IntakeSuggestionsInput)=>Promise<{term:IntakeTermSuggestion|null;prices?:IntakePriceSuggestion[]}>;
+  termin:(auth:AuthorizationSnapshot,input:IntakeSuggestionsInput,options?:IntakeSuggestionReadOptions)=>Promise<{term:IntakeTermSuggestion|null;prices?:IntakePriceSuggestion[]}>;
   kv:(auth:AuthorizationSnapshot,quoteId:string)=>Promise<QuoteReadback|null>;
   verbrauch:(auth:AuthorizationSnapshot,orderId:string)=>Promise<readonly Materialverbrauch[]>;
   kunde:(auth:AuthorizationSnapshot,customerId:string)=>Promise<{id:string;email:string|null;billingEmail:string|null;phone:string|null}|null>;
@@ -216,16 +216,7 @@ function pruefeStammdaten(original:NonNullable<Awaited<ReturnType<typeof readInc
   return {frei:false,grund:'stammdaten',text,ausweg:{befehl:'saveIntakeTaskAction',text}};
 }
 
-/** Mail uses the established payment and goods-out evidence before making a promise. */
-export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
-  const recht=fehlendesRecht(auth,input.art);
-  if(recht)return {frei:false,grund:recht==='preise'?'preisrecht':'recht',
-    text:MAIL_PROMISE_COPY.roleRight(ROLE_LABELS[auth.role],ACCESS_AREA_LABELS[recht].text)};
-  if(input.anliegen!==undefined||input.wirkung!==undefined){
-    if(typeof input.anliegen!=='string'||typeof input.wirkung!=='string'||!erlaubteWirkung(
-      input.anliegen,input.wirkung,{preisrecht:hasAuthorizationArea(auth,'preise')},
-    ))return unavailable;
-  }
+async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
   if(input.art==='preis_im_text')return {frei:true};
   if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unknownChannel;
   try{
@@ -245,8 +236,8 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
     if(input.art==='zahlungsavis')return {frei:false,grund:'zahlungsavis',text:MAIL_PROMISE_COPY.paymentNotice};
     if(input.art==='preisquelle'){
       const request=await readSuggestionInput(auth,input,leser.kv);
-      const prices=request?(await leser.termin(auth,request)).prices:undefined;
-      return request&&prices&&request.positions.every(position=>prices.some(price=>price.positionKey===position.key))
+      const prices=request?(await leser.termin(auth,request,{documentedPricesOnly:true})).prices:undefined;
+      return request&&prices&&request.positions.every(position=>prices.some(price=>price.positionKey===position.key&&(price.source==='gleich'||price.source==='katalog')))
         ?{frei:true}:{frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unknownPriceSource};
     }
     if(input.art==='herausgabe'||input.art==='abholer'){
@@ -263,4 +254,20 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
     if(input.art==='abwesenheit')return unknownAbsence;
     return input.art==='termin'?unknownTerm:input.art==='auftrag_aus_kv'?unknownQuote:unavailable;
   }
+}
+
+/** An approved effect needs both its business evidence and its permitted mail action. */
+export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
+  const recht=fehlendesRecht(auth,input.art);
+  if(recht)return {frei:false,grund:recht==='preise'?'preisrecht':'recht',
+    text:MAIL_PROMISE_COPY.roleRight(ROLE_LABELS[auth.role],ACCESS_AREA_LABELS[recht].text)};
+  const {anliegen,wirkung}=input;
+  if(anliegen===undefined&&wirkung===undefined)return pruefeFachZusage(auth,input,leser);
+  if(typeof anliegen!=='string'||typeof wirkung!=='string')return unavailable;
+  const ergebnis=await pruefeFachZusage(auth,input,leser);
+  if(!ergebnis.frei)return ergebnis;
+  return erlaubteWirkung(anliegen,wirkung,{
+    preisrecht:hasAuthorizationArea(auth,'preise'),
+    ...(input.art==='preisquelle'?{preisquelle:true}:{}),
+  })?ergebnis:unavailable;
 }

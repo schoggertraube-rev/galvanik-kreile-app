@@ -21,7 +21,7 @@ import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 import {pruefeZusage as zusage,type ZusageLeser} from '@/modules/eingang/server-public';
 
 const leser:ZusageLeser={
-  termin:(auth,input)=>readIntakeSuggestions(auth,input,readBetriebsruheInTransaction),
+  termin:(auth,input,options)=>readIntakeSuggestions(auth,input,readBetriebsruheInTransaction,options),
   kv:async(auth,quoteId)=>{
     const result=await readQuoteCommand(quoteOperationContext(auth),{quoteId});
     return result.code==='OK'?result.quote:null;
@@ -137,6 +137,12 @@ it('uses the actual order and planning sources to return the earliest possible a
   const request={art:'termin' as const,termin:wish,positionen:[{...position,key:created.receipt.items[0].id}]};
   expect(await pruefeZusage(authorized.data,request)).toMatchObject({frei:false,grund:'termin'});
   expect(await pruefeZusage(authorized.data,{...request,positionen:[]})).toMatchObject({frei:false,grund:'unbekannt_termin'});
+  const pricedPlan={...input,art:'preisquelle' as const,anliegen:'A4',wirkung:'auftrag_mit_preisquelle_anlegen'};
+  expect(await pruefeZusage(authorized.data,pricedPlan)).toEqual({frei:true});
+  expect(await pruefeZusage(authorized.data,{...pricedPlan,orderId:undefined,positionen:[{
+    ...position,key:randomUUID(),name:`TEST Preis fehlt ${randomUUID()}`,catalogServiceId:null,unitPriceCents:null,
+  }]})).toEqual({frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unknownPriceSource});
+  expect(await pruefeZusage(authorized.data,{...pricedPlan,art:'preis_im_text'})).toMatchObject({frei:false});
   // Simulate a failed dependency at the planning reader boundary only.
   const unavailable={...leser,termin:async()=>{throw Error('TEST_S1_PLANNING_READ_FAILED');}};
   expect(await zusage(authorized.data,input,unavailable)).toMatchObject({frei:false,grund:'unbekannt_termin'});
