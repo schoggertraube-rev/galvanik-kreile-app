@@ -113,7 +113,9 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       });
       expect(await orderReceipts()).toEqual([]);
       expect(await logout({ sessionScope: scope })).toMatchObject({ ok: true });
-      expect(await readAppSession()).toEqual({ ok: false, reason: 'NO_COOKIE' });
+      expect(store.get(COOKIE_NAME)?.value).toBe(expiredToken);
+      expect(await getAuthorizationSnapshotAction()).toMatchObject({ ok: false });
+      expect(await getIntakeDraftsAction()).toMatchObject({ code: 'UNAUTHENTICATED' });
 
       await withRequest('', async () => {
         expect(await loginWithPin(handle, pin, 'tablet')).toMatchObject({ok:true});

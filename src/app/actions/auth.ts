@@ -118,16 +118,17 @@ export async function logout(input?: { sessionScope: string | undefined }): Prom
   }
   let remoteSignOut: "success" | "failed" = "success";
   try {
-    const supabase = await createClient();
+    // A response from the old session can arrive after a new login in another tab.
+    const supabase = input !== undefined ? await createClient({ writeCookies: false }) : await createClient();
     const result = input !== undefined
       ? await supabase.auth.signOut({ scope: 'local' })
       : await supabase.auth.signOut();
     if (result.error) return { ok: true, remoteSignOut: "failed" };
   } catch {
     remoteSignOut = "failed";
-    console.warn("Supabase signOut failed; app session cookie will still be cleared.");
+    console.warn("Supabase signOut failed.");
   } finally {
-    await clearAppSession();
+    if (input === undefined) await clearAppSession();
   }
   return { ok: true, remoteSignOut };
 }
