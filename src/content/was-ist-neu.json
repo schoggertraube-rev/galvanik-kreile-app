@@ -1,6 +1,15 @@
 [
   {
     "datum": "2026-11-27",
+    "pr": 336,
+    "seite": "rechnungen",
+    "ziel": "/buchhaltung/rechnungen",
+    "punkte": [
+      "Die beim Ausstellen hinterlegte Zahlungsart steht in der E-Rechnung. Beim Nachdruck erhältst du dasselbe Original."
+    ]
+  },
+  {
+    "datum": "2026-11-27",
     "pr": 332,
     "seite": "heute",
     "ziel": "/",

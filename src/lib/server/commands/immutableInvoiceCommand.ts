@@ -5,7 +5,7 @@ import {resolveInvoicePaymentTerms,parseInvoicePaymentTerms,InvoicePaymentTermsS
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {isCancelInvoiceInput as isValidCancelInput,type CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 export type {CancelInvoiceInput} from '@/lib/domain/invoiceIntentContract';
-import {isCreateInvoiceInput as isValidInput,isInvoiceShippingCostsInput as validShippingCosts,type CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
+import {isCreateInvoiceInput as isValidInput,isInvoiceShippingCostsInput as validShippingCosts,isInvoicePaymentMethodAtIssue,type CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 export type {CreateInvoiceInput} from '@/lib/domain/invoiceIntentContract';
 import type {InvoiceVatGroup,InvoiceVatReader} from '@/modules/accounting/public';
 import {readInvoiceVat} from '@/modules/accounting/public';
@@ -618,6 +618,7 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string|null}, re
     "seller", "serviceDate", "totals",
     ...(Object.hasOwn(value,"terms")?["terms"]:[]),
     ...(Object.hasOwn(value,"collection")?["collection"]:[]),
+    ...(Object.hasOwn(value,"paymentMethodAtIssue")?["paymentMethodAtIssue"]:[]),
   ])) throw new Error("INVOICE_SNAPSHOT_SHAPE_INVALID");
   if ((value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== 3) || !plainObject(value.seller) || !plainObject(value.customer)
     || !(plainObject(value.order)||(value.schemaVersion===3&&value.order===null&&Object.hasOwn(value,"collection"))) || !plainObject(value.totals) || !Array.isArray(value.lines)) {
@@ -632,6 +633,10 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string|null}, re
     ...(value.schemaVersion !== 1 ? ["vatId"] : []),
   ])) throw new Error("INVOICE_SNAPSHOT_CUSTOMER_SHAPE_INVALID");
   const collection=Object.hasOwn(value,"collection")?parseInvoiceCollectionOriginal(value.collection):undefined;
+  const paymentMethodAtIssue=value.paymentMethodAtIssue;
+  if(Object.hasOwn(value,"paymentMethodAtIssue")
+    && (value.schemaVersion!==3||collection!==undefined||!isInvoicePaymentMethodAtIssue(paymentMethodAtIssue)))
+    throw Error('INVOICE_SNAPSHOT_PAYMENT_METHOD_INVALID');
   if(collection&&(value.schemaVersion!==3||value.order!==null||value.serviceDate!==null||invoice.order_id!==null))throw Error("INVOICE_COLLECTION_ORIGINAL_SOURCE_INVALID");
   if (!collection&&(!plainObject(value.order)||!exactKeys(value.order, ["freezeId", "orderId", "orderNumber", "orderVersion", "title"]))) {
     throw new Error("INVOICE_SNAPSHOT_ORDER_SHAPE_INVALID");
@@ -702,6 +707,7 @@ function parseStoredSnapshot(value: unknown, invoice: {order_id:string|null}, re
     serviceDate,
     issuedAt,
     paymentTermDays,
+    ...(isInvoicePaymentMethodAtIssue(paymentMethodAtIssue)?{paymentMethodAtIssue}:{}),
     ...(Object.hasOwn(value,"terms")?{terms:parseInvoicePaymentTerms(value.terms,paymentTermDays)}:{}),
   } as ImmutableInvoiceSnapshot;
 }
@@ -1146,6 +1152,7 @@ export function mapInvoiceCancellationReceipt(
 function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput, row:ReceiptRow): boolean {
   return receipt.orderId === input.orderId
     && receipt.orderVersion === input.expectedVersion
+    && plainObject(row.snapshot) && row.snapshot.paymentMethodAtIssue === input.paymentMethodAtIssue
     && (input.shippingCosts===undefined
       ?row.belegart==='auftrag'&&row.ursprung_rechnung_id===null&&row.shipping_costs_intent===null
       :row.belegart==='versandkosten'&&row.ursprung_rechnung_id===input.shippingCosts.invoiceId
@@ -2073,6 +2080,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
   }
   const invoiceOrderId=order===null?null:order.id,invoiceOrderVersion=order===null?null:order.version;
   const shippingCosts='shippingCosts'in input?input.shippingCosts:undefined;
+  const paymentMethodAtIssue='paymentMethodAtIssue'in input?input.paymentMethodAtIssue:undefined;
   assertInvoiceElectronicFields({...content,...originalSource,seller:content.seller,paymentTermDays:terms.paymentTermDays});
   assertInvoiceContentGlyphs(content); // C15/C12: before the number and every original/PDF write.
   const {tenantId,userId:actorId}=auth;
@@ -2118,6 +2126,7 @@ async function persistPreparedInvoice(tx:PrivilegedTenantTransaction,auth:Author
     totals: content.totals,
     issuedAt: issuedAtIso,
     paymentTermDays,
+    ...(paymentMethodAtIssue===undefined?{}:{paymentMethodAtIssue}),
     ...(terms.frozenInvoiceTerms?{terms:terms.frozenInvoiceTerms}:{}),
   };
 
