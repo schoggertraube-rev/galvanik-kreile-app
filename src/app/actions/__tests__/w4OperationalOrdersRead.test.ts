@@ -175,7 +175,6 @@ function directExecutedSqlTemplates(sourceFile: ts.SourceFile, root: ts.Node) {
 describe("W4 operational order read actions", () => {
   beforeAll(async () => {
     await import("../orders.actions");
-    await import("@/modules/quotes/server-public");
     await import("@/lib/server/orderCardRead");
   }, 30_000);
 
