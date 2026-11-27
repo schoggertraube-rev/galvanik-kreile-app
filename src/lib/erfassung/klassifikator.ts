@@ -1,3 +1,5 @@
+import { foldSearchText } from '@/lib/domain/searchText';
+
 export function bildeSchluessel(klasse: string, oberflaeche: string): string {
   return normalizeString(klasse) + '|' + normalizeString(oberflaeche);
 }
@@ -15,11 +17,11 @@ export function klassifiziereTeil(
   teilName: string, 
   klassifikatorListe: { klasse: string; keywords: string[] }[]
 ): string {
-  const name = normalizeString(teilName);
+  const name = foldSearchText(teilName);
   
   for (const item of klassifikatorListe) {
     for (const keyword of item.keywords) {
-      if (name.includes(normalizeString(keyword))) {
+      if (name.includes(foldSearchText(keyword))) {
         return item.klasse;
       }
     }
