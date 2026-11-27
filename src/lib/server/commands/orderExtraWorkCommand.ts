@@ -1,14 +1,19 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
-import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
+import { hasAuthorizationArea } from "@/lib/auth/authorizationContract";
+import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { canViewOrderCard } from "@/lib/server/orderCardRead";
+import { leseMehrarbeitsfreigabe, ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { ORDER_CONTENT_COPY } from "@/ui/ordersCopy";
+import { readOrderInvoiceNumberInTransaction, readOrderScrapInvoiceNumberInTransaction } from "./immutableInvoiceCommand";
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {isOfflineOriginal,normalizeOfflineOriginal,offlineOccurrenceTime,type OfflineOriginal} from '@/lib/domain/offlineOriginal';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 
 const EVENT_TYPE = "ORDER_ITEM_EXTRA_WORK_CHANGED_V1";
+const APPROVAL_EVENT_TYPE = "ORDER_EXTRA_WORK_APPROVED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -50,6 +55,153 @@ export type ChangeOrderItemExtraWorkResult =
   | { code: "CONFLICT"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
+
+export type RecordPhoneExtraWorkApprovalInput = Pick<
+  NonNullable<ReturnType<typeof leseMehrarbeitsfreigabe>>, "approvedNetAmountCents" | "positions" | "confirmationText"
+> & {
+  orderId: string;
+  clientEventId: string;
+};
+
+export type RecordExtraWorkApprovalInput = RecordPhoneExtraWorkApprovalInput & (
+  | { channel: "telefon" }
+  | { channel: "mail"; intakeItemId: string }
+);
+
+export type ReadLinkedApprovalMail = (
+  tx: PrivilegedTenantTransaction, auth: AuthorizationSnapshot, intakeItemId: string,
+) => Promise<{ id: string; orderId: string; customerId: string } | null>;
+
+export type RecordExtraWorkApprovalResult =
+  | { code: "OK"; eventId: string; replayed: boolean }
+  | { code: "INVOICE_ISSUED"; invoiceNumber: string }
+  | { code: "UNAVAILABLE"; message: string; next: { label: string; kind: "retry" } }
+  | { code: "FORBIDDEN"; message: string }
+  | { code: "NOT_FOUND" | "CONFLICT"; message: string; next: { label: string; href: string } }
+  | { code: "VALIDATION_ERROR" | "UNAUTHENTICATED" };
+
+export type RecordPhoneExtraWorkApprovalResult = RecordExtraWorkApprovalResult;
+
+export function recordPhoneExtraWorkApproval(input: unknown): Promise<RecordExtraWorkApprovalResult> {
+  return recordExtraWorkApproval(
+    input && typeof input === "object" && !Array.isArray(input) ? { ...input, channel: "telefon", intakeItemId: undefined } : input,
+  );
+}
+
+export async function recordExtraWorkApproval(
+  input: unknown,
+  readLinkedApprovalMail?: ReadLinkedApprovalMail,
+): Promise<RecordExtraWorkApprovalResult> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" };
+  const { orderId, clientEventId, approvedNetAmountCents, positions: requestedPositions, confirmationText, channel, intakeItemId } =
+    input as Record<string, unknown>;
+  if (typeof clientEventId !== "string" || !UUID_PATTERN.test(clientEventId)
+    || typeof orderId !== "string" || orderId !== orderId.trim() || !orderId || orderId.length > 128) {
+    return { code: "VALIDATION_ERROR" };
+  }
+  const nichtVerfuegbar = {
+    code: "UNAVAILABLE" as const, message: ORDER_CONTENT_COPY.extraWorkApprovalUnavailable,
+    next: { kind: "retry" as const, label: ORDER_CONTENT_COPY.extraWorkApprovalRetry },
+  };
+  try {
+    const konflikt = {
+      code: "CONFLICT" as const, message: ORDER_CONTENT_COPY.extraWorkApprovalConflict,
+      next: { label: ORDER_CONTENT_COPY.extraWorkApprovalReopen, href: `/orders/${encodeURIComponent(orderId)}` },
+    };
+    const authorization = await resolveAuthorization();
+    if (!authorization.ok) {
+      return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+        ? nichtVerfuegbar
+        : { code: "UNAUTHENTICATED" };
+    }
+    const auth = authorization.data;
+    if (!canViewOrderCard(auth) || !hasAuthorizationArea(auth, "preise") || auth.packageSwitches?.p3_werkstatt !== true
+      || (channel === "mail" && (!hasAuthorizationArea(auth, "mails") || !hasAuthorizationArea(auth, "auftraege")))) {
+      return { code: "FORBIDDEN", message: ORDER_CONTENT_COPY.extraWorkApprovalForbidden };
+    }
+
+    const approval = leseMehrarbeitsfreigabe({
+      approvedNetAmountCents, positions: requestedPositions, confirmationText,
+      channel, intakeItemId, approvedBy: auth.userId, approvedAt: new Date().toISOString(),
+    });
+    if (!approval) return { code: "VALIDATION_ERROR" };
+    const payload = {
+      ...approval,
+      positions: approval.positions.map(({ lineId, lineVersion }) => ({ lineId, lineVersion }))
+        .sort((links, rechts) => links.lineId.localeCompare(rechts.lineId)),
+    };
+
+    return await withPrivilegedTenantTransaction(auth, async tx => {
+      await tx.execute(sql`
+        SELECT pg_advisory_xact_lock(hashtextextended('f1:client-event:' || ${auth.tenantId} || ':' || ${clientEventId}, 0))
+      `);
+      const events = await tx.execute<{
+        id: string; order_id: string; user_id: string; event_type: string; status: string; payload: unknown;
+      }>(sql`
+        SELECT id, order_id, user_id, event_type, status, payload FROM public.events
+        WHERE tenant_id = ${auth.tenantId} AND client_event_id = ${clientEventId}::uuid
+        LIMIT 2
+      `);
+      if (events.length) {
+        const [event] = events;
+        const recorded = leseMehrarbeitsfreigabe(event.payload);
+        if (events.length === 1 && event.order_id === orderId && event.user_id === auth.userId
+          && event.event_type === APPROVAL_EVENT_TYPE && event.status === "success"
+          && recorded && canonicalJson(recorded) === canonicalJson({ ...payload, approvedAt: recorded.approvedAt })) {
+          return { code: "OK", eventId: event.id, replayed: true };
+        }
+        return konflikt;
+      }
+
+      const [order] = await tx.execute<{ version: number; station: string; customer_id: string }>(sql`
+        SELECT version, station, customer_id FROM public.orders
+        WHERE tenant_id = ${auth.tenantId} AND id = ${orderId}
+        FOR UPDATE
+      `);
+      if (!order) return {
+        code: "NOT_FOUND", message: ORDER_CONTENT_COPY.extraWorkApprovalNotFound,
+        next: { label: ORDER_CONTENT_COPY.extraWorkApprovalOpenList, href: "/orders" },
+      };
+      if (payload.channel === "mail") {
+        if (!readLinkedApprovalMail) throw Error("ORDER_EXTRA_WORK_APPROVAL_MAIL_PORT_MISSING");
+        const original = await readLinkedApprovalMail(tx, auth, payload.intakeItemId);
+        if (!original || original.id !== payload.intakeItemId
+          || original.orderId !== orderId || original.customerId !== order.customer_id) return konflikt;
+      }
+      const invoiceNumber = await readOrderScrapInvoiceNumberInTransaction(tx, auth.tenantId, orderId);
+      if (invoiceNumber) return { code: "INVOICE_ISSUED", invoiceNumber };
+
+      const positions = await tx.execute<{ line_id: string; line_version: number; integrity_ok: boolean }>(sql`
+        SELECT line_id::text, line_version, integrity_ok FROM private.v_order_extra_work_live_v1
+        WHERE tenant_id = ${auth.tenantId} AND order_id = ${orderId}
+          AND line_id IN (${sql.join(payload.positions.map(position => sql`${position.lineId}::uuid`), sql`, `)})
+      `);
+      const versions = new Map(positions.filter(position => position.integrity_ok)
+        .map(position => [position.line_id, position.line_version]));
+      if (positions.length !== payload.positions.length
+        || payload.positions.some(position => versions.get(position.lineId) !== position.lineVersion)) {
+        return konflikt;
+      }
+
+      const [written] = await tx.execute<{ id: string }>(sql`
+        INSERT INTO public.events (
+          id, tenant_id, order_id, event_type, description, payload, status, user_id, station, created_at,
+          client_event_id, event_schema_version, correlation_id, aggregate_version
+        ) VALUES (
+          gen_random_uuid()::text, ${auth.tenantId}, ${orderId}, ${APPROVAL_EVENT_TYPE}, '',
+          ${JSON.stringify(payload)}::jsonb, 'success', ${auth.userId}::uuid, ${order.station},
+          clock_timestamp() AT TIME ZONE 'UTC', ${clientEventId}::uuid, ${EVENT_SCHEMA_VERSION},
+          gen_random_uuid(), ${order.version}
+        ) RETURNING id
+      `);
+      if (!written) throw Error("ORDER_EXTRA_WORK_APPROVAL_WRITE_FAILED");
+      return { code: "OK", eventId: written.id, replayed: false };
+    });
+  } catch (error) {
+    console.error("[ORDER_EXTRA_WORK_APPROVAL_FAILED]", error instanceof Error ? error.name : "UnknownError");
+    return nichtVerfuegbar;
+  }
+}
 
 type LockedOrder = {
   id: string;
@@ -282,6 +434,12 @@ export async function changeOrderItemExtraWork(
       }
       if (order.version !== input.expectedOrderVersion) {
         return { code: "CONFLICT", message: "Auftrag wurde bereits geändert." };
+      }
+      const invoiceNumber = await readOrderInvoiceNumberInTransaction(
+        tx, authorization.data.tenantId, order.id, "issued",
+      );
+      if (invoiceNumber) {
+        return { code: "CONFLICT", message: ORDER_CONTENT_COPY.invoiceAlreadyIssued(invoiceNumber) };
       }
       if (
         order.station !== ORDER_LIFECYCLE_STATUS.GALVANIK

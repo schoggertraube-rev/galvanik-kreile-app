@@ -18,7 +18,9 @@ vi.mock("@/lib/server/privilegedDb", () => ({
   withPrivilegedTenantTransaction: vi.fn(async (_context, work) => work({ execute })),
 }));
 
-import { changeOrderContent, setOrderItemFinished } from "../orderContentCommand";
+import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { changeOrderContent, setOrderItemFinished, setOrderItemFinishedInTransaction } from "../orderContentCommand";
 
 const actor = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const itemId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -70,6 +72,37 @@ describe("order content command", () => {
   it("fails closed without order write permission", async () => {
     resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: KREILE_TENANT_SLUG, role: "readonly", permissions: [], active: true, displayName: "Leser" } });
     await expect(setOrderItemFinished({ orderId: "order-1", itemId, expectedVersion: 1, clientEventId, finished: true })).resolves.toEqual({ code: "FORBIDDEN", message: "Diese Rolle darf den Teilstatus nicht ändern." });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("uses the same readable rejection for an invalid individual or bundle position", async () => {
+    const auth: AuthorizationSnapshot = {
+      userId: actor, tenantId: KREILE_TENANT_SLUG, permissions: ["perm_op_status"], active: true,
+      role: "werkstatt", displayName: "TEST Werkstatt", areas: ["auftraege"],
+    };
+    const input = { orderId: "TEST-order-1", itemId: "TEST-ungueltig", expectedVersion: 1, clientEventId, finished: true };
+    const antwort = { code: "VALIDATION_ERROR", message: "Teilstatus ist ungültig." };
+    const transaktion = { execute } as unknown as PrivilegedTenantTransaction;
+
+    await expect(setOrderItemFinished(input)).resolves.toEqual(antwort);
+    await expect(setOrderItemFinishedInTransaction(transaktion, auth, input)).resolves.toEqual(antwort);
+    expect(resolveAuthorization).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("uses the supplied transaction and rejects a stale order version before writing a completion", async () => {
+    const auth: AuthorizationSnapshot = {
+      userId: actor, tenantId: KREILE_TENANT_SLUG, permissions: ["perm_op_status"], active: true,
+      role: "werkstatt", displayName: "TEST Werkstatt", areas: ["auftraege"],
+    };
+    const laufExecute = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "TEST-order-1", version: 2 }]);
+    const laufTransaktion = { execute: laufExecute } as unknown as PrivilegedTenantTransaction;
+    await expect(setOrderItemFinishedInTransaction(laufTransaktion, auth, {
+      orderId: "TEST-order-1", itemId, expectedVersion: 1, clientEventId, finished: true,
+    })).resolves.toMatchObject({ code: "CONFLICT" });
+    expect(laufExecute).toHaveBeenCalledTimes(3);
+    expect(resolveAuthorization).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
   });
 });
