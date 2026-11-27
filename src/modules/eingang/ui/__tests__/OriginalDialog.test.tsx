@@ -4,6 +4,7 @@ import {afterEach,describe,expect,it,vi} from 'vitest';
 import {OriginalDialog,type OriginalPorts} from '../OriginalDialog';
 import {IntakeObjectDialogs,type IntakeObjectPorts} from '../IntakeObjectDialogs';
 import {IncomingInvoiceDialog} from '../IncomingInvoiceDialog';
+import {IncomingInvoiceDialogs} from '../IncomingInvoiceDialogs';
 import {EMPTY_INVOICE_FIELDS,type InvoicePorts,type InvoiceView} from '../../invoiceContract';
 import {Dialog} from '@/ui/kr';
 import {createDeferredDialogEvents,withDeferredDialogReady} from '@/lib/client/deferredDialogEvents';
@@ -11,6 +12,28 @@ import {createDeferredDialogEvents,withDeferredDialogReady} from '@/lib/client/d
 afterEach(cleanup);
 
 describe('Original: O07 metadata without Mails',()=>{
+ it('uses the existing original tile to select the file sent to Erfassen',async()=>{
+  const itemId='22222222-2222-4222-8222-222222222222';
+  const first={id:'11111111-1111-4111-8111-111111111111',name:'TEST L-A.pdf',mime:'application/pdf',sha256:'a'.repeat(64)};
+  const second={id:'33333333-3333-4333-8333-333333333333',name:'TEST L-B.pdf',mime:'application/pdf',sha256:'b'.repeat(64)};
+  const source:InvoiceView={item:{id:itemId,version:1,at:'2026-11-18T08:00:00Z',channel:'mail',sender:null},
+   invoice:null,supplier:null,originals:[first,second],fileId:first.id,fields:{...EMPTY_INVOICE_FIELDS},
+   uncertain:0,conflict:null,duplicate:null};
+  const supplier={id:'TEST-Lieferant-B',name:'TEST Lieferant B',iban:null,paymentTermDays:null};
+  const selected:InvoiceView={...source,fileId:second.id,supplier,fields:{...source.fields,lieferantId:supplier.id,
+   nummer:'TEST-L-B',datum:'2026-11-18',netto:'55,00',ust:'0,00',brutto:'55,00',faelligAm:'2026-11-30'}};
+  const ports:InvoicePorts={read:vi.fn<InvoicePorts['read']>(async request=>({code:'OK',view:request.fileId===second.id?selected:source})),
+   save:vi.fn().mockResolvedValue({code:'UNAVAILABLE',message:'TEST Antwort'}),status:vi.fn(),clarify:vi.fn(),searchSuppliers:vi.fn(),
+   openOriginal:vi.fn(),createSupplier:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),openTask:vi.fn()};
+  render(<IncomingInvoiceDialogs ports={ports} allowed onRefresh={vi.fn()}/>);
+  window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'rechnungein',arg:itemId},cancelable:true}));
+  fireEvent.click(await screen.findByRole('button',{name:/TEST L-B.pdf/}));
+  expect(ports.read).toHaveBeenCalledWith({id:itemId,fileId:second.id});
+  await waitFor(()=>expect(ports.openOriginal).toHaveBeenCalledWith(itemId,second.id));
+  fireEvent.click(await screen.findByRole('button',{name:/^Erfassen/}));
+  await waitFor(()=>expect(ports.save).toHaveBeenCalledWith(expect.objectContaining({itemId,fileId:second.id,
+   fields:expect.objectContaining({nummer:'TEST-L-B',brutto:'55,00'})})));
+ });
  it('opens and confirms the original using the selected invoice instead of the common mail',async()=>{
   const fileId='11111111-1111-4111-8111-111111111111';
   const itemId='22222222-2222-4222-8222-222222222222';

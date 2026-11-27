@@ -14,7 +14,7 @@ function today(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Berlin
 const fieldRows=[['nummer','rechnungsnummer','Rechnungsnummer','text'],['datum','rechnungsdatum','Rechnungsdatum','date'],['netto','netto','Netto','text'],['ust','ust','USt','text'],['brutto','brutto','Brutto','text'],['faelligAm','faellig','Fällig am','date'],['iban','iban','IBAN','text']] as const;
 
 /** 3.8 is a projection of the canonical intake/original and its one supplier_invoice. */
-export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial:InvoiceView;ports:InvoicePorts;onClose:()=>void;onMessage:(text:string,taskId?:string)=>void}){
+export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onSelectOriginal}:{initial:InvoiceView;ports:InvoicePorts;onClose:()=>void;onMessage:(text:string,taskId?:string)=>void;onSelectOriginal?:(fileId:string)=>void}){
  const [view,setView]=useState(initial),[fields,setFields]=useState({...initial.fields}),[selected,setSelected]=useState<InvoiceSupplier|null>(initial.supplier);
  const [mode,setMode]=useState<Mode>(initial.invoice?.zahlstatus==='unklar'?'klaeren':initial.invoice?.zahlstatus==='offen'?'bezahlt_markieren':initial.invoice?'ansicht':'pruefen');
  const [supplierQuery,setSupplierQuery]=useState(initial.supplier?.name??''),[suppliers,setSuppliers]=useState<InvoiceSupplier[]>([]),[searching,setSearching]=useState(false);
@@ -23,9 +23,10 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
  const [proofFileId,setProofFileId]=useState<string|null>(initial.invoice?.nachweis_file_id??null),[proofName,setProofName]=useState(''),[uploading,setUploading]=useState(false),[proofRetry,setProofRetry]=useState(false),proofInput=useRef<HTMLInputElement>(null);
  const pendingProof=useRef<{file:File;id:string;sha256:string}|null>(null);
  const [message,setMessage]=useState<string|null>(null),[retry,setRetry]=useState(false),[busy,setBusy]=useState(false),[discard,setDiscard]=useState(false),[uncertain,setUncertain]=useState(initial.uncertain);
+ const [pendingOriginal,setPendingOriginal]=useState<string|null>(null);
  const working=useRef(false),key=useRef(crypto.randomUUID()),root=useRef<HTMLDivElement>(null);
  const changed=JSON.stringify(fields)!==JSON.stringify(initial.fields)||proofRetry||proofFileId!==(initial.invoice?.nachweis_file_id??null)||paidDate!==initialPaidDate||reason!==''||duplicateReason!==''||mode==='bezahlt'||correct||outcome!==' ';
- const canClose=()=>{if(working.current)return false;if(!changed)return true;setDiscard(true);return false;};
+ const canClose=()=>{if(working.current)return false;if(!changed)return true;setPendingOriginal(null);setDiscard(true);return false;};
  const close=()=>{if(canClose())onClose();};
  useEffect(()=>{
   if(supplierQuery.trim().length<2||selected&&supplierQuery===selected.name)return;
@@ -37,16 +38,29 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   },250);return()=>{active=false;clearTimeout(timer);};
  },[supplierQuery,selected,ports]);
  useEffect(()=>{
-  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read({id:initial.invoice?.id??initial.item.id});if(result.code!=='OK'){setMessage(result.message);return;}
+  const request=initial.invoice?{id:initial.invoice.id}:{id:initial.item.id,...(initial.fileId?{fileId:initial.fileId}:{})};
+  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read(request);if(result.code!=='OK'){setMessage(result.message);return;}
    setView(result.view);setUncertain(result.view.uncertain);setSelected(result.view.supplier);setSupplierQuery(result.view.supplier?.name??'');setFields(current=>({...current,lieferantId:result.view.supplier?.id??current.lieferantId}));
    if(detail?.itemId===initial.item.id&&detail.customerId&&detail.customerName&&result.view.invoice&&!result.view.invoice.lieferant_id){const found=await ports.searchSuppliers(detail.customerName);if(found.code==='OK'){const supplier=found.suppliers.find(value=>value.id===detail.customerId);if(supplier){setSelected(supplier);setSupplierQuery(supplier.name);setFields(current=>({...current,lieferantId:supplier.id}));setCorrect(true);setOutcome('offen');}}}
   }catch(error){console.error('[INVOICE_RETURN_READ_FAILED]',error);setMessage('Lieferant konnte nicht neu gelesen werden · Fehlercode: INVOICE_RETURN_READ_FAILED.');}};
   window.addEventListener(INTAKE_CHANGED_EVENT,refresh);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,refresh);
- },[initial.invoice?.id,initial.item.id,ports]);
+ },[initial.invoice,initial.fileId,initial.item.id,ports]);
  const openOriginal=(fileId:string)=>{
+  if(working.current)return;
+  if(onSelectOriginal&&fileId!==view.fileId){
+   if(changed){setPendingOriginal(fileId);setDiscard(true);}
+   else onSelectOriginal(fileId);
+   return;
+  }
   const saved=view.invoice;
   if(saved?.file_id===fileId)ports.openOriginal(view.item.id,fileId,saved.id);
   else ports.openOriginal(view.item.id,fileId);
+ };
+ const cancelDiscard=()=>{setPendingOriginal(null);setDiscard(false);};
+ const discardChanges=()=>{
+  if(!pendingOriginal){onClose();return;}
+  onSelectOriginal?.(pendingOriginal);
+  cancelDiscard();
  };
  const chooseSupplier=(supplier:InvoiceSupplier)=>{if(view.invoice&&!view.invoice.lieferant_id){setCorrect(true);setOutcome('offen');}setSelected(supplier);setSupplierQuery(supplier.name);setSuppliers([]);setFields(current=>{
   const next={...current,lieferantId:supplier.id};if(!next.faelligAm&&invoiceDate(next.datum)&&supplier.paymentTermDays!==null){const date=new Date(next.datum+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+supplier.paymentTermDays);next.faelligAm=date.toISOString().slice(0,10);}return next;
@@ -146,5 +160,5 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
    {proofRetry?<Button text="Nachweis erneut sichern" disabled={busy} onClick={()=>void uploadProof()}/>:null}
   </div>:null}
  </div></Dialog>
- {discard?<Rueckfrage felder={[...fieldRows.filter(([field])=>fields[field]!==initial.fields[field]).map(([, ,label])=>label),...(fields.lieferantId!==initial.fields.lieferantId?['Lieferant']:[]),...(reason?['Grund']:[]),...(duplicateReason?['Grund für die zweite Erfassung']:[]),...(outcome!==' '?['Ergebnis']:[])]} beschaeftigt={busy} onVerwerfen={onClose} onWeiter={()=>setDiscard(false)}/>:null}</>;
+ {discard?<Rueckfrage felder={[...fieldRows.filter(([field])=>fields[field]!==initial.fields[field]).map(([, ,label])=>label),...(fields.lieferantId!==initial.fields.lieferantId?['Lieferant']:[]),...(reason?['Grund']:[]),...(duplicateReason?['Grund für die zweite Erfassung']:[]),...(outcome!==' '?['Ergebnis']:[])]} beschaeftigt={busy} onVerwerfen={discardChanges} onWeiter={cancelDiscard}/>:null}</>;
 }

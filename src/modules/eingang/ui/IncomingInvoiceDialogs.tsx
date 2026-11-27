@@ -9,12 +9,17 @@ import {IncomingInvoiceDialog} from './IncomingInvoiceDialog';
 export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoicePorts;allowed:boolean;onRefresh:()=>void}){
  const [entry,setEntry]=useState<{key:string;view:InvoiceView}|null>(null),[loading,setLoading]=useState(false),[failure,setFailure]=useState<string|null>(null);
  const [message,setMessage]=useState<{text:string;taskId?:string}|null>(null),device=useKrGeraet(),generation=useRef(0);
- const open=useCallback(async(arg:string)=>{
+ const open=useCallback(async(arg:string,fileId?:string)=>{
   if(!allowed){setMessage({text:FINANCIAL_ACCESS_COPY.bookkeepingMissing});return;}
   const id=arg.split('#',2)[0];if(!id)return;const current=++generation.current;setLoading(true);setFailure(null);
-  try{const result=await ports.read({id});if(current!==generation.current)return;
-   if(result.code!=='OK'){if(result.code==='FORBIDDEN'){setMessage({text:FINANCIAL_ACCESS_COPY.bookkeepingMissing});return;}setFailure(result.message);return;}
+  try{const result=await ports.read(fileId?{id,fileId}:{id});if(current!==generation.current)return;
+   if(result.code!=='OK'){if(result.code==='FORBIDDEN'||fileId){setMessage({text:result.code==='FORBIDDEN'?FINANCIAL_ACCESS_COPY.bookkeepingMissing:result.message});return;}setFailure(result.message);return;}
    setEntry({key:crypto.randomUUID(),view:result.view});
+   if(fileId){
+    const saved=result.view.invoice;
+    if(saved?.file_id===fileId)ports.openOriginal(result.view.item.id,fileId,saved.id);
+    else ports.openOriginal(result.view.item.id,fileId);
+   }
   }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current)setFailure('Rechnung konnte nicht gelesen werden · Fehlercode: INVOICE_DIALOG_OPEN_FAILED.');}
   finally{if(current===generation.current)setLoading(false);}
  },[allowed,ports]);
@@ -28,7 +33,8 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
  const notify=(text:string,taskId?:string)=>{setMessage({text,taskId});onRefresh();};
  return <>{message?<Toast text={message.text} aktion={message.taskId?{text:'Aufgabe ansehen',onClick:()=>ports.openTask(message.taskId!)}:undefined}/>:null}
   {(entry||loading||failure)&&typeof document!=='undefined'?createPortal(<KrApp geraet={device} portal>
-   {entry?<IncomingInvoiceDialog key={entry.key} initial={entry.view} ports={ports} onClose={close} onMessage={notify}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<Button text="Schließen" onClick={close}/>}>
+   {entry?<IncomingInvoiceDialog key={entry.key} initial={entry.view} ports={ports} onClose={close} onMessage={notify}
+    onSelectOriginal={fileId=>void open(entry.view.item.id,fileId)}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<Button text="Schließen" onClick={close}/>}>
     {loading?<p role="status">Rechnung wird geladen …</p>:<Hinweis ton="warn">{failure}</Hinweis>}</Dialog>}
   </KrApp>,document.body):null}</>;
 }
