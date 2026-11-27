@@ -178,8 +178,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
         recordObservedFailure('INTAKE_RAW_NOT_SAVED');
       }
     }
-    const ocr = rawPath !== null && recognized?.code === "OK" ? recognized : null;
-    const rawStorageFailed = recognized?.code === "OK" && ocr === null;
+    const ocr = recognized?.code === "OK" ? recognized : null;
+    const rawStorageFailed = ocr !== null && rawPath === null;
     const kind = xmlResult?.code === "OK" ? "rechnung" : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
     const positionRows = ocr?.original ? readAzurePositionRows(ocr.original.tables) : [];
     await withPrivilegedTenantTransaction(auth, async tx => {
@@ -188,15 +188,15 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
         AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);
       if(active[0]?.befehl_id!==claimKey){console.info('[INTAKE_RECOGNITION_SUPERSEDED]',{fileId});return;}
-      const successful=ocr!==null||xmlResult?.code==='OK';
+      const hasValues=ocr!==null||xmlResult?.code==='OK';
       const documentText = ocr?.data.suggestions.find(suggestion => suggestion.field === "DOCUMENT_TEXT")?.value ?? null;
       const pages = ocr?.original?.pages ?? null;
       const model = ocr?.original?.model ?? null;
-      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${successful ? "fertig" : "fehler"},
+      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${hasValues && !rawStorageFailed ? "fertig" : "fehler"},
           erkannter_text=CASE WHEN ${ocr !== null} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
-          erkennung_roh_pfad=coalesce(${rawPath},erkennung_roh_pfad)
+          erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
-      if(successful)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
+      if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
       const suggestions=xmlResult?.code==='OK'?xmlResult.suggestions:ocr?[
         ...ocr.data.suggestions.filter(suggestion => suggestion.field !== "DOCUMENT_TEXT"),
         ...recognizeInvoiceFields(ocr.data.suggestions),

@@ -101,13 +101,21 @@ it.each([
     const archivePath = `${tenant}/${sha256}.erkennung.${model}.json`;
     if (damagedArchive) {
       expect((await archive.upload(archivePath, '{', { contentType: "application/json" })).error).toBeNull();
+      await sql`UPDATE public.intake_file SET erkennung_roh_pfad=${archivePath}
+        WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
       try {
         const failed = await withSession(full, () => finishIntakeFileAction(fileId));
         if (failed.code !== "OK") throw Error("TEST_I1_CAPTURE_UNAVAILABLE");
         expect(failed.capture.files.find(file => file.id === fileId)).toMatchObject({
-          secured: true, status: "fehler", errorCode: "INTAKE_RAW_NOT_SAVED",
+          secured: true, status: "fehler", errorCode: "INTAKE_RAW_NOT_SAVED", recognizedText: text,
         });
-        expect(failed.capture.suggestions).toEqual([]);
+        expect(failed.capture.suggestions).toEqual(expect.arrayContaining([
+          expect.objectContaining({ field: "rechnung.nummer", value: "TEST-I1-NUMMER" }),
+        ]));
+        expect(await sql`SELECT seiten,erkennung_roh_pfad FROM public.intake_file
+          WHERE tenant_id=${tenant} AND id=${fileId}::uuid`).toEqual([{ seiten: 2, erkennung_roh_pfad: null }]);
+        expect(await sql`SELECT wert->>'positionKey' AS key FROM public.intake_suggestion
+          WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position' AND status='offen'`).toEqual([{ key: "p1" }]);
       } finally {
         expect((await archive.remove([archivePath])).error).toBeNull();
       }
@@ -141,7 +149,7 @@ it.each([
       WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='DOCUMENT_TEXT'`).toEqual([]);
     const positions = await sql`SELECT wert,modell,sicherheit_wert::float8 AS confidence,status FROM public.intake_suggestion
       WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position'`;
-    expect(positions).toHaveLength(2);
+    expect(positions).toHaveLength(damagedArchive ? 3 : 2);
     expect(positions.filter(position => position.status === "offen")).toHaveLength(1);
     for (const position of positions) expect(position).toMatchObject({
       wert: { positionKey: "p1", lieferantenArtikelNr: "TEST-BELEGZEILE", menge: "4.25" },
