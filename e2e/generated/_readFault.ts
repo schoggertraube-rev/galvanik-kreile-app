@@ -1,6 +1,12 @@
 // Test transport metadata only. Diagnostics are not the business read whose
 // failure a generated flow requests; no action IDs or payloads are guessed.
 type ActionReference={filename?:string;exportedName?:string;workers?:Record<string,{filename?:string;exportedName?:string}>};
+
+export function interruptedLoadControlId(step?: {id?:string;aktion?:string;wert?:unknown}):string|undefined{
+ if(step?.aktion==='oeffne'&&step.wert==='mailein')return 'mailein';
+ return step?.id?.startsWith('navigation.')?step.id:undefined;
+}
+
 export function protocolDiagnosticActionIds(manifest:{node:Record<string,ActionReference>}):Set<string>{
  const ids=new Set<string>();
  for(const name of ['getProtocolLogAction','recordProtocolClicksAction']){

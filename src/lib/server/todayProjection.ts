@@ -180,9 +180,17 @@ function productivePorts():TodayProjectionPorts{
   }};
 }
 
-async function claim(tenantId:string,settings:TodayReadSettings):Promise<Lease|null>{
+async function claim(tenantId:string,settings:TodayReadSettings,taktErgebnis:boolean):Promise<Lease|null>{
  return withPrivilegedTenantTransaction({tenantId},async tx=>{
-  await tx.execute(sql`INSERT INTO private.today_tenant_v1(tenant_id) VALUES(${tenantId}) ON CONFLICT(tenant_id) DO NOTHING`);
+  if(taktErgebnis){
+   // This follow-up refreshes an existing source. It must yield to a rebuild
+   // waiting for the tenant row instead of delaying the completed Takt run.
+   const available=await tx.execute(sql`SELECT tenant_id FROM private.today_tenant_v1
+    WHERE tenant_id=${tenantId} FOR UPDATE SKIP LOCKED`);
+   if(available.length===0)return null;
+  }else{
+   await tx.execute(sql`INSERT INTO private.today_tenant_v1(tenant_id) VALUES(${tenantId}) ON CONFLICT(tenant_id) DO NOTHING`);
+  }
   const rows=await tx.execute<Lease>(sql`UPDATE private.today_tenant_v1 SET refresh_lease_until=statement_timestamp()+interval '1 second'*${settings.todayRefreshLeaseSeconds}
    WHERE tenant_id=${tenantId} AND (refresh_lease_until IS NULL OR refresh_lease_until<statement_timestamp())
    RETURNING refresh_lease_until::text AS token,tenant_seq::text AS "tenantSeq",to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS day`);
@@ -271,7 +279,7 @@ async function projectGroup(auth:ProjectorAuthorization,lease:Lease,rows:readonl
 
 async function runProjection(tenantId:string,ports:TodayProjectionPorts,rebuild:boolean,signal?:AbortSignal,kind?:string){
  signal?.throwIfAborted();
- const settings=await ports.readSettings({tenantId}),lease=await claim(tenantId,settings);
+ const settings=await ports.readSettings({tenantId}),lease=await claim(tenantId,settings,kind===TAKT_AUSFALL_QUELLE);
  if(!lease)return {code:'BUSY' as const,built:0,stale:0};
  const heartbeat=keepLeaseAlive(tenantId,lease,settings.todayRefreshLeaseSeconds);
  const assertOwned=()=>{signal?.throwIfAborted();assertPageReadBudgetActive();heartbeat.assertOwned();};
