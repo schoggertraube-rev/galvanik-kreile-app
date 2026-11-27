@@ -53,17 +53,12 @@ async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
  if(orders.length!==ids.length)throw new DeliveryNoteSourceRejected({code:'NOT_FOUND',message:copy.invalid});
  if(orders.some(row=>row.customer_id!==orders[0].customer_id))throw new DeliveryNoteSourceRejected({code:'VALIDATION_ERROR',message:sourceCopy.mixedCustomers});
  // Zahlungsbuchungen sperren denselben Auftrag vor dem Schreiben.
- const releaseStates=await tx.execute<{vorab:Source['vorab']|null}>(sql`
-  SELECT CASE
-   WHEN private.order_release_allowed_v1(orders.tenant_id,orders.id) OR EXISTS (
+ const releaseStates=await tx.execute<{vorab:boolean}>(sql`
+  SELECT (private.order_release_allowed_v1(orders.tenant_id,orders.id) OR EXISTS (
     SELECT 1 FROM private.v_goods_out_ui_state_v1 release
     WHERE release.tenant_id=orders.tenant_id AND release.order_id=orders.id
      AND release.order_version=orders.version AND release.integrity_ok AND release.goods_out_event_id IS NOT NULL
-   ) THEN NULL
-   WHEN orders.payment_mode='vorkasse' AND private.order_release_allowed_v1(orders.tenant_id,orders.id,false,true)
-   THEN 'delivery_note.preview_payment_required'
-   ELSE 'delivery_note.preview_release_required'
-  END AS vorab
+  )) IS NOT TRUE AS vorab
   FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id IN (${orderIds})
  `);
  if(releaseStates.length!==orders.length)throw Error('DELIVERY_NOTE_RELEASE_STATE_MISSING');
@@ -78,8 +73,7 @@ async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
  const missing=(['name','street','houseNumber','zipCode','city','country'] as const).find(key=>typeof customer[key]!=='string'||!customer[key]!.trim());
  if(missing)throw new DeliveryNoteSourceRejected({code:'VALIDATION_ERROR',message:sourceCopy.addressMissing(MANUAL_SHIPPING_FIELDS[missing]),remedy:{href:'/customers/'+encodeURIComponent(orders[0].customer_id),field:missing,datei:'src/app/actions/customers.actions.ts',funktion:'getCustomerSummaryAction',argumente:{customerId:orders[0].customer_id}}});
  const result:Source={schemaVersion:2,company:company.company,customer:{id:orders[0].customer_id,name:customer.companyName??customer.name,street:[customer.street,customer.houseNumber].join(' '),zip:customer.zipCode!,city:customer.city!,country:customer.country!},orders:[]};
- if(releaseStates.some(order=>order.vorab==='delivery_note.preview_release_required'))result.vorab='delivery_note.preview_release_required';
- else if(releaseStates.some(order=>order.vorab==='delivery_note.preview_payment_required'))result.vorab='delivery_note.preview_payment_required';
+ if(releaseStates.some(order=>order.vorab))result.vorab='delivery_note.preview_payment_required';
  for(const order of orders){
   const rows=await readOrderPaymentSummaries(tx,auth.tenantId,order.id);
   const paymentSourceHash=sha(canonicalJson(rows.map(row=>({invoiceId:row.invoice_id,invoiceNumber:row.invoice_number,total:row.total_amount_cents,mode:row.payment_mode,paymentStatus:row.payment_status,paymentVersion:row.payment_version,eventId:row.payment_event_id,receiptId:row.payment_receipt_id,paidAt:row.payment_paid_at instanceof Date?row.payment_paid_at.toISOString():row.payment_paid_at,paidAmount:row.payment_paid_amount_cents,openAmount:row.payment_open_amount_cents})).sort((a,b)=>a.invoiceId.localeCompare(b.invoiceId))));

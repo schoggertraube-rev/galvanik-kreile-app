@@ -28,7 +28,6 @@ function texte(knoten: ReactNode): string[] {
 
 it.each([
   ["delivery_note.preview_payment_required", "Vorab-Lieferschein – Ware erst nach Zahlung"],
-  ["delivery_note.preview_release_required", "Vorab-Lieferschein – Ware erst nach Freigabe"],
   [undefined, undefined],
 ] as const)("zeigt den Vermerk für %s ausschließlich auf der Vorabfassung", (vorab, erwarteterText) => {
   const dokument = DeliveryNoteDocument({ snapshot: { ...snapshot, vorab }, logo: null });
