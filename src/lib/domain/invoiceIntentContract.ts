@@ -28,17 +28,17 @@ export type CreateInvoiceInput = {
 export function isCreateInvoiceInput(input: unknown,storedOriginal=false): input is CreateInvoiceInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
+  if (Object.hasOwn(value, "paymentMethodAtIssue") && !isInvoicePaymentMethodAtIssue(value.paymentMethodAtIssue)) return false;
   const expected = ["clientEventId", "expectedVersion", "orderId"];
   const expectedWithAgreement = ["agreement", ...expected].sort();
-  const actual = Object.keys(value).sort();
+  const actual = Object.keys(value).filter(key => key !== "paymentMethodAtIssue").sort();
   const hasAgreement = actual.length === expectedWithAgreement.length
     && actual.every((key, index) => key === expectedWithAgreement[index]);
   const agreement = value.agreement;
   const hasShipping = actual.join(',') === [...expected,'shippingCosts'].sort().join(',');
-  const hasPaymentMethod = actual.join(',') === [...expected,'paymentMethodAtIssue'].sort().join(',');
   return (actual.length === expected.length
       && actual.every((key, index) => key === expected[index])
-      || hasAgreement || hasShipping || hasPaymentMethod)
+      || hasAgreement || hasShipping)
     && typeof value.orderId === "string"
     && value.orderId.trim() === value.orderId
     && value.orderId.length > 0
@@ -48,7 +48,6 @@ export function isCreateInvoiceInput(input: unknown,storedOriginal=false): input
     && typeof value.expectedVersion === "number"
     && Number.isSafeInteger(value.expectedVersion)
     && value.expectedVersion > 0
-    && (!hasPaymentMethod || isInvoicePaymentMethodAtIssue(value.paymentMethodAtIssue))
     && (!hasShipping || isInvoiceShippingCostsInput(value.shippingCosts,value.orderId as string,storedOriginal))
     && (!hasAgreement || (
       agreement !== null
