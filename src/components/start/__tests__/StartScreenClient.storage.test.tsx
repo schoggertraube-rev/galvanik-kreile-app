@@ -20,3 +20,17 @@ it('shows the canonical storage warning while the PIN request still starts exact
  expect(screen.getByRole('alert')).toHaveTextContent(OFFLINE_DEVICE_STATUS_COPY.unavailable);
  fireEvent.keyDown(window,{key:'4'});expect(ports.pin).toHaveBeenCalledTimes(1);
 });
+
+it.each(['g', 'g-1', 'g_1', 'g1000000'])('uses the existing login identity for mobile code %s', async (typedCode) => {
+  vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+  vi.stubGlobal('indexedDB', undefined);
+  render(<StartScreenClient users={[{
+    loginHandle: 'TEST-mobile-handle', fullName: 'TEST Mobil', shortCode: typedCode.toUpperCase(),
+    designation: 'TEST', role: 'werkstatt', emailLoginAvailable: false,
+  }]} />);
+
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: typedCode } });
+  for (const digit of '7654') fireEvent.keyDown(window, { key: digit });
+
+  await waitFor(() => expect(ports.pin).toHaveBeenCalledExactlyOnceWith('TEST-mobile-handle', '7654'));
+});

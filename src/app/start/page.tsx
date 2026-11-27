@@ -15,7 +15,7 @@ export default async function StartPage() {
   let users: StartUserDto[] = [];
   let loginUnavailable = false;
   let supportReference: string | undefined;
-  let maintenanceNotice = false;
+  let skippedLogins = 0;
 
   try {
     const result = await readActiveStartUsers();
@@ -23,7 +23,7 @@ export default async function StartPage() {
       loginUnavailable = true;
     } else {
       users = result.users;
-      maintenanceNotice = result.skipped > 0;
+      skippedLogins = result.skipped;
     }
   } catch {
     loginUnavailable = true;
@@ -37,7 +37,7 @@ export default async function StartPage() {
       users={users}
       loginUnavailable={loginUnavailable}
       supportReference={supportReference}
-      maintenanceNotice={maintenanceNotice}
+      skippedLogins={skippedLogins}
     />
   );
 }
