@@ -1,3 +1,4 @@
+import { captureRecognition, concernForCaptureKind, recognizeCaptureDocument } from "../captureRecognition";
 import { expect, it } from "vitest";
 import { INTAKE_CONCERN_AREAS } from "../intakeLifecycleContract";
 
@@ -13,4 +14,24 @@ it("uses the agreed set of intake concerns and document types", () => {
     badanalyse: [], nachweis: [], sicherheitsdatenblatt: [], zaehlerstand: [], werbung: [], sonstiges: [],
     lieferschein: ["eingang"], zahlungsavis: ["zahlungen"], kontobeleg: ["zahlungen"],
   });
+});
+
+
+it.each([
+  ["Lieferschein 431\nAbsender: TEST-Betrieb", "lieferschein", "lieferschein"],
+  ["Quittung 717\nTEST-Kauf", "quittung", "quittung"],
+  ["Kassenbon\nTEST-Kauf", "quittung", "quittung"],
+  ["DHL\nSendungsnummer 21452", "ware", "ware"],
+  ["Anfrage für TEST-Teile", "anfrage", "kv_anfrage"],
+  ["Der Lieferschein wird nachgereicht.", "dokument", null],
+  ["Lieferschein\nQuittung", "dokument", null],
+  ["", "unklar", null],
+] as const)("bindet erkannte Belegart an das vorhandene Anliegen: %s", (text, kind, concern) => {
+  const result = recognizeCaptureDocument({ text });
+  expect(result.kind).toBe(kind);
+  expect(concernForCaptureKind(result.kind)).toBe(concern);
+});
+
+it("behält die vorhandene Ansicht für den erkannten Lieferschein", () => {
+  expect(captureRecognition({ text: "Lieferschein 431" })).toMatchObject({ kind: "dokument" });
 });

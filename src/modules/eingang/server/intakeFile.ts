@@ -11,7 +11,7 @@ import { analyzeWithAzureDocumentIntelligence } from "@/lib/server/azureDocument
 import {recognizeInvoiceFields,recognizeInvoiceXml,recognizeInvoicePdf} from './invoiceRecognition';
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
-import { captureRecognition } from "../captureRecognition";
+import { concernForCaptureKind, recognizeCaptureDocument } from "../captureRecognition";
 import {isIntakeOriginalTakeover} from '../captureContract';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -94,7 +94,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     const mailOriginal=file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'),invoiceAccess=hasAuthorizationArea(auth,'buchhaltung')&&file.invoice_context===true&&!mailOriginal;
     if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN',message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
     if((file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
-    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')),originalOnly);
+    const onlyInvoiceAccess=invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails'));
+    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,onlyInvoiceAccess,originalOnly);
     if(retryKey){
       const retry=await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
@@ -155,7 +156,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     const recognized = !isXml && xmlResult?.code!=='OK' && canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
       (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),undefined,{subject:{type:'intake',id:file.item_id},originalRef:file.id}) : null;
     if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
-    const kind = xmlResult?.code === "OK" ? "rechnung" : recognized?.code === "OK" ? captureRecognition({ text: null, suggestions: recognized.data.suggestions }).kind : null;
+    const kind = xmlResult?.code === "OK" ? "rechnung" : recognized?.code === "OK" ? recognizeCaptureDocument({ text: null, suggestions: recognized.data.suggestions }).kind : null;
     await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
@@ -171,10 +172,12 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
             SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,${suggestion.field.startsWith('rechnung.')?(suggestion.confidence>=0.9?'sicher':'unsicher'):'vorschlag'},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
           WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND feld=${suggestion.field} AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
       }
-      if (kind === "rechnung") await tx.execute(sql`UPDATE public.intake_item
-        SET anliegen=array_append(anliegen,'rechnung'), anliegen_offen=CASE WHEN 'rechnung'=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,'rechnung') END,
+      const concern = kind === null ? null : concernForCaptureKind(kind);
+      if (concern !== null && (!onlyInvoiceAccess || concern === "rechnung")) await tx.execute(sql`UPDATE public.intake_item
+        SET anliegen=array_append(anliegen,${concern}::text),
+          anliegen_offen=CASE WHEN ${concern}::text=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,${concern}::text) END,
           version=version+1, geaendert_von=${auth.userId}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
-        WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT ('rechnung'=ANY(anliegen))`);
+        WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT (${concern}::text=ANY(anliegen))`);
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${auth.userId},${JSON.stringify({ fileId, kind, code: xmlResult?.code==='OK'?'OK':isXml?'UNSUPPORTED_XML':recognized?.code ?? (bytes.byteLength>20*1024*1024?"INTAKE_RECOGNITION_TOO_LARGE":"UNSUPPORTED_DOCUMENT_TYPE") })}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);
