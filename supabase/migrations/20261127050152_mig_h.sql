@@ -573,3 +573,13 @@ CREATE OR REPLACE VIEW private.v_payment_summary_v1 WITH(security_invoker=true) 
    FROM invoices invoice
      LEFT JOIN orders orders ON orders.id = invoice.order_id AND orders.tenant_id::text = invoice.tenant_id
   WHERE invoice.status = 'issued'::text AND invoice.payment_contract_version = 1 AND invoice.tenant_id = current_setting('app.tenant_id'::text, true);
+
+-- L-M4: Read marked questions and their one secured reply from existing receipts.
+CREATE INDEX events_mail_question_source_idx
+  ON public.events (tenant_id,(payload->>'itemId'),created_at DESC,id DESC)
+  WHERE event_type='COMMUNICATION_MAIL_SENT_V1' AND status='success' AND event_schema_version=1
+    AND payload->'antwortErwartet'='true'::jsonb;
+
+CREATE UNIQUE INDEX intake_event_mail_question_answer_uidx
+  ON public.intake_event (tenant_id,(nachher->>'mailSentEventId'))
+  WHERE art='einsatz' AND nachher->>'action'='mail_question_answered';
