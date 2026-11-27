@@ -266,12 +266,15 @@ export async function getPaymentState(authorization:AuthorizationSnapshot|Paymen
 export async function readMailPaymentReleaseInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string){
  if(!auth.active||!canChangeOrderHandover(auth,'mail')||!ORDER_ID_PATTERN.test(orderId))return null;
  const showAmount=hasAuthorizationArea(auth,'zahlungen');
- const rows=await tx.execute<{mode:string;paid:boolean;ready:boolean;amount:number|null}>(sql`
-   SELECT payment_mode AS mode,all_invoice_payments_allowed AS paid,goods_out_allowed AS ready,
-     CASE WHEN ${showAmount} AND active_invoice_count=1 THEN payment_open_amount_cents END AS amount
-   FROM private.read_order_payment_states_v1(${auth.tenantId},ARRAY[${orderId}]::text[])
-   WHERE order_id=${orderId} AND integrity_ok IS TRUE AND invoice_state='issued'
-     AND payment_integrity_ok IS TRUE AND payment_status IN ('offen','teilbezahlt','bezahlt')`);
+ const rows=await tx.execute<{mode:string;paid:boolean;ready:boolean;amount:number|null;orderNumber:string}>(sql`
+   SELECT state.payment_mode AS mode,state.all_invoice_payments_allowed AS paid,state.goods_out_allowed AS ready,
+     CASE WHEN ${showAmount} AND state.active_invoice_count=1 THEN state.payment_open_amount_cents END AS amount,
+     orders.order_number AS "orderNumber"
+   FROM private.read_order_payment_states_v1(${auth.tenantId},ARRAY[${orderId}]::text[]) state
+   JOIN public.orders orders ON orders.tenant_id=${auth.tenantId} AND orders.id=state.order_id
+   WHERE state.order_id=${orderId} AND state.integrity_ok IS TRUE AND state.invoice_state='issued'
+     AND state.payment_integrity_ok IS TRUE AND state.payment_status IN ('offen','teilbezahlt','bezahlt')`);
  const result=rows[0];
- return rows.length===1&&typeof result.paid==='boolean'&&typeof result.ready==='boolean'?result:null;
+ return rows.length===1&&typeof result.paid==='boolean'&&typeof result.ready==='boolean'&&
+   !!result.orderNumber&&(result.amount===null||Number.isSafeInteger(result.amount)&&result.amount>=0)?result:null;
 }

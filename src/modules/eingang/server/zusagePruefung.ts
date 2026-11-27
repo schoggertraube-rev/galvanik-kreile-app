@@ -1,38 +1,94 @@
 import 'server-only';
 
-import {canChangeOrderHandover,hasAuthorizationArea,hasLagerCapability} from '@/lib/auth/authorizationContract';
+import {ACCESS_AREA_LABELS,ROLE_LABELS,canChangeOrderHandover,hasAuthorizationArea,hasLagerCapability,type AccessArea} from '@/lib/auth/authorizationContract';
 import {formatEuro} from '@/lib/domain/formatEuro';
-import type {IntakeSuggestionsInput,IntakeTermSuggestion} from '@/lib/intakeSuggestionsContract';
+import type {IntakeSuggestionsInput,IntakeTermSuggestion,IntakePriceSuggestion} from '@/lib/intakeSuggestionsContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {pruefeHerausgabe,type ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
 import {readLiveOrderCard} from '@/lib/server/orderCardRead';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {normaliseOrderPositionUnit,orderPositionQuantityError,orderPositionUnitLabel} from '@/lib/orderPositionContract';
 import type {QuoteReadback} from '@/modules/quotes/public';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 import {ORDER_STATION_COPY} from '@/ui/situationCatalog';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readIntakeMessagesForAuthorization} from './intakeMessages';
+import {planeMailWirkungen} from './mailPlaene';
 
 export type ZusageInput={
-  art:'herausgabe'|'termin'|'menge'|'auftrag_aus_kv'|'preis_im_text'|'storno'|'stammdaten'|'kanal_versand';
+  art:'herausgabe'|'termin'|'menge'|'auftrag_aus_kv'|'preis_im_text'|'storno'|'stammdaten'|'kanal_versand'|
+    'zu_spaet'|'etikett'|'abholer'|'gewaehrleistung'|'preisquelle'|'dublette'|'beleg_dublette'|'abwesenheit'|'zahlungsavis';
   customerId?:string;
   orderId?:string;
+  quoteId?:string;
   menge?:number;
   termin?:string;
+  antwortBis?:string;
   sourceItemId?:string;
+  sourceVersion?:number;
   kanal?:string;
+  /** Positionen der vorhandenen Anfrage, sofern es noch keinen Auftrag oder KV gibt. */
+  positionen?:IntakeSuggestionsInput['positions'];
 };
-export {recordZusageAusnahmeInTransaction,type ZusageGrund,type ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
+export type {ZusageGrund,ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
 export type ZusageLeser={
-  termin:(auth:AuthorizationSnapshot,input:IntakeSuggestionsInput)=>Promise<{term:IntakeTermSuggestion|null}>;
+  termin:(auth:AuthorizationSnapshot,input:IntakeSuggestionsInput)=>Promise<{term:IntakeTermSuggestion|null;prices?:IntakePriceSuggestion[]}>;
   kv:(auth:AuthorizationSnapshot,quoteId:string)=>Promise<QuoteReadback|null>;
   verbrauch:(auth:AuthorizationSnapshot,orderId:string)=>Promise<readonly Materialverbrauch[]>;
+  kunde:(auth:AuthorizationSnapshot,customerId:string)=>Promise<{id:string;email:string|null;billingEmail:string|null;phone:string|null}|null>;
 };
 type Materialverbrauch={wertEur:string|null;preisFehlt:boolean;vorlaeufig:boolean};
 
 const unavailable={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unavailable} as const;
-const permission={frei:false,grund:'recht',text:MAIL_PROMISE_COPY.handoverRight} as const;
+const unknownTerm={frei:false,grund:'unbekannt_termin',text:MAIL_PROMISE_COPY.unknownTerm} as const;
+const unknownQuote={frei:false,grund:'unbekannt_kv',text:MAIL_PROMISE_COPY.unknownQuote} as const;
+const unknownChannel={frei:false,grund:'unbekannt_kanal',text:MAIL_PROMISE_COPY.unknownChannel} as const;
+const foreignSender={frei:false,grund:'absender_fremd',text:MAIL_PROMISE_COPY.foreignSender} as const;
+const optionalCustomer = (input:ZusageInput) => input.art==='preis_im_text'||input.art==='kanal_versand'||
+  (input.art==='termin'&&!input.orderId&&!input.quoteId);
+
+function fehlendesRecht(auth:AuthorizationSnapshot,art:ZusageInput['art']):AccessArea|null{
+  if(!auth.active||!hasAuthorizationArea(auth,'mails'))return 'mails';
+  switch(art){
+    case 'herausgabe': case 'menge': case 'zu_spaet': case 'etikett': case 'abholer':
+      return canChangeOrderHandover(auth,'mail')?null:'auftraege';
+    case 'termin': case 'storno':
+      return hasAuthorizationArea(auth,'auftraege')?null:'auftraege';
+    case 'auftrag_aus_kv':
+      return hasAuthorizationArea(auth,'auftraege')&&quoteOperationContext(auth).capabilities.canConvertQuote?null:'auftraege';
+    case 'preis_im_text': case 'preisquelle':
+      return hasAuthorizationArea(auth,'preise')?null:'preise';
+    case 'zahlungsavis':
+      return hasAuthorizationArea(auth,'zahlungen')?null:'zahlungen';
+    default: return null;
+  }
+}
+
+async function readIncomingOriginal(auth:AuthorizationSnapshot,input:ZusageInput){
+  if(!input.sourceItemId)return null;
+  const result=await readIntakeMessagesForAuthorization(auth,'alle',input.sourceItemId);
+  if(result.code!=='OK'||result.messages.length!==1)return null;
+  const [original]=result.messages;
+  if(original.direction!=='rein'||input.sourceVersion!==undefined&&input.sourceVersion!==original.version)return null;
+  const capture=await intakeCaptureSnapshot(auth,original.id);
+  if(capture.code!=='OK'||capture.capture.version!==original.version)return null;
+  if(original.channel==='mail'&&!capture.capture.files.some(file=>file.mime==='message/rfc822'&&file.secured===true))return null;
+  return original;
+}
+
+async function qualifyCustomer(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser){
+  const original=await readIncomingOriginal(auth,input);
+  if(!original||!input.customerId||original.customerId!==input.customerId||
+    original.assignment!=='bestaetigt'&&original.assignment!=='hand')return null;
+  if(input.orderId&&original.orderId&&(original.orderKind!=='auftrag'||original.orderId!==input.orderId))return null;
+  if(input.quoteId&&original.orderId&&(original.orderKind!=='kv'||original.orderId!==input.quoteId))return null;
+  const customer=await leser.kunde(auth,input.customerId);
+  const sender=original.senderAddress?.trim().toLowerCase();
+  if(!customer||customer.id!==input.customerId||!sender)return null;
+  const contacts=[customer.email,customer.billingEmail,customer.phone];
+  return contacts.some(address=>address?.trim().toLowerCase()===sender)?original:null;
+}
 
 async function readPromiseOrder(auth:AuthorizationSnapshot,input:ZusageInput){
   if(!input.orderId)return null;
@@ -40,18 +96,36 @@ async function readPromiseOrder(auth:AuthorizationSnapshot,input:ZusageInput){
   return source.code==='OK'&&(!input.customerId||input.customerId===source.data.customerId)?source.data:null;
 }
 
-async function pruefeTermin(auth:AuthorizationSnapshot,input:ZusageInput,readTerm:ZusageLeser['termin']):Promise<ZusageErgebnis>{
-  if(!input.termin)return unavailable;
-  const card=await readPromiseOrder(auth,input);
-  if(!card)return unavailable;
-  if(!card.handoverMode||card.items.some(item=>item.unitPriceCents===null))return unavailable;
-  const suggested=await readTerm(auth,{kind:'ORDER',customerId:card.customerId,wishDate:input.termin,
-    handoverMode:card.handoverMode,positions:card.items.map(item=>({
+async function readSuggestionInput(auth:AuthorizationSnapshot,input:ZusageInput,readQuote:ZusageLeser['kv']):Promise<IntakeSuggestionsInput|null>{
+  if(input.orderId){
+    const card=await readPromiseOrder(auth,input);
+    if(!card?.handoverMode||!card.items.length)return null;
+    return {kind:'ORDER',customerId:card.customerId,wishDate:input.termin??null,
+      handoverMode:card.handoverMode,positions:card.items.map(item=>({
       key:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,
       surfaceRequested:item.surfaceRequested,unit:item.unit,unitPriceCents:item.unitPriceCents,
-    }))});
+    }))};
+  }
+  if(input.quoteId){
+    const quote=await readQuote(auth,input.quoteId);
+    if(!quote?.positions.length||quote.customerId!==input.customerId)return null;
+    return {kind:'QUOTE',customerId:quote.customerId,wishDate:input.termin??null,positions:quote.positions.map(item=>({
+      key:item.id,catalogServiceId:null,name:item.name,quantity:item.quantity,
+      surfaceRequested:item.surfaceRequested,unit:item.unit??null,unitPriceCents:item.unitPriceCents,
+      effortMinutes:item.plannedMinutes??null,
+    }))};
+  }
+  if(!input.positionen?.length)return null;
+  return {kind:'QUOTE',customerId:input.customerId??null,wishDate:input.termin??null,positions:input.positionen};
+}
+
+async function pruefeTermin(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
+  if(!input.termin)return unknownTerm;
+  const request=await readSuggestionInput(auth,input,leser.kv);
+  if(!request)return unknownTerm;
+  const suggested=await leser.termin(auth,request);
   const term=suggested.term;
-  if(!term?.achievableDate||!term.rating)return unavailable;
+  if(!term?.achievableDate||!term.rating)return unknownTerm;
   if(term.rating==='nicht_machbar'||term.rating==='unmoeglich')return {
     frei:false,grund:'termin',text:MAIL_PROMISE_COPY.earliestTerm(input.termin,term.achievableDate),
   };
@@ -92,19 +166,20 @@ async function pruefeMenge(auth:AuthorizationSnapshot,input:ZusageInput):Promise
 }
 
 async function pruefeKVAuftrag(auth:AuthorizationSnapshot,input:ZusageInput,readQuote:ZusageLeser['kv']):Promise<ZusageErgebnis>{
-  if(!input.orderId)return unavailable;
-  const quote=await readQuote(auth,input.orderId);
-  if(!quote||input.customerId&&input.customerId!==quote.customerId)return unavailable;
+  if(!input.quoteId)return unknownQuote;
+  const quote=await readQuote(auth,input.quoteId);
+  if(!quote)return unknownQuote;
+  if(input.customerId!==quote.customerId)return foreignSender;
   if(quote.linkedOrderId){
     const linked=await readPromiseOrder(auth,{...input,orderId:quote.linkedOrderId,customerId:quote.customerId});
-    return linked?{frei:false,grund:'kv_schon_auftrag',text:MAIL_PROMISE_COPY.quoteAlreadyOrder(quote.quoteNumber,linked.orderNumber)}:unavailable;
+    return linked?{frei:false,grund:'kv_schon_auftrag',text:MAIL_PROMISE_COPY.quoteAlreadyOrder(quote.quoteNumber,linked.orderNumber)}:unknownQuote;
   }
   const lifecycle=quote.lifecycle;
   if(lifecycle?.stage==='abgelaufen')return {frei:false,grund:'kv_abgelaufen',text:MAIL_PROMISE_COPY.quoteExpired(quote.quoteNumber)};
-  if(!quote.positions.length||quote.positions.some(position=>orderPositionQuantityError(position.quantity,position.unit??null)))return unavailable;
+  if(!quote.positions.length||quote.positions.some(position=>orderPositionQuantityError(position.quantity,position.unit??null)))return unknownQuote;
   const difference=requestedQuantityBlock(input.menge,quote.positions);
   if(difference)return difference;
-  return lifecycle?.stage==='zugesagt'&&lifecycle.acceptedEdition===lifecycle.edition?{frei:true}:unavailable;
+  return lifecycle?.stage==='zugesagt'&&lifecycle.acceptedEdition===lifecycle.edition?{frei:true}:unknownQuote;
 }
 
 function materialkosten(rows:readonly Materialverbrauch[]):string|null{
@@ -124,42 +199,47 @@ async function pruefeStorno(auth:AuthorizationSnapshot,input:ZusageInput,readVer
   if(!card)return unavailable;
   const costs=auth.packageSwitches?.p4_lager===true&&hasLagerCapability(auth,'lager.werte')
     ?materialkosten(await readVerbrauch(auth,card.id)):null;
-  return {frei:false,grund:'storno',text:MAIL_PROMISE_COPY.cancellation(card.orderNumber,ORDER_STATION_COPY[card.station]??ORDER_STATION_COPY.unknown,costs)};
+  return {frei:false,grund:'storno',text:MAIL_PROMISE_COPY.cancellation(input.antwortBis),
+    hinweis:MAIL_PROMISE_COPY.cancellationHint(card.orderNumber,ORDER_STATION_COPY[card.station]??ORDER_STATION_COPY.unknown,costs)};
 }
 
-async function pruefeStammdaten(auth:AuthorizationSnapshot,input:ZusageInput):Promise<ZusageErgebnis>{
-  if(!input.sourceItemId)return unavailable;
-  const result=await readIntakeMessagesForAuthorization(auth,'alle',input.sourceItemId);
-  if(result.code!=='OK'||result.messages.length!==1)return unavailable;
-  const [original]=result.messages;
-  if(original.channel!=='mail'||original.direction!=='rein'||input.customerId&&original.customerId!==input.customerId)return unavailable;
-  const capture=await intakeCaptureSnapshot(auth,original.id);
-  if(capture.code!=='OK'||capture.capture.version!==original.version||
-    !capture.capture.files.some(file=>file.mime==='message/rfc822'&&file.secured===true))return unavailable;
+function pruefeStammdaten(original:NonNullable<Awaited<ReturnType<typeof readIncomingOriginal>>>):ZusageErgebnis{
   const sender=original.senderName?.trim()||original.senderAddress?.trim();
-  if(!sender)return unavailable;
+  if(!sender||!planeMailWirkungen('A29',['bankverbindung_telefonisch_bestaetigen'],{}).length)return unavailable;
   const text=MAIL_PROMISE_COPY.verifyBankDetails(sender);
   return {frei:false,grund:'stammdaten',text,ausweg:{befehl:'saveIntakeTaskAction',text}};
 }
 
 /** Mail uses the established payment and goods-out evidence before making a promise. */
 export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
-  if(!hasAuthorizationArea(auth,'mails'))return permission;
-  if(input.art==='preis_im_text')return hasAuthorizationArea(auth,'preise')?{frei:true}:
-    {frei:false,grund:'preisrecht',text:MAIL_PROMISE_COPY.priceRight};
-  if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unavailable;
+  const recht=fehlendesRecht(auth,input.art);
+  if(recht)return {frei:false,grund:recht==='preise'?'preisrecht':'recht',
+    text:MAIL_PROMISE_COPY.roleRight(ROLE_LABELS[auth.role],ACCESS_AREA_LABELS[recht].text)};
+  if(input.art==='preis_im_text')return {frei:true};
+  if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unknownChannel;
   try{
-    if(input.art==='stammdaten')return await pruefeStammdaten(auth,input);
-    if(!canChangeOrderHandover(auth,'mail'))return permission;
+    const customerRequired=!optionalCustomer(input);
+    const original=customerRequired?await qualifyCustomer(auth,input,leser):null;
+    if(customerRequired&&!original)return foreignSender;
+    if(input.art==='stammdaten'&&original)return pruefeStammdaten(original);
     if(input.art==='storno')return await pruefeStorno(auth,input,leser.verbrauch);
-    if(input.art==='termin')return await pruefeTermin(auth,input,leser.termin);
+    if(input.art==='termin')return await pruefeTermin(auth,input,leser);
     if(input.art==='menge')return await pruefeMenge(auth,input);
     if(input.art==='auftrag_aus_kv')return await pruefeKVAuftrag(auth,input,leser.kv);
+    if(input.art==='zahlungsavis')return {frei:false,grund:'zahlungsavis',text:MAIL_PROMISE_COPY.paymentNotice};
+    if(input.art==='preisquelle'){
+      const request=await readSuggestionInput(auth,input,leser.kv);
+      const prices=request?(await leser.termin(auth,request)).prices:undefined;
+      return request&&prices&&request.positions.every(position=>prices.some(price=>price.positionKey===position.key))
+        ?{frei:true}:{frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unknownPriceSource};
+    }
+    if(Object.hasOwn(MAIL_PROMISE_COPY.pending,input.art)) return {frei:false,grund:'unbekannt',
+      text:MAIL_PROMISE_COPY.pending[input.art as keyof typeof MAIL_PROMISE_COPY.pending]};
     if(input.art!=='herausgabe'||!input.customerId||!input.orderId)return unavailable;
     const {customerId,orderId}=input;
     return await withPrivilegedTenantTransaction(auth,tx=>pruefeHerausgabe(tx,auth,{customerId,orderId}));
   }catch(error){
     console.error('[MAIL_PROMISE_SOURCE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
-    return unavailable;
+    return input.art==='termin'?unknownTerm:input.art==='auftrag_aus_kv'?unknownQuote:unavailable;
   }
 }

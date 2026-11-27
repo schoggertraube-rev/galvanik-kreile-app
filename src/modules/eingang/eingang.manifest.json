@@ -5,7 +5,6 @@
   "publicExports": [
     "@/modules/eingang/server-public#tagQuellen",
     "@/modules/eingang/server-public#pruefeZusage",
-    "@/modules/eingang/server-public#recordZusageAusnahmeInTransaction",
     "@/modules/eingang/server-public#erlaubteWirkung",
     "@/modules/eingang/server-public#MailAnliegen",
     "@/modules/eingang/server-public#MailWirkung",

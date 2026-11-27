@@ -15,9 +15,10 @@ import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
+import {readCustomerProfile} from '@/modules/customers/server-public';
 import {leseLagerAuftragsmaterialInTransaction} from '@/modules/lager/server-public';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
-import {pruefeZusage as zusage,recordZusageAusnahmeInTransaction,type ZusageLeser} from '@/modules/eingang/server-public';
+import {pruefeZusage as zusage,type ZusageLeser} from '@/modules/eingang/server-public';
 
 const leser:ZusageLeser={
   termin:(auth,input)=>readIntakeSuggestions(auth,input,readBetriebsruheInTransaction),
@@ -26,15 +27,30 @@ const leser:ZusageLeser={
     return result.code==='OK'?result.quote:null;
   },
   verbrauch:(auth,orderId)=>withPrivilegedTenantTransaction(auth,tx=>leseLagerAuftragsmaterialInTransaction(tx,orderId)),
+  kunde:(auth,customerId)=>withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,customerId)),
 };
 const pruefeZusage=(auth:Parameters<typeof zusage>[0],input:Parameters<typeof zusage>[1])=>zusage(auth,input,leser);
+
+// Isolated synthetic incoming notes. Rights, customer, order, quote and payment readers are real.
+async function originalFixture(customerId:string,options:{sender?:string;type?:'auftrag'|'kv';target?:string}={}){
+  const row=await withSession(full,async()=>{const authorized=await resolveAuthorization();
+    if(!authorized.ok)throw Error('TEST_S1_FIXTURE_AUTH');
+    return leser.kunde(authorized.data,customerId);});
+  if(!row?.email)throw Error('TEST_S1_FIXTURE_CONTACT_REQUIRED');
+  const id=randomUUID();
+  await sql`INSERT INTO public.intake_item (id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,
+      kunde_id,zuordnung,einsatz,absender_adresse,absender_name,text,vorgang_art,vorgang_id)
+    VALUES (${id}::uuid,${tenant},${id},'notiz','rein','app',${full.actorId}::uuid,${customerId},'hand','offen',
+      ${options.sender??row.email},'TEST Kontakt','TEST S-1 Meldung',${options.type??null},${options.target??null})`;
+  return id;
+}
 
 it('reads customer-wide debt from the actual invoice source without exposing it to a mail-only financial context',async()=>{
   const customerId=await customerFixture('TEST S-1 Zahlungsvoraussetzung');
   const affected=await intakeOrderFixture('TEST S-1 Abholauftrag',customerId);
   const historicalOrder=await intakeOrderFixture('TEST S-1 Altauftrag',customerId);
   const orderId=affected.receipt.orderId;
-  const input={art:'herausgabe' as const,customerId,orderId};
+  const input={art:'herausgabe' as const,customerId,orderId,sourceItemId:await originalFixture(customerId)};
   const authorized=await withSession(full,()=>resolveAuthorization());
   if(!authorized.ok)throw Error('TEST_S1_AUTH_REQUIRED');
   const auth=authorized.data;
@@ -52,7 +68,14 @@ it('reads customer-wide debt from the actual invoice source without exposing it 
     data:{blocked:true,invoiceIds:[invoiceId]},oldest:{number:'R-2025-0812',openAmountCents:6000,daysOverdue:1}});
   expect(await readCustomerDeliveryBlock(auth,customerId)).toMatchObject({code:'OK',data:{blocked:true,invoiceIds:[invoiceId]}});
   expect(await pruefeZusage(auth,input)).toMatchObject({frei:false,grund:'liefersperre',
-    ausweg:{befehl:'confirmPaymentAction',text:expect.stringContaining('R-2025-0812')}});
+    hinweis:expect.stringContaining('R-2025-0812')});
+  expect(await pruefeZusage(auth,input)).not.toHaveProperty('ausweg');
+  const unrelated=await originalFixture(customerId,{sender:'test-fremd@example.invalid'});
+  expect(await pruefeZusage(auth,{...input,sourceItemId:unrelated})).toMatchObject({frei:false,grund:'absender_fremd'});
+  const shipping=await intakeOrderFixture('TEST S-1 Versandauftrag',customerId,'shipping');
+  expect(await pruefeZusage(auth,{...input,orderId:shipping.receipt.orderId})).toMatchObject({
+    frei:false,grund:'liefersperre',hinweis:expect.stringContaining('Versand nach Zahlung'),
+  });
 
   const mailOperator=await createFixture(['mails','auftraege'],'werkstatt');
   const limited=await withSession(mailOperator,()=>resolveAuthorization());
@@ -62,36 +85,17 @@ it('reads customer-wide debt from the actual invoice source without exposing it 
   expect(hidden).not.toHaveProperty('oldest');
   expect(await pruefeZusage(limited.data,input)).toMatchObject({frei:false,grund:'liefersperre',text:'Abholung erst nach Zahlung.'});
   expect(await pruefeZusage(limited.data,{art:'preis_im_text'})).toMatchObject({frei:false,grund:'preisrecht'});
-  expect(await pruefeZusage(auth,{...input,orderId:randomUUID()})).toMatchObject({frei:false,grund:'unbekannt'});
+  expect(await pruefeZusage(auth,{...input,orderId:randomUUID()})).toMatchObject({frei:false,grund:'unbekannt_zahlung'});
 
   const approver=await createFixture(['mails','auftraege','entscheiden']);
   const authorization=await withSession(approver,()=>resolveAuthorization());
   if(!authorization.ok)throw Error('TEST_S1_APPROVER_AUTH_REQUIRED');
-  const exception={customerId,orderId,expectedVersion:affected.receipt.orderVersion,
-    clientEventId:randomUUID(),reason:'TEST S-1 Verbindliche Ausnahme durch den Meister'};
-  const record=(actor:typeof auth,command:Parameters<typeof recordZusageAusnahmeInTransaction>[2])=>withPrivilegedTenantTransaction(actor,
-    tx=>recordZusageAusnahmeInTransaction(tx,actor,command));
-  expect(await record(limited.data,exception)).toEqual({code:'FORBIDDEN'});
-  expect(await record(authorization.data,{...exception,reason:''})).toEqual({code:'VALIDATION_ERROR'});
-  expect(await record(authorization.data,{...exception,expectedVersion:exception.expectedVersion+1})).toEqual({code:'CONFLICT'});
-  expect(await pruefeZusage(authorization.data,input)).toMatchObject({frei:false,ausnahme:{recht:'entscheiden'}});
-  const saved=await record(authorization.data,exception);
-  if(saved.code!=='OK')throw Error('TEST_S1_EXCEPTION_NOT_RECORDED:'+saved.code);
-  expect(saved.replayed).toBe(false);
-  expect(await record(authorization.data,structuredClone(exception))).toEqual({...saved,replayed:true});
-  expect(await record(authorization.data,{...exception,reason:'Anderer Grund'})).toEqual({code:'CONFLICT'});
-  expect(await sql`SELECT id,user_id,order_id,notes,payload FROM public.events
-    WHERE tenant_id=${tenant} AND client_event_id=${exception.clientEventId}::uuid`).toEqual([{
-    id:saved.eventId,user_id:authorization.data.userId,order_id:orderId,notes:exception.reason,
-    payload:{customerId,grund:'liefersperre'},
-  }]);
-  expect(await pruefeZusage(auth,input)).toMatchObject({frei:false,grund:'liefersperre'});
+  expect(await pruefeZusage(authorization.data,input)).toEqual({frei:false,grund:'liefersperre',text:'Abholung erst nach Zahlung.'});
   const {confirmPaymentAction}=await import('@/app/actions/payments.actions');
   expect(await withSession(full,()=>confirmPaymentAction({invoiceId,amount:6000,method:'bar',
     expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await pruefeZusage(auth,input)).toEqual({frei:true});
   expect(await readCustomerDeliveryBlock(auth,customerId)).toMatchObject({code:'OK',data:{blocked:false,invoiceIds:[]}});
-  expect(await record(authorization.data,{...exception,clientEventId:randomUUID()})).toEqual({code:'CONFLICT'});
 });
 
 it('uses the actual order and planning sources to return the earliest possible appointment',async()=>{
@@ -120,13 +124,16 @@ it('uses the actual order and planning sources to return the earliest possible a
   expect(terms.term?.rating).toBe('unmoeglich');
   const earliest=terms.term?.achievableDate;
   if(!earliest)throw Error('TEST_S1_TERM_COUNTEROFFER_REQUIRED');
-  const input={art:'termin' as const,orderId:created.receipt.orderId,customerId,termin:wish};
+  const input={art:'termin' as const,orderId:created.receipt.orderId,customerId,termin:wish,sourceItemId:await originalFixture(customerId)};
   expect(await pruefeZusage(authorized.data,input)).toEqual({frei:false,grund:'termin',text:MAIL_PROMISE_COPY.earliestTerm(wish,earliest)});
   expect(await pruefeZusage(authorized.data,{...input,termin:earliest})).toEqual({frei:true});
-  expect(await pruefeZusage(authorized.data,{...input,customerId:randomUUID()})).toMatchObject({frei:false,grund:'unbekannt'});
+  expect(await pruefeZusage(authorized.data,{...input,customerId:randomUUID()})).toMatchObject({frei:false,grund:'absender_fremd'});
+  const request={art:'termin' as const,termin:wish,positionen:[{...position,key:created.receipt.items[0].id}]};
+  expect(await pruefeZusage(authorized.data,request)).toMatchObject({frei:false,grund:'termin'});
+  expect(await pruefeZusage(authorized.data,{...request,positionen:[]})).toMatchObject({frei:false,grund:'unbekannt_termin'});
   // Simulate a failed dependency at the planning reader boundary only.
   const unavailable={...leser,termin:async()=>{throw Error('TEST_S1_PLANNING_READ_FAILED');}};
-  expect(await zusage(authorized.data,input,unavailable)).toMatchObject({frei:false,grund:'unbekannt'});
+  expect(await zusage(authorized.data,input,unavailable)).toMatchObject({frei:false,grund:'unbekannt_termin'});
 });
 
 it('keeps the open complaint as a block while real rework requires no payment',async()=>{
@@ -145,7 +152,8 @@ it('keeps the open complaint as a block while real rework requires no payment',a
       ${actor.actorId}::uuid,statement_timestamp() AT TIME ZONE 'UTC')`;
   const authorization=await withSession(actor,()=>resolveAuthorization());
   if(!authorization.ok)throw Error('TEST_S1_COMPLAINT_AUTH_REQUIRED');
-  expect(await pruefeZusage(authorization.data,{art:'herausgabe',customerId,orderId:order.receipt.orderId})).toMatchObject({
+  const sourceItemId=await originalFixture(customerId);
+  expect(await pruefeZusage(authorization.data,{art:'herausgabe',customerId,orderId:order.receipt.orderId,sourceItemId})).toMatchObject({
     frei:false,grund:'reklamation',text:expect.stringContaining(number),
   });
   const {nacharbeitAnlegenAction}=await import('@/app/actions/complaints.actions');
@@ -155,7 +163,7 @@ it('keeps the open complaint as a block while real rework requires no payment',a
   expect(await readCustomerDeliveryBlock(authorization.data,customerId,work.receipt.orderId)).toMatchObject({
     code:'OK',paymentMode:'keiner',data:{blocked:false},
   });
-  expect(await pruefeZusage(authorization.data,{art:'herausgabe',customerId,orderId:work.receipt.orderId})).toEqual({frei:true});
+  expect(await pruefeZusage(authorization.data,{art:'herausgabe',customerId,orderId:work.receipt.orderId,sourceItemId})).toEqual({frei:true});
 });
 
 it('keeps a mixed completion state visible and releases a full quantity only after both parts are finished',async()=>{
@@ -173,7 +181,7 @@ it('keeps a mixed completion state visible and releases a full quantity only aft
   const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:created.receipt.orderVersion,clientEventId:randomUUID()}));
   if(moved.code!=='OK')throw Error('TEST_S1_QUANTITY_HANDOFF:'+moved.code);
   for(const item of created.receipt.items)await storeItemPhoto(orderId,item.id);
-  const input={art:'menge' as const,orderId,customerId,menge:5};
+  const input={art:'menge' as const,orderId,customerId,menge:5,sourceItemId:await originalFixture(customerId)};
   const authorization=await withSession(full,()=>resolveAuthorization());
   if(!authorization.ok)throw Error('TEST_S1_QUANTITY_AUTH_REQUIRED');
   const pending=(finished:number)=>({frei:false,grund:'menge',text:MAIL_PROMISE_COPY.quantityNotReady([
@@ -203,11 +211,11 @@ it('reads the quote edition and quantity, rejecting an expired or different quot
   const send=(quoteId:string)=>withSession(full,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),
     expectedVersion:1,edition:1,channel:'druck',evidence:'TEST bisherige Fassung gedruckt'}));
   const quote=await create();if(quote.code!=='OK')throw Error('TEST_S1_QUOTE:'+quote.code);
-  const input={art:'auftrag_aus_kv' as const,orderId:quote.quote.quoteId,customerId,menge:3};
+  const input={art:'auftrag_aus_kv' as const,quoteId:quote.quote.quoteId,customerId,menge:3,sourceItemId:await originalFixture(customerId)};
   const read=()=>pruefeZusage(authorization.data,input);
-  expect(await read()).toMatchObject({frei:false,grund:'unbekannt'});
-  expect(await send(input.orderId)).toMatchObject({code:'OK'});
-  expect(await withSession(full,()=>changeQuoteLifecycleAction({action:'accept',quoteId:input.orderId,clientEventId:randomUUID(),
+  expect(await read()).toMatchObject({frei:false,grund:'unbekannt_kv'});
+  expect(await send(input.quoteId)).toMatchObject({code:'OK'});
+  expect(await withSession(full,()=>changeQuoteLifecycleAction({action:'accept',quoteId:input.quoteId,clientEventId:randomUUID(),
     expectedVersion:2,edition:1,evidence:'TEST aktuelle Fassung angenommen'}))).toMatchObject({code:'OK'});
   expect(await read()).toEqual({frei:true});
   expect(await pruefeZusage(authorization.data,{...input,menge:2})).toEqual({frei:false,grund:'menge',text:MAIL_PROMISE_COPY.quantityMismatch(2,3)});
@@ -216,7 +224,7 @@ it('reads the quote edition and quantity, rejecting an expired or different quot
   // Represent elapsed calendar time in the explicitly isolated TEST quote.
   await sql`UPDATE private.quotes SET valid_until=(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1
     WHERE tenant_id=${tenant} AND id=${expired.quote.quoteId}::uuid`;
-  expect(await pruefeZusage(authorization.data,{...input,orderId:expired.quote.quoteId})).toEqual({
+  expect(await pruefeZusage(authorization.data,{...input,quoteId:expired.quote.quoteId})).toEqual({
     frei:false,grund:'kv_abgelaufen',text:MAIL_PROMISE_COPY.quoteExpired(expired.quote.quoteNumber),
   });
 });
@@ -225,6 +233,8 @@ it('uses a secured incoming original for the phone handoff and only allows the c
   const {getOpenIntakeMailsAction}=await import('@/app/actions/eingang.actions');
   const sender='TEST S-1 Absender';
   const address='test-s1-'+randomUUID()+'@example.invalid';
+  const customerId=await customerFixture('TEST Kontakt der Bankdatenmeldung');
+  await sql`UPDATE public.customers SET email=${address} WHERE tenant_id=${tenant} AND id=${customerId}`;
   const body='TEST: Bitte neue Bankdaten telefonisch abstimmen.';
   const message={
     id:'TEST-S1-'+randomUUID(),internetMessageId:`<${address}>`,subject:'TEST S-1 Neue Bankverbindung',
@@ -250,14 +260,17 @@ it('uses a secured incoming original for the phone handoff and only allows the c
   if(!source)throw Error('TEST_S1_BANK_ORIGINAL_REQUIRED');
   const authorization=await withSession(full,()=>resolveAuthorization());
   if(!authorization.ok)throw Error('TEST_S1_BANK_AUTH_REQUIRED');
-  const input={art:'stammdaten' as const,sourceItemId:source.id};
+  // Synthetic confirmed association of the real imported original.
+  await sql`UPDATE public.intake_item SET kunde_id=${customerId}, zuordnung='hand' WHERE tenant_id=${tenant} AND id=${source.id}::uuid`;
+  const input={art:'stammdaten' as const,sourceItemId:source.id,customerId};
   const text=MAIL_PROMISE_COPY.verifyBankDetails(sender);
   expect(await pruefeZusage(authorization.data,input)).toEqual({
     frei:false,grund:'stammdaten',text,ausweg:{befehl:'saveIntakeTaskAction',text},
   });
-  expect(await pruefeZusage(authorization.data,{...input,sourceItemId:randomUUID()})).toMatchObject({frei:false,grund:'unbekannt'});
+  expect(await pruefeZusage(authorization.data,{...input,sourceItemId:randomUUID()})).toMatchObject({frei:false,grund:'absender_fremd'});
+  expect(await pruefeZusage(authorization.data,{...input,sourceItemId:await originalFixture(customerId)})).toMatchObject({frei:false,grund:'stammdaten'});
   expect(await pruefeZusage(authorization.data,{art:'kanal_versand',kanal:'mail'})).toEqual({frei:true});
-  expect(await pruefeZusage(authorization.data,{art:'kanal_versand',kanal:'whatsapp'})).toMatchObject({frei:false,grund:'unbekannt'});
+  expect(await pruefeZusage(authorization.data,{art:'kanal_versand',kanal:'whatsapp'})).toMatchObject({frei:false,grund:'unbekannt_kanal'});
   expect(await sql`SELECT version FROM public.intake_item WHERE tenant_id=${tenant} AND id=${source.id}::uuid`).toEqual([{version:source.version}]);
 });
 
@@ -291,11 +304,11 @@ it('reads the actual station and authorized material value without cancelling th
     const [order]=await sql`SELECT order_number,version FROM public.orders WHERE tenant_id=${tenant} AND id=${orderId}`;
     const snapshot=await leser.verbrauch(authorization.data,orderId);
     expect(snapshot).toMatchObject([{wertEur:'8.16',preisFehlt:false,vorlaeufig:false}]);
-    const input={art:'storno' as const,orderId,customerId};
+    const input={art:'storno' as const,orderId,customerId,sourceItemId:await originalFixture(customerId)};
     expect(await pruefeZusage(authorization.data,input)).toEqual({frei:false,grund:'storno',
-      text:MAIL_PROMISE_COPY.cancellation(order.order_number,'Fertig','8,16\u00a0€')});
+      text:MAIL_PROMISE_COPY.cancellation(),hinweis:MAIL_PROMISE_COPY.cancellationHint(order.order_number,'Fertig','8,16\u00a0€')});
     expect(await pruefeZusage(restricted.data,input)).toEqual({frei:false,grund:'storno',
-      text:MAIL_PROMISE_COPY.cancellation(order.order_number,'Fertig',null)});
+      text:MAIL_PROMISE_COPY.cancellation(),hinweis:MAIL_PROMISE_COPY.cancellationHint(order.order_number,'Fertig',null)});
     expect(await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${orderId}`).toEqual([{version}]);
   }finally{
     await sql`UPDATE public.feature_flags SET enabled=${flag.enabled} WHERE id='p4_lager'`;
@@ -316,10 +329,26 @@ it('blocks unpaid prepayment and allows it after the real payment with or withou
     withSession(full,()=>resolveAuthorization()),withSession(approver,()=>resolveAuthorization()),
   ]);
   if(!authorized.ok||!limited.ok)throw Error('TEST_S1_PREPAYMENT_AUTH_REQUIRED');
-  const input={art:'herausgabe' as const,customerId,orderId};
+  const input={art:'herausgabe' as const,customerId,orderId,sourceItemId:await originalFixture(customerId)};
   expect(await pruefeZusage(authorized.data,input)).toMatchObject({frei:false,grund:'vorkasse',text:expect.stringContaining('€')});
-  expect(await pruefeZusage(limited.data,input)).toEqual({frei:false,grund:'vorkasse',text:'Abholung erst nach Zahlung.',
-    ausnahme:{recht:'entscheiden'}});
+  expect(await pruefeZusage(limited.data,input)).toEqual({frei:false,grund:'vorkasse',text:'Abholung erst nach Zahlungseingang.'});
+  const previous=await intakeOrderFixture('TEST S-1 offener Altauftrag',customerId);
+  const earlierInvoiceId=randomUUID();
+  // Explicit synthetic historical debt. The current bill comes from the real invoice action.
+  await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,
+    due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,
+    payment_paid_amount_cents,payment_currency,payment_version)
+    VALUES(${earlierInvoiceId}::uuid,${tenant},${previous.receipt.orderId},${customerId},'R-2025-0813',60,'issued',
+      (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-1,6000,1,'rechnung','offen',6000,0,'EUR',0)`;
+  const [current]=await sql`SELECT order_number FROM public.orders WHERE tenant_id=${tenant} AND id=${orderId}`;
+  const blocked=await pruefeZusage(authorized.data,input);
+  expect(blocked).toMatchObject({frei:false,grund:'liefersperre',text:expect.stringContaining('R-2025-0813')});
+  expect(blocked).toMatchObject({text:expect.stringContaining(current.order_number),
+    hinweis:expect.stringContaining('R-2025-0813 + '+current.order_number)});
+  expect(await pruefeZusage(limited.data,input)).toEqual({frei:false,grund:'liefersperre',text:'Abholung erst nach Zahlung.'});
+  // Move only the isolated historical fixture out of the overdue class.
+  expect(await sql`UPDATE public.invoices SET due_date=(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+1
+    WHERE tenant_id=${tenant} AND id=${earlierInvoiceId}::uuid RETURNING id::text`).toEqual([{id:earlierInvoiceId}]);
   expect(await withSession(full,()=>confirmPaymentAction({invoiceId:invoice.invoiceId,amount:invoice.grossAmountCents,
     expectedVersion:0,method:'bar',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
   expect(await pruefeZusage(authorized.data,input)).toEqual({frei:true});

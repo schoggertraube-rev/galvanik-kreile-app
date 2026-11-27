@@ -40,5 +40,5 @@ export {observeIntakeMailboxImport,readIntakeMailboxWatermark} from "./server/in
 
 export {parkIntakeMailImportFailure,readFailedIntakeMailImports} from './server/intakeMailImport';
 export {tagQuellen} from './server/tagQuellen';
-export {pruefeZusage,recordZusageAusnahmeInTransaction,type ZusageInput,type ZusageErgebnis,type ZusageLeser} from './server/zusagePruefung';
+export {pruefeZusage,type ZusageInput,type ZusageErgebnis,type ZusageLeser} from './server/zusagePruefung';
 export {erlaubteWirkung,type MailAnliegen,type MailWirkung} from './server/mailWirkungen';
