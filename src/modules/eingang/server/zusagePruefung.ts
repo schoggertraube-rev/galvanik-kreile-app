@@ -6,15 +6,18 @@ import type {IntakeSuggestionsInput,IntakeTermSuggestion,IntakePriceSuggestion,I
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {pruefeHerausgabe,type ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
 import {readLiveOrderCard} from '@/lib/server/orderCardRead';
+import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {normaliseOrderPositionUnit,orderPositionQuantityError,orderPositionUnitLabel} from '@/lib/orderPositionContract';
 import type {QuoteReadback} from '@/modules/quotes/public';
+import type {CustomerStoredProfile} from '@/modules/customers/public';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 import {ORDER_STATION_COPY} from '@/ui/situationCatalog';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readIntakeMessagesForAuthorization} from './intakeMessages';
 import {readIntakeAutomaticReply} from './intakeOriginal';
+import {readIncomingInvoice} from './incomingInvoice';
 import {planeMailWirkungen} from './mailPlaene';
 import {erlaubteWirkung} from './mailWirkungen';
 
@@ -40,7 +43,7 @@ export type ZusageLeser={
   termin:(auth:AuthorizationSnapshot,input:IntakeSuggestionsInput,options?:IntakeSuggestionReadOptions)=>Promise<{term:IntakeTermSuggestion|null;prices?:IntakePriceSuggestion[]}>;
   kv:(auth:AuthorizationSnapshot,quoteId:string)=>Promise<QuoteReadback|null>;
   verbrauch:(auth:AuthorizationSnapshot,orderId:string)=>Promise<readonly Materialverbrauch[]>;
-  kunde:(auth:AuthorizationSnapshot,customerId:string)=>Promise<{id:string;email:string|null;billingEmail:string|null;phone:string|null}|null>;
+  kunde:(auth:AuthorizationSnapshot,customerId:string)=>Promise<CustomerStoredProfile|null>;
 };
 type Materialverbrauch={wertEur:string|null;preisFehlt:boolean;vorlaeufig:boolean};
 
@@ -49,6 +52,7 @@ const unknownTerm={frei:false,grund:'unbekannt_termin',text:MAIL_PROMISE_COPY.un
 const unknownQuote={frei:false,grund:'unbekannt_kv',text:MAIL_PROMISE_COPY.unknownQuote} as const;
 const unknownChannel={frei:false,grund:'unbekannt_kanal',text:MAIL_PROMISE_COPY.unknownChannel} as const;
 const unknownAbsence={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.abwesenheit} as const;
+const unknownDocument={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.beleg_dublette} as const;
 const foreignSender={frei:false,grund:'absender_fremd',text:MAIL_PROMISE_COPY.foreignSender} as const;
 const optionalCustomer = (input:ZusageInput) => input.art==='preis_im_text'||input.art==='kanal_versand'||
   (input.art==='termin'&&!input.orderId&&!input.quoteId);
@@ -66,6 +70,8 @@ function fehlendesRecht(auth:AuthorizationSnapshot,art:ZusageInput['art']):Acces
       return hasAuthorizationArea(auth,'preise')?null:'preise';
     case 'zahlungsavis':
       return hasAuthorizationArea(auth,'zahlungen')?null:'zahlungen';
+    case 'beleg_dublette':
+      return hasAuthorizationArea(auth,'buchhaltung')?null:'buchhaltung';
     default: return null;
   }
 }
@@ -93,7 +99,22 @@ async function qualifyCustomer(auth:AuthorizationSnapshot,input:ZusageInput,lese
   const sender=original.senderAddress?.trim().toLowerCase();
   if(!customer||customer.id!==input.customerId||!sender)return null;
   const contacts=[customer.email,customer.billingEmail,customer.phone];
-  return contacts.some(address=>address?.trim().toLowerCase()===sender)?original:null;
+  return contacts.some(address=>address?.trim().toLowerCase()===sender)?{...original,customer}:null;
+}
+
+async function pruefeBelegDublette(auth:AuthorizationSnapshot,original:NonNullable<Awaited<ReturnType<typeof qualifyCustomer>>>):Promise<ZusageErgebnis>{
+  const {customer}=original;
+  if(customer.customerType!=='lieferant')return unknownDocument;
+  const result=await readIncomingInvoice({id:original.id},{
+    findSuppliers:(reader,query,by)=>searchOrderIntakeCustomers(reader,{query},{exactSupplier:by}),
+    readCustomer:async(_tx,tenant,id)=>tenant===auth.tenantId&&id===customer.id?customer:null,
+  },auth);
+  if(result.code!=='OK')return unknownDocument;
+  const {view}=result;
+  if(view.item.id!==original.id||view.item.version!==original.version||view.supplier?.id!==customer.id||
+    !view.fileId||!view.originals.some(file=>file.id===view.fileId)||!view.fields.nummer.trim())return unknownDocument;
+  if(view.invoice||view.duplicate)return {frei:false,grund:'beleg_dublette',text:MAIL_PROMISE_COPY.duplicateDocument};
+  return view.uncertain===0&&!view.conflict?{frei:true}:unknownDocument;
 }
 
 async function readPromiseOrder(auth:AuthorizationSnapshot,input:ZusageInput){
@@ -224,6 +245,7 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
     const original=customerRequired?await qualifyCustomer(auth,input,leser):null;
     if(customerRequired&&!original)return foreignSender;
     if(input.art==='stammdaten'&&original)return pruefeStammdaten(original);
+    if(input.art==='beleg_dublette'&&original)return await pruefeBelegDublette(auth,original);
     if(input.art==='abwesenheit'){
       if(!original?.mimeFileId)return unknownAbsence;
       const automatic=await readIntakeAutomaticReply(auth,{itemId:original.id,fileId:original.mimeFileId,version:original.version});
@@ -252,6 +274,7 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
   }catch(error){
     console.error('[MAIL_PROMISE_SOURCE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
     if(input.art==='abwesenheit')return unknownAbsence;
+    if(input.art==='beleg_dublette')return unknownDocument;
     return input.art==='termin'?unknownTerm:input.art==='auftrag_aus_kv'?unknownQuote:unavailable;
   }
 }
@@ -269,5 +292,6 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
   return erlaubteWirkung(anliegen,wirkung,{
     preisrecht:hasAuthorizationArea(auth,'preise'),
     ...(input.art==='preisquelle'?{preisquelle:true}:{}),
+    ...(input.art==='beleg_dublette'&&wirkung==='rechnung_im_belegzugang_ablegen'?{belegDublette:false}:{}),
   })?ergebnis:unavailable;
 }

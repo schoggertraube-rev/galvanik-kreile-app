@@ -1,5 +1,5 @@
 // @vitest-environment node
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {expect,it,vi} from 'vitest';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -362,6 +362,73 @@ it('holds the reply open only for an automatic marking in the secured MIME heade
       ]);
     }
   }finally{fetchMock.mockRestore();}
+});
+
+it('uses the same incoming invoice evidence to stop a second registration',async()=>{
+  const {createCustomerAction}=await import('@/app/actions/customers.actions');
+  const {prepareIntakeFileAction,finishIntakeFileAction,getIncomingInvoiceAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+  const {createElement}=await import('react');
+  const {Document,Page,Text,renderToBuffer}=await import('@react-pdf/renderer');
+  const address=`TEST-S1-${randomUUID()}@example.invalid`;
+  const supplier=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',
+    companyName:'TEST S-1 Lieferantenbeleg',country:'DE',email:address}));
+  if(supplier.code!=='OK')throw Error('TEST_S1_SUPPLIER_REQUIRED');
+  const customerId=supplier.receipt.customerId,number=`TEST-S1-${randomUUID()}`;
+  const ocrHost=process.env.AZURE_DOCINTEL_ENDPOINT?new URL(process.env.AZURE_DOCINTEL_ENDPOINT).hostname:null;
+  const captureDocument=async(originalText:string)=>{
+    const itemId=randomUUID(),fileId=randomUUID();
+    const bytes=await renderToBuffer(createElement(Document,null,
+      createElement(Page,null,createElement(Text,null,number+' '+originalText))));
+    const grant=await withSession(full,()=>prepareIntakeFileAction({itemId,fileId,name:'TEST-S1-Beleg.pdf',mime:'application/pdf',
+      bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),captureOrigin:'dokument'}));
+    if(grant.code!=='OK'||!grant.upload)throw Error('TEST_S1_DOCUMENT_GRANT_REQUIRED:'+grant.code);
+    const url=new URL(`/storage/v1/object/upload/sign/${grant.upload.bucket}/${grant.upload.path}`,process.env.NEXT_PUBLIC_SUPABASE_URL);
+    if(url.hostname!=='127.0.0.1')throw Error('TEST_LOOPBACK_ONLY');
+    url.searchParams.set('token',grant.upload.token);
+    expect((await nativeFetch(url,{method:'PUT',headers:{'content-type':'application/pdf','x-upsert':'false'},body:new Uint8Array(bytes)})).ok).toBe(true);
+    const recognition=vi.spyOn(globalThis,'fetch').mockImplementation((request,init)=>{
+      const api=new URL(typeof request==='string'?request:request instanceof URL?request.href:request.url);
+      return ocrHost&&api.hostname===ocrHost?Promise.resolve(new Response('TEST OCR unavailable',{status:503})):nativeFetch(request,init);
+    });
+    try{expect(await withSession(full,()=>finishIntakeFileAction(fileId))).toMatchObject({code:'OK',capture:{
+      files:expect.arrayContaining([expect.objectContaining({id:fileId,secured:true})]),
+    }});}finally{recognition.mockRestore();}
+    // Isolated contact fixture. The document and its storage receipt are real.
+    await sql`UPDATE public.intake_item SET kunde_id=${customerId},zuordnung='hand',absender_adresse=${address}
+      WHERE tenant_id=${tenant} AND id=${itemId}::uuid`;
+    const view=await withSession(full,()=>getIncomingInvoiceAction({id:itemId}));
+    if(view.code!=='OK')throw Error('TEST_S1_INVOICE_VIEW_REQUIRED');
+    return {itemId,fileId,version:view.view.item.version};
+  };
+  // Isolated OCR fixture. The invoice writer and duplicate reader are real.
+  const recognizeNumber=({itemId,fileId}:Awaited<ReturnType<typeof captureDocument>>)=>sql`
+    INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,status)
+    VALUES(${tenant},${itemId}::uuid,${fileId}::uuid,'rechnung.nummer',${sql.json(number)}::jsonb,'sicher','offen')`;
+  const document=await captureDocument('TEST Original vom Lieferanten');
+  const {itemId,fileId,version}=document;
+  const authorization=await withSession(full,()=>resolveAuthorization());
+  if(!authorization.ok)throw Error('TEST_S1_INVOICE_AUTH_REQUIRED');
+  const plan={art:'beleg_dublette' as const,anliegen:'A19',wirkung:'rechnung_im_belegzugang_ablegen',
+    sourceItemId:itemId,sourceVersion:version,customerId};
+  expect(await pruefeZusage(authorization.data,plan)).toEqual({frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.beleg_dublette});
+  await recognizeNumber(document);
+  expect(await pruefeZusage(authorization.data,plan)).toEqual({frei:true});
+  expect(await pruefeZusage(authorization.data,{...plan,wirkung:'lieferschein_an_bestellung_ablegen'})).toMatchObject({frei:false});
+  const saved=await withSession(full,()=>saveIncomingInvoiceAction({itemId,fileId,version:plan.sourceVersion,clientKey:randomUUID(),
+    fields:{lieferantId:customerId,nummer:number,datum:'2026-11-25',netto:'100,00',ust:'19,00',brutto:'119,00',
+      faelligAm:'2026-11-30',iban:'',ibanGeprueft:false},status:'offen',paidDate:null,proofFileId:null,
+    duplicateId:null,duplicateReason:null,unclearReason:null}));
+  expect(saved).toMatchObject({code:'OK'});
+  const current=await withSession(full,()=>getIncomingInvoiceAction({id:itemId}));
+  if(current.code!=='OK')throw Error('TEST_S1_SAVED_INVOICE_REQUIRED');
+  expect(await pruefeZusage(authorization.data,{...plan,sourceVersion:current.view.item.version})).toEqual({
+    frei:false,grund:'beleg_dublette',text:MAIL_PROMISE_COPY.duplicateDocument,
+  });
+  const other=await captureDocument('TEST Separater Scan derselben Rechnung');
+  await recognizeNumber(other);
+  expect(await pruefeZusage(authorization.data,{...plan,sourceItemId:other.itemId,sourceVersion:other.version})).toEqual({
+    frei:false,grund:'beleg_dublette',text:MAIL_PROMISE_COPY.duplicateDocument,
+  });
 });
 
 it('reads the actual station and authorized material value without cancelling the order',async()=>{
