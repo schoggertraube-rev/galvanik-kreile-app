@@ -186,10 +186,11 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       if(active[0]?.befehl_id!==claimKey){console.info('[INTAKE_RECOGNITION_SUPERSEDED]',{fileId});return;}
       const hasValues=ocr!==null||xmlResult?.code==='OK';
       const documentText = ocr?.data.suggestions.find(suggestion => suggestion.field === "DOCUMENT_TEXT")?.value ?? null;
+      const replaceDocumentText = ocr !== null && (documentText !== null || !rawStorageFailed);
       const pages = ocr?.original?.pages ?? null;
       const model = ocr?.original?.model ?? null;
       await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${hasValues && !rawStorageFailed ? "fertig" : "fehler"},
-          erkannter_text=CASE WHEN ${ocr !== null} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
+          erkannter_text=CASE WHEN ${replaceDocumentText} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
           erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);

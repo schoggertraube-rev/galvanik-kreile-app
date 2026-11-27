@@ -38,8 +38,9 @@ it("reads stored company models and threshold, with the existing default layout"
 
 it.each([
   { text: "TEST Rechnung", damagedArchive: true },
+  { text: null, damagedArchive: true },
   { text: null, damagedArchive: false },
-])("stores the original, pages and position (damagedArchive=$damagedArchive)", async ({ text, damagedArchive }) => {
+])("stores the original, pages and position (text=$text, damagedArchive=$damagedArchive)", async ({ text, damagedArchive }) => {
   const model = "prebuilt-layout";
   const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
     modelId: model, content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
@@ -102,7 +103,7 @@ it.each([
         const failed = await withSession(full, () => finishIntakeFileAction(fileId));
         if (failed.code !== "OK") throw Error("TEST_I1_CAPTURE_UNAVAILABLE");
         expect(failed.capture.files.find(file => file.id === fileId)).toMatchObject({
-          secured: true, status: "fehler", errorCode: "INTAKE_RAW_NOT_SAVED", recognizedText: text,
+          secured: true, status: "fehler", errorCode: "INTAKE_RAW_NOT_SAVED", recognizedText: text ?? "TEST früherer Volltext",
         });
         expect(failed.capture.suggestions).toEqual(expect.arrayContaining([
           expect.objectContaining({ field: "rechnung.nummer", value: "TEST-I1-NUMMER" }),
