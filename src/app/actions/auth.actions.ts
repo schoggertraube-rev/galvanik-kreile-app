@@ -2,7 +2,7 @@
 import type {PackageSwitchValues} from "@/modules/fundament/public";
 import {logTechnical} from '@/modules/logging/server-public';
 import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
-import {getAuthBootstrapState,type AuthBootstrapState} from '@/lib/server/authBootstrap';
+import {getAuthBootstrapState,readCacheLoginScope,type AuthBootstrapState} from '@/lib/server/authBootstrap';
 
 import bcrypt from "bcryptjs";
 import {withPageReadPhase} from '@/db/readBudget';
@@ -18,9 +18,11 @@ import type {
   PermissionKey,
 } from "@/lib/auth/authorizationContract";
 import { canUsePinLogin } from "@/lib/auth/authorizationContract";
+import type { SessionActivityResult, SessionInactivity } from '@/lib/auth/sessionInactivity';
 import {
   APP_TENANT_ID,
   clearAppSession,
+  renewAppSessionActivity,
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
@@ -44,6 +46,7 @@ export type ClientAuthorizationResult =
         offlineScope?: string;
         offline24h?:boolean;
         packageSwitches?:Readonly<PackageSwitchValues>;
+        inactivity?: SessionInactivity;
         role: AppRole;
         areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
@@ -66,6 +69,18 @@ export async function getAuthBootstrapAction():Promise<AuthBootstrapState>{
 export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizationResult> {
  return actionObservationActive()?readClientAuthorizationSnapshot():withActionObservation(readClientAuthorizationSnapshot,logTechnical);
 }
+
+/** Only the currently authorized signed session can acknowledge an interaction. */
+export async function recordAppSessionActivity(sessionScope: string): Promise<SessionActivityResult> {
+  if (typeof sessionScope !== 'string' || !/^[a-f0-9]{64}$/.test(sessionScope)) return { code: 'EXPIRED' };
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) return { code: authorization.reason === 'AUTHORIZATION_UNAVAILABLE' ? 'UNAVAILABLE' : 'EXPIRED' };
+  const current = authorization.data.sessionInactivity;
+  if (!current) return { code: 'UNAVAILABLE' };
+  const now = await renewAppSessionActivity({ userId: authorization.data.userId, issuedAt: current.issuedAt, sessionScope }, current);
+  return now ? { code: 'OK', inactivity: now } : { code: 'EXPIRED' };
+}
+
 async function readClientAuthorizationSnapshot():Promise<ClientAuthorizationResult>{
   const result = await resolveAuthorization();
   if (!result.ok) {
@@ -80,10 +95,13 @@ async function readClientAuthorizationSnapshot():Promise<ClientAuthorizationResu
     };
   }
 
+  const inactivity = result.data.sessionInactivity;
+  const sessionScope = inactivity ? await readCacheLoginScope() : undefined;
   return {
     ok: true,
     data: {
       displayName: result.data.displayName,
+      ...(inactivity ? { inactivity: { lastSeen: inactivity.lastSeen, expiresAt: inactivity.expiresAt, minutes: inactivity.minutes, serverAt: inactivity.serverAt, sessionScope } } : {}),
       // Local partition only, never a credential; preserves existing intake originals.
       offlineScope: offlinePartition(result.data),
       offline24h: result.data.offline24h===true,
@@ -169,6 +187,7 @@ function pinLoginFailureDetails(error: unknown): { name: string; code: string | 
 export async function loginWithPin(
   loginHandle: string,
   pin: string,
+  tabletInput?: 'tablet',
 ): Promise<
   | { ok: true; role: AppRole }
   | { ok: false; message: string; supportReference?: string }
@@ -232,7 +251,7 @@ export async function loginWithPin(
       displayName: user.fullName,
       issuedAt: now,
       expiresAt: now + SESSION_TTL_MS,
-    });
+    }, tabletInput === 'tablet' ? tabletInput : undefined);
 
     const lastSeen = await withPageReadPhase('auth.last_seen',()=>recordUserLastSeenForLogin());
     if (lastSeen.code !== "OK") {

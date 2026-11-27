@@ -39,6 +39,9 @@
     "src/app/actions/auth.actions.ts#getAuthBootstrapAction": [
       "src/test/acceptance/package_feature_switches.integration.test.ts"
     ],
+    "src/app/actions/auth.actions.ts#recordAppSessionActivity": [
+      "src/test/acceptance/l_g6c_session_activity.integration.test.ts"
+    ],
     "src/app/actions/domainAttachments.actions.ts#analyzeDomainAttachmentAction": [
       "src/test/acceptance/s20_recognition_protocol.integration.test.ts"
     ],

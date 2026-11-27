@@ -1,0 +1,20 @@
+[
+  {
+    "schluessel": "inaktivitaet_abmelden_minuten",
+    "status": "wirkt",
+    "leser": "src/lib/auth/sessionInactivity.ts#readSessionInactivity",
+    "wirkung": "Beendet die Anmeldung nach der vorgesehenen Zeit ohne Bedienung."
+  },
+  {
+    "schluessel": "inaktivitaet_abmelden_geraete",
+    "status": "wirkt",
+    "leser": "src/lib/auth/sessionInactivity.ts#readSessionInactivity",
+    "wirkung": "Verwendet für das jeweilige Gerät die dafür eingestellte Zeit."
+  },
+  {
+    "schluessel": "inaktivitaet_abmelden_rollen",
+    "status": "wirkt",
+    "leser": "src/lib/auth/sessionInactivity.ts#readSessionInactivity",
+    "wirkung": "Verwendet für die Rolle die dafür eingestellte Zeit. Treffen Gerät und Rolle zu, gilt die kürzere Zeit."
+  }
+]

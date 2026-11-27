@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+import type { SessionInactivity } from '@/lib/auth/sessionInactivity';
 import type {
   AccessArea,
   AuthorizationAction,
@@ -36,6 +37,7 @@ interface AuthState {
   offlineScope: string | null;
   offline24h: boolean;
   packageSwitches: Readonly<PackageSwitchValues>|null;
+  inactivity?: SessionInactivity;
   areas: AccessArea[];
   permissions: string[];
   actions: AuthorizationActionGrants;
@@ -65,6 +67,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
       offlineScope: initial.user.offlineScope ?? null,
       offline24h: initial.user.offline24h===true,
       packageSwitches: initial.user.packageSwitches?{...initial.user.packageSwitches}:null,
+      ...(initial.user.inactivity ? { inactivity: initial.user.inactivity } : {}),
       areas: [...initial.user.areas],
       permissions: [...initial.user.permissions],
       actions: { ...DENIED_ACTIONS, ...initial.user.actions },
@@ -150,6 +153,7 @@ export function PermissionsProvider({
           offlineScope: result.data.offlineScope ?? null,
           offline24h: result.data.offline24h===true,
           packageSwitches: result.data.packageSwitches?{...result.data.packageSwitches}:null,
+          ...(result.data.inactivity ? { inactivity: result.data.inactivity } : {}),
           areas: [...result.data.areas],
           permissions: [...result.data.permissions],
           actions: { ...result.data.actions },

@@ -123,6 +123,25 @@ describe("authorized Supabase server data client", () => {
     expect(mockCreateServerClient).toHaveBeenCalledOnce();
   });
 
+  it("reads the old request session without applying a delayed Supabase cookie deletion", async () => {
+    const requestCookies = [{ name: "sb-test-auth-token.0", value: "synthetic-old-session" }];
+    const cookieDeletion = { name: requestCookies[0].name, value: "", options: { maxAge: 0 } };
+    const set = vi.fn();
+    mockCookies.mockResolvedValue({ getAll: () => requestCookies, set });
+    const { createClient } = await import("@/lib/supabase/server");
+
+    await createClient({ writeCookies: false });
+    const expiredRequest = mockCreateServerClient.mock.lastCall![2].cookies;
+    expect(expiredRequest.getAll()).toEqual(requestCookies);
+    expiredRequest.setAll([cookieDeletion]);
+    expect(set).not.toHaveBeenCalled();
+
+    await createClient();
+    const manualRequest = mockCreateServerClient.mock.lastCall![2].cookies;
+    manualRequest.setAll([cookieDeletion]);
+    expect(set).toHaveBeenCalledExactlyOnceWith(cookieDeletion.name, cookieDeletion.value, cookieDeletion.options);
+  });
+
   it("does not fall back to a browser key when server configuration is missing", async () => {
     mockReadAuthorizedArea.mockResolvedValue({
       ok: true,
