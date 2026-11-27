@@ -41,7 +41,7 @@ export function projectTodayOrderSources(auth:AuthorizationSnapshot,sources:Awai
 export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrderReadAuthorization,orderIds:string[],ports:TodayOrderReadPorts){
   const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
   const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,orderIds))]);
-  const [{readInvoiceShippingConsequencesBatch},{readOrdersInformed},{readOrderPickupAppointment},{getPaymentStatesBatch,maskOrderPaymentCredit}]=await Promise.all([
+  const [{readInvoiceShippingConsequencesBatch},{readOrdersInformed},{readOrderPickupAppointmentsBatch},{getPaymentStatesBatch,maskOrderPaymentCredit}]=await Promise.all([
    import('@/lib/server/commands/immutableInvoiceCommand'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/paymentSummaryRead')]);
   const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
   const readCredit=canReadOrderPaymentCredit(readAuth)?ports.readCredit:undefined;
@@ -53,9 +53,11 @@ export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrde
   const qualifiedCards=orderIds.flatMap(orderId=>{const source=cards.get(orderId),proof=evidence.get(orderId);return source?.code==='OK'&&proof?.code==='OK'?[source.data]:[];});
   const finishedIds=qualifiedCards.filter(card=>card.station==='fertig').map(card=>card.id);
   const shipmentIds=qualifiedCards.filter(card=>card.handoverMode==='shipping').map(card=>card.id);
+  const pickupIds=qualifiedCards.filter(card=>card.station==='fertig'&&card.handoverMode==='pickup').map(card=>card.id);
   const informedReads=withPageReadPhase('action.informed',()=>readOrdersInformed(auth,finishedIds));
   const paymentReads=withPageReadPhase('action.payment',()=>getPaymentStatesBatch('canReadArea'in auth?auth.payment:auth,finishedIds,readCredit));
   const shipmentReads=shipmentIds.length?withPageReadPhase('action.shipment',()=>ports.readShipments(auth,shipmentIds,readShippingSettings)):Promise.resolve(new Map<string,ManualShippingReadResult>());
+  const appointmentReads=withPageReadPhase('action.appointment',()=>readOrderPickupAppointmentsBatch(auth,pickupIds));
   const rows=await Promise.all(orderIds.map(async orderId=>{
    const source=cards.get(orderId),proof=evidence.get(orderId);
    if(!source||source.code!=='OK')return {orderId,result:source??{code:'UNAVAILABLE' as const,message:'Auftrag nicht verfügbar.'}};
@@ -67,7 +69,7 @@ export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrde
      card.station==='fertig'?informedReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_NOTIFICATION_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
      card.station==='fertig'?paymentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('ORDER_PAYMENT_BATCH_SOURCE_MISSING');return maskOrderPaymentCredit(readAuth,value);}):Promise.resolve(undefined),
      card.handoverMode==='shipping'?shipmentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('MANUAL_SHIPPING_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
-     card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
+     card.station==='fertig'&&card.handoverMode==='pickup'?appointmentReads.then(rows=>{const value=rows.get(card.id);if(!value)throw Error('PICKUP_APPOINTMENT_BATCH_SOURCE_MISSING');return value;}):Promise.resolve(undefined),
     ]);
     if(informed?.code==='OK'&&informed.orderVersion!==card.version)return {orderId,result:{code:'UNAVAILABLE' as const,message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'}};
     return {orderId,result:{code:'OK' as const,data:{card,records:proof.data,shipping,informed,payment,shipment,appointment}}};

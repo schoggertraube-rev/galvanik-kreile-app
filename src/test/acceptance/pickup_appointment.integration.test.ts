@@ -6,7 +6,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
-import {setOrderPickupAppointmentAction,getLiveOrderCardAction} from '@/app/actions/orders.actions';
+import {setOrderPickupAppointmentAction,getLiveOrderCardAction,getTodayOrderReadAction} from '@/app/actions/orders.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 import {getOrdersDb} from '@/app/actions/orders.actions';
 import {updateCustomerAction} from '@/app/actions/customers.actions';
@@ -44,6 +44,20 @@ it('a separate actual appointment preserves the production date, records actor/c
  const shipping=await readyInvoiceOrder('Abholtermin-Versand','shipping');
  expect(await withSession(full,()=>setOrderPickupAppointmentAction({...input,orderId:shipping.orderId,expectedVersion:shipping.version,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${shipping.orderId} AND event_type='ORDER_PICKUP_APPOINTMENT_SET_V1'`).toHaveLength(0);
+});
+it('reads the matching active pickup appointments for two orders in the same Today request',async()=>{
+ const orders=[await readyInvoiceOrder('TEST Abholtermine gesammelt A'),await readyInvoiceOrder('TEST Abholtermine gesammelt B')];
+ const dates=['2027-06-10','2027-06-14'];
+ const receipts=[];
+ for(const [index,order] of orders.entries()){
+  const saved=await withSession(full,()=>setOrderPickupAppointmentAction({orderId:order.orderId,expectedVersion:order.version,previousEventId:null,date:dates[index],channel:'telefon',clientEventId:randomUUID()}));
+  if(saved.code!=='OK')throw Error('TEST_PICKUP_APPOINTMENT_NOT_SAVED');
+  receipts.push(saved.receipt);
+ }
+ const orderIds=orders.map(order=>order.orderId);
+ expect(await withSession(full,()=>getTodayOrderReadAction({orderIds}))).toMatchObject({code:'OK',data:{rows:receipts.map(receipt=>({
+  orderId:receipt.orderId,result:{code:'OK',data:{pickupAppointment:{code:'OK',appointment:{eventId:receipt.eventId,date:receipt.date,actorId:full.actorId}}}},
+ }))}});
 });
 it('a stale call proposal cannot recreate a callback after an actual pickup agreement has paused its group',async()=>{
  const order=await readyInvoiceOrder('Abholtermin-Anrufrennen');

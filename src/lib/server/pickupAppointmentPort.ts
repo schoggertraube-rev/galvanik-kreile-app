@@ -70,8 +70,14 @@ function qualify(row:Row){
  if(!r||row.status!=='success'||row.event_schema_version!==1||r.eventId!==row.id||r.orderId!==row.order_id||r.actorId!==row.user_id||r.clientEventId!==row.client_event_id||row.correlation_id!==row.client_event_id||!uuid.test(r.freezeId)||!Number.isSafeInteger(r.orderVersion)||r.orderVersion<1||row.aggregate_version!==r.orderVersion||!validDay(r.date)||!channels.includes(r.channel)||!Number.isFinite(Date.parse(r.recordedAt))||new Date(row.created_at).toISOString()!==r.recordedAt||!(r.previousEventId===null||uuid.test(r.previousEventId))||digest(r)!==p.receiptSha256||digest({orderId:r.orderId,expectedVersion:r.orderVersion,previousEventId:r.previousEventId,date:r.date,channel:r.channel,clientEventId:r.clientEventId})!==p.intent)throw Error('PICKUP_APPOINTMENT_RECEIPT_INVALID');
  return r;
 }
+function latestRows(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,orderIds:readonly string[]){
+ return tx.execute<Row>(sql`SELECT DISTINCT ON (order_id) ${selection}
+  FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_PICKUP_APPOINTMENT_SET_V1'
+   AND order_id=ANY(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[])
+  ORDER BY order_id,public.events.created_at DESC,public.events.id DESC`);
+}
 async function latest(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,orderId:string){
- const rows=await tx.execute<Row>(sql`SELECT ${selection} FROM public.events WHERE tenant_id=${auth.tenantId} AND order_id=${orderId} AND event_type='ORDER_PICKUP_APPOINTMENT_SET_V1' ORDER BY created_at DESC,id DESC LIMIT 1`);
+ const rows=await latestRows(tx,auth,[orderId]);
  return rows.length?qualify(rows[0]):null;
 }
 /** The agreement is an event on the existing order, never its production due date. */
@@ -123,13 +129,56 @@ export async function readOrderPickupAppointment(auth:AuthorizationSnapshot|Auth
  try{return await withPrivilegedTenantTransaction(readAuth,async tx=>({code:'OK' as const,appointment:await readOrderPickupAppointmentInTransaction(tx,readAuth,orderId)}));
  }catch(error){console.error('[PICKUP_APPOINTMENT_READ_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const};}
 }
+function activePickupFreezes(tx:PrivilegedTenantTransaction,tenantId:string,orderIds:readonly string[]){
+ return tx.execute<{order_id:string;freeze_id:string}>(sql`SELECT o.id::text AS order_id,f.freeze_id::text
+  FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok
+  WHERE o.tenant_id=${tenantId} AND o.id=ANY(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[])
+   AND o.handover_mode='pickup' AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
+}
 export async function readOrderPickupAppointmentInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot|AuthorizedReadContext,orderId:string){
   const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
   if(!readAuth.canReadArea('auftraege'))throw Error('PICKUP_APPOINTMENT_FORBIDDEN');
   const receipt=await latest(tx,readAuth,orderId);
   if(!receipt)return null;
-  const current=await tx.execute<{freeze_id:string}>(sql`SELECT f.freeze_id::text FROM public.orders o JOIN private.v_order_freeze_state_v1 f ON f.tenant_id=o.tenant_id AND f.order_id=o.id AND f.active AND f.integrity_ok WHERE o.tenant_id=${readAuth.tenantId} AND o.id=${orderId} AND o.handover_mode='pickup' AND o.station='fertig' AND o.status='fertig' AND o.current_station='fertig' AND o.current_station_id='fertig'`);
+  const current=await activePickupFreezes(tx,readAuth.tenantId,[orderId]);
   return current[0]?.freeze_id===receipt.freezeId?receipt:null;
+}
+
+/** Latest evidence and active freezes for the same authorized Today read. */
+export async function readOrderPickupAppointmentsBatch(auth:AuthorizationSnapshot|AuthorizedReadContext,orderIds:readonly string[]){
+ const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
+ const allowed=readAuth.canReadArea('auftraege');
+ const result=new Map<string,Awaited<ReturnType<typeof readOrderPickupAppointment>>>();
+ const ids:string[]=[];
+ for(const id of new Set(orderIds)){
+  if(!allowed) result.set(id,{code:'FORBIDDEN'});
+  else if(!uuid.test(id)) result.set(id,{code:'VALIDATION_ERROR'});
+  else ids.push(id);
+ }
+ if(!ids.length)return result;
+ try{
+  await withPrivilegedTenantTransaction(readAuth,async tx=>{
+   const rows=await latestRows(tx,readAuth,ids);
+   const byOrder=new Map(rows.map(row=>[row.order_id,row]));
+   const active=rows.length?await activePickupFreezes(tx,readAuth.tenantId,rows.map(row=>row.order_id)):[];
+   const freezeByOrder=new Map(active.map(row=>[row.order_id,row.freeze_id]));
+   for(const id of ids){
+    const row=byOrder.get(id);
+    try{
+     const receipt=row?qualify(row):null;
+     const appointment=receipt&&freezeByOrder.get(id)===receipt.freezeId?receipt:null;
+     result.set(id,{code:'OK',appointment});
+    }catch(error){
+     console.error('[PICKUP_APPOINTMENT_READ_FAILED]',error instanceof Error?error.message:'UnknownError');
+     result.set(id,{code:'UNAVAILABLE'});
+    }
+   }
+  });
+ }catch(error){
+  console.error('[PICKUP_APPOINTMENT_READ_FAILED]',error instanceof Error?error.message:'UnknownError');
+  for(const id of ids)result.set(id,{code:'UNAVAILABLE'});
+ }
+ return result;
 }
 
 /** A task may retain only the freezes not covered by this actual appointment. */
