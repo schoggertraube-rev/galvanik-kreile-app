@@ -67,7 +67,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
         offline24h:result.data.offline24h===true,
         ...(result.data.packageSwitches?{packageSwitches:{...result.data.packageSwitches}}:{}),
         ...(offlineLoginScope?{offlineLoginScope}:{}),
-        ...(inactivity?{inactivity:{lastSeen:inactivity.lastSeen,expiresAt:inactivity.expiresAt,minutes:inactivity.minutes,serverAt:inactivity.serverAt}}:{}),
+        ...(inactivity?{inactivity:{lastSeen:inactivity.lastSeen,expiresAt:inactivity.expiresAt,minutes:inactivity.minutes,serverAt:inactivity.serverAt,sessionScope:offlineLoginScope}}:{}),
         role: result.data.role,
         displayName: result.data.displayName,
         areas: [...(result.data.areas ?? [])],

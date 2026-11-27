@@ -2,7 +2,7 @@
 import type {PackageSwitchValues} from "@/modules/fundament/public";
 import {logTechnical} from '@/modules/logging/server-public';
 import {actionObservationActive,withActionObservation} from '@/lib/server/actionObservation';
-import {getAuthBootstrapState,type AuthBootstrapState} from '@/lib/server/authBootstrap';
+import {getAuthBootstrapState,readCacheLoginScope,type AuthBootstrapState} from '@/lib/server/authBootstrap';
 
 import bcrypt from "bcryptjs";
 import {withPageReadPhase} from '@/db/readBudget';
@@ -95,11 +95,12 @@ async function readClientAuthorizationSnapshot():Promise<ClientAuthorizationResu
   }
 
   const inactivity = result.data.sessionInactivity;
+  const sessionScope = inactivity ? await readCacheLoginScope() : undefined;
   return {
     ok: true,
     data: {
       displayName: result.data.displayName,
-      ...(inactivity ? { inactivity: { lastSeen: inactivity.lastSeen, expiresAt: inactivity.expiresAt, minutes: inactivity.minutes, serverAt: inactivity.serverAt } } : {}),
+      ...(inactivity ? { inactivity: { lastSeen: inactivity.lastSeen, expiresAt: inactivity.expiresAt, minutes: inactivity.minutes, serverAt: inactivity.serverAt, sessionScope } } : {}),
       // Local partition only, never a credential; preserves existing intake originals.
       offlineScope: offlinePartition(result.data),
       offline24h: result.data.offline24h===true,

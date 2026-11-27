@@ -11,6 +11,7 @@ import { createFixture, full, sql, withRequest, withSession } from '../../../e2e
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { getAuthorizationSnapshotAction, loginWithPin, recordAppSessionActivity } from '@/app/actions/auth.actions';
+import { logout } from '@/app/actions/auth';
 import { getIntakeDraftsAction, saveIntakeDraftAction } from '@/app/actions/eingang.actions';
 import { replayOfflineWorkshopAction } from '@/app/actions/offlineWorkshop.actions';
 import { getLiveOrderCardAction, transitionWareneingangToGalvanikAction } from '@/app/actions/orders.actions';
@@ -67,7 +68,7 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       const token = store.get(COOKIE_NAME)!.value;
       const scope = appSessionReadScope(token, original);
       expect(await getAuthorizationSnapshotAction()).toMatchObject({ ok: true,
-        data: { inactivity: { expiresAt: now + 120_000, lastSeen: now, minutes: 2 } } });
+        data: { inactivity: { expiresAt: now + 120_000, lastSeen: now, minutes: 2, sessionScope: scope } } });
       const draftId = randomUUID();
       const payload = { clientKey: draftId, text: 'TEST Entwurf auf dem Tablet' };
       const draft = { id: draftId, art: 'eingang', payload, zuletzt_feld: 'text' };
@@ -81,6 +82,12 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
       if (!refreshed.ok) throw new Error('TEST signed session unavailable');
       expect(refreshed.session.expiresAt).toBe(original.expiresAt);
       expect(appSessionReadScope(store.get(COOKIE_NAME)!.value, refreshed.session)).toBe(scope);
+      clock.mockReturnValue(now + 120_000);
+      const renewedToken = store.get(COOKIE_NAME)!.value;
+      expect(await logout({ sessionScope: scope })).toMatchObject({
+        ok: false, code: 'ACTIVE', inactivity: { expiresAt: now + 165_000, sessionScope: scope },
+      });
+      expect(store.get(COOKIE_NAME)?.value).toBe(renewedToken);
 
       const pending: PendingPhysicalWorkshopOriginal = {
         id: commandId, kind: 'workshop', itemId: orderId, command: 'item.finished',
@@ -105,10 +112,17 @@ it('expires a tablet session and resumes the same login’s saved draft and orig
         expect(await getIntakeDraftsAction()).toEqual({code:'OK',drafts:[]});
       });
       expect(await orderReceipts()).toEqual([]);
+      expect(await logout({ sessionScope: scope })).toMatchObject({ ok: true });
+      expect(await readAppSession()).toEqual({ ok: false, reason: 'NO_COOKIE' });
 
       await withRequest('', async () => {
         expect(await loginWithPin(handle, pin, 'tablet')).toMatchObject({ok:true});
-        expect((await cookies()).get(COOKIE_NAME)?.value).not.toBe(expiredToken);
+        const newStore = await cookies();
+        const newToken = newStore.get(COOKIE_NAME)?.value;
+        expect(newToken).toBeTruthy();
+        expect(newToken).not.toBe(expiredToken);
+        expect(await logout({ sessionScope: scope })).toEqual({ ok: false, code: 'SESSION_CHANGED' });
+        expect(newStore.get(COOKIE_NAME)?.value).toBe(newToken);
         expect(await getIntakeDraftsAction()).toEqual(saved);
         const applied = await replayOfflineWorkshopAction(partition, structuredClone(pending));
         expect(applied.code).toBe('OK');

@@ -29,13 +29,25 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
       expiring = true;
       setExpired(true);
       try {
-        await logoutWithReadCleanup('inactivity');
+        const result = await logoutWithReadCleanup('inactivity', initial.sessionScope);
+        if (disposed) return;
+        if (!result.ok) {
+          if (result.code === 'ACTIVE') {
+            applyServerTime(result.inactivity);
+            expiring = false;
+            setExpired(false);
+            schedule();
+          } else {
+            window.location.replace('/start');
+          }
+          return;
+        }
       } catch {
         console.error('[APP_SESSION_INACTIVITY_LOGOUT_FAILED]');
-      } finally {
-        const query = new URLSearchParams({ message: INACTIVITY_COPY.signedOut(windowState.minutes) });
-        window.location.replace(`/start?${query}`);
       }
+      if (disposed) return;
+      const query = new URLSearchParams({ message: INACTIVITY_COPY.signedOut(windowState.minutes) });
+      window.location.replace(`/start?${query}`);
     };
 
     function schedule() {

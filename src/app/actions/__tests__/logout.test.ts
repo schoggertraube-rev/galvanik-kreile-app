@@ -13,10 +13,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { logout } from "@/app/actions/auth";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
-const { mockSignOut, mockClearAppSession } = vi.hoisted(() => ({
+const { mockSignOut, mockClearAppSession, mockResolveAuthorization, mockReadScope } = vi.hoisted(() => ({
   mockSignOut: vi.fn(),
   mockClearAppSession: vi.fn(),
+  mockResolveAuthorization: vi.fn(),
+  mockReadScope: vi.fn(),
 }));
+
+vi.mock('@/lib/server/authBootstrap', () => ({ readCacheLoginScope: mockReadScope }));
+vi.mock('@/lib/server/authorization', () => ({ resolveAuthorization: mockResolveAuthorization }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn().mockResolvedValue({
@@ -86,8 +91,18 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
 
   it("revokes only the current Supabase session after inactivity", async () => {
     mockSignOut.mockResolvedValueOnce({ error: null });
-    expect(await logout('inactivity')).toEqual({ ok: true, remoteSignOut: "success" });
+    const sessionScope = 'c'.repeat(64);
+    mockReadScope.mockResolvedValueOnce(sessionScope);
+    mockResolveAuthorization.mockResolvedValueOnce({ ok: false, reason: 'INVALID_SESSION', message: 'AUTH_SESSION_INACTIVE' });
+    expect(await logout({ sessionScope })).toEqual({ ok: true, remoteSignOut: "success" });
     expect(mockSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' });
     expect(mockClearAppSession).toHaveBeenCalledOnce();
+  });
+
+  it('does not call Supabase or change cookies for an older tab after relogin', async () => {
+    mockReadScope.mockResolvedValueOnce('b'.repeat(64));
+    expect(await logout({ sessionScope: 'c'.repeat(64) })).toEqual({ ok: false, code: 'SESSION_CHANGED' });
+    expect(mockSignOut).not.toHaveBeenCalled();
+    expect(mockClearAppSession).not.toHaveBeenCalled();
   });
 });

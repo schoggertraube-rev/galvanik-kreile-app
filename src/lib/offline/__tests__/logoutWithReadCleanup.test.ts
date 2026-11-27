@@ -30,12 +30,29 @@ it('fences the expired session immediately and keeps the original queue for the 
   return {ok:true};
  });
  ports.cleanup.mockResolvedValue({cacheCleared:true,pendingCount:2});
- await logoutWithReadCleanup('inactivity');
+ const sessionScope='e'.repeat(64);
+ await logoutWithReadCleanup('inactivity',sessionScope);
  expect(ports.sync).not.toHaveBeenCalled();
- expect(ports.logout).toHaveBeenCalledExactlyOnceWith('inactivity');
+ expect(ports.logout).toHaveBeenCalledExactlyOnceWith({sessionScope});
  expect(ports.cleanup).toHaveBeenCalledWith(scope);
  expect(state.authStatus).toBe('unauthenticated');
  expect(readLogoutNotice()).toContain('sobald du wieder angemeldet und online bist');
+});
+it('reopens the same confirmed read partition without clearing its pending originals',async()=>{
+ const state=document.documentElement.dataset;
+ const scope='a'.repeat(64),sessionScope='b'.repeat(64);
+ state.authStatus='authenticated';state.offlineScope=scope;state.offlineLoginScope=sessionScope;
+ ports.logout.mockImplementationOnce(async()=>{
+  expect(state.authStatus).toBe('error');
+  expect(state.offlineScope).toBeUndefined();
+  return {ok:false,code:'ACTIVE',inactivity:{minutes:2,lastSeen:50000,expiresAt:170000,sessionScope}};
+ });
+ expect(await logoutWithReadCleanup('inactivity',sessionScope)).toMatchObject({ok:false,code:'ACTIVE'});
+ expect(state.authStatus).toBe('authenticated');
+ expect(state.offlineScope).toBe(scope);
+ expect(state.offlineLoginScope).toBe(sessionScope);
+ expect(ports.cleanup).not.toHaveBeenCalled();
+ expect(ports.sync).not.toHaveBeenCalled();
 });
 it('a failed flush retains the pending notice and still allows logout',async()=>{
  document.documentElement.dataset.offlineScope='c'.repeat(64);ports.sync.mockRejectedValue(Error('TEST_NETWORK_LOST'));

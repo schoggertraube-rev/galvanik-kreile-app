@@ -1,10 +1,10 @@
 'use client';
 import {reportProtocolClientError} from '@/modules/logging/public';
 
-import {logout} from '@/app/actions/auth';
+import {logout,type InactivityLogoutResult,type LogoutResult} from '@/app/actions/auth';
 import {clearLoggedOutReadState} from './logoutReadState';
 import {OFFLINE_LOGOUT_COPY} from '@/ui/situationCatalog';
-import {removeCacheScopeMarker} from './cacheScopeMarker';
+import {readCacheScopeMarker,removeCacheScopeMarker} from './cacheScopeMarker';
 import {syncOriginals} from './syncOriginals';
 import {readServerReachability} from './serverReachability';
 
@@ -13,9 +13,12 @@ const listeners=new Set<()=>void>();
 export const subscribeLogoutNotice=(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};};
 export const readLogoutNotice=()=>notice;
 /** The existing action ends the session first; local storage is never authority. */
-export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual'){
+export async function logoutWithReadCleanup(reason?:'manual'):Promise<LogoutResult>;
+export async function logoutWithReadCleanup(reason:'inactivity',sessionScope?:string):Promise<InactivityLogoutResult>;
+export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual',sessionScope?:string){
  const readState=document.documentElement.dataset;
  const scope=readState.offlineScope??null;
+ const previousLoginScope=readState.offlineLoginScope;
  // PL11:25/13:29: finish delayed commands with the original session before
  // ending it. Unavailable network/storage must not consume originals or stop logout.
  if(reason==='inactivity'){
@@ -25,11 +28,21 @@ export async function logoutWithReadCleanup(reason:'manual'|'inactivity'='manual
   delete readState.offlineLoginScope;
  }else if(scope&&readServerReachability())try{await syncOriginals(scope,()=>readState.offlineScope??null,{flushDelayed:true,workshopOnly:true});}
  catch{reportProtocolClientError('OFFLINE_LOGOUT_FLUSH_FAILED');}
- try{removeCacheScopeMarker();}catch{reportProtocolClientError('OFFLINE_CACHE_MARKER_REVOKE_FAILED');}
+ try{
+  if(reason==='manual'||sessionScope&&readCacheScopeMarker()===sessionScope)removeCacheScopeMarker();
+ }catch{reportProtocolClientError('OFFLINE_CACHE_MARKER_REVOKE_FAILED');}
  // Start the server action before touching potentially broken local storage.
- let result:Awaited<ReturnType<typeof logout>>|undefined;
+ let result:InactivityLogoutResult|undefined;
  let failure:unknown;
- try{result=await (reason==='inactivity'?logout('inactivity'):logout());}catch(error){failure=error;}
+ try{result=await (reason==='inactivity'?logout({sessionScope}):logout());}catch(error){failure=error;}
+ if(result&&!result.ok){
+  if(result.code==='ACTIVE'){
+   readState.authStatus='authenticated';
+   if(scope)readState.offlineScope=scope;
+   if(previousLoginScope)readState.offlineLoginScope=previousLoginScope;
+  }
+  return result;
+ }
  // A lost server response is not a confirmed logout. Still fence local reads
  // and retain originals; do not publish the successful-logout wording.
  readState.authStatus=result?'unauthenticated':'error';

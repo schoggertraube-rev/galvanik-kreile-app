@@ -211,7 +211,11 @@ export async function setAppSession(session: AppSession, tabletInput?: 'tablet')
   cookieStore.set(COOKIE_NAME, token, getCookieOptions(new Date(session.expiresAt)));
   // Persistent reading fence, not a session lease. Offline contact age and
   // online authorization remain independently checked at their existing ports.
-  cookieStore.set(CACHE_SCOPE_COOKIE,appSessionReadScope(token, initialized),{...getCookieOptions(),httpOnly:false,maxAge:365*24*60*60});
+  setSessionReadScopeCookie(cookieStore, appSessionReadScope(token, initialized));
+}
+
+function setSessionReadScopeCookie(store: Awaited<ReturnType<typeof cookies>>, scope: string) {
+  store.set(CACHE_SCOPE_COOKIE, scope, { ...getCookieOptions(), httpOnly: false, maxAge: 365 * 24 * 60 * 60 });
 }
 
 /** Updates only this signed session. The fixed end and its offline reading partition stay the same. */
@@ -243,6 +247,17 @@ export async function renewAppSessionActivity(
 export async function clearAppSession(): Promise<void> {
   const cookieStore = await cookies();
   try{cookieStore.delete(COOKIE_NAME);}finally{cookieStore.delete(CACHE_SCOPE_COOKIE);}
+}
+
+/** Reopen the read fence only for the credential already validated by the caller. */
+export async function restoreAppSessionReadScope(expectedScope: string): Promise<boolean> {
+  const store = await cookies();
+  const token = store.get(COOKIE_NAME)?.value;
+  if (!token) return false;
+  const current = verifyAppSessionToken(token, getSecretKey());
+  if (!current.ok || appSessionReadScope(token, current.session) !== expectedScope) return false;
+  setSessionReadScopeCookie(store, expectedScope);
+  return true;
 }
 
 // ─── Backward-compat: getAppSession() ────────────────────────────────────────

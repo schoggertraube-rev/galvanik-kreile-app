@@ -6,10 +6,13 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { createClient } from "@/lib/supabase/server";
 import {
   clearAppSession,
+  restoreAppSessionReadScope,
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
-import { hasAuthorizationArea, resolveLoginIdentityByEmail } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization, resolveLoginIdentityByEmail } from "@/lib/server/authorization";
+import { readCacheLoginScope } from '@/lib/server/authBootstrap';
+import type { SessionInactivity } from '@/lib/auth/sessionInactivity';
 import {
   reportProductActorOperationalFailure,
 } from "@/lib/server/productActorReadiness";
@@ -19,6 +22,10 @@ export type LogoutResult = {
   ok: true;
   remoteSignOut: "success" | "failed";
 };
+
+export type InactivityLogoutResult = LogoutResult
+  | { ok: false; code: 'ACTIVE'; inactivity: SessionInactivity }
+  | { ok: false; code: 'SESSION_CHANGED' };
 
 function redirectToStart(message: string, supportReference?: string): never {
   const query = new URLSearchParams({ message, mode: "email" });
@@ -89,13 +96,30 @@ export async function login(formData: FormData) {
 }
 
 /**
- * Logout always clears the app cookie, even if remote Supabase logout fails.
+ * Explicit logout keeps its normal scope. A deadline can only end its own idle session.
  */
-export async function logout(reason: 'manual' | 'inactivity' = 'manual'): Promise<LogoutResult> {
+export async function logout(): Promise<LogoutResult>;
+export async function logout(input: { sessionScope: string | undefined }): Promise<InactivityLogoutResult>;
+export async function logout(input?: { sessionScope: string | undefined }): Promise<InactivityLogoutResult> {
+  if (input !== undefined) {
+    const expected = input?.sessionScope;
+    const changed = { ok: false, code: 'SESSION_CHANGED' } as const;
+    if (!expected || !/^[a-f0-9]{64}$/.test(expected) || await readCacheLoginScope() !== expected) return changed;
+    const current = await resolveAuthorization();
+    if (current.ok) {
+      const inactivity = current.data.sessionInactivity;
+      if (!inactivity || !await restoreAppSessionReadScope(expected)) return changed;
+      return { ok: false, code: 'ACTIVE', inactivity: {
+        lastSeen: inactivity.lastSeen, expiresAt: inactivity.expiresAt, minutes: inactivity.minutes,
+        serverAt: inactivity.serverAt, sessionScope: expected,
+      } };
+    }
+    if (current.reason !== 'INVALID_SESSION' || current.message !== 'AUTH_SESSION_INACTIVE') return changed;
+  }
   let remoteSignOut: "success" | "failed" = "success";
   try {
     const supabase = await createClient();
-    const result = reason === 'inactivity'
+    const result = input !== undefined
       ? await supabase.auth.signOut({ scope: 'local' })
       : await supabase.auth.signOut();
     if (result.error) return { ok: true, remoteSignOut: "failed" };

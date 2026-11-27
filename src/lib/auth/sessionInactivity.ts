@@ -11,6 +11,7 @@ export type SessionInactivity = {
   expiresAt: number;
   minutes: number;
   serverAt?: number;
+  sessionScope?: string;
 };
 
 export type SessionActivityResult =
