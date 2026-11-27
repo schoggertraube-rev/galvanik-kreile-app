@@ -695,6 +695,7 @@ test("Die Ausschussmeldung legt das Anliegen einmal an und lässt es bei Mengenk
 
 test("Rechnung berücksichtigt Stückausschuss und den belegten Anteil gewogener Teile", async () => {
   const { issueInvoiceAction } = await import("@/app/actions/invoices.actions");
+  const { meldeAusschussAction } = await import("@/app/actions/orders.actions");
   const [schalter] = await sql<{enabled: boolean}[]>`SELECT enabled FROM public.feature_flags WHERE id = 'p3_werkstatt'`;
   if (!schalter) throw Error("TEST_WERKSTATT_SCHALTER_FEHLT");
   const [vorher] = await sql<{ausschuss_berechnen: boolean}[]>`SELECT ausschuss_berechnen FROM public.company_settings WHERE tenant_id = ${mandant}`;
@@ -722,8 +723,22 @@ test("Rechnung berücksichtigt Stückausschuss und den belegten Anteil gewogener
     FROM public.invoices WHERE tenant_id = ${mandant} AND order_id = ${orderId}`;
   try {
     await sql`UPDATE public.feature_flags SET enabled = true WHERE id = 'p3_werkstatt'`;
-    const gewogen = await vorbereiten('Gewogen 3 von 10', 'kg', 12.5, 3, 10);
     await setzen(false);
+    const gewogen = await readyOrderForInvoice('Gewogen 3 von 10', 'pickup', undefined, 1_333, 12.5, async ({ orderId, itemId }) => {
+      const eingabe = {
+        auftragId: orderId, itemId, menge: 3, grund: 'TEST Ausschuss', clientEventId: randomUUID(),
+      };
+      expect(await withSession(full, () => meldeAusschussAction(eingabe))).toMatchObject({ code: 'STUECKZAHL_FEHLT' });
+      const melden = () => withSession(full, () => meldeAusschussAction({ ...eingabe, gesamtStueck: 10 }));
+      const meldung = await melden();
+      if (meldung.code !== 'OK') throw Error('TEST_AUSSCHUSS_MELDUNG: ' + meldung.code);
+      expect(await melden()).toEqual(meldung);
+      expect(meldung.quittung).toMatchObject({ menge: 3, gesamt: '10' });
+      expect(await sql`SELECT payload->>'gesamt_stueck' AS gesamt FROM public.events
+        WHERE tenant_id = ${mandant} AND order_id = ${orderId} AND item_id = ${itemId}
+          AND client_event_id = ${eingabe.clientEventId}::uuid`).toEqual([{ gesamt: '10' }]);
+      return meldung.quittung.version;
+    }, 'kg');
     expect(await ausstellen(gewogen)).toMatchObject({code:'OK',receipt:{netAmountCents:11_664}});
     expect(await beleg(gewogen.orderId)).toMatchObject([{pdf:true,snapshot:{schemaVersion:3,lines:[{
       type:'BASE', unit:'KGM', quantity:12.5, lineNetAmountCents:11_664, unitNetAmountCents:933,

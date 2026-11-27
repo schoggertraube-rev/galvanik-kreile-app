@@ -27,15 +27,15 @@ function ladePosition(einheit: string, abrechnungsmenge: string) {
 
 beforeEach(() => execute.mockReset());
 
-test("Ausschuss für gewogene Ware verlangt die Gesamtzahl der Teile", async () => {
-  ladePosition("kg", "12.5");
+test.each(["kg", "dm²", "Satz"])("Ausschuss je %s braucht eine ausdrücklich gezählte Stückzahl", async (einheit) => {
+  ladePosition(einheit, "10");
   const aktualisiereAnliegen = vi.fn(async () => {});
   const antwort = await meldeAusschuss(auth, eingabe, {
     sperrendeRechnung: async () => null,
     aktualisiereAnliegen,
   });
   expect(antwort).toEqual({
-    code: "STUECKZAHL_FEHLT", message: "Gib die Gesamtzahl der Teile an. Diese Position wird in kg abgerechnet.",
+    code: "STUECKZAHL_FEHLT", message: `Gib die Gesamtzahl der Teile an. Diese Position wird in ${einheit} abgerechnet.`,
   });
   expect(execute).toHaveBeenCalledTimes(3);
   expect(aktualisiereAnliegen).not.toHaveBeenCalled();
