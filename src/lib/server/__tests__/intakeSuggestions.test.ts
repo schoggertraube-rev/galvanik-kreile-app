@@ -41,13 +41,24 @@ const history = (overrides: Partial<{
 });
 
 describe("intake suggestions", () => {
-  it('uses only the catalogue or matching customer prices for a documented proposal', () => {
-    const codedPosition={...position,catalogServiceId:catalogId};
-    const comparison=Array.from({length:3},()=>history({catalogServiceId:catalogId,unitPriceCents:900}));
-    expect(choosePriceSuggestion(codedPosition,null,comparison,catalog)?.source).toBe('aehnlich');
-    expect(choosePriceSuggestion(codedPosition,null,comparison,catalog,true)).toMatchObject({source:'katalog',unitPriceCents:1200});
-    expect(choosePriceSuggestion(codedPosition,null,comparison,null,true)).toBeNull();
-    expect(choosePriceSuggestion(codedPosition,comparison[0].customerId,comparison,catalog,true)).toMatchObject({source:'gleich',unitPriceCents:900});
+  it("uses only the catalogue or matching customer prices for a documented proposal", () => {
+    const catalog = {
+      id: "11111111-1111-4111-8111-111111111112",
+      name: position.name,
+      surface: "verzinken",
+      unit: "Stück",
+      net_price_cents: 1_200,
+      standard_lead_time_working_days: 3,
+    };
+    const codedPosition = { ...position, catalogServiceId: catalog.id };
+    const comparison = Array.from({ length: 3 }, () => history({ catalogServiceId: catalog.id, unitPriceCents: 900 }));
+
+    expect(choosePriceSuggestion(codedPosition, null, comparison, catalog)?.source).toBe("aehnlich");
+    expect(choosePriceSuggestion(codedPosition, null, comparison, catalog, true))
+      .toMatchObject({ source: "katalog", unitPriceCents: 1_200 });
+    expect(choosePriceSuggestion(codedPosition, null, comparison, null, true)).toBeNull();
+    expect(choosePriceSuggestion(codedPosition, comparison[0].customerId, comparison, catalog, true))
+      .toMatchObject({ source: "gleich", unitPriceCents: 900 });
   });
 
   it("uses the shared German working-day calendar", () => {
