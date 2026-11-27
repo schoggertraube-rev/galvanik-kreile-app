@@ -9,7 +9,7 @@ const scope=vi.hoisted(()=>{
 });
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:scope.tenant}));
 import {sql,full,createFixture,withSession} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder,customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,customerFixture,intakeOrderFixture,deliveryNoteInputFixture} from '../../../e2e/ablauf/orderFixture';
 import {storeOrderPhoto,storeIntakeGoodsPhoto,storeItemPhoto} from '../../../e2e/ablauf/photoFixture';
 import {randomUUID} from 'node:crypto';
 // The harness restores its provider environment first; restore the original
@@ -102,6 +102,14 @@ it('K13K-6 real rework stores instants without a UTC cast in a Berlin database s
  expect(frozen.code).toBe('OK');if(frozen.code!=='OK')throw Error('TEST_REWORK_FROZEN');
  await station('fertig');
  expect(await withSession(full,()=>markOrderInformedByPhoneAction({orderId:result.receipt.orderId,expectedVersion:frozen.receipt.aggregateVersion,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const {generateDeliveryNote}=await import('@/app/actions/pdf.actions');
+ const deliveryInput=await deliveryNoteInputFixture([result.receipt.orderId]);
+ const delivery=await withSession(full,()=>generateDeliveryNote(deliveryInput));
+ if(delivery.code!=='OK')throw Error('TEST_B7L3_NACHARBEIT_LIEFERSCHEIN:'+delivery.code);
+ const [deliveryProof]=await sql`SELECT payload->'snapshot' AS snapshot FROM public.events
+  WHERE tenant_id=${scope.tenant} AND id=${delivery.receipt.originalEventId} AND event_type='DELIVERY_NOTE_ORIGINAL_V1'`;
+ expect(deliveryProof?.snapshot).toMatchObject({orders:[{id:result.receipt.orderId,payments:[]}]});
+ expect(deliveryProof.snapshot).not.toHaveProperty('vorab');
  const {recordGoodsOutAction}=await import('@/app/actions/goodsOut.actions');
  const requestOut={orderId:result.receipt.orderId,expectedVersion:frozen.receipt.aggregateVersion,mode:'abholung' as const,clientEventId:randomUUID()};
  const [beforeOut]=await sql`SELECT statement_timestamp() AS clock`;
