@@ -29,6 +29,7 @@ beforeEach(() => execute.mockReset());
 
 test.each(["kg", "dm²", "Satz"])("Ausschuss je %s braucht eine ausdrücklich gezählte Stückzahl", async (einheit) => {
   ladePosition(einheit, "10");
+  execute.mockResolvedValueOnce([]);
   const aktualisiereAnliegen = vi.fn(async () => {});
   const antwort = await meldeAusschuss(auth, eingabe, {
     sperrendeRechnung: async () => null,
@@ -37,7 +38,7 @@ test.each(["kg", "dm²", "Satz"])("Ausschuss je %s braucht eine ausdrücklich ge
   expect(antwort).toEqual({
     code: "STUECKZAHL_FEHLT", message: `Gib die Gesamtzahl der Teile an. Diese Position wird in ${einheit} abgerechnet.`,
   });
-  expect(execute).toHaveBeenCalledTimes(3);
+  expect(execute).toHaveBeenCalledTimes(4);
   expect(aktualisiereAnliegen).not.toHaveBeenCalled();
 });
 
@@ -57,13 +58,27 @@ test("Eine bestehende Rechnung sperrt die Ausschussmeldung vor jeder Änderung",
 
 test("Ausschuss über der gezählten Stückzahl hinterlässt keine Meldung", async () => {
   ladePosition("kg", "12.5");
+  execute.mockResolvedValueOnce([]);
   const aktualisiereAnliegen = vi.fn(async () => {});
   const antwort = await meldeAusschuss(auth, { ...eingabe, menge: 5, gesamtStueck: 4 }, {
     sperrendeRechnung: async () => null,
     aktualisiereAnliegen,
   });
   expect(antwort).toEqual({ code: "VALIDATION_ERROR", message: "Gib 0 bis 4 Teile als Ausschuss ein." });
-  expect(execute).toHaveBeenCalledTimes(3);
+  expect(execute).toHaveBeenCalledTimes(4);
+  expect(aktualisiereAnliegen).not.toHaveBeenCalled();
+});
+
+test("Eine neue Angabe erhöht die bereits belegte Stückzahl nicht", async () => {
+  ladePosition("dm²", "12.5");
+  execute.mockResolvedValueOnce([{ gesamt: "4" }]);
+  const aktualisiereAnliegen = vi.fn(async () => {});
+  const antwort = await meldeAusschuss(auth, { ...eingabe, menge: 5, gesamtStueck: 10 }, {
+    sperrendeRechnung: async () => null,
+    aktualisiereAnliegen,
+  });
+  expect(antwort).toEqual({ code: "VALIDATION_ERROR", message: "Gib 0 bis 4 Teile als Ausschuss ein." });
+  expect(execute).toHaveBeenCalledTimes(4);
   expect(aktualisiereAnliegen).not.toHaveBeenCalled();
 });
 
@@ -84,10 +99,11 @@ test("Eine begründete Korrektur auf null setzt vollständigen Ausschuss zurück
 test.each([{ menge: 3, vollstaendig: false }, { menge: 4, vollstaendig: true }])(
   "Das Abrechnungsgewicht bleibt bei $menge von vier Ausschussteilen erhalten", async ({ menge, vollstaendig }) => {
   ladePosition("kg", "12.5");
-  execute.mockResolvedValueOnce([{ id: eingabe.auftragId }]).mockResolvedValueOnce([{ id: "TEST-Ereignis" }])
+  execute.mockResolvedValueOnce([{ gesamt: "4" }])
+    .mockResolvedValueOnce([{ id: eingabe.auftragId }]).mockResolvedValueOnce([{ id: "TEST-Ereignis" }])
     .mockResolvedValueOnce([{ itemId: eingabe.itemId, menge: String(menge), gesamt: "4" }]);
   const aktualisiereAnliegen = vi.fn(async () => {});
-  expect(await meldeAusschuss(auth, { ...eingabe, menge, gesamtStueck: 4 }, {
+  expect(await meldeAusschuss(auth, { ...eingabe, menge }, {
     sperrendeRechnung: async () => null,
     aktualisiereAnliegen,
   })).toMatchObject({ code: "OK", quittung: { itemId: eingabe.itemId, menge, gesamt: "4" } });

@@ -102,7 +102,19 @@ export async function meldeAusschuss(auth: AuthorizationSnapshot, eingabe: Aussc
 
     const einheit = normaliseOrderPositionUnit(teil.einheit);
     if (einheit === null || einheit === "stunde") return { code: "VALIDATION_ERROR" as const };
-    const stueckzahl = einheit === "stueck" ? Number(teil.abrechnungsmenge) : gesamtStueck;
+    let stueckzahl = einheit === "stueck" ? Number(teil.abrechnungsmenge) : gesamtStueck;
+    if (einheit !== "stueck") {
+      // Der erste Stückzahlbeleg gilt auch bei späteren Meldungen und Mengenkorrekturen.
+      const [beleg] = await tx.execute<{ gesamt: string }>(sql`
+        SELECT payload->>'gesamt_stueck' AS gesamt
+        FROM public.events
+        WHERE tenant_id = ${tenant} AND order_id = ${auftragId} AND item_id = ${itemId}
+          AND event_type = ${MELDUNG} AND status = 'success'
+          AND jsonb_typeof(payload->'gesamt_stueck') = 'number'
+        ORDER BY aggregate_version, id LIMIT 1
+      `);
+      if (beleg) stueckzahl = Number(beleg.gesamt);
+    }
     if (stueckzahl === undefined || !Number.isSafeInteger(stueckzahl) || stueckzahl <= 0) {
       return { code: "STUECKZAHL_FEHLT" as const, message: WORK_TIME_COPY.scrapTotalPiecesRequired(orderPositionUnitLabel(einheit)) };
     }

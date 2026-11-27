@@ -726,18 +726,26 @@ test("Rechnung berücksichtigt Stückausschuss und den belegten Anteil gewogener
     await setzen(false);
     const gewogen = await readyOrderForInvoice('Gewogen 3 von 10', 'pickup', undefined, 1_333, 12.5, async ({ orderId, itemId }) => {
       const eingabe = {
-        auftragId: orderId, itemId, menge: 3, grund: 'TEST Ausschuss', clientEventId: randomUUID(),
+        auftragId: orderId, itemId, menge: 2, grund: 'TEST Ausschuss', clientEventId: randomUUID(),
       };
       expect(await withSession(full, () => meldeAusschussAction(eingabe))).toMatchObject({ code: 'STUECKZAHL_FEHLT' });
       const melden = () => withSession(full, () => meldeAusschussAction({ ...eingabe, gesamtStueck: 10 }));
       const meldung = await melden();
       if (meldung.code !== 'OK') throw Error('TEST_AUSSCHUSS_MELDUNG: ' + meldung.code);
       expect(await melden()).toEqual(meldung);
-      expect(meldung.quittung).toMatchObject({ menge: 3, gesamt: '10' });
+      expect(meldung.quittung).toMatchObject({ menge: 2, gesamt: '10' });
+
+      const folgemeldung = { ...eingabe, menge: 3, clientEventId: randomUUID() };
+      expect(await withSession(full, () => meldeAusschussAction({ ...folgemeldung, menge: 11, gesamtStueck: 20 })))
+        .toMatchObject({ code: 'VALIDATION_ERROR' });
+      const danach = await withSession(full, () => meldeAusschussAction(folgemeldung));
+      if (danach.code !== 'OK') throw Error('TEST_AUSSCHUSS_FOLGEMELDUNG: ' + danach.code);
+      expect(danach.quittung).toMatchObject({ menge: 3, gesamt: '10' });
       expect(await sql`SELECT payload->>'gesamt_stueck' AS gesamt FROM public.events
         WHERE tenant_id = ${mandant} AND order_id = ${orderId} AND item_id = ${itemId}
-          AND client_event_id = ${eingabe.clientEventId}::uuid`).toEqual([{ gesamt: '10' }]);
-      return meldung.quittung.version;
+          AND event_type = 'ORDER_ITEM_SCRAP_REPORTED_V1' ORDER BY aggregate_version`)
+        .toEqual([{ gesamt: '10' }, { gesamt: '10' }]);
+      return danach.quittung.version;
     }, 'kg');
     expect(await ausstellen(gewogen)).toMatchObject({code:'OK',receipt:{netAmountCents:11_664}});
     expect(await beleg(gewogen.orderId)).toMatchObject([{pdf:true,snapshot:{schemaVersion:3,lines:[{
