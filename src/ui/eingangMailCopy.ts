@@ -5,6 +5,7 @@ type PaymentReference = {number:string;amount:string};
 type OpenOrder = PaymentReference & {total:string};
 
 export const MAIL_PROMISE_COPY = {
+  noProposal: 'kein Vorschlag',
   unavailable: 'Die Angaben reichen für eine Zusage noch nicht aus.',
   unknownPayment: 'Zahlungsstand fehlt – Zusage später senden.',
   unknownTerm: 'Für den Wunschtermin fehlen Angaben zur Ware.',

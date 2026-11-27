@@ -4,7 +4,7 @@ import {ACCESS_AREA_LABELS,ROLE_LABELS,canAssignIntakeCustomer,canChangeOrderHan
 import {formatEuro} from '@/lib/domain/formatEuro';
 import type {IntakeSuggestionsInput,IntakeTermSuggestion,IntakePriceSuggestion,IntakeSuggestionReadOptions} from '@/lib/intakeSuggestionsContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
-import {pruefeHerausgabe,type ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
+import {pruefeHerausgabe,pruefeVersand,type MailShippingSettingsReader,type ZusageErgebnis} from '@/lib/server/commands/mailPromiseReleaseCommand';
 import {readLiveOrderCard} from '@/lib/server/orderCardRead';
 import {readIntakeCustomerDuplicate,searchOrderIntakeCustomers,type IntakeCustomerDuplicateDraft} from '@/lib/server/orderIntakeRead';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -45,6 +45,7 @@ export type ZusageLeser={
   kv:(auth:AuthorizationSnapshot,quoteId:string)=>Promise<QuoteReadback|null>;
   verbrauch:(auth:AuthorizationSnapshot,orderId:string)=>Promise<readonly Materialverbrauch[]>;
   kunde:(auth:AuthorizationSnapshot,customerId:string)=>Promise<CustomerStoredProfile|null>;
+  versandEinstellungen:MailShippingSettingsReader;
 };
 type Materialverbrauch={wertEur:string|null;preisFehlt:boolean;vorlaeufig:boolean};
 
@@ -57,6 +58,7 @@ const unknownDocument={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pendi
 const unknownCustomer={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.dublette} as const;
 const duplicateCustomer={frei:false,grund:'dublette',text:MAIL_PROMISE_COPY.duplicateCustomer} as const;
 const foreignSender={frei:false,grund:'absender_fremd',text:MAIL_PROMISE_COPY.foreignSender} as const;
+const noProposal={frei:false,grund:'kein_vorschlag',text:MAIL_PROMISE_COPY.noProposal} as const;
 const optionalCustomer = (input:ZusageInput) => input.art==='preis_im_text'||input.art==='kanal_versand'||
   (input.art==='termin'&&!input.orderId&&!input.quoteId);
 
@@ -94,8 +96,9 @@ async function readIncomingOriginal(auth:AuthorizationSnapshot,input:ZusageInput
   return {...original,mimeFileId:original.channel==='mail'?mime[0].id:null};
 }
 
-async function qualifyCustomer(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser){
-  const original=await readIncomingOriginal(auth,input);
+type IncomingOriginal=Awaited<ReturnType<typeof readIncomingOriginal>>;
+
+async function qualifyCustomer(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser,original:IncomingOriginal){
   if(!original||!input.customerId||original.customerId!==input.customerId||
     original.assignment!=='bestaetigt'&&original.assignment!=='hand')return null;
   if(input.orderId&&original.orderId&&(original.orderKind!=='auftrag'||original.orderId!==input.orderId))return null;
@@ -122,9 +125,8 @@ async function pruefeBelegDublette(auth:AuthorizationSnapshot,original:NonNullab
   return view.uncertain===0&&!view.conflict?{frei:true}:unknownDocument;
 }
 
-async function pruefeNeukundenDublette(auth:AuthorizationSnapshot,input:ZusageInput):Promise<ZusageErgebnis>{
+async function pruefeNeukundenDublette(auth:AuthorizationSnapshot,input:ZusageInput,original:IncomingOriginal):Promise<ZusageErgebnis>{
   if(!Number.isSafeInteger(input.sourceVersion)||!input.kundenentwurf)return unknownCustomer;
-  const original=await readIncomingOriginal(auth,input);
   if(!original||original.customerId||original.assignment!=='offen'||!original.openConcerns.includes('kv_anfrage'))return unknownCustomer;
   const observed=await readIntakeCustomerDuplicate(auth,input.kundenentwurf,original.senderAddress);
   if(observed==='missing')return unknownCustomer;
@@ -252,12 +254,17 @@ function pruefeStammdaten(original:NonNullable<Awaited<ReturnType<typeof readInc
 }
 
 async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
-  if(input.art==='preis_im_text')return {frei:true};
-  if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unknownChannel;
   try{
-    if(input.art==='dublette'&&!input.customerId)return await pruefeNeukundenDublette(auth,input);
+    if(input.anliegen==='A22')return noProposal;
+    const source=input.sourceItemId?await readIncomingOriginal(auth,input):null;
+    if(source?.channel==='mail'&&(source.usage==='info'||typeof source.discardReason==='string'
+      ||input.anliegen!==undefined&&!source.orderId&&source.openConcerns.length===0))return noProposal;
+    if(input.sourceItemId&&!source&&input.anliegen!==undefined&&optionalCustomer(input))return unavailable;
+    if(input.art==='preis_im_text')return {frei:true};
+    if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unknownChannel;
+    if(input.art==='dublette'&&!input.customerId)return await pruefeNeukundenDublette(auth,input,source);
     const customerRequired=!optionalCustomer(input);
-    const original=customerRequired?await qualifyCustomer(auth,input,leser):null;
+    const original=customerRequired?await qualifyCustomer(auth,input,leser,source):null;
     if(customerRequired&&!original)return foreignSender;
     if(input.art==='dublette')return duplicateCustomer;
     if(input.art==='stammdaten'&&original)return pruefeStammdaten(original);
@@ -269,6 +276,12 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
     }
     if(input.art==='storno')return await pruefeStorno(auth,input,leser.verbrauch);
     if(input.art==='termin')return await pruefeTermin(auth,input,leser);
+    if(input.art==='zu_spaet'||input.art==='etikett'){
+      const {art,customerId,orderId}=input;
+      if(!customerId||!orderId)return {frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending[art]};
+      const wiedervorlage=input.anliegen==='A21'&&input.wirkung==='wiedervorlage_vor_annahmeschluss';
+      return await withPrivilegedTenantTransaction(auth,tx=>pruefeVersand(tx,auth,{art,customerId,orderId,wiedervorlage},leser.versandEinstellungen));
+    }
     if(input.art==='menge')return await pruefeMenge(auth,input);
     if(input.art==='auftrag_aus_kv')return await pruefeKVAuftrag(auth,input,leser.kv);
     if(input.art==='zahlungsavis')return {frei:false,grund:'zahlungsavis',text:MAIL_PROMISE_COPY.paymentNotice};
@@ -292,6 +305,7 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
     if(input.art==='abwesenheit')return unknownAbsence;
     if(input.art==='beleg_dublette')return unknownDocument;
     if(input.art==='dublette')return unknownCustomer;
+    if(input.art==='zu_spaet'||input.art==='etikett')return {frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending[input.art]};
     return input.art==='termin'?unknownTerm:input.art==='auftrag_aus_kv'?unknownQuote:unavailable;
   }
 }
@@ -306,11 +320,14 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
   if(typeof anliegen!=='string'||typeof wirkung!=='string')return unavailable;
   const ergebnis=await pruefeFachZusage(auth,input,leser);
   if(!ergebnis.frei)return ergebnis;
+  const versandBelegt=input.art==='zu_spaet'||input.art==='etikett';
   return erlaubteWirkung(anliegen,wirkung,{
     preisrecht:hasAuthorizationArea(auth,'preise'),
     ...(input.art==='preisquelle'?{preisquelle:true}:{}),
     ...(input.art==='auftrag_aus_kv'?{kvAuftrag:true}:{}),
     ...(input.art==='dublette'&&!input.customerId?{dublette:false}:{}),
     ...(input.art==='beleg_dublette'&&wirkung==='rechnung_im_belegzugang_ablegen'?{belegDublette:false}:{}),
+    ...(versandBelegt&&anliegen==='A9'?{versandAenderbar:true}:{}),
+    ...(versandBelegt&&anliegen==='A21'?{wiedervorlageVorAnnahmeschluss:true}:{}),
   })?ergebnis:unavailable;
 }

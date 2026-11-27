@@ -8,10 +8,12 @@ import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 import {COMPLAINT_ORDER_COPY} from '@/ui/situationCatalog';
 import {readPendingInvoiceReissue} from './immutableInvoiceCommand';
+import {readMailHandoverForPromise,type MailShippingSettingsReader} from './orderContentCommand';
+export type {MailShippingSettingsReader} from './orderContentCommand';
 
 export type ZusageGrund='unbekannt'|'unbekannt_zahlung'|'recht'|'preisrecht'|'liefersperre'|'vorkasse'|'abholzahlung'|'reklamation'|'neuausstellung'|'termin'|
   'unbekannt_termin'|'unbekannt_kv'|'unbekannt_kanal'|'absender_fremd'|'zu_spaet'|'etikett'|
-  'menge'|'kv_abgelaufen'|'kv_schon_auftrag'|'storno'|'stammdaten'|'abwesenheit'|'dublette'|'beleg_dublette'|'zahlungsavis';
+  'menge'|'kv_abgelaufen'|'kv_schon_auftrag'|'storno'|'stammdaten'|'abwesenheit'|'dublette'|'beleg_dublette'|'zahlungsavis'|'kein_vorschlag';
 export type ZusageErgebnis={frei:true}|{
   frei:false;
   grund:ZusageGrund;
@@ -21,6 +23,18 @@ export type ZusageErgebnis={frei:true}|{
 };
 
 const unavailable={frei:false,grund:'unbekannt_zahlung',text:MAIL_PROMISE_COPY.unknownPayment} as const;
+
+export async function pruefeVersand(
+  tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
+  input:{customerId:string;orderId:string;art:'zu_spaet'|'etikett';wiedervorlage:boolean},
+  readSettings:MailShippingSettingsReader,
+):Promise<ZusageErgebnis>{
+  const boundary=await readMailHandoverForPromise(tx,auth,input,readSettings);
+  if(boundary?.handedOver||boundary?.beforeCutoff===false)return {frei:false,grund:'zu_spaet',text:MAIL_PROMISE_COPY.tooLate};
+  if(boundary?.labelBooked&&!input.wiedervorlage)return {frei:false,grund:'etikett',text:MAIL_PROMISE_COPY.labelBooked};
+  if(boundary?.beforeCutoff===true)return {frei:true};
+  return {frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending[input.art]};
+}
 
 export async function pruefeHerausgabe(
   tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{customerId:string;orderId:string;antwortBis?:string},

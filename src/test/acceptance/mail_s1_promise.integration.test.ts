@@ -13,7 +13,7 @@ import {readIntakeSuggestions} from '@/lib/server/intakeSuggestions';
 import {readCustomerDeliveryBlock} from '@/lib/server/paymentSummaryRead';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
-import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
 import {leseLagerAuftragsmaterialInTransaction} from '@/modules/lager/server-public';
@@ -28,6 +28,7 @@ const leser:ZusageLeser={
   },
   verbrauch:(auth,orderId)=>withPrivilegedTenantTransaction(auth,tx=>leseLagerAuftragsmaterialInTransaction(tx,orderId)),
   kunde:(auth,customerId)=>withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,customerId)),
+  versandEinstellungen:readShippingSettingsInTransaction,
 };
 const pruefeZusage=(auth:Parameters<typeof zusage>[0],input:Parameters<typeof zusage>[1])=>zusage(auth,input,leser);
 
