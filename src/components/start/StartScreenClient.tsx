@@ -343,7 +343,7 @@ function StartContent({
         </div> : null}
         {shortCodeRequired ? <label className={styles.shortCode}>
           {PIN_LOGIN_COPY.kuerzelLabel}
-          <input ref={shortCodeRef} value={shortCode} disabled={pinDisabled} autoComplete="username" autoCapitalize="characters"
+          <input ref={shortCodeRef} value={shortCode} disabled={pinDisabled} autoComplete="username" autoCapitalize="characters" enterKeyHint="next"
             spellCheck={false} onChange={(event) => {
               setShortCode(event.target.value.toUpperCase());
               setPin("");
@@ -370,9 +370,9 @@ function StartContent({
         </div>
       </> : <form className={styles.emailForm} onSubmit={submitEmail}>
         <label htmlFor="email">E-Mail</label>
-        <input id="email" name="email" type="email" autoComplete="username" required autoFocus disabled={loginUnavailable} onChange={() => setShowServerMessage(false)} />
+        <input id="email" name="email" type="email" autoComplete="username" autoCapitalize="none" required autoFocus disabled={loginUnavailable} onChange={() => setShowServerMessage(false)} />
         <label htmlFor="password">Passwort</label>
-        <input id="password" name="password" type="password" autoComplete="current-password" required disabled={loginUnavailable} />
+        <input id="password" name="password" type="password" autoComplete="current-password" enterKeyHint="go" required disabled={loginUnavailable} />
         {message || serverMessage ? <p className={styles.errorText} role="alert" aria-live="polite">{message ?? serverMessage}</p> : null}
         <Glasknopf ton="haupt" data-spec-id="login.email-anmelden" type="submit" disabled={!interactive || loginUnavailable || emailPending}
           text={emailPending ? PIN_LOGIN_COPY.meldetAn : PIN_LOGIN_COPY.anmelden} />
