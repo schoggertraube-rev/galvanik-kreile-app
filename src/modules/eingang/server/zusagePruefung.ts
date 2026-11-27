@@ -19,7 +19,7 @@ import {readIntakeMessagesForAuthorization} from './intakeMessages';
 import {readIntakeAutomaticReply} from './intakeOriginal';
 import {readIncomingInvoice} from './incomingInvoice';
 import {planeMailWirkungen} from './mailPlaene';
-import {erlaubteWirkung} from './mailWirkungen';
+import {erlaubteWirkung,istMailWirkung,type MailWirkung} from './mailWirkungen';
 
 export type ZusageInput={
   art:'herausgabe'|'termin'|'menge'|'auftrag_aus_kv'|'preis_im_text'|'storno'|'stammdaten'|'kanal_versand'|
@@ -62,8 +62,33 @@ const noProposal={frei:false,grund:'kein_vorschlag',text:MAIL_PROMISE_COPY.noPro
 const optionalCustomer = (input:ZusageInput) => input.art==='preis_im_text'||input.art==='kanal_versand'||
   (input.art==='termin'&&!input.orderId&&!input.quoteId);
 
-function fehlendesRecht(auth:AuthorizationSnapshot,art:ZusageInput['art']):AccessArea|null{
+// Only effects with an existing source reader can pass the S-1 decision.
+const pruefarten:Partial<Record<MailWirkung,ZusageInput['art']>>={
+  kunde_ohne_dublette_anlegen:'dublette',
+  auftrag_aus_kv_anlegen:'auftrag_aus_kv',
+  auftrag_mit_preisquelle_anlegen:'preisquelle',
+  mengenwunsch_vormerken:'menge',
+  wunschtermin_vormerken:'termin',
+  versand_stoppen:'zu_spaet',
+  uebergabeart_aendern:'zu_spaet',
+  versandpauschale_nennen:'preis_im_text',
+  abholer_vormerken:'abholer',
+  zahlungsavis_vormerken:'zahlungsavis',
+  stornowunsch_vormerken:'storno',
+  rechnung_im_belegzugang_ablegen:'beleg_dublette',
+  wiedervorlage_vor_annahmeschluss:'zu_spaet',
+  bankverbindung_telefonisch_bestaetigen:'stammdaten',
+};
+
+function pruefartFuerWirkung(anliegen:string,wirkung:string):ZusageInput['art']|undefined{
+  if(!istMailWirkung(anliegen,wirkung))return undefined;
+  if(anliegen==='A9'&&wirkung==='antwort_senden')return 'herausgabe';
+  return pruefarten[wirkung];
+}
+
+function fehlendesRecht(auth:AuthorizationSnapshot,art:ZusageInput['art'],wirkung?:string):AccessArea|null{
   if(!auth.active||!hasAuthorizationArea(auth,'mails'))return 'mails';
+  if(wirkung==='auftrag_mit_preisquelle_anlegen'&&!auth.permissions.includes('perm_data_orders'))return 'eingang';
   switch(art){
     case 'herausgabe': case 'menge': case 'zu_spaet': case 'etikett': case 'abholer':
       return canChangeOrderHandover(auth,'mail')?null:'auftraege';
@@ -253,12 +278,13 @@ function pruefeStammdaten(original:NonNullable<Awaited<ReturnType<typeof readInc
   return {frei:false,grund:'stammdaten',text,ausweg:{befehl:'saveIntakeTaskAction',text}};
 }
 
-async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
+async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser,artPasst=true):Promise<ZusageErgebnis>{
   try{
     if(input.anliegen==='A22')return noProposal;
     const source=input.sourceItemId?await readIncomingOriginal(auth,input):null;
     if(source?.channel==='mail'&&(source.usage==='info'||typeof source.discardReason==='string'
       ||input.anliegen!==undefined&&!source.orderId&&source.openConcerns.length===0))return noProposal;
+    if(!artPasst)return unavailable;
     if(input.sourceItemId&&!source&&input.anliegen!==undefined&&optionalCustomer(input))return unavailable;
     if(input.art==='preis_im_text')return {frei:true};
     if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unknownChannel;
@@ -312,13 +338,15 @@ async function pruefeFachZusage(auth:AuthorizationSnapshot,input:ZusageInput,les
 
 /** An approved effect needs both its business evidence and its permitted mail action. */
 export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser):Promise<ZusageErgebnis>{
-  const recht=fehlendesRecht(auth,input.art);
+  const {anliegen,wirkung}=input;
+  const art=typeof anliegen==='string'&&typeof wirkung==='string'?pruefartFuerWirkung(anliegen,wirkung):undefined;
+  const recht=fehlendesRecht(auth,art??input.art,wirkung);
   if(recht)return {frei:false,grund:recht==='preise'?'preisrecht':'recht',
     text:MAIL_PROMISE_COPY.roleRight(ROLE_LABELS[auth.role],ACCESS_AREA_LABELS[recht].text)};
-  const {anliegen,wirkung}=input;
   if(anliegen===undefined&&wirkung===undefined)return pruefeFachZusage(auth,input,leser);
   if(typeof anliegen!=='string'||typeof wirkung!=='string')return unavailable;
-  const ergebnis=await pruefeFachZusage(auth,input,leser);
+  const artPasst=art!==undefined&&(art===input.art||art==='zu_spaet'&&input.art==='etikett');
+  const ergebnis=await pruefeFachZusage(auth,input,leser,artPasst);
   if(!ergebnis.frei)return ergebnis;
   const versandBelegt=input.art==='zu_spaet'||input.art==='etikett';
   return erlaubteWirkung(anliegen,wirkung,{

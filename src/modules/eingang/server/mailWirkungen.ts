@@ -54,10 +54,14 @@ export type MailWirkungsKontext={
   neueMailadresseBestaetigt?:boolean;
 };
 
-export function erlaubteWirkung(anliegen:string,wirkung:string,kontext:MailWirkungsKontext):boolean{
+export function istMailWirkung(anliegen:string,wirkung:string):wirkung is MailWirkung{
   if(!Object.hasOwn(mailWirkungen,anliegen))return false;
   const erlaubt:readonly string[]=mailWirkungen[anliegen as MailAnliegen];
-  if(!erlaubt.includes(wirkung))return false;
+  return erlaubt.includes(wirkung);
+}
+
+export function erlaubteWirkung(anliegen:string,wirkung:string,kontext:MailWirkungsKontext):boolean{
+  if(!istMailWirkung(anliegen,wirkung))return false;
   switch(wirkung){
     case 'kunde_ohne_dublette_anlegen': return kontext.dublette===false;
     case 'auftrag_mit_preisquelle_anlegen': return kontext.preisquelle===true;

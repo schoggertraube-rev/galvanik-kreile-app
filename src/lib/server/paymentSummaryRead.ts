@@ -82,14 +82,14 @@ export async function readCustomerDeliveryBlockInTransaction(
   if(!data.blocked)return {code:'OK',paymentMode,handover,data};
   const visible=hasAuthorizationArea(auth,'zahlungen');
   if(!visible&&!lockInvoices)return {code:'OK',paymentMode,handover,data:{...data,invoiceIds:[]}};
-  const ids=sql`ARRAY[${sql.join(scope.overdue_ids.map(id=>sql`${id}::uuid`),sql`, `)}]::uuid[]`;
   // Lock or enrich the qualified IDs. A change since their read invalidates this projection.
   const invoices=await tx.execute<{id:string;number:string;open_amount:number;days_overdue:number}>(sql`
     SELECT invoice.id::text,invoice.invoice_number AS number,invoice.payment_open_amount_cents AS open_amount,
       (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date-invoice.due_date::date AS days_overdue
     FROM public.invoices invoice
     WHERE invoice.tenant_id=${auth.tenantId} AND invoice.customer_id=${customerId}
-      AND invoice.id=ANY(${ids}) AND ${classifyOverdue()}
+      AND invoice.id=ANY(ARRAY[${sql.join(scope.overdue_ids.map(id=>sql`${id}::uuid`),sql`, `)}]::uuid[])
+      AND ${classifyOverdue()}
     ORDER BY invoice.due_date,invoice.id ${lockInvoices?sql`FOR SHARE OF invoice`:sql``}`);
   if(invoices.length!==scope.overdue_ids.length)return {code:'UNAVAILABLE'};
   const oldest=invoices[0];

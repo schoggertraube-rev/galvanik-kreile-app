@@ -5,7 +5,7 @@ import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
-import {full,nativeFetch,sql,withSession} from '../../../e2e/ablauf/replayHarness';
+import {createFixture,full,nativeFetch,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture,invoiceCompanySettingsFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -58,6 +58,15 @@ it('reads the carrier handoff, booked label and cutoff for a confirmed mail and 
   const plan={art:'zu_spaet' as const,customerId,orderId,sourceItemId:original.id,sourceVersion:original.version,
     anliegen:'A9',wirkung:'versand_stoppen'};
   const reminder={...plan,anliegen:'A21',wirkung:'wiedervorlage_vor_annahmeschluss'};
+  const paymentNotice={...plan,anliegen:'A14',wirkung:'zahlungsavis_vormerken',art:'zahlungsavis' as const};
+  const paymentAsChannel={...paymentNotice,art:'kanal_versand' as const,kanal:'mail'};
+  const operator=await createFixture(['mails','auftraege'],'werkstatt');
+  const restricted=await withSession(operator,()=>resolveAuthorization());
+  if(!restricted.ok)throw Error('TEST_C8_RESTRICTED_LOGIN_REQUIRED');
+  expect(await pruefeZusage(restricted.data,paymentAsChannel,readers)).toMatchObject({frei:false,grund:'recht'});
+  expect(await pruefeZusage(restricted.data,paymentNotice,readers)).toMatchObject({frei:false,grund:'recht'});
+  expect(await read(paymentAsChannel)).toEqual({frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unavailable});
+  expect(await read(paymentNotice)).toEqual({frei:false,grund:'zahlungsavis',text:MAIL_PROMISE_COPY.paymentNotice});
   expect(await read({...plan,sourceItemId:other.id,sourceVersion:other.version,anliegen:'A12',wirkung:'reklamation_aufnehmen'}))
     .toEqual({frei:false,grund:'kein_vorschlag',text:MAIL_PROMISE_COPY.noProposal});
   const carrier='TEST C8 Paketdienst';
@@ -73,6 +82,7 @@ it('reads the carrier handoff, booked label and cutoff for a confirmed mail and 
     await sql`INSERT INTO public.shipments(id,tenant_id,order_id,carrier,status)
       VALUES(${shipmentId}::uuid,${tenant},${orderId},${carrier},'created')`;
     expect(await read(plan)).toEqual({frei:true});
+    expect(await read({...plan,art:'kanal_versand',kanal:'mail'})).toEqual({frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unavailable});
     expect(await read(reminder)).toEqual({frei:true});
     await sql`UPDATE public.shipments SET label_url='https://example.invalid/TEST-Etikett' WHERE tenant_id=${tenant} AND id=${shipmentId}::uuid`;
     expect(await read({...plan,art:'etikett'})).toEqual({frei:false,grund:'etikett',text:MAIL_PROMISE_COPY.labelBooked});
