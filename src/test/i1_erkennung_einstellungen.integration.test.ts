@@ -1,13 +1,19 @@
 // @vitest-environment node
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 
 const tenant = vi.hoisted(() => "TEST-ablauf-i1-settings-" + globalThis.crypto.randomUUID());
 vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: tenant }));
 
-import { full, sql, withSession } from "../../e2e/ablauf/replayHarness";
+import { full, nativeFetch, sql, withSession } from "../../e2e/ablauf/replayHarness";
+import {
+  finishIntakeFileAction,
+  prepareIntakeFileAction,
+  retryIntakeRecognitionAction,
+} from "@/app/actions/eingang.actions";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { readErkennungsEinstellungenInTransaction } from "@/modules/fundament/server-public";
 
 it("reads stored company models and threshold, with the existing default layout", async () => {
@@ -26,4 +32,72 @@ it("reads stored company models and threshold, with the existing default layout"
     ki_sicherheitsschwelle: 0.5,
     erkennung_modelle: { dokument: "prebuilt-layout", rechnung: null, bon: "test-quittung" },
   });
+});
+
+it("stores the unchanged OCR response, both pages and one stable position when reread", async () => {
+  const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
+    modelId: "prebuilt-layout", content: "TEST Rechnung", pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
+    keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" }, confidence: 0.8 }],
+    tables: [{ cells: [
+      { rowIndex: 0, columnIndex: 0, kind: "columnHeader", content: "Artikelnummer" },
+      { rowIndex: 0, columnIndex: 1, kind: "columnHeader", content: "Menge" },
+      { rowIndex: 1, columnIndex: 0, content: "TEST-BELEGZEILE", confidence: 0.9 },
+      { rowIndex: 1, columnIndex: 1, content: "4,25", confidence: 0.8 },
+    ] }],
+  } }, null, 2) + "\n";
+  vi.stubEnv("AZURE_DOCINTEL_ENDPOINT", "https://i1.example.invalid/");
+  vi.stubEnv("AZURE_DOCINTEL_KEY", "TEST-i1-external-fixture");
+  let providerResults = 0;
+  const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname !== "i1.example.invalid") return nativeFetch(input, init);
+    if (init?.method === "POST") return new Response(null, { status: 202, headers: {
+      "operation-location": "https://i1.example.invalid/documentintelligence/documentModels/prebuilt-layout/analyzeResults/TEST-I1",
+    } });
+    return new Response(rawReply + " ".repeat(providerResults++));
+  });
+
+  try {
+    const bytes = new Uint8Array(Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3l8AAAAASUVORK5CYII=", "base64",
+    ));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const fileId = randomUUID();
+    const grant = await withSession(full, () => prepareIntakeFileAction({
+      itemId: randomUUID(), fileId, name: "TEST-i1.png", mime: "image/png", bytes: bytes.length, sha256,
+    }));
+    if (grant.code !== "OK" || !grant.upload) throw Error("TEST_I1_UPLOAD_GRANT");
+    const storage = createAdminClient().storage;
+    const saved = await storage.from(grant.upload.bucket).uploadToSignedUrl(
+      grant.upload.path, grant.upload.token, bytes, { contentType: "image/png" },
+    );
+    expect(saved.error).toBeNull();
+
+    expect(await withSession(full, () => finishIntakeFileAction(fileId))).toMatchObject({ code: "OK" });
+    const retry = { fileId, clientEventId: randomUUID() };
+    expect(await withSession(full, () => retryIntakeRecognitionAction(retry))).toMatchObject({ code: "OK" });
+    expect(await withSession(full, () => retryIntakeRecognitionAction(retry))).toMatchObject({ code: "OK" });
+    expect(providerResults).toBe(2);
+
+    const [file] = await sql`SELECT erkennung_roh_pfad,erkannter_text,seiten FROM public.intake_file
+      WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
+    expect(file).toMatchObject({
+      erkennung_roh_pfad: `${tenant}/${sha256}.erkennung.prebuilt-layout.json`,
+      erkannter_text: "TEST Rechnung", seiten: 2,
+    });
+    const original = await storage.from("scans").download(file.erkennung_roh_pfad);
+    expect(original.error).toBeNull();
+    expect(await original.data!.text()).toBe(rawReply);
+    const positions = await sql`SELECT wert,modell,sicherheit_wert::float8 AS confidence,status FROM public.intake_suggestion
+      WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position'`;
+    expect(positions).toHaveLength(2);
+    expect(positions.filter(position => position.status === "offen")).toHaveLength(1);
+    for (const position of positions) expect(position).toMatchObject({
+      wert: { positionKey: "p1", lieferantenArtikelNr: "TEST-BELEGZEILE", menge: "4.25" },
+      modell: "prebuilt-layout", confidence: 0.8,
+    });
+  } finally {
+    fetched.mockRestore();
+    vi.unstubAllEnvs();
+  }
 });

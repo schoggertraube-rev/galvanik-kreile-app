@@ -11,11 +11,36 @@ export type DocumentSuggestion = {
   field: "CUSTOMER_NAME" | "CONTACT_PERSON" | "EMAIL" | "PHONE" | "ADDRESS" | "DUE_DATE" | "ITEM_DESCRIPTION" | "QUANTITY" | "MATERIAL" | "SURFACE" | "DOCUMENT_TEXT" | "OTHER";
   label: string;
   value: string;
-  confidence: number;
+  confidence: number | null;
   source: { page: number; polygon: number[] };
 };
 
-type AzureResult = { code: "OK"; data: { suggestions: DocumentSuggestion[] } } | { code: "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
+type AzureResult = {
+  code: "OK";
+  data: { suggestions: DocumentSuggestion[] };
+  original?: { bytes: Uint8Array; model: string; pages: number | null; tables: unknown[] };
+} | { code: "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
+
+function readAzurePayload(bytes: Uint8Array): Record<string, unknown> {
+  const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw Error("AZURE_RESULT_INVALID");
+  return payload as Record<string, unknown>;
+}
+
+function successfulResult(payload: Record<string, unknown>, bytes: Uint8Array, model: string): Extract<AzureResult, { code: "OK" }> {
+  const analysis = payload.analyzeResult;
+  const document = analysis && typeof analysis === "object" ? analysis as Record<string, unknown> : null;
+  if (document?.modelId !== undefined && document.modelId !== model) throw Error("AZURE_RESULT_MODEL_INVALID");
+  const pages = Array.isArray(document?.pages) && document.pages.length > 0 ? document.pages.length : null;
+  const tables = Array.isArray(document?.tables) ? document.tables : [];
+  return { code: "OK", data: { suggestions: suggestions(payload) }, original: { bytes, model, pages, tables } };
+}
+
+export function readAzureRecognitionOriginal(bytes: Uint8Array, model: string) {
+  const payload = readAzurePayload(bytes);
+  if (payload.status !== "succeeded") throw Error("AZURE_RESULT_INVALID");
+  return successfulResult(payload, bytes, model);
+}
 
 export function readAzureDocumentIntelligenceStatus(env: Environment = process.env) {
   return env.AZURE_DOCINTEL_ENDPOINT?.trim() && env.AZURE_DOCINTEL_KEY?.trim()
@@ -51,19 +76,19 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
     const key = pair.key && typeof pair.key === "object" && !Array.isArray(pair.key) ? pair.key as Record<string, unknown> : {};
     const value = pair.value && typeof pair.value === "object" && !Array.isArray(pair.value) ? pair.value as Record<string, unknown> : {};
     const label = typeof key.content === "string" ? key.content.trim().slice(0, 200) : "";
-    const content = typeof value.content === "string" ? value.content.trim().slice(0, 1000) : "";
-    const confidence = typeof pair.confidence === "number" ? pair.confidence : typeof value.confidence === "number" ? value.confidence : 0;
+    const content = typeof value.content === "string" ? value.content.trim() : "";
+    const confidence = typeof pair.confidence === "number" ? pair.confidence : typeof value.confidence === "number" ? value.confidence : null;
     const regions = Array.isArray(value.boundingRegions) ? value.boundingRegions : Array.isArray(key.boundingRegions) ? key.boundingRegions : [];
     const region = regions[0] && typeof regions[0] === "object" && !Array.isArray(regions[0]) ? regions[0] as Record<string, unknown> : {};
     const page = typeof region.pageNumber === "number" && Number.isInteger(region.pageNumber) ? region.pageNumber : 1;
     const polygon = Array.isArray(region.polygon) ? region.polygon.filter((point): point is number => typeof point === "number" && Number.isFinite(point)).slice(0, 16) : [];
-    if (!label || !content || confidence < 0 || confidence > 1) continue;
+    if (!label || !content || (confidence !== null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1))) continue;
     output.push({ field: classify(label), label, value: content, confidence, source: { page, polygon } });
   }
-  const text = typeof analysis.content === "string" ? analysis.content.trim().slice(0, 20_000) : "";
-  if (text) output.unshift({ field: "DOCUMENT_TEXT", label: "Dokumenttext", value: text, confidence: 0,
+  const text = typeof analysis.content === "string" ? analysis.content : "";
+  if (text) output.unshift({ field: "DOCUMENT_TEXT", label: "Dokumenttext", value: text, confidence: null,
     source: { page: 1, polygon: [] } });
-  return output.slice(0, 80);
+  return output;
 }
 
 export async function analyzeWithAzureDocumentIntelligence(
@@ -85,7 +110,8 @@ export async function analyzeWithAzureDocumentIntelligence(
   try {
     const endpoint = new URL(endpointValue);
     if (endpoint.protocol !== "https:") throw new Error("AZURE_ENDPOINT_INVALID");
-    const analyzeUrl = new URL("documentintelligence/documentModels/prebuilt-layout:analyze", endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
+    const model = "prebuilt-layout";
+    const analyzeUrl = new URL(`documentintelligence/documentModels/${model}:analyze`, endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");
     analyzeUrl.searchParams.set("api-version", API_VERSION);
     analyzeUrl.searchParams.set("features", "keyValuePairs");
@@ -100,13 +126,18 @@ export async function analyzeWithAzureDocumentIntelligence(
     const operationHeader = response.headers.get("operation-location");
     if (!operationHeader) throw new Error("AZURE_OPERATION_MISSING");
     const operation = new URL(operationHeader);
-    if (operation.origin !== endpoint.origin || !operation.pathname.includes("/documentintelligence/documentModels/prebuilt-layout/analyzeResults/")) throw new Error("AZURE_OPERATION_INVALID");
+    if (operation.origin !== endpoint.origin || !operation.pathname.includes(`/documentintelligence/documentModels/${model}/analyzeResults/`)) throw new Error("AZURE_OPERATION_INVALID");
     for (let attempt = 0; attempt < 12; attempt += 1) {
       if (attempt > 0) await wait(500);
       const poll = await fetchPort(operation, { headers: { "Ocp-Apim-Subscription-Key": key }, cache: "no-store" });
       if (!poll.ok) {observedOutcome='fehler';throw new Error(`AZURE_RESULT_${poll.status}`);}
-      const payload = await poll.json() as Record<string, unknown>;
-      if (payload.status === "succeeded") {observedOutcome='ok';return { code: "OK", data: { suggestions: suggestions(payload) } };}
+      const original = new Uint8Array(await poll.arrayBuffer());
+      const payload = readAzurePayload(original);
+      if (payload.status === "succeeded") {
+        const result = successfulResult(payload, original, model);
+        observedOutcome = "ok";
+        return result;
+      }
       if (payload.status === "failed") {observedOutcome='fehler';throw new Error("AZURE_ANALYZE_FAILED");}
       if (payload.status !== "running" && payload.status !== "notStarted") throw new Error("AZURE_STATUS_INVALID");
     }

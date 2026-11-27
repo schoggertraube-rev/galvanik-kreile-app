@@ -64,7 +64,8 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot|Authoriz
       AND (${!invoiceOnly} OR file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml') ORDER BY file.reihenfolge,file.id`);
     const suggestions=await tx.execute<NonNullable<IntakeCapture["suggestions"]>[number]>(sql`SELECT id::text,file_id::text AS "fileId",order_id AS "orderId",
       feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt"
-      FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND (${!invoiceOnly} OR feld LIKE 'rechnung.%') ORDER BY id`);
+      FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid
+        AND feld<>'position' AND (${!invoiceOnly} OR feld LIKE 'rechnung.%') ORDER BY id`);
     const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||readAuth.canReadArea('mails'));
     const continuations = await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${itemId}::uuid ORDER BY erstellt_am,id`);
     const sourceText = row.fortsetzung_von ? await tx.execute<{text:string|null;source_id:string}>(sql`SELECT original.nachher->>'text' AS text,created.nachher->>'textSourceId' AS source_id
