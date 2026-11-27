@@ -142,6 +142,7 @@
       "private.v_order_frozen_receipts_v1"
     ],
     "src/lib/server/orderHandoverSourcePort.ts": [
+      "private.v_customer_create_receipts_v1",
       "private.v_order_handover_manual_source_v1"
     ],
     "src/lib/server/orderIntakeRead.ts": [
