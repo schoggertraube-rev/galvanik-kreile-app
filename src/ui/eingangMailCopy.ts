@@ -12,6 +12,7 @@ export const MAIL_PROMISE_COPY = {
   unknownChannel: 'Dieser Versandkanal ist noch nicht verbunden.',
   unknownPriceSource: 'Für diese Positionen fehlt ein belegter Preis.',
   paymentNotice: 'Danke, wir ordnen Ihre Zahlung zu.',
+  automaticReply: 'Automatische Antwort. Die Rückfrage bleibt offen.',
   foreignSender: 'Wir haben Ihre Nachricht erhalten und stimmen das mit Ihrem hinterlegten Ansprechpartner ab.',
   tooLate: 'Ihr Paket ist bereits unterwegs.',
   labelBooked: 'Das Etikett ist gebucht. Der Versand muss die Änderung übernehmen.',

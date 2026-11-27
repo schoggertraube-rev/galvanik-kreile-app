@@ -14,6 +14,7 @@ import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 import {ORDER_STATION_COPY} from '@/ui/situationCatalog';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readIntakeMessagesForAuthorization} from './intakeMessages';
+import {readIntakeAutomaticReply} from './intakeOriginal';
 import {planeMailWirkungen} from './mailPlaene';
 import {erlaubteWirkung} from './mailWirkungen';
 
@@ -47,6 +48,7 @@ const unavailable={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unavailab
 const unknownTerm={frei:false,grund:'unbekannt_termin',text:MAIL_PROMISE_COPY.unknownTerm} as const;
 const unknownQuote={frei:false,grund:'unbekannt_kv',text:MAIL_PROMISE_COPY.unknownQuote} as const;
 const unknownChannel={frei:false,grund:'unbekannt_kanal',text:MAIL_PROMISE_COPY.unknownChannel} as const;
+const unknownAbsence={frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.abwesenheit} as const;
 const foreignSender={frei:false,grund:'absender_fremd',text:MAIL_PROMISE_COPY.foreignSender} as const;
 const optionalCustomer = (input:ZusageInput) => input.art==='preis_im_text'||input.art==='kanal_versand'||
   (input.art==='termin'&&!input.orderId&&!input.quoteId);
@@ -76,8 +78,9 @@ async function readIncomingOriginal(auth:AuthorizationSnapshot,input:ZusageInput
   if(original.direction!=='rein'||input.sourceVersion!==undefined&&input.sourceVersion!==original.version)return null;
   const capture=await intakeCaptureSnapshot(auth,original.id);
   if(capture.code!=='OK'||capture.capture.version!==original.version)return null;
-  if(original.channel==='mail'&&!capture.capture.files.some(file=>file.mime==='message/rfc822'&&file.secured===true))return null;
-  return original;
+  const mime=capture.capture.files.filter(file=>file.mime==='message/rfc822'&&file.secured===true);
+  if(original.channel==='mail'&&mime.length!==1)return null;
+  return {...original,mimeFileId:original.channel==='mail'?mime[0].id:null};
 }
 
 async function qualifyCustomer(auth:AuthorizationSnapshot,input:ZusageInput,leser:ZusageLeser){
@@ -230,6 +233,11 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
     const original=customerRequired?await qualifyCustomer(auth,input,leser):null;
     if(customerRequired&&!original)return foreignSender;
     if(input.art==='stammdaten'&&original)return pruefeStammdaten(original);
+    if(input.art==='abwesenheit'){
+      if(!original?.mimeFileId)return unknownAbsence;
+      const automatic=await readIntakeAutomaticReply(auth,{itemId:original.id,fileId:original.mimeFileId,version:original.version});
+      return automatic===true?{frei:false,grund:'abwesenheit',text:MAIL_PROMISE_COPY.automaticReply}:unknownAbsence;
+    }
     if(input.art==='storno')return await pruefeStorno(auth,input,leser.verbrauch);
     if(input.art==='termin')return await pruefeTermin(auth,input,leser);
     if(input.art==='menge')return await pruefeMenge(auth,input);
@@ -252,6 +260,7 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
     return unavailable;
   }catch(error){
     console.error('[MAIL_PROMISE_SOURCE_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');
+    if(input.art==='abwesenheit')return unknownAbsence;
     return input.art==='termin'?unknownTerm:input.art==='auftrag_aus_kv'?unknownQuote:unavailable;
   }
 }

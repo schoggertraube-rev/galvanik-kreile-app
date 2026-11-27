@@ -305,6 +305,59 @@ it('uses a secured incoming original for the phone handoff and only allows the c
     .toEqual([{version:receipt.orderVersion,handover_mode:'shipping'}]);
 });
 
+it('holds the reply open only for an automatic marking in the secured MIME header',async()=>{
+  const {getOpenIntakeMailsAction}=await import('@/app/actions/eingang.actions');
+  const customerId=await customerFixture('TEST S-1 Automatische Antwort');
+  const authorization=await withSession(full,()=>resolveAuthorization());
+  if(!authorization.ok)throw Error('TEST_S1_REPLY_AUTH_REQUIRED');
+  const customer=await leser.kunde(authorization.data,customerId);
+  if(!customer?.email)throw Error('TEST_S1_REPLY_CONTACT_REQUIRED');
+  const body='TEST: Auto-Submitted: auto-replied';
+  const replyTo='<TEST-S1-Rueckfrage@example.invalid>';
+  const messages=['auto-replied','no'].map(marking=>{
+    const id=`TEST-S1-${randomUUID()}`;
+    return {marking,value:{id,internetMessageId:`<${id}@example.invalid>`,subject:'TEST S-1 Automatische Antwort',
+      from:{emailAddress:{name:'TEST Kontakt',address:customer.email}},receivedDateTime:new Date().toISOString(),
+      bodyPreview:body,body:{contentType:'text',content:body},hasAttachments:false}};
+  });
+  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
+    SELECT ${randomUUID()},${tenant},'TEST S-1 Mail',20,'TEST-S1'
+    WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
+  // Synthetic provider responses; the usual import secures both originals.
+  const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+    const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+    if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-S1-mail-provider-token'.repeat(3)});
+    if(url.hostname!=='graph.microsoft.com')return nativeFetch(input,init);
+    if(url.pathname.includes('/mailFolders/inbox/messages'))return Response.json({value:messages.map(row=>row.value)});
+    const message=messages.find(row=>url.pathname.split('/').includes(row.value.id));
+    if(!message)return new Response(null,{status:404});
+    if(url.pathname.endsWith('/$value'))return new Response(`From: ${customer.email}\r\nMessage-ID: ${message.value.internetMessageId}\r\nSubject: ${message.value.subject}\r\nAuto-Submitted: ${message.marking}\r\nIn-Reply-To: ${replyTo}\r\nReferences: <TEST-S1-Faden@example.invalid>\r\n ${replyTo}\r\n\r\n${body}`);
+    if(url.pathname.endsWith('/attachments'))return Response.json({value:[]});
+    return Response.json(message.value);
+  });
+  try{
+    expect(await withSession(full,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK'});
+    const readbacks=await sql<{id:string;messageId:string;version:number}[]>`SELECT id::text,graph_message_id AS "messageId",version
+      FROM public.intake_item WHERE tenant_id=${tenant} AND graph_message_id=ANY(${messages.map(row=>row.value.id)}::text[])`;
+    expect(readbacks).toHaveLength(2);
+    for(const [index,message] of messages.entries()){
+      const original=readbacks.find(row=>row.messageId===message.value.id);
+      if(!original)throw Error('TEST_S1_REPLY_ORIGINAL_REQUIRED');
+      // Isolated confirmed association, independent of the original headers.
+      await sql`UPDATE public.intake_item SET kunde_id=${customerId},zuordnung='hand' WHERE tenant_id=${tenant} AND id=${original.id}::uuid`;
+      const result=await pruefeZusage(authorization.data,{art:'abwesenheit',customerId,sourceItemId:original.id,sourceVersion:original.version});
+      expect(result).toEqual(index===0
+        ?{frei:false,grund:'abwesenheit',text:MAIL_PROMISE_COPY.automaticReply}
+        :{frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.pending.abwesenheit});
+      expect(await sql`SELECT geoeffnet FROM public.intake_file WHERE tenant_id=${tenant} AND item_id=${original.id}::uuid AND mime='message/rfc822'`).toEqual([{geoeffnet:false}]);
+      expect(await sql`SELECT nachher->'replyChain' AS chain FROM public.intake_event
+        WHERE tenant_id=${tenant} AND item_id=${original.id}::uuid AND art='angelegt'`).toEqual([
+        {chain:expect.objectContaining({status:'present',inReplyTo:[replyTo],references:['<TEST-S1-Faden@example.invalid>',replyTo]})},
+      ]);
+    }
+  }finally{fetchMock.mockRestore();}
+});
+
 it('reads the actual station and authorized material value without cancelling the order',async()=>{
   const {orderId,customerId,version}=await readyOrderForInvoice('TEST S-1 Stornoübersicht');
   const {bucheAuftragsverbrauchAction}=await import('@/app/actions/lager.actions');
