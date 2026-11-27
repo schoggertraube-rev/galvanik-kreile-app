@@ -64,9 +64,16 @@ test('Werkstatt-Puls stuft Versand am Fertigtermin ein und lässt die Lieferzusa
     expect(ergebnis).toMatchObject({ ok: true });
     if (!ergebnis.ok) throw Error('TEST_WERKSTATT_PULS_FEHLT');
     expect(ergebnis.data.orders).toContainEqual(expect.objectContaining({
-      fertigAm, order: expect.objectContaining({ id: versand.receipt.orderId, due_date: zusage }),
+      fertigAm, order: expect.objectContaining({ id: versand.receipt.orderId, due_date: zusage, customers: null }),
     }));
     expect(ergebnis.data.orders.some(({ order }) => order.id === abholung.receipt.orderId)).toBe(false);
+    const mitKundenlesen = await createFixture(['buchhaltung', 'kunden']);
+    expect(await withSession(mitKundenlesen, () => readDelayedWorkOrdersAction())).toMatchObject({
+      ok: true,
+      data: { orders: expect.arrayContaining([expect.objectContaining({
+        order: expect.objectContaining({ id: versand.receipt.orderId, customers: { name: expect.any(String) } }),
+      })]) },
+    });
   } finally {
     await sql`UPDATE public.company_settings SET betriebsruhe = ${einstellungen.ruhe}::jsonb,
       versandpuffer_arbeitstage = ${einstellungen.puffer}, termin_knapp_arbeitstage = ${einstellungen.knapp}

@@ -1,6 +1,7 @@
 "use server";
 
 import { readAuthorizedArea } from "@/lib/server/authHelper";
+import { hasAuthorizationArea } from "@/lib/server/authorization";
 import { createClient } from "@/lib/supabase/server";
 import {
   AnalyseTileKey,
@@ -43,7 +44,7 @@ type AffectedOrderRow = {
   order_number: string;
   title: string | null;
   customer_id: string;
-  customers: CustomerNameRow | CustomerNameRow[] | null;
+  customers?: CustomerNameRow | CustomerNameRow[] | null;
   station: string | null;
   due_date: string | null;
   completed_date: string | null;
@@ -96,6 +97,7 @@ function toWerkstattPulsPeriod(period: string): WerkstattPulsData["period"] {
 function toAffectedOrder(
   order: AffectedOrderRow,
   status: "critical" | "missing_due_date",
+  mayReadCustomerName: boolean,
   delayDays: number | null = null,
 ): WerkstattPulsData["affectedOrders"][number] {
   return {
@@ -103,7 +105,7 @@ function toAffectedOrder(
     orderNumber: order.order_number,
     title: order.title || "Ohne Titel",
     customerId: order.customer_id,
-    customerName: getCustomerName(order.customers),
+    customerName: mayReadCustomerName ? getCustomerName(order.customers) : '',
     stationName: order.station || "Unbekannt",
     dueDate: order.due_date,
     completedDate: order.completed_date,
@@ -349,9 +351,13 @@ export async function getAnalyseTileDetail(
       const delayedOrders = await readDelayedWorkOrdersAction();
       if (!delayedOrders.ok) return { data: null, error: delayedOrders.message };
       const today = Date.parse(delayedOrders.data.today);
+      const mayReadCustomerName = hasAuthorizationArea(authorization.data, 'kunden');
 
-      const { data: missingDueOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
-        .select('id, order_number, title, customer_id, customers(name), station, due_date, completed_date, status')
+      const orders = supabase.from('orders');
+      const missingDueQuery = mayReadCustomerName
+        ? orders.select('id, order_number, title, customer_id, customers(name), station, due_date, completed_date, status')
+        : orders.select('id, order_number, title, customer_id, station, due_date, completed_date, status');
+      const { data: missingDueOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await missingDueQuery
         .eq('tenant_id', authorization.data.tenantId)
         .is('due_date', null)
         .neq('status', 'storniert')
@@ -405,9 +411,9 @@ export async function getAnalyseTileDetail(
 
       // Affected Orders
       const affectedOrdersMapped = delayedOrders.data.orders.map(({ order, fertigAm }) =>
-        toAffectedOrder(order, 'critical', (today - Date.parse(fertigAm)) / 86_400_000));
+        toAffectedOrder(order, 'critical', mayReadCustomerName, (today - Date.parse(fertigAm)) / 86_400_000));
       (missingDueOrders || []).forEach(order => {
-        affectedOrdersMapped.push(toAffectedOrder(order, "missing_due_date"));
+        affectedOrdersMapped.push(toAffectedOrder(order, "missing_due_date", mayReadCustomerName));
       });
 
       // Data Sources list

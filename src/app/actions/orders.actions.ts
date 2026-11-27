@@ -2,7 +2,7 @@
 // E-C: Today model is composed at the existing Today/Orders Action seam.
 import 'server-only';
 import type {QuoteReadback} from '@/modules/quotes/public';
-import {hasAnyAuthorizationArea} from '@/lib/server/authorization';
+import {hasAnyAuthorizationArea,hasAuthorizationArea} from '@/lib/server/authorization';
 import type {TodayModelReadPorts,TodayDashboardSources} from '@/lib/server/todayDashboard';
 import type {OfficeHomeModel} from '@/components/home/OfficeHomeClient';
 import {PAGE_READ_COPY} from '@/ui/situationCatalog';
@@ -166,7 +166,7 @@ export async function getProductionWeekAction(input?:{onDate?:string;includePosi
 }
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
-import { readAuthorizedArea, type ActionResult } from "@/lib/server/authHelper";
+import type { ActionResult } from "@/lib/server/authHelper";
 import {
   resolveAuthorization,
   type AuthorizationSnapshot,
@@ -937,9 +937,11 @@ export async function getOrdersBaseDb(): Promise<ActionResult<OrderResponse[]> &
 export async function readDelayedWorkOrdersAction() {
   return observeAction('readDelayedWorkOrdersAction', subjectForAction('readDelayedWorkOrdersAction', undefined), async () => {
     noStore();
+    const { readAuthorizedArea } = await import('@/lib/server/authHelper');
     const authorization = await readAuthorizedArea('buchhaltung');
     if (!authorization.ok) return authorization;
     const { tenantId } = authorization.data;
+    const mayReadCustomerName = hasAuthorizationArea(authorization.data, 'kunden');
     const [{ withPrivilegedTenantTransaction }, { leseFertigterminKalender }, { fertigtermin }, { berlinCalendarDay }, { sql }] = await Promise.all([
       import('@/lib/server/privilegedDb'), import('@/lib/server/orderStationRead'), import('@/modules/orders/public'),
       import('@/lib/domain/workingDays'), import('drizzle-orm'),
@@ -948,15 +950,16 @@ export async function readDelayedWorkOrdersAction() {
     const data = await withPrivilegedTenantTransaction(authorization.data, async tx => {
       const calendar = await leseFertigterminKalender(tx, tenantId, readBetriebsruheInTransaction);
       const rows = await tx.execute<{
-        id: string; order_number: string; title: string | null; customer_id: string; customers: { name: string | null };
+        id: string; order_number: string; title: string | null; customer_id: string; customers: { name: string | null } | null;
         station: string | null; due_date: string; completed_date: null; status: string | null;
         handover_mode: Parameters<typeof fertigtermin>[0]['handoverMode'];
       }>(sql`
         SELECT orders.id, orders.order_number, orders.title, orders.customer_id, orders.station,
           orders.due_date::date::text AS due_date, orders.completed_date, orders.status, orders.handover_mode,
-          jsonb_build_object('name', customer.name) AS customers
+          CASE WHEN customer.id IS NOT NULL THEN jsonb_build_object('name', customer.name) END AS customers
         FROM public.orders orders
-        LEFT JOIN public.customers customer ON customer.tenant_id = orders.tenant_id AND customer.id = orders.customer_id
+        LEFT JOIN public.customers customer ON ${mayReadCustomerName}
+          AND customer.tenant_id = orders.tenant_id AND customer.id = orders.customer_id
         WHERE orders.tenant_id = ${tenantId} AND orders.due_date IS NOT NULL
           AND orders.completed_date IS NULL AND orders.status IS DISTINCT FROM 'storniert'
       `);
