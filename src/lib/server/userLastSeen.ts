@@ -219,6 +219,12 @@ export async function markUserLastSeen(
     return { code: "VALIDATION_ERROR", message: "Ungültige Version oder Anfragekennung." };
   }
 
+  return persistUserLastSeen(input);
+}
+
+async function persistUserLastSeen(
+  input: { clientEventId: string; expectedVersion: number | null },
+): Promise<MarkUserLastSeenResult> {
   let authorization;
   try {
     authorization = await resolveAuthorization();
@@ -256,7 +262,10 @@ export async function markUserLastSeen(
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
         const receipt = mapReceipt(existingReceipts[0], authorization.data);
-        if (!receiptMatchesIntent(receipt, authorization.data, input)) {
+        if (input.expectedVersion === null || !receiptMatchesIntent(receipt, authorization.data, {
+          clientEventId: input.clientEventId,
+          expectedVersion: input.expectedVersion,
+        })) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
         return { code: "OK", receipt, replayed: true };
@@ -273,18 +282,31 @@ export async function markUserLastSeen(
         return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
 
+      // For login, qualify the existing state under the writer's lock instead
+      // of reading an optimistic version in a separate transaction.
+      const qualification = input.expectedVersion === null ? sql`, (
+        SELECT source.integrity_ok FROM private.v_user_last_seen_v1 source
+        WHERE source.tenant_id = seen.tenant_id AND source.user_id = seen.user_id
+      ) AS integrity_ok` : sql``;
       const lockedStates = await tx.execute<StateRow>(sql`
-        SELECT tenant_id, user_id, last_seen_at, version
-        FROM private.user_last_seen
-        WHERE tenant_id = ${authorization.data.tenantId}
-          AND user_id = ${authorization.data.userId}
-        FOR UPDATE
+        SELECT seen.tenant_id, seen.user_id, seen.last_seen_at, seen.version ${qualification}
+        FROM private.user_last_seen seen
+        WHERE seen.tenant_id = ${authorization.data.tenantId}
+          AND seen.user_id = ${authorization.data.userId}
+        FOR UPDATE OF seen
       `);
       const current = lockedStates[0];
       if (lockedStates.length > 1) throw new Error("USER_LAST_SEEN_STATE_AMBIGUOUS");
+      if (input.expectedVersion === null && current && (
+        current.integrity_ok !== true
+        || current.tenant_id !== authorization.data.tenantId
+        || current.user_id !== authorization.data.userId
+        || !Number.isSafeInteger(current.version)
+        || current.version <= 0
+      )) throw new Error("USER_LAST_SEEN_STATE_INVALID");
 
       const currentVersion = current?.version ?? 0;
-      if (currentVersion !== input.expectedVersion) {
+      if (input.expectedVersion !== null && currentVersion !== input.expectedVersion) {
         return { code: "CONFLICT", message: "Letzter Blick wurde bereits geändert." };
       }
 
@@ -379,7 +401,7 @@ export async function markUserLastSeen(
       }
       const receipt = mapReceipt(readbackRows[0], authorization.data);
       if (
-        !receiptMatchesIntent(receipt, authorization.data, input)
+        !receiptMatchesIntent(receipt, authorization.data, { clientEventId: input.clientEventId, expectedVersion: currentVersion })
         || receipt.previousSeenAt !== previousSeenAt
         || receipt.lastSeenAt !== lastSeenAt
       ) {
@@ -395,34 +417,9 @@ export async function markUserLastSeen(
 
 /**
  * Records exactly one confirmed login view without accepting tenant, actor or
- * version data from the client. The canonical session is resolved first; a
- * single optimistic retry covers two concurrent logins for the same user.
+ * version data from the client. The shared writer selects the next version
+ * under the same account lock as an ordinary last-seen command.
  */
 export async function recordUserLastSeenForLogin(): Promise<MarkUserLastSeenResult> {
-  let authorization;
-  try {
-    authorization = await resolveAuthorization();
-  } catch {
-    return { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." };
-  }
-  if (!authorization.ok) {
-    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." }
-      : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  }
-
-  const clientEventId = randomUUID();
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const current = await readUserLastSeen(authorization.data);
-    if (current.code !== "OK") {
-      return { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." };
-    }
-    const result = await markUserLastSeen({
-      expectedVersion: current.data.version,
-      clientEventId,
-    });
-    if (result.code !== "CONFLICT" || attempt === 1) return result;
-  }
-
-  return { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." };
+  return persistUserLastSeen({ clientEventId: randomUUID(), expectedVersion: null });
 }

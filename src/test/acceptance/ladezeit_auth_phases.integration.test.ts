@@ -9,6 +9,7 @@ import {saveManagedUserAction} from '@/app/actions/settings.actions';
 import {loginWithPin} from '@/app/actions/auth.actions';
 import {createPinLoginHandle} from '@/lib/server/pinLoginHandle';
 import {readAppSession} from '@/lib/server/appSession';
+import {recordUserLastSeenForLogin} from '@/lib/server/userLastSeen';
 
 it('E0 measures the existing real login phases while retaining wrong-PIN counting, cookie and one last-seen receipt',async()=>{
  const manager=await createFixture(['einstellungen','logins']),actor=await createFixture(['auftraege']);
@@ -35,4 +36,17 @@ it('E0 measures the existing real login phases while retaining wrong-PIN countin
   expect(await sql`SELECT count(*)::int AS count FROM public.events WHERE tenant_id=${tenant} AND user_id=${actor.actorId}::uuid AND event_type='USER_LAST_SEEN_RECORDED_V1'`).toEqual([{count:1}]);
   expect(await sql`SELECT failed_attempts FROM public.pin_rate_limits WHERE tenant_id=${tenant} AND operator_id=${actor.actorId}::uuid`).toEqual([]);
  }finally{output.mockRestore();}
+});
+
+it('uses the locked last-seen version for two overlapping authenticated login receipts',async()=>{
+ const actor=await createFixture(['auftraege']);
+ const results=await withSession(actor,()=>Promise.all([recordUserLastSeenForLogin(),recordUserLastSeenForLogin()]));
+ expect(results).toMatchObject([{code:'OK',replayed:false},{code:'OK',replayed:false}]);
+ const receipts=results.flatMap(result=>result.code==='OK'?[result.receipt]:[])
+  .sort((left,right)=>left.aggregateVersion-right.aggregateVersion);
+ expect(receipts.map(receipt=>receipt.aggregateVersion)).toEqual([1,2]);
+ expect(receipts[0].previousSeenAt).toBeNull();
+ expect(receipts[1].previousSeenAt).toBe(receipts[0].lastSeenAt);
+ expect(receipts.every(receipt=>receipt.actorId===actor.actorId)).toBe(true);
+ expect(await sql`SELECT aggregate_version FROM public.events WHERE tenant_id=${tenant} AND user_id=${actor.actorId}::uuid AND event_type='USER_LAST_SEEN_RECORDED_V1' ORDER BY aggregate_version`).toEqual([{aggregate_version:1},{aggregate_version:2}]);
 });
