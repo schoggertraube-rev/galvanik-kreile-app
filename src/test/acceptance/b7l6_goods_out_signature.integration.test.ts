@@ -46,7 +46,17 @@ it('binds a signed pickup to its saved receipt', async () => {
   expect(await book(missingSignature)).toMatchObject({ code: 'VALIDATION_ERROR' });
   expect(await book({ ...input, collector: { ...input.collector,
     unterschrift: { ...input.collector.unterschrift, sha256: '0'.repeat(64) } } })).toMatchObject({ code: 'VALIDATION_ERROR' });
+  const corruptedRequest = { ...base, clientEventId: randomUUID() };
+  const corruptedGrant = await withSession(full, () => prepareGoodsOutSignatureUploadAction(corruptedRequest));
+  if (corruptedGrant.code !== 'OK') throw new Error(`TEST_B7L_CORRUPT_GRANT:${corruptedGrant.code}`);
+  const truncated = Buffer.concat([bytes.subarray(0, 24), bytes.subarray(-12)]);
+  expect((await storage.uploadToSignedUrl(corruptedGrant.storagePath, corruptedGrant.token, truncated, { contentType: 'image/png' })).error).toBeNull();
+  expect(await book({ ...input, clientEventId: corruptedRequest.clientEventId, collector: { ...input.collector,
+    unterschrift: { ...input.collector.unterschrift, storagePath: corruptedGrant.storagePath,
+      sha256: createHash('sha256').update(truncated).digest('hex') } } })).toMatchObject({ code: 'VALIDATION_ERROR' });
   expect(await sql`SELECT station FROM public.orders WHERE tenant_id=${tenant} AND id=${order.orderId}`).toEqual([{ station: 'fertig' }]);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${tenant} AND order_id=${order.orderId}
+    AND event_type IN ('ORDER_PICKED_UP_V1','ORDER_GOODS_OUT_COLLECTOR_V1')`).toEqual([]);
 
   const handover = await book(input);
   if (handover.code !== 'OK') throw new Error(`TEST_B7L_HANDOVER:${handover.code}`);
