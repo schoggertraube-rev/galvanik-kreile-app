@@ -22,6 +22,11 @@ import { offlinePartition } from '@/lib/server/offlinePartition';
 import { createPinLoginHandle } from '@/lib/server/pinLoginHandle';
 import { proxy } from '@/proxy';
 
+const replayUrl = process.env.DATABASE_URL;
+if (!replayUrl || replayUrl !== process.env.H18_EXPECTED_DATABASE_URL || new URL(replayUrl).hostname !== '127.0.0.1') {
+  throw new Error('TEST_INACTIVITY_DEDICATED_LOOPBACK_REQUIRED');
+}
+
 const desktopAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15';
 
 it('expires a tablet session and resumes the same login’s saved draft and original', async () => {
