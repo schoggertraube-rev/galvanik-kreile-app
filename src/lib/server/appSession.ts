@@ -233,14 +233,15 @@ export async function renewAppSessionActivity(
     || result.session.issuedAt !== identity.issuedAt) return null;
 
   const session = result.session;
+  const sessionScope = appSessionReadScope(token, session);
   const allowed = readSessionInactivity(session, { minutes: inactivity.minutes });
   if (now >= allowed.expiresAt || now >= inactivity.expiresAt) return null;
   const minimumInterval = Math.min(30_000, inactivity.minutes * 10_000);
-  if (now - allowed.lastSeen < minimumInterval) return { ...allowed, serverAt: now };
+  if (now - allowed.lastSeen < minimumInterval) return { ...allowed, serverAt: now, sessionScope };
 
-  const renewed = { ...session, lastSeen: now, readScope: appSessionReadScope(token, session) };
+  const renewed = { ...session, lastSeen: now, readScope: sessionScope };
   cookieStore.set(COOKIE_NAME, signAppSession(renewed, secret), getCookieOptions(new Date(session.expiresAt)));
-  return { ...readSessionInactivity(renewed, { minutes: inactivity.minutes }), serverAt: now };
+  return { ...readSessionInactivity(renewed, { minutes: inactivity.minutes }), serverAt: now, sessionScope };
 }
 
 // ─── Cookie I/O: Löschen ────────────────────────────────────────────────────

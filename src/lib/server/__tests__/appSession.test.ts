@@ -96,7 +96,7 @@ describe('signed inactivity and offline reading partition', () => {
 
     const settings = { devices: { tablet: 5 } };
     const renewed = await renewAppSessionActivity(session, readSessionInactivity(session, settings));
-    expect(renewed).toMatchObject({ minutes: 5 });
+    expect(renewed).toMatchObject({ minutes: 5, sessionScope: cacheScopeFromCredential(token) });
     expect(renewed?.lastSeen).toBeGreaterThanOrEqual(now);
     expect(mockCookieSet).toHaveBeenCalledOnce();
     const [cookie, newToken, options] = mockCookieSet.mock.calls[0];

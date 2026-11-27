@@ -106,18 +106,35 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
         setExpired(false);
         schedule();
       };
+      const openCache = async (scope: string, login: string) => {
+        const state = await readPendingShellMetadata(scope, login);
+        if (state.code !== 'OK' || state.metadata.scope !== login) return;
+        const deadline = state.metadata.idleDeadline;
+        if (!deadline || !('serverAt' in deadline)) return;
+        // More recent HTML may shorten the lease. Its timestamp never starts a new clock.
+        const expiresAt = initial.serverAt !== undefined && initial.serverAt >= deadline.serverAt
+          ? Math.min(deadline.expiresAt, deadline.localAt + initial.expiresAt - deadline.serverAt)
+          : deadline.expiresAt;
+        const remaining = remainingIdleClock({ ...deadline, expiresAt });
+        if (remaining !== null) open(remaining);
+      };
       try {
         if (!scope || !loginScope || !sameLogin()) return;
         if (!navigator.onLine) {
-          const state = await readPendingShellMetadata(scope, loginScope);
-          const remaining = state.code === 'OK' && state.metadata.scope === loginScope
-            ? remainingIdleClock(state.metadata.idleDeadline) : null;
-          if (remaining !== null) open(remaining);
+          await openCache(scope, loginScope);
           return;
         }
         // An available server may have shortened the deadline since the last offline snapshot.
         const started = captureIdleClock();
-        const result = await getAuthorizationSnapshotAction();
+        let result: Awaited<ReturnType<typeof getAuthorizationSnapshotAction>>;
+        try {
+          result = await getAuthorizationSnapshotAction();
+        } catch (error) {
+          if (!(error instanceof TypeError)) throw error;
+          // A connected device can lose its route to the app while a confirmed view is still readable.
+          if (!disposed && sameLogin()) await openCache(scope, loginScope);
+          return;
+        }
         if (disposed || !sameLogin() || !result.ok || result.data.offlineScope !== scope || result.data.offline24h !== true) return;
         const current = result.data.inactivity;
         if (current?.sessionScope !== loginScope || current.serverAt === undefined) return;

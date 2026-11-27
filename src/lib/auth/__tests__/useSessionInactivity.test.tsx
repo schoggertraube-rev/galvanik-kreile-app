@@ -2,6 +2,7 @@
 // The logout transport is held open to observe the shell before it replies.
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { captureIdleClock } from '@/lib/offline/pendingStore';
 import { useSessionInactivity } from '../useSessionInactivity';
 
 const ports = vi.hoisted(() => ({
@@ -22,6 +23,8 @@ vi.mock('@/lib/offline/pendingStore', async importOriginal => ({
 
 afterEach(() => {
   vi.clearAllMocks();
+  ports.authorization.mockReset();
+  ports.readDeadline.mockReset();
   vi.useRealTimers();
   vi.restoreAllMocks();
   const root = document.documentElement;
@@ -71,9 +74,29 @@ it('opens an online view with the newly confirmed shorter deadline', async () =>
   const { result } = renderHook(() => useSessionInactivity(initial));
   await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
   expect(result.current).toBe(false);
+  expect(ports.readDeadline).not.toHaveBeenCalled();
   await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
   expect(result.current).toBe(true);
   expect(ports.logout).toHaveBeenCalledExactlyOnceWith('inactivity', sessionScope);
+});
+
+it('uses the remaining confirmed time when the device has Wi-Fi but cannot contact the app', async () => {
+  vi.useFakeTimers();
+  enableOfflineView();
+  const clock = captureIdleClock();
+  if (!clock) throw Error('TEST_READING_CLOCK_REQUIRED');
+  const now = Date.now();
+  const initial = { minutes: 1, lastSeen: now - 30_000, expiresAt: now + 30_000, serverAt: now - 30_000, sessionScope };
+  ports.authorization.mockRejectedValueOnce(new TypeError('TEST network unavailable'));
+  ports.readDeadline.mockResolvedValueOnce({ code: 'OK', metadata: { scope: sessionScope, idleDeadline: {
+    serverAt: now - 30_000, localAt: clock.localAt - 30_000, monotonicAt: clock.monotonicAt - 30_000,
+    expiresAt: now + 30_000,
+  } } });
+  const { result } = renderHook(() => useSessionInactivity(initial));
+  await act(async () => { await vi.advanceTimersByTimeAsync(29_000); });
+  expect(result.current).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+  expect(result.current).toBe(true);
 });
 
 it('hides the current shell at the deadline even when the sign-out response never arrives', async () => {
