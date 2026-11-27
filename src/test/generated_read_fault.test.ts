@@ -1,6 +1,6 @@
 // Explicit isolated transport/manifest fixtures, not a real N09 app acceptance.
 import {expect,it} from 'vitest';
-import {protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from '../../e2e/generated/_readFault';
+import {interruptedLoadControlId,protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from '../../e2e/generated/_readFault';
 const file='src/app/actions/logging.actions.ts';
 const metadata='a'.repeat(40),write='b'.repeat(40),list='c'.repeat(40);
 const fixture=()=>({node:{
@@ -47,4 +47,11 @@ it('a declared message navigation keeps the fault pending through unrelated home
  const requests=[metadata,write,'getIntakeDraftsAction','getIntakeAssignmentAction',list].map(nextAction=>({method:'POST',resourceType:'fetch',nextAction}));
  expect(requests.filter(request=>isApplicationDataLoad(request,diagnostics,list)).map(request=>request.nextAction)).toEqual([list]);
  expect(isApplicationDataLoad({method:'GET',resourceType:'fetch'},diagnostics,list)).toBe(false);
+});
+
+it('targets opening a mail dialog and leaves other open actions and navigation unchanged',()=>{
+ expect(interruptedLoadControlId({aktion:'oeffne',wert:'mailein'})).toBe('mailein');
+ expect(interruptedLoadControlId({aktion:'oeffne',wert:'auftrag'})).toBeUndefined();
+ expect(interruptedLoadControlId({id:'navigation.nachrichten',aktion:'klick'})).toBe('navigation.nachrichten');
+ expect(interruptedLoadControlId({id:'eingang.buchen',aktion:'klick'})).toBeUndefined();
 });

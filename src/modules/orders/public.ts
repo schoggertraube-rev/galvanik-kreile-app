@@ -10,6 +10,7 @@ export type {
 } from "./ui/OrderStationAttachmentPanel";
 export { getUrgency } from "./domain/getUrgency";
 export type { Urgency } from "./domain/getUrgency";
+export { leseMehrarbeitsfreigabe, verteileMehrarbeit, type Auftragsmehrarbeit } from "./domain/mehrarbeitSpielraum";
 export { buildOrdersHomeProjection } from "./domain/buildOrdersHomeProjection";
 export type { OrdersHomeProjection, OrdersHomeSource } from "./domain/buildOrdersHomeProjection";
 export {

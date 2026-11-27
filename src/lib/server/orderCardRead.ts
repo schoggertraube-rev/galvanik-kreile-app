@@ -577,6 +577,8 @@ function canView(authorization: Pick<AuthorizationSnapshot,'permissions'>): bool
   return authorization.permissions.includes("perm_view_leitstand");
 }
 
+export { canView as canViewOrderCard };
+
 type OrderPriceEvent={aggregate_version:number;payload:{prices:unknown}};
 function qualifyCurrentOrderItems(authorization:Pick<AuthorizationSnapshot,'tenantId'>,queue:QueueRow,isReworkOrder:boolean,intakeRows:IntakeRow[],currentRows:CurrentItemRow[],contentEvent:ContentEventRow|null,priceEvents:OrderPriceEvent[]){
       const intake = intakeRows[0];
