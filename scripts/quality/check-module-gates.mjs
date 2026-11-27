@@ -1069,23 +1069,24 @@ function sqlDdlText(source) {
 }
 
 // B6-K: nur belegte vollständige Abfragen in den freigegebenen Dateien.
-// Jede Prüfsumme umfasst den gesamten SQL-Text samt Mandant und Ereignisart.
+// Beim Schreiber gehört der SQL-Ausdruck für den Transaktionsmandanten zur Prüfsumme.
+const metallkursWriter = 'src/modules/metallkurs/server/schreiben.ts';
 const metallkursSqlStatements = new Map([
   ['src/modules/metallkurs/server/lesen.ts', {
     'public.metallkurse': ['ffca605663a79568e02ee74cd440d76d4a418bb2ecdcd4491824929a949b2bf0'],
   }],
-  ['src/modules/metallkurs/server/schreiben.ts', {
+  [metallkursWriter, {
     'public.metallkurse': [
-      'cb1cd823f4bd973dffd19af6b9ebe3a59ab3e6f135a896412ec96284f2f29336', // Originalkurse einfügen
-      'fa32f45a338c95080d16a63101f5faaad45db7c27ff6efce5a3cd8b70eac0087', // Wiederholung am Original erkennen
-      'b3c1a79bdbf123a047cdffc5c36ff906c38f9bbf34f33cbaed232528e0e76535', // vorhandenen Handkurs lesen
+      '22a10740cb64f1f084e5e9b1249a4ccc2ffe0e355aa60c5e3d97b9679b10522d', // Originalkurse einfügen
+      '189b0b6b176fc4146c4d80818b951bc8b8755c9700bdc7b4b6484a546ef3b267', // Wiederholung am Original erkennen
+      'e215955cb0c2c45a31e852d67dda64c2a355fc377318cfbf3a2dec0c87ae5ccd', // vorhandenen Handkurs lesen
     ],
     'public.events': [
-      '7fb8edaa5f9b4c380cdffe5f6da2eaa80f2cc0600f308678589833f1d8ea7fbb', // Monatsabrufe zählen
-      '6c253615af1d8300f66d967a6d50b85f895b1bffcb5905419b4c4aacc3cd9d7c', // abgeschlossenen Abruf lesen
-      '959132d3c12bee8b9b7b2b3ae837efbbadffde3a0c67670b38023ae93eef2da1', // offenen Abruf anlegen
-      '1c1b27da83771f4ffb49d7503db977b7291ace7439d3d72469024baed51f73c9', // genau diesen offenen Abruf abschließen
-      '9c707e7a47695c5b42e0cb142bcfcb1eb3be369fcb5efbf9408fd0c59e78a82d', // fehlenden Zugang belegen
+      '8b7d04a3b7174807cdc05d37b903837fc6f0fe391cd906d59f7401768d7089c1', // Monatsabrufe zählen
+      '4d6dbd65306f73559882f73f9a8d0dce4e26c1d34d771125dbcaa198e33f5d0f', // abgeschlossenen Abruf lesen
+      '8a7d27454463fe7df6dcddfd38b68ea92d4a5d3f007664f2f5ccdc884899d56f', // offenen Abruf anlegen
+      'b3c4fce1bf84fbc23fa5a1a5c73b729486f833a2f35d7f3c366d8c70600fc78a', // genau diesen offenen Abruf abschließen
+      '0d30f4a79252d16c1227e47e3dc840b3a4430144ff556983fb7fb7d1f9585c63', // fehlenden Zugang belegen
     ],
   }],
   ['src/modules/metallkurs/server/__tests__/lesen.integration.test.ts', {
@@ -1096,6 +1097,36 @@ const metallkursSqlStatements = new Map([
   }],
 ]);
 
+function sqlTaggedTemplate(node) {
+  return node && ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && node.tag.text === 'sql'
+    ? node.template : undefined;
+}
+
+function normalizedSqlTemplate(tree, template) {
+  return tree.text.slice(template.getStart(tree) + 1, template.end - 1).replace(/\s+/gu, ' ').trim();
+}
+
+function metallkursTenantTemplate(tree) {
+  // Außer SQL-Einbettungen ist nur eine Modulkonstante erlaubt. Keine lokale Überschattung.
+  const bindings = [];
+  function collect(node) {
+    if (ts.isIdentifier(node) && node.text === 'mandantVergleich' &&
+        !(ts.isTemplateSpan(node.parent) && node.parent.expression === node)) {
+      bindings.push(node);
+    }
+    ts.forEachChild(node, collect);
+  }
+  collect(tree);
+  if (bindings.length !== 1) return undefined;
+  const [binding] = bindings;
+  const declaration = binding.parent;
+  if (!ts.isVariableDeclaration(declaration) || declaration.name !== binding) return undefined;
+  const list = declaration.parent;
+  if (!ts.isVariableDeclarationList(list) || !(list.flags & ts.NodeFlags.Const) ||
+      !ts.isVariableStatement(list.parent) || list.parent.parent !== tree) return undefined;
+  return sqlTaggedTemplate(declaration.initializer);
+}
+
 function allowedMetallkursTableRef(file, source, reference) {
   const allowed = metallkursSqlStatements.get(file)?.[reference.ref];
   if (!allowed || reference.functionCall) return false;
@@ -1103,17 +1134,20 @@ function allowedMetallkursTableRef(file, source, reference) {
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   function findTemplate(node) {
     if (reference.index < node.getFullStart() || reference.index >= node.end) return undefined;
-    if (ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && node.tag.text === 'sql' &&
-        reference.index > node.template.getStart(tree)) {
-      return node.template;
-    }
+    const template = sqlTaggedTemplate(node);
+    if (template && reference.index > template.getStart(tree)) return template;
     return ts.forEachChild(node, findTemplate);
   }
 
   const template = findTemplate(tree);
   if (!template) return false;
-  const statement = source.slice(template.getStart(tree) + 1, template.end - 1).replace(/\s+/gu, ' ').trim();
-  return allowed.includes(createHash('sha256').update(statement).digest('hex'));
+  const hash = createHash('sha256').update(normalizedSqlTemplate(tree, template));
+  if (file === metallkursWriter) {
+    const tenantTemplate = metallkursTenantTemplate(tree);
+    if (!tenantTemplate) return false;
+    hash.update('\n').update(normalizedSqlTemplate(tree, tenantTemplate));
+  }
+  return allowed.includes(hash.digest('hex'));
 }
 
 function gateData(root, findings, manifests) {
