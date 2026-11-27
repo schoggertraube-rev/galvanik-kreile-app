@@ -70,6 +70,7 @@ export function readAzurePositionRows(tables: readonly unknown[]) {
         rabattProzent: numericText(values.rabattProzent, 4),
         positionsNetto: numericText(values.positionsNetto, 4),
       };
+      if (!Object.values(position).some(value => value !== null)) return [];
       return [{ position, confidence, source: { tableIndex, rowIndex } }];
     });
   });

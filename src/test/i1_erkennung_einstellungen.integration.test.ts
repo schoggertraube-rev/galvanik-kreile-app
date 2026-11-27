@@ -7,7 +7,9 @@ vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: tenant }));
 
 import { full, nativeFetch, sql, withSession } from "../../e2e/ablauf/replayHarness";
 import {
+  confirmIntakeOriginalAction,
   finishIntakeFileAction,
+  openIntakeOriginalAction,
   prepareIntakeFileAction,
   retryIntakeRecognitionAction,
 } from "@/app/actions/eingang.actions";
@@ -35,9 +37,9 @@ it("reads stored company models and threshold, with the existing default layout"
 });
 
 it.each([
-  { text: "TEST Rechnung", configured: "test-belegmodell", model: "test-belegmodell" },
-  { text: null, configured: null, model: "prebuilt-layout" },
-])("stores the original, pages and position using $model", async ({ text, configured, model }) => {
+  { text: "TEST Rechnung", configured: "test-belegmodell", model: "test-belegmodell", damagedArchive: true },
+  { text: null, configured: null, model: "prebuilt-layout", damagedArchive: false },
+])("stores the original, pages and position using $model", async ({ text, configured, model, damagedArchive }) => {
   await sql`INSERT INTO public.company_settings (id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
     SELECT ${randomUUID()},${tenant},'TEST I1 Einstellungen',0,'TEST-I1'
     WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
@@ -46,12 +48,17 @@ it.each([
     WHERE tenant_id=${tenant}`;
   const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
     modelId: model, content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
-    keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" }, confidence: 0.8 }],
+    keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" } }],
     tables: [{ cells: [
       { rowIndex: 0, columnIndex: 0, kind: "columnHeader", content: "Artikelnummer" },
       { rowIndex: 0, columnIndex: 1, kind: "columnHeader", content: "Menge" },
       { rowIndex: 1, columnIndex: 0, content: "TEST-BELEGZEILE", confidence: 0.9 },
       { rowIndex: 1, columnIndex: 1, content: "4,25", confidence: 0.8 },
+    ] }, { cells: [
+      { rowIndex: 0, columnIndex: 0, kind: "columnHeader", content: "Bank" },
+      { rowIndex: 0, columnIndex: 1, kind: "columnHeader", content: "IBAN" },
+      { rowIndex: 1, columnIndex: 0, content: "TEST-Bank" },
+      { rowIndex: 1, columnIndex: 1, content: "TEST-IBAN" },
     ] }],
   } }, null, 2) + "\n";
   vi.stubEnv("AZURE_DOCINTEL_ENDPOINT", "https://i1.example.invalid/");
@@ -90,26 +97,46 @@ it.each([
     await sql`UPDATE public.intake_file SET erkannter_text='TEST früherer Volltext'
       WHERE tenant_id=${tenant} AND id=${fileId}`;
 
-    const result = await withSession(full, () => finishIntakeFileAction(fileId));
+    const archive = storage.from(grant.upload.bucket);
+    const archivePath = `${tenant}/${sha256}.erkennung.${model}.json`;
+    if (damagedArchive) {
+      expect((await archive.upload(archivePath, '{', { contentType: "application/json" })).error).toBeNull();
+      try {
+        const failed = await withSession(full, () => finishIntakeFileAction(fileId));
+        if (failed.code !== "OK") throw Error("TEST_I1_CAPTURE_UNAVAILABLE");
+        expect(failed.capture.files.find(file => file.id === fileId)).toMatchObject({
+          secured: true, status: "fehler", errorCode: "INTAKE_RAW_NOT_SAVED",
+        });
+        expect(failed.capture.suggestions).toEqual([]);
+      } finally {
+        expect((await archive.remove([archivePath])).error).toBeNull();
+      }
+    }
+    const result = await withSession(full, () => damagedArchive
+      ? retryIntakeRecognitionAction({ fileId, clientEventId: randomUUID() })
+      : finishIntakeFileAction(fileId));
     if (result.code !== "OK") throw Error("TEST_I1_RECOGNITION_FAILED");
+    expect(result.capture.files.find(file => file.id === fileId)).toMatchObject({
+      status: "fertig", recognizedText: text,
+    });
     if (text !== null) expect(result.capture.recognition?.text).toBe(text);
     expect(result.capture.recognition?.text).not.toContain("TEST früherer Volltext");
     const retry = { fileId, clientEventId: randomUUID() };
     const reread = await withSession(full, () => retryIntakeRecognitionAction(retry));
     expect(reread).toMatchObject({ code: "OK", capture: { recognition: { text: result.capture.recognition?.text } } });
     expect(await withSession(full, () => retryIntakeRecognitionAction(retry))).toMatchObject({ code: "OK" });
-    expect(providerResults).toBe(2);
-    expect(analyzePaths).toEqual(Array(2).fill("/documentintelligence/documentModels/" + model + ":analyze"));
+    expect(providerResults).toBe(damagedArchive ? 3 : 2);
+    expect(analyzePaths).toEqual(Array(providerResults).fill("/documentintelligence/documentModels/" + model + ":analyze"));
 
     const [file] = await sql`SELECT erkennung_roh_pfad,erkannter_text,seiten FROM public.intake_file
       WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
     expect(file).toMatchObject({
-      erkennung_roh_pfad: `${tenant}/${sha256}.erkennung.${model}.json`,
+      erkennung_roh_pfad: archivePath,
       erkannter_text: text, seiten: 2,
     });
     const original = await storage.from("scans").download(file.erkennung_roh_pfad);
     expect(original.error).toBeNull();
-    expect(await original.data!.text()).toBe(rawReply);
+    expect(await original.data!.text()).toBe(rawReply + (damagedArchive ? " " : ""));
     expect(await sql`SELECT id FROM public.intake_suggestion
       WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='DOCUMENT_TEXT'`).toEqual([]);
     const positions = await sql`SELECT wert,modell,sicherheit_wert::float8 AS confidence,status FROM public.intake_suggestion
@@ -120,6 +147,13 @@ it.each([
       wert: { positionKey: "p1", lieferantenArtikelNr: "TEST-BELEGZEILE", menge: "4.25" },
       modell: model, confidence: 0.8,
     });
+    expect(await sql`SELECT sicherheit,sicherheit_wert FROM public.intake_suggestion
+      WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='rechnung.nummer' AND status='offen'`)
+      .toEqual([{ sicherheit: "unsicher", sicherheit_wert: null }]);
+    expect(await withSession(full, () => openIntakeOriginalAction({ fileId, clientEventId: randomUUID() })))
+      .toMatchObject({ code: "OK" });
+    expect(await withSession(full, () => confirmIntakeOriginalAction({ fileId, clientEventId: randomUUID() })))
+      .toMatchObject({ code: "OK", count: 1 });
   } finally {
     fetched.mockRestore();
     vi.unstubAllEnvs();

@@ -38,6 +38,8 @@ export function OriginalDialog({fileId,ports,onClose,onAssign,onMessage}:{fileId
   finally{working.current=false;setBusy(false);}
  };
  const suggestions=data?.invoiceSuggestions??capture?.suggestions?.filter(s=>s.fileId===fileId&&s.status==='offen')??[];
+ const recognizedText=capture?.files.find(file=>file.id===fileId)?.recognizedText??null;
+ const note=capture?.text??null;
  const needsCheck=suggestions.some(s=>s.confidence==='unsicher'&&!s.verifiedAt);
  const assigned=Boolean(data?.customerId||data?.orderId);
  return <Dialog titel="Original" icon="file" groesse="breit" schliessenSpecId="original.schliessen" onSchliessen={onClose} fuss={<>
@@ -51,7 +53,8 @@ export function OriginalDialog({fileId,ports,onClose,onAssign,onMessage}:{fileId
   {failure?<div data-spec-id={failure.blocked?'original.zustand.gesperrt':'original.zustand.fehler'}><Hinweis ton="warn">{failure.blocked?'Nicht geöffnet':'Original nicht ladbar'} · {failure.message}</Hinweis>{!failure.blocked?<Button text="Erneut" data-spec-id="original.erneut" onClick={()=>void load()}/>:null}</div>:null}
   {data?<><div className="kr-form"><Kachel titel="Datei" icon="photo"><strong>{data.name}</strong><p>unverändert · {new Intl.NumberFormat('de-DE',{maximumFractionDigits:1}).format(data.bytes/1024)} KB</p>
     {data.restricted?<Hinweis>Mail · Inhalt nur fürs Büro</Hinweis>:data.url&&data.previewable?data.mime.startsWith('image/')?<Image src={data.url} alt={data.name} width={1200} height={900} unoptimized style={{maxWidth:'100%',height:'auto',objectFit:'contain'}}/>:<iframe title={data.name} src={data.url} style={{width:'100%',height:'45vh',border:0}}/>:null}
-    {!data.restricted&&capture?.text?<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{capture.text}</pre>:null}
+    {!data.restricted&&note&&(!recognizedText||!recognizedText.startsWith(note))?<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{note}</pre>:null}
+    {!data.restricted&&recognizedText?<pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{recognizedText}</pre>:null}
    </Kachel><Kachel titel="Erkannt" icon="scan">{suggestions.length?suggestions.map(s=><div key={s.id}><b>{s.field}: {typeof s.value==='string'?s.value:JSON.stringify(s.value)}</b><p>{s.verifiedAt?'geprüft':s.confidence==='unsicher'?'bitte prüfen':s.confidence==='sicher'?'sicher':'Vorschlag'} · {s.source?JSON.stringify(s.source):'Fundstelle fehlt'}</p></div>):<p>{data.restricted?'Mail · Inhalt nur fürs Büro':'Keine Vorschläge'}</p>}
     {needsCheck&&!data.restricted?<Button data-spec-id="original.am-original-geprueft" text="Am Original geprüft" icon="check" art="erledigen" disabled={busy} onClick={()=>void confirm()}/>:null}
    </Kachel></div><Fakten zeilen={[{k:'Herkunft',v:data.name},{k:'Prüfsumme',v:'SHA-256 '+data.sha256},{k:'Zuordnung',v:data.orderId?'Auftrag '+data.orderId:data.invoiceId?'Rechnung '+data.invoiceId:data.customerId?'Kunde '+data.customerId:'nicht zugeordnet'}]}/></>:null}

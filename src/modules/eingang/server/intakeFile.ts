@@ -165,7 +165,6 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       : null;
     if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
     let rawPath: string | null = null;
-    let rawStorageFailed = false;
     if (recognized?.code === "OK" && recognized.original) {
       const original = recognized.original;
       try {
@@ -176,12 +175,12 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
         if (saved.bytes !== original.bytes) recognized = readAzureRecognitionOriginal(saved.bytes, original.model);
         rawPath = saved.path;
       } catch {
-        rawStorageFailed = true;
         recordObservedFailure('INTAKE_RAW_NOT_SAVED');
       }
     }
-    const kind = xmlResult?.code === "OK" ? "rechnung" : recognized?.code === "OK" ? recognizeCaptureDocument({ text: null, suggestions: recognized.data.suggestions }).kind : null;
-    const ocr = recognized?.code === "OK" ? recognized : null;
+    const ocr = rawPath !== null && recognized?.code === "OK" ? recognized : null;
+    const rawStorageFailed = recognized?.code === "OK" && ocr === null;
+    const kind = xmlResult?.code === "OK" ? "rechnung" : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
     const positionRows = ocr?.original ? readAzurePositionRows(ocr.original.tables) : [];
     await withPrivilegedTenantTransaction(auth, async tx => {
       if (positionRows.length > 0) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
@@ -189,7 +188,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
         AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);
       if(active[0]?.befehl_id!==claimKey){console.info('[INTAKE_RECOGNITION_SUPERSEDED]',{fileId});return;}
-      const successful=recognized?.code==='OK'||xmlResult?.code==='OK';
+      const successful=ocr!==null||xmlResult?.code==='OK';
       const documentText = ocr?.data.suggestions.find(suggestion => suggestion.field === "DOCUMENT_TEXT")?.value ?? null;
       const pages = ocr?.original?.pages ?? null;
       const model = ocr?.original?.model ?? null;
@@ -225,8 +224,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       });
       for (const suggestion of [...suggestions, ...positionSuggestions]) {
         const confidence = suggestion.confidence;
-        const certainty = suggestion.field.startsWith('rechnung.') && confidence !== null
-          ? confidence >= 0.9 ? 'sicher' : 'unsicher'
+        const certainty = suggestion.field.startsWith('rechnung.')
+          ? confidence !== null && confidence >= 0.9 ? 'sicher' : 'unsicher'
           : 'vorschlag';
         const jsonValue = JSON.stringify(suggestion.value);
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,sicherheit_wert,modell,regel,grund,fundstelle,status)

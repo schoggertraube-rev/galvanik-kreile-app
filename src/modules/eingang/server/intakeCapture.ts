@@ -82,8 +82,8 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot|Authoriz
     const capture: IntakeCapture = { id: row.id, version: row.version, text: contentAllowed?(row.fortsetzung_von?row.text??sourceText[0]?.text??null:row.text):null, customerId: row.kunde_id,
       continuation:{sourceId:row.fortsetzung_von,childIds:continuations.map(value=>value.id),textSourceId:contentAllowed?sourceText[0]?.source_id??null:null},
       orderId: invoiceOnly?null:row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: invoiceOnly?row.anliegen.filter(value=>value==='rechnung'):contentAllowed?row.anliegen:[],dismissedConcerns:contentAllowed?row.anliegen_abgewaehlt:[],openConcerns:contentAllowed?row.anliegen_offen:[],
-      files: files.map(({ id, name, mime, bytes, readable, status, secured, errorCode, captureOrigin }) =>
-        ({ id, name, mime, bytes: Number(bytes), readable, status, secured, errorCode, captureOrigin })),
+      files: files.map(({ id, name, mime, bytes, readable, status, secured, errorCode, captureOrigin, recognizedText }) =>
+        ({ id, name, mime, bytes: Number(bytes), readable, status, secured, errorCode, captureOrigin, recognizedText })),
       suggestions:contentAllowed||invoiceOnly?displaySuggestions:[] };
     const listText = capture.text;
     const mailOriginalContainsListText = listText !== null && files.some(file =>
