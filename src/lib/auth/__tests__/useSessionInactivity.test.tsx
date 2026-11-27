@@ -6,13 +6,75 @@ import { useSessionInactivity } from '../useSessionInactivity';
 
 const ports = vi.hoisted(() => ({
   logout: vi.fn(() => new Promise(() => {})),
+  authorization: vi.fn(),
+  readDeadline: vi.fn(),
+  rememberDeadline: vi.fn(async () => {}),
 }));
 vi.mock('@/lib/offline/logoutWithReadCleanup', () => ({ logoutWithReadCleanup: ports.logout }));
-vi.mock('@/app/actions/auth.actions', () => ({ recordAppSessionActivity: vi.fn() }));
+vi.mock('@/app/actions/auth.actions', () => ({
+  getAuthorizationSnapshotAction: ports.authorization, recordAppSessionActivity: vi.fn(),
+}));
+vi.mock('@/lib/offline/pendingStore', async importOriginal => ({
+  ...await importOriginal<typeof import('@/lib/offline/pendingStore')>(),
+  readPendingShellMetadata: ports.readDeadline,
+  rememberPendingShellDeadline: ports.rememberDeadline,
+}));
 
-afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
+afterEach(() => {
+  vi.clearAllMocks();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  const root = document.documentElement;
+  root.removeAttribute('data-offline-24h');
+  delete root.dataset.offlineScope;
+  delete root.dataset.offlineLoginScope;
+  document.cookie = 'kreile_offline_cache_scope=; Max-Age=0; Path=/';
+});
 
 const sessionScope = 'a'.repeat(64);
+const offlineScope = 'test-device';
+
+function enableOfflineView() {
+  document.documentElement.setAttribute('data-offline-24h', 'enabled');
+  document.documentElement.dataset.offlineScope = offlineScope;
+  document.documentElement.dataset.offlineLoginScope = sessionScope;
+  document.cookie = `kreile_offline_cache_scope=${sessionScope}; Path=/`;
+}
+
+it('keeps an old tab closed when another login replaces its marker during authorization', async () => {
+  enableOfflineView();
+  let authorize: (value: unknown) => void = () => {};
+  ports.authorization.mockReturnValueOnce(new Promise(resolve => { authorize = resolve; }));
+  const now = Date.now();
+  const initial = { minutes: 60, lastSeen: now, expiresAt: now + 3_600_000, serverAt: now, sessionScope };
+  const { result } = renderHook(() => useSessionInactivity(initial));
+  expect(result.current).toBe(true);
+  document.cookie = `kreile_offline_cache_scope=${'b'.repeat(64)}; Path=/`;
+  await act(async () => {
+    authorize({ ok: true, data: { offlineScope, offline24h: true, inactivity: initial } });
+  });
+  expect(result.current).toBe(true);
+  expect(ports.rememberDeadline).not.toHaveBeenCalled();
+});
+
+it('opens an online view with the newly confirmed shorter deadline', async () => {
+  vi.useFakeTimers();
+  enableOfflineView();
+  const now = Date.now();
+  const initial = { minutes: 60, lastSeen: now, expiresAt: now + 3_600_000, serverAt: now, sessionScope };
+  ports.readDeadline.mockResolvedValueOnce({code:'OK', metadata:{scope:sessionScope, idleDeadline:{
+    localAt:now, monotonicAt:Math.round(performance.timeOrigin+performance.now()), serverAt:now, expiresAt:initial.expiresAt,
+  }}});
+  ports.authorization.mockResolvedValueOnce({ ok: true, data: {
+    offlineScope, offline24h: true, inactivity: { ...initial, minutes: 1, expiresAt: now + 60_000 },
+  } });
+  const { result } = renderHook(() => useSessionInactivity(initial));
+  await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
+  expect(result.current).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+  expect(result.current).toBe(true);
+  expect(ports.logout).toHaveBeenCalledExactlyOnceWith('inactivity', sessionScope);
+});
 
 it('hides the current shell at the deadline even when the sign-out response never arrives', async () => {
   vi.useFakeTimers();

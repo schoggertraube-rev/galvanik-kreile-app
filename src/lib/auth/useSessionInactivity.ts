@@ -24,6 +24,8 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
     const loginScope = initial.sessionScope;
     const offlineEnabled = root.getAttribute('data-offline-24h') === 'enabled';
     let checkingCache = offlineEnabled;
+    const sameLogin = () => Boolean(loginScope && root.dataset.offlineLoginScope === loginScope
+      && readCacheScopeMarker() === loginScope);
 
     const applyServerTime = (current: SessionInactivity, started: ReturnType<typeof captureIdleClock>) => {
       windowState = current;
@@ -48,7 +50,8 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
         const result = await logoutWithReadCleanup('inactivity', initial.sessionScope);
         if (disposed) return;
         if (!result.ok) {
-          if (result.code === 'ACTIVE') {
+          if (result.code === 'ACTIVE' && (!offlineEnabled
+            || (result.inactivity.sessionScope === loginScope && sameLogin()))) {
             applyServerTime(result.inactivity, started);
             expiring = false;
             setExpired(false);
@@ -97,30 +100,25 @@ export function useSessionInactivity(initial: SessionInactivity | undefined): bo
     const openScopedView = async () => {
       setExpired(true);
       const open = (remaining: number) => {
+        if (disposed || !sameLogin()) return;
         clockOffset = windowState.expiresAt - remaining - performance.now();
         checkingCache = false;
         setExpired(false);
         schedule();
       };
       try {
-        if (!scope || !loginScope || root.dataset.offlineLoginScope !== loginScope) return;
-        if (readCacheScopeMarker() === loginScope) {
-          let state: Awaited<ReturnType<typeof readPendingShellMetadata>> | undefined;
-          try {
-            state = await readPendingShellMetadata(scope, loginScope);
-          } catch {
-            console.error('[OFFLINE_SHELL_DEADLINE_READ_FAILED]');
-          }
-          if (disposed) return;
-          const remaining = state?.code === 'OK' && state.metadata.scope === loginScope && readCacheScopeMarker() === loginScope
+        if (!scope || !loginScope || !sameLogin()) return;
+        if (!navigator.onLine) {
+          const state = await readPendingShellMetadata(scope, loginScope);
+          const remaining = state.code === 'OK' && state.metadata.scope === loginScope
             ? remainingIdleClock(state.metadata.idleDeadline) : null;
-          if (remaining !== null) return open(remaining);
+          if (remaining !== null) open(remaining);
+          return;
         }
-        // Without a local anchor only an authenticated server response can open this view.
-        if (!navigator.onLine) return;
+        // An available server may have shortened the deadline since the last offline snapshot.
         const started = captureIdleClock();
         const result = await getAuthorizationSnapshotAction();
-        if (disposed || !result.ok || result.data.offlineScope !== scope || result.data.offline24h !== true) return;
+        if (disposed || !sameLogin() || !result.ok || result.data.offlineScope !== scope || result.data.offline24h !== true) return;
         const current = result.data.inactivity;
         if (current?.sessionScope !== loginScope || current.serverAt === undefined) return;
         const deadline = makeConfirmedIdleClock(current.serverAt, current.expiresAt, started);
