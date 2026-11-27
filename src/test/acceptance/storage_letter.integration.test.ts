@@ -329,6 +329,17 @@ it.each([false,true])('an original reply keeps the callback open until its exact
   expect(original.status).toBe('erledigt');
   expect(await readTask(first.restoredTaskId!)).toEqual([{...original,status:'offen'}]);
   expect(await sql`SELECT zuordnung,kunde_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{zuordnung:'offen',kunde_id:null}]);
+  const [{resolveAuthorization},{withPrivilegedTenantTransaction},{readDispatchReplyReceipt,readLatestReplyForFreeze}]=await Promise.all([
+   import('@/lib/server/authorization'),import('@/lib/server/privilegedDb'),import('@/lib/server/dispatchReplyPort'),
+  ]);
+  const auth=await withSession(full,()=>resolveAuthorization());
+  if(!auth.ok)throw Error('TEST_REPLY_AUTH_REQUIRED');
+  await withPrivilegedTenantTransaction(auth.data,async tx=>{
+   const historical=await readDispatchReplyReceipt(tx,auth.data,replyEventId,true);
+   const frozen=historical.proof.freezes.find(source=>source.orderId===order.orderId);
+   if(!frozen)throw Error('TEST_REPLY_FREEZE_REQUIRED');
+   expect(await readLatestReplyForFreeze(tx,auth.data,order.orderId,frozen.freezeId)).toBeNull();
+  });
  }
 });
 it('an original customer reply ends the exact open postal task on click and replays without Outlook',async()=>{

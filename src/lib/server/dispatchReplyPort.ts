@@ -192,7 +192,12 @@ export async function readRecordedDispatchReplies(auth:AuthorizationSnapshot,cus
  });
 }
 export async function readLatestReplyForFreeze(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,orderId:string,freezeId:string){
- const rows=await tx.execute<{id:string}>(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND event_type='ORDER_COLLECTION_REPLY_RECORDED_V1' AND payload->'receipt'->'proof'->'freezes' @> ${JSON.stringify([{orderId,freezeId}])}::jsonb ORDER BY (payload->'receipt'->'proof'->>'receivedAt')::timestamptz DESC,created_at DESC,id DESC LIMIT 1`);
+ const rows=await tx.execute<{id:string}>(sql`
+  SELECT reply.id FROM public.events reply
+  WHERE reply.tenant_id=${auth.tenantId} AND reply.event_type='ORDER_COLLECTION_REPLY_RECORDED_V1'
+   AND reply.payload->'receipt'->'proof'->'freezes' @> ${JSON.stringify([{orderId,freezeId}])}::jsonb
+   AND NOT ${replyAssignmentWithdrawn(auth.tenantId,sql`reply.id`,sql`reply.payload->'receipt'->'proof'->>'itemId'`,sql`reply.payload->'receipt'->>'customerId'`)}
+  ORDER BY (reply.payload->'receipt'->'proof'->>'receivedAt')::timestamptz DESC,reply.created_at DESC,reply.id DESC LIMIT 1`);
  return rows.length?readDispatchReplyReceipt(tx,auth,rows[0].id):null;
 }
 export function replyDefersToAppointment(reply:DispatchReplyReceipt,appointment:{date:string;recordedAt:string}){
