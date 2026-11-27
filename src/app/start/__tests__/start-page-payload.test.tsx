@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import StartPage from "@/app/start/page";
 
 const ports = vi.hoisted(() => ({
   readActiveStartUsers: vi.fn(),
@@ -49,12 +50,16 @@ const activeUsers = [
   { loginHandle: "synthetic-gregor-handle", fullName: "Gregor", shortCode: "G", designation: "Wartung", role: "developer" as const, emailLoginAvailable: true },
 ];
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  window.localStorage.removeItem('kreile:last-login-handle');
+  vi.unstubAllGlobals();
+});
 
 describe("StartPage product actor boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    ports.readActiveStartUsers.mockResolvedValue({ code: "OK", users: activeUsers });
+    ports.readActiveStartUsers.mockResolvedValue({ code: "OK", users: activeUsers, skipped: 0 });
     ports.reportProductActorOperationalFailure.mockReturnValue(
       "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     );
@@ -73,7 +78,6 @@ describe("StartPage product actor boundary", () => {
   });
 
   it("emits only browser-safe handles for every active app user", async () => {
-    const { default: StartPage } = await import("@/app/start/page");
     const element = await StartPage();
 
     expect(element.props.users).toEqual(activeUsers);
@@ -102,15 +106,13 @@ describe("StartPage product actor boundary", () => {
 
   it.each([
     ["desktop", 1914, 917],
-    ["mobile", 390, 844],
+    ["narrow fine-pointer", 390, 844],
   ])(
     "keeps the compact V5 login and every product identity at the %s viewport",
     async (_viewport, width, height) => {
       Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
       Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
       window.dispatchEvent(new Event("resize"));
-
-      const { default: StartPage } = await import("@/app/start/page");
       render(await StartPage());
 
       expect(screen.getByRole("heading", { name: /Guten (Morgen|Tag|Abend)/, level: 1 })).toBeVisible();
@@ -122,9 +124,88 @@ describe("StartPage product actor boundary", () => {
     },
   );
 
+  it('selects a desktop identity using arrow keys and returns to the selection with Escape', async () => {
+    render(await StartPage());
+    const first = screen.getByTestId('pin-user-card-synthetic-rolf-handle');
+    const second = screen.getByTestId('pin-user-card-synthetic-phillip-handle');
+    first.focus();
+    expect(first).toHaveAttribute('tabindex', '0');
+    expect(second).toHaveAttribute('tabindex', '-1');
+    fireEvent.keyDown(first, { key: 'ArrowRight' });
+    expect(second).toHaveFocus();
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(second);
+    const pin = screen.getByLabelText('0 von 4 Stellen eingegeben');
+    expect(pin).toHaveFocus();
+    fireEvent.keyDown(pin, { key: '8' });
+    expect(screen.getByLabelText('1 von 4 Stellen eingegeben')).toBeVisible();
+    fireEvent.keyDown(pin, { key: 'Escape' });
+    expect(second).toHaveFocus();
+    expect(screen.getByLabelText('0 von 4 Stellen eingegeben')).toBeVisible();
+    expect(ports.loginWithPin).not.toHaveBeenCalled();
+  });
+
+  it('asks for a short code instead of displaying the people list on a phone', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    const mobileUsers = activeUsers.map((user, index) => ({ ...user, shortCode: ['RO', 'PH', 'GR'][index] }));
+    ports.readActiveStartUsers.mockResolvedValue({ code: 'OK', users: mobileUsers, skipped: 0 });
+    render(await StartPage());
+    const shortCode = screen.getByRole('textbox', { name: 'Dein Kürzel' });
+    expect(screen.queryByRole('group', { name: 'Wähle dich aus' })).not.toBeInTheDocument();
+    fireEvent.change(shortCode, { target: { value: 'xx' } });
+    fireEvent.keyDown(shortCode, { key: 'Enter' });
+    const pin = screen.getByLabelText('0 von 4 Stellen eingegeben');
+    expect(pin).toHaveFocus();
+    for (const digit of '1836') fireEvent.keyDown(pin, { key: digit });
+    expect(screen.getByRole('alert')).toHaveTextContent('Kürzel oder Code passt nicht.');
+    expect(shortCode).toHaveFocus();
+    expect(ports.loginWithPin).not.toHaveBeenCalled();
+    fireEvent.change(shortCode, { target: { value: 'ph' } });
+    expect(shortCode).toHaveValue('PH');
+    fireEvent.keyDown(shortCode, { key: 'Enter' });
+    for (const digit of '1836') fireEvent.keyDown(pin, { key: digit });
+    await waitFor(() => expect(ports.loginWithPin).toHaveBeenCalledExactlyOnceWith('synthetic-phillip-handle', '1836'));
+  });
+
+  it('shows only the remembered identity on a phone', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    window.localStorage.setItem('kreile:last-login-handle', 'synthetic-phillip-handle');
+    render(await StartPage());
+    const change = await screen.findByRole('button', { name: 'Nicht Phillip? Mit deinem Kürzel anmelden' });
+    expect(screen.getByRole('heading', { name: /, Phillip$/ })).toBeVisible();
+    expect(screen.queryByTestId('pin-user-card-synthetic-rolf-handle')).not.toBeInTheDocument();
+    fireEvent.click(change);
+    const shortCode = screen.getByRole('textbox', { name: 'Dein Kürzel' });
+    await waitFor(() => expect(shortCode).toHaveFocus());
+  });
+
+  it('keeps one active group and focuses a person on another group by keyboard', async () => {
+    const people = Array.from({ length: 20 }, (_, index) => ({
+      ...activeUsers[0], fullName: `TEST Person ${index}`, loginHandle: `synthetic-roster-${index}`,
+      shortCode: index === 19 ? 'ZZ' : `A${index}`,
+    }));
+    ports.readActiveStartUsers.mockResolvedValue({ code: 'OK', users: people, skipped: 0 });
+    render(await StartPage());
+    const group = screen.getByRole('group', { name: 'Wähle dich aus' });
+    const first = screen.getByTestId('pin-user-card-synthetic-roster-0');
+    first.focus();
+    expect(group.querySelectorAll('button').length).toBeLessThan(people.length);
+    expect(screen.queryByTestId('pin-user-card-synthetic-roster-19')).not.toBeInTheDocument();
+    fireEvent.keyDown(first, { key: 'Z' });
+    const last = screen.getByTestId('pin-user-card-synthetic-roster-19');
+    await waitFor(() => expect(last).toHaveFocus());
+    expect(group.querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+    expect(screen.queryByTestId('pin-user-card-synthetic-roster-0')).not.toBeInTheDocument();
+    fireEvent.keyDown(last, { key: 'Home' });
+    await waitFor(() => expect(screen.getByTestId('pin-user-card-synthetic-roster-0')).toHaveFocus());
+    fireEvent.wheel(group, { deltaY: 120 });
+    expect(screen.queryByTestId('pin-user-card-synthetic-roster-0')).not.toBeInTheDocument();
+    expect(group.querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+    expect(ports.loginWithPin).not.toHaveBeenCalled();
+  });
+
   it("accepts NumLock-off numpad codes, deletes with Backspace and submits exactly once after digit four", async () => {
     ports.loginWithPin.mockReturnValue(new Promise(() => {}));
-    const { default: StartPage } = await import("@/app/start/page");
     render(await StartPage());
     fireEvent.click(screen.getByTestId("pin-user-card-synthetic-rolf-handle"));
 
@@ -144,7 +225,6 @@ describe("StartPage product actor boundary", () => {
 
   it("clears a URL error on the next digit and keeps email errors in the email form", async () => {
     ports.searchParams = "message=Code+falsch&mode=pin";
-    const { default: StartPage } = await import("@/app/start/page");
     const { unmount } = render(await StartPage());
     expect(screen.getByRole("alert")).toHaveTextContent("Code falsch");
     fireEvent.click(screen.getByRole("button", { name: "1" }));
@@ -159,29 +239,25 @@ describe("StartPage product actor boundary", () => {
 
   it("disables every login path and exposes only a correlation reference on readiness failure", async () => {
     ports.readActiveStartUsers.mockResolvedValue({ code: "UNAVAILABLE" });
-
-    const { default: StartPage } = await import("@/app/start/page");
     const element = await StartPage();
     expect(element.props.users).toEqual([]);
     expect(element.props.loginUnavailable).toBe(true);
 
     render(element);
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Anmeldung ist momentan nicht verfügbar",
+      "Die Anmeldung ist gerade nicht erreichbar. Versuch es in einer Minute noch einmal.",
     );
     expect(screen.getAllByRole("button").every((button) => button.hasAttribute("disabled"))).toBe(true);
   });
 
   it("shows a maintenance notice when active login rows were skipped", async () => {
     ports.readActiveStartUsers.mockResolvedValue({ code: "OK", users: activeUsers, skipped: 2 });
-    const { default: StartPage } = await import("@/app/start/page");
     render(await StartPage());
-    expect(screen.getByRole("status")).toHaveTextContent("Wartung prüfen");
+    expect(screen.getByRole("status")).toHaveTextContent("2 Logins sind ausgeblendet, weil Angaben fehlen. Die Wartung ergänzt sie in den Einstellungen.");
   });
 
   it("fails closed and records a safe operational reference on an unexpected read error", async () => {
     ports.readActiveStartUsers.mockRejectedValue(new Error("synthetic failure"));
-    const { default: StartPage } = await import("@/app/start/page");
     const element = await StartPage();
 
     expect(element.props).toMatchObject({

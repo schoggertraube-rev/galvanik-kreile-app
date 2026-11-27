@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { PIN_LOGIN_COPY } from "../src/ui/allgemeinCopy";
 
 test.describe("Kreile auth boundary", () => {
   test("redirects anonymous access and keeps the legitimate login surface", async ({ page }) => {
@@ -10,11 +11,11 @@ test.describe("Kreile auth boundary", () => {
       page.getByRole("heading", { name: /Guten (Morgen|Tag|Abend)/ }),
     ).toBeVisible();
     const unavailableAlert = page.getByRole("alert").filter({
-      hasText: "Anmeldung ist momentan nicht verfügbar.",
+      hasText: PIN_LOGIN_COPY.nichtVerfuegbar,
     });
     await expect(unavailableAlert).toHaveCount(1);
     await expect(unavailableAlert).toBeVisible();
-    await expect(page.getByLabel("Person auswählen").getByRole("button")).toHaveCount(0);
+    await expect(page.getByTestId(/^pin-user-card-/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "1", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Löschen" })).toBeDisabled();
     await expect(page.locator("body")).not.toContainText(/Auftrag\s+[A-Z]-?\d+/i);
