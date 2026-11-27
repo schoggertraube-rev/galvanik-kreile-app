@@ -63,6 +63,8 @@ function withAuthCookieCleanup(
   request: NextRequest,
   clearInvalidAppSession: boolean,
 ) {
+  if (isServerActionPost(request)) return response
+
   for (const cookieName of LEGACY_AUTH_COOKIES) {
     if (request.cookies.has(cookieName)) {
       expireCookie(response, request, cookieName)
@@ -74,6 +76,11 @@ function withAuthCookieCleanup(
   }
 
   return response
+}
+
+function isServerActionPost(request: NextRequest): boolean {
+  return !request.nextUrl.pathname.startsWith('/api/')
+    && request.method === 'POST' && request.headers.has('next-action')
 }
 
 export async function proxy(request: NextRequest) {
@@ -159,7 +166,9 @@ export async function proxy(request: NextRequest) {
     .getAll()
     .some(({ name }) => name.startsWith('sb-') && name.includes('-auth-token'))
 
-  if (hasSupabaseAuthCookie) {
+  // A delayed action response must not carry a proxy refresh for an older login.
+  // Actions that sign in or deliberately renew a session own their cookie writes.
+  if (hasSupabaseAuthCookie && !isServerActionPost(request)) {
     try {
       await supabase.auth.getSession()
     } catch {
@@ -192,17 +201,7 @@ export async function proxy(request: NextRequest) {
     )
   }
 
-  // Verhindere, dass eingeloggte Nutzer die Start-Seite (Login) erneut aufrufen
-  if (hasValidAppSession && request.nextUrl.pathname.startsWith('/start')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/'
-    return withAuthCookieCleanup(
-      NextResponse.redirect(url),
-      request,
-      clearInvalidAppSession,
-    )
-  }
-
+  // The start page checks the full session, including inactivity and revocation.
   return withAuthCookieCleanup(
     supabaseResponse,
     request,

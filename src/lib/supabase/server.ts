@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import {readAuthorizedArea} from '@/lib/server/authHelper'
 import type {AccessArea} from '@/lib/auth/authorizationContract'
 
-export async function createClient() {
+export async function createClient(options?: { writeCookies: false }) {
   const cookieStore = await cookies()
 
   return createServerClient(
@@ -16,6 +16,7 @@ export async function createClient() {
           return cookieStore.getAll()
         },
         setAll(cookiesToSet) {
+          if (options?.writeCookies === false) return
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
