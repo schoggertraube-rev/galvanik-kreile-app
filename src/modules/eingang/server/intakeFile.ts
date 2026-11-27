@@ -1,13 +1,14 @@
+import "server-only";
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
-import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
 import { analyzeWithAzureDocumentIntelligence, readAzureRecognitionOriginal } from "@/lib/server/azureDocumentIntelligence";
+import { readErkennungsEinstellungenInTransaction } from "@/modules/fundament/server-public";
 import {recognizeInvoiceFields,recognizeInvoiceXml,recognizeInvoicePdf} from './invoiceRecognition';
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
@@ -155,8 +156,13 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     const xmlResult=isXml?recognizeInvoiceXml(bytes):file.mime==='application/pdf'?await recognizeInvoicePdf(bytes):null;
     const canRead = isXml ? xmlResult?.code==='OK' : bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
     const deadline = AbortSignal.timeout(30_000);
-    let recognized = !isXml && xmlResult?.code!=='OK' && canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
-      (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),undefined,{subject:{type:'intake',id:file.item_id},originalRef:file.id}) : null;
+    const settings = !isXml && xmlResult?.code !== "OK" && canRead
+      ? await withPrivilegedTenantTransaction(auth, tx => readErkennungsEinstellungenInTransaction(tx, auth.tenantId))
+      : null;
+    let recognized = settings ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
+      (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
+      undefined, { subject: { type: "intake", id: file.item_id }, originalRef: file.id, model: settings.erkennung_modelle.dokument })
+      : null;
     if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
     let rawPath: string | null = null;
     let rawStorageFailed = false;

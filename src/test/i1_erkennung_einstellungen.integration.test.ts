@@ -34,9 +34,18 @@ it("reads stored company models and threshold, with the existing default layout"
   });
 });
 
-it.each(["TEST Rechnung", null])("stores the OCR response, pages and position when the read text is %s", async text => {
+it.each([
+  { text: "TEST Rechnung", configured: "test-belegmodell", model: "test-belegmodell" },
+  { text: null, configured: null, model: "prebuilt-layout" },
+])("stores the original, pages and position using $model", async ({ text, configured, model }) => {
+  await sql`INSERT INTO public.company_settings (id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
+    SELECT ${randomUUID()},${tenant},'TEST I1 Einstellungen',0,'TEST-I1'
+    WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
+  await sql`UPDATE public.company_settings
+    SET erkennung_modelle=erkennung_modelle || jsonb_build_object('dokument',${configured}::text)
+    WHERE tenant_id=${tenant}`;
   const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
-    modelId: "prebuilt-layout", content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
+    modelId: model, content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
     keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" }, confidence: 0.8 }],
     tables: [{ cells: [
       { rowIndex: 0, columnIndex: 0, kind: "columnHeader", content: "Artikelnummer" },
@@ -48,12 +57,16 @@ it.each(["TEST Rechnung", null])("stores the OCR response, pages and position wh
   vi.stubEnv("AZURE_DOCINTEL_ENDPOINT", "https://i1.example.invalid/");
   vi.stubEnv("AZURE_DOCINTEL_KEY", "TEST-i1-external-fixture");
   let providerResults = 0;
+  const analyzePaths: string[] = [];
   const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     if (url.hostname !== "i1.example.invalid") return nativeFetch(input, init);
-    if (init?.method === "POST") return new Response(null, { status: 202, headers: {
-      "operation-location": "https://i1.example.invalid/documentintelligence/documentModels/prebuilt-layout/analyzeResults/TEST-I1",
-    } });
+    if (init?.method === "POST") {
+      analyzePaths.push(url.pathname);
+      return new Response(null, { status: 202, headers: {
+        "operation-location": "https://i1.example.invalid/documentintelligence/documentModels/" + model + "/analyzeResults/TEST-I1",
+      } });
+    }
     return new Response(rawReply + " ".repeat(providerResults++));
   });
 
@@ -86,11 +99,12 @@ it.each(["TEST Rechnung", null])("stores the OCR response, pages and position wh
     expect(reread).toMatchObject({ code: "OK", capture: { recognition: { text: result.capture.recognition?.text } } });
     expect(await withSession(full, () => retryIntakeRecognitionAction(retry))).toMatchObject({ code: "OK" });
     expect(providerResults).toBe(2);
+    expect(analyzePaths).toEqual(Array(2).fill("/documentintelligence/documentModels/" + model + ":analyze"));
 
     const [file] = await sql`SELECT erkennung_roh_pfad,erkannter_text,seiten FROM public.intake_file
       WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
     expect(file).toMatchObject({
-      erkennung_roh_pfad: `${tenant}/${sha256}.erkennung.prebuilt-layout.json`,
+      erkennung_roh_pfad: `${tenant}/${sha256}.erkennung.${model}.json`,
       erkannter_text: text, seiten: 2,
     });
     const original = await storage.from("scans").download(file.erkennung_roh_pfad);
@@ -104,7 +118,7 @@ it.each(["TEST Rechnung", null])("stores the OCR response, pages and position wh
     expect(positions.filter(position => position.status === "offen")).toHaveLength(1);
     for (const position of positions) expect(position).toMatchObject({
       wert: { positionKey: "p1", lieferantenArtikelNr: "TEST-BELEGZEILE", menge: "4.25" },
-      modell: "prebuilt-layout", confidence: 0.8,
+      modell: model, confidence: 0.8,
     });
   } finally {
     fetched.mockRestore();

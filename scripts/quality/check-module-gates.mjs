@@ -552,6 +552,9 @@ export function allowedServerFacadeConsumer(file, source) {
   if(file==='src/modules/metallkurs/server/abruf.ts')return validNamedServerFacadeReader(
     file, source, '@/modules/fundament/server-public', 'readMetallkursEinstellungenInTransaction',
   );
+  if(file==='src/modules/eingang/server/intakeFile.ts')return validNamedServerFacadeReader(
+    file, source, '@/modules/fundament/server-public', 'readErkennungsEinstellungenInTransaction',
+  );
   const taktJobsFile = 'src/modules/takt/jobs.ts';
   const taktRoutes = new Set([
     'src/app/api/takt/route.ts',
