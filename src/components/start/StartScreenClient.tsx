@@ -16,7 +16,7 @@ import { Glasknopf } from "@/ui/kr/design-final/Glasknopf";
 import styles from "./StartScreenClient.module.css";
 
 const LAST_LOGIN_KEY = "kreile:last-login-handle";
-const MOBILE_LOGIN_QUERY = "(pointer: coarse) and ((max-width: 600px) or (max-height: 600px))";
+const MOBILE_LOGIN_QUERY = "(max-width: 600px) and (pointer: coarse), (max-width: 1023px) and (max-height: 519px) and (orientation: landscape) and (pointer: coarse)";
 
 function subscribeMobileLogin(onChange: () => void) {
   const media = window.matchMedia?.(MOBILE_LOGIN_QUERY);

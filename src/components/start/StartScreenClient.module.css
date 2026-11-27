@@ -124,7 +124,7 @@
 @media (max-width: 380px), (max-height: 519px) {
   .personLabel small { display: none; }
 }
-@media (max-width: 600px) and (pointer: coarse), (max-height: 600px) and (pointer: coarse) {
+@media (max-width: 600px) and (pointer: coarse), (max-width: 1023px) and (max-height: 519px) and (orientation: landscape) and (pointer: coarse) {
   .users { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
