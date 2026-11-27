@@ -67,7 +67,7 @@ export type InvoiceResult = {
   code: 'OK'; invoice: IncomingInvoice; replayed: boolean;
 } | { code: 'DUPLICATE'; message: string; duplicate: InvoiceDuplicate } | InvoiceFailure;
 export type InvoicePorts = {
-  read: (request: { id: string }) => Promise<InvoiceReadResult>;
+  read: (request: { id: string; fileId?: string }) => Promise<InvoiceReadResult>;
   save: (input: InvoiceSaveInput) => Promise<InvoiceResult>;
   status: (input: InvoiceChangeInput) => Promise<InvoiceResult>;
   clarify: (input: InvoiceChangeInput) => Promise<InvoiceResult>;

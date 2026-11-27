@@ -83,8 +83,8 @@ async function deliverTwice(files: Awaited<ReturnType<typeof document>>[]) {
   }
 }
 
-async function invoice(id: string) {
-  const result = await withSession(full, () => getIncomingInvoiceAction({ id }));
+async function invoice(id: string, fileId?: string) {
+  const result = await withSession(full, () => getIncomingInvoiceAction(fileId ? { id, fileId } : { id }));
   if (result.code !== 'OK') throw Error(`TEST_I01_READ:${result.code}`);
   return result.view;
 }
@@ -112,17 +112,22 @@ it('M03–M05 saves 95 and 55 on separate original files of a twice delivered ma
   const first = await save(command(itemId, fileIds[0], initial.item.version, supplierA, 'TEST-L-A', '95,00'));
   const firstRead = await invoice(itemId);
   expect(firstRead.invoice).toMatchObject({ id: first.id, file_id: fileIds[0], seite_von: null, seite_bis: null });
+  const nextOriginal = await invoice(itemId, fileIds[1]);
+  expect(nextOriginal).toMatchObject({ invoice: null, fileId: fileIds[1], fields: { lieferantId: '', brutto: '' } });
+  expect(await withSession(full, () => getIncomingInvoiceAction({ id: first.id, fileId: fileIds[1] })))
+    .toMatchObject({ code: 'NOT_FOUND' });
   const duplicate = command(itemId, fileIds[1], firstRead.item.version, supplierA, 'TEST-L-A', '95,00');
   expect(await withSession(full, () => saveIncomingInvoiceAction(duplicate)))
     .toMatchObject({ code: 'DUPLICATE', duplicate: { id: first.id, exact: true } });
 
-  const input = command(itemId, fileIds[1], firstRead.item.version, supplierB, 'TEST-L-B', '55,00');
+  const input = command(itemId, fileIds[1], nextOriginal.item.version, supplierB, 'TEST-L-B', '55,00');
   const second = await save(input);
   expect(second.id).not.toBe(first.id);
   expect(await withSession(full, () => saveIncomingInvoiceAction(JSON.parse(JSON.stringify(input)))))
     .toMatchObject({ code: 'OK', replayed: true, invoice: { id: second.id } });
   expect((await invoice(first.id)).invoice).toMatchObject({ item_id: itemId, brutto: '95.00', file_id: fileIds[0] });
   expect((await invoice(second.id)).invoice).toMatchObject({ item_id: itemId, brutto: '55.00', file_id: fileIds[1] });
+  expect((await invoice(itemId, fileIds[1])).invoice?.id).toBe(second.id);
   expect(await withSession(full, () => getIncomingInvoiceAction({ id: itemId }))).toMatchObject({ code: 'CONFLICT' });
   const mailOnly = await createFixture(['mails']);
   expect(await withSession(mailOnly, () => getIncomingInvoiceAction({ id: first.id }))).toMatchObject({ code: 'FORBIDDEN' });
