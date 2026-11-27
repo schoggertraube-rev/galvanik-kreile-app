@@ -29,8 +29,8 @@ export function IntakeObjectDialogs({ports,allowed,originalAllowed=allowed,onRef
   return opened?null:'Kunde zum Original kann in diesem Stand nicht gewählt werden · Code: INTAKE_ASSIGNMENT_VIEW_MISSING.';
  };
  return <>{message?<div role="status" className="kr-toast">{message}</div>:null}{stack.length&&typeof document!=='undefined'?createPortal(<KrApp geraet={device} portal>{stack.map(entry=>{
-  const [id,fileId]=entry.arg.split('#',2);
+  const [id,fileId,invoiceId]=entry.arg.split('#',3);
   return entry.screen==='kvware'?<QuoteGoodsDialog key={entry.key} quoteId={id} sourceId={fileId} ports={ports.quoteGoods} customerOverlayId={customerOverlayId} onClose={close} onMessage={notify} onOriginal={(item,file)=>open('original',item+'#'+file)} onCustomer={id=>onOpenCustomer(id)} onOrder={id=>onOpenOrder(id)} onQuote={id=>onOpenQuote(id)}/>:entry.screen==='ware'?<GoodsReceiptDialog key={entry.key} orderId={id} sourceId={fileId} ports={ports.goods} onClose={close} onMessage={notify} onOriginal={(item,file)=>open('original',item+'#'+file)}/>
-   :<OriginalDialog key={entry.key} fileId={fileId??id} ports={ports.original} onClose={close} onMessage={refresh} onAssign={assign}/>;
+   :<OriginalDialog key={entry.key} fileId={fileId??id} invoiceId={invoiceId} ports={ports.original} onClose={close} onMessage={refresh} onAssign={assign}/>;
  })}</KrApp>,document.body):null}</>;
 }
