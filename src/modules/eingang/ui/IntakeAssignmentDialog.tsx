@@ -7,7 +7,25 @@ export function IntakeAssignmentDialog({itemId,mode,sourceChannel,ports,onClose,
  const [view,setView]=useState<AssignmentView|null>(null),[state,setState]=useState<'daten'|'kundesuche'|'kein'|'doppelt'|'erfolg'|'schon'>(mode==='kein'?'kein':'daten'),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[query,setQuery]=useState(''),[hits,setHits]=useState<Array<{id:string;name:string}>>([]),[searching,setSearching]=useState(false),[target,setTarget]=useState<AssignmentCustomer|null>(null),[retry,setRetry]=useState<(()=>void)|null>(null);
  const inFlight=useRef(false),keys=useRef(new Map<string,string>()),searchRequest=useRef(0),searchInput=useRef<HTMLInputElement>(null);
  const key=(kind:string)=>{if(!keys.current.has(kind))keys.current.set(kind,crypto.randomUUID());return keys.current.get(kind)!;};
- const load=useCallback(async(signal?:AbortSignal)=>{setLoading(true);setError(null);setRetry(null);try{const result=await ports.read({itemId,mode});if(signal?.aborted)return;if(result.code!=='OK'){setError(result.message);return;}setView(result.view);setState(mode==='kein'?'kein':mode!=='umhaengen'&&result.view.assignment!=='offen'?'schon':'daten');}catch(failure){console.error('[INTAKE_ASSIGNMENT_UI_READ_FAILED]',failure);if(!signal?.aborted)setError((sourceChannel==='mail'||sourceChannel==='weitergeleitet'?'Postfach nicht erreichbar':'Eingang konnte nicht geladen werden')+' · Code: INTAKE_ASSIGNMENT_UI_READ_FAILED.');}finally{if(!signal?.aborted)setLoading(false);}},[ports,itemId,mode,sourceChannel]);
+ const load=useCallback(async(signal?:AbortSignal)=>{
+  setLoading(true);setError(null);setRetry(null);
+  try{
+   const result=await ports.read({itemId,mode});
+   if(signal?.aborted)return;
+   if(result.code!=='OK'){setError(result.message);return;}
+   setView(result.view);
+   setState(mode==='kein'?'kein':mode!=='umhaengen'&&result.view.assignment!=='offen'?'schon':'daten');
+  }catch(failure){
+   console.error('[INTAKE_ASSIGNMENT_UI_READ_FAILED]',failure);
+   if(!signal?.aborted){
+    // Opening the mail dialog by mail ID conveys no source channel until the first read succeeds.
+    const mailbox=sourceChannel==='mail'||sourceChannel==='weitergeleitet'||(sourceChannel===undefined&&mode==='normal');
+    setError((mailbox?'Postfach nicht erreichbar':'Eingang konnte nicht geladen werden')+' · Code: INTAKE_ASSIGNMENT_UI_READ_FAILED.');
+   }
+  }finally{
+   if(!signal?.aborted)setLoading(false);
+  }
+ },[ports,itemId,mode,sourceChannel]);
  useEffect(()=>{const controller=new AbortController(),timer=setTimeout(()=>void load(controller.signal),0);return()=>{clearTimeout(timer);controller.abort();};},[load]);
  useEffect(()=>{if(state==='kundesuche')searchInput.current?.focus();},[state]);
  useEffect(()=>{const request=++searchRequest.current;if(state!=='kundesuche'||query.trim().length<2)return;let active=true;const timer=setTimeout(async()=>{setSearching(true);try{const result=await ports.search(query.trim());if(!active||request!==searchRequest.current)return;if(result.code!=='OK'||!('customers' in result)){setError(result.message);return;}setHits(result.customers);}catch(failure){console.error('[INTAKE_ASSIGNMENT_SEARCH_FAILED]',failure);if(active)setError('Suche nicht verfügbar · Code: INTAKE_ASSIGNMENT_SEARCH_FAILED.');}finally{if(active)setSearching(false);}},180);return()=>{active=false;clearTimeout(timer);};},[query,state,ports]);

@@ -497,6 +497,7 @@ export function validTodayProjectorComposition(source) {
     if(!ts.isImportDeclaration(statement)||!ts.isStringLiteral(statement.moduleSpecifier))continue;
     const facade=(resolveSpec(TODAY_PROJECTOR_FILE,statement.moduleSpecifier.text)??'').match(/^src\/modules\/([^/]+)\/server-public$/);
     if(!facade)continue;
+    if(facade[1]==='metallkurs')return false;
     const allowed=TODAY_PROJECTOR_READ_FACADES.get(facade[1])??new Set(),bindings=statement.importClause?.namedBindings;
     if(!bindings||!ts.isNamedImports(bindings)||statement.importClause.name)return false;
     if(bindings.elements.some(binding=>{
@@ -515,7 +516,9 @@ function validTodayTagComposition(source) {
     const facade=(resolveSpec(TODAY_TAG_COMPOSITION_FILE,statement.moduleSpecifier.text)??'').match(/^src\/modules\/([^/]+)\/server-public$/);
     if(!facade)continue;
     const clause=statement.importClause,bindings=clause?.namedBindings;
-    if(!TODAY_TAG_SOURCE_MODULES.has(facade[1])||!clause||clause.name||clause.isTypeOnly||
+    const allowed = TODAY_TAG_SOURCE_MODULES.has(facade[1]) ||
+      statement.moduleSpecifier.text === '@/modules/metallkurs/server-public';
+    if(!allowed||!clause||clause.name||clause.isTypeOnly||
         !bindings||!ts.isNamedImports(bindings)||bindings.elements.length!==1)return false;
     const [binding]=bindings.elements;
     if(binding.isTypeOnly||(binding.propertyName??binding.name).text!=='tagQuellen')return false;
@@ -523,9 +526,32 @@ function validTodayTagComposition(source) {
   return true;
 }
 
+function validNamedServerFacadeReader(file, source, facadePath, readerName) {
+  const tree = todayReadCompositionTree(file, source);
+  if (!tree) return false;
+  const imports = tree.statements.filter(statement =>
+    ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) &&
+    (resolveSpec(file, statement.moduleSpecifier.text) ?? '').endsWith('/server-public'));
+  if (imports.length !== 1) return false;
+  const [statement] = imports;
+  const clause = statement.importClause;
+  const bindings = clause?.namedBindings;
+  if (statement.moduleSpecifier.text !== facadePath ||
+      !clause || clause.name || clause.isTypeOnly ||
+      !bindings || !ts.isNamedImports(bindings) || bindings.elements.length !== 1) return false;
+  const [binding] = bindings.elements;
+  return !binding.isTypeOnly && (binding.propertyName ?? binding.name).text === readerName;
+}
+
 export function allowedServerFacadeConsumer(file, source) {
   if(file===TODAY_PROJECTOR_FILE)return validTodayProjectorComposition(source);
   if(file===TODAY_TAG_COMPOSITION_FILE)return validTodayTagComposition(source);
+  if(file==='src/lib/server/weekPlanPort.ts')return validNamedServerFacadeReader(
+    file, source, '@/modules/fundament/server-public', 'readBetriebsruheInTransaction',
+  );
+  if(file==='src/modules/metallkurs/server/abruf.ts')return validNamedServerFacadeReader(
+    file, source, '@/modules/fundament/server-public', 'readMetallkursEinstellungenInTransaction',
+  );
   const taktJobsFile = 'src/modules/takt/jobs.ts';
   const taktRoutes = new Set([
     'src/app/api/takt/route.ts',
@@ -556,6 +582,7 @@ export function allowedServerFacadeConsumer(file, source) {
       'isFeatureEnabled', 'readTenantFeatures', 'readPackageSwitches',
       'readPackageSwitchValuesForTakt',
       'readErkennungsEinstellungenInTransaction',
+      'stelleTaktSystemakteurBereitInTransaction',
     ]);
     for (const statement of tree.statements) {
       if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -1041,6 +1068,88 @@ function sqlDdlText(source) {
   return result + source.slice(start);
 }
 
+// B6-K: nur belegte vollständige Abfragen in den freigegebenen Dateien.
+// Beim Schreiber gehört der SQL-Ausdruck für den Transaktionsmandanten zur Prüfsumme.
+const metallkursWriter = 'src/modules/metallkurs/server/schreiben.ts';
+const metallkursSqlStatements = new Map([
+  ['src/modules/metallkurs/server/lesen.ts', {
+    'public.metallkurse': ['ffca605663a79568e02ee74cd440d76d4a418bb2ecdcd4491824929a949b2bf0'],
+  }],
+  [metallkursWriter, {
+    'public.metallkurse': [
+      '22a10740cb64f1f084e5e9b1249a4ccc2ffe0e355aa60c5e3d97b9679b10522d', // Originalkurse einfügen
+      '189b0b6b176fc4146c4d80818b951bc8b8755c9700bdc7b4b6484a546ef3b267', // Wiederholung am Original erkennen
+      'e215955cb0c2c45a31e852d67dda64c2a355fc377318cfbf3a2dec0c87ae5ccd', // vorhandenen Handkurs lesen
+    ],
+    'public.events': [
+      '8b7d04a3b7174807cdc05d37b903837fc6f0fe391cd906d59f7401768d7089c1', // Monatsabrufe zählen
+      '4d6dbd65306f73559882f73f9a8d0dce4e26c1d34d771125dbcaa198e33f5d0f', // abgeschlossenen Abruf lesen
+      '8a7d27454463fe7df6dcddfd38b68ea92d4a5d3f007664f2f5ccdc884899d56f', // offenen Abruf anlegen
+      'b3c4fce1bf84fbc23fa5a1a5c73b729486f833a2f35d7f3c366d8c70600fc78a', // genau diesen offenen Abruf abschließen
+      '0d30f4a79252d16c1227e47e3dc840b3a4430144ff556983fb7fb7d1f9585c63', // fehlenden Zugang belegen
+    ],
+  }],
+  ['src/modules/metallkurs/server/__tests__/lesen.integration.test.ts', {
+    'public.metallkurse': ['22fd115547175774fec6b8cf7455d16d669e3edc11174f2fe8a46c28df61ac63'],
+  }],
+  ['src/modules/metallkurs/server/__tests__/schreiben.integration.test.ts', {
+    'public.metallkurse': ['f5b18e8d7487be64cb9b032a66a31fdc559cbb914234e1109f8537b08ea8c6a0'],
+  }],
+]);
+
+function sqlTaggedTemplate(node) {
+  return node && ts.isTaggedTemplateExpression(node) && ts.isIdentifier(node.tag) && node.tag.text === 'sql'
+    ? node.template : undefined;
+}
+
+function normalizedSqlTemplate(tree, template) {
+  return tree.text.slice(template.getStart(tree) + 1, template.end - 1).replace(/\s+/gu, ' ').trim();
+}
+
+function metallkursTenantTemplate(tree) {
+  // Außer SQL-Einbettungen ist nur eine Modulkonstante erlaubt. Keine lokale Überschattung.
+  const bindings = [];
+  function collect(node) {
+    if (ts.isIdentifier(node) && node.text === 'mandantVergleich' &&
+        !(ts.isTemplateSpan(node.parent) && node.parent.expression === node)) {
+      bindings.push(node);
+    }
+    ts.forEachChild(node, collect);
+  }
+  collect(tree);
+  if (bindings.length !== 1) return undefined;
+  const [binding] = bindings;
+  const declaration = binding.parent;
+  if (!ts.isVariableDeclaration(declaration) || declaration.name !== binding) return undefined;
+  const list = declaration.parent;
+  if (!ts.isVariableDeclarationList(list) || !(list.flags & ts.NodeFlags.Const) ||
+      !ts.isVariableStatement(list.parent) || list.parent.parent !== tree) return undefined;
+  return sqlTaggedTemplate(declaration.initializer);
+}
+
+function allowedMetallkursTableRef(file, source, reference) {
+  const allowed = metallkursSqlStatements.get(file)?.[reference.ref];
+  if (!allowed || reference.functionCall) return false;
+
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  function findTemplate(node) {
+    if (reference.index < node.getFullStart() || reference.index >= node.end) return undefined;
+    const template = sqlTaggedTemplate(node);
+    if (template && reference.index > template.getStart(tree)) return template;
+    return ts.forEachChild(node, findTemplate);
+  }
+
+  const template = findTemplate(tree);
+  if (!template) return false;
+  const hash = createHash('sha256').update(normalizedSqlTemplate(tree, template));
+  if (file === metallkursWriter) {
+    const tenantTemplate = metallkursTenantTemplate(tree);
+    if (!tenantTemplate) return false;
+    hash.update('\n').update(normalizedSqlTemplate(tree, tenantTemplate));
+  }
+  return allowed.includes(hash.digest('hex'));
+}
+
 function gateData(root, findings, manifests) {
   const declaredPublicViews = new Set();
   const privateRelationOwners = new Map();
@@ -1076,6 +1185,7 @@ function gateData(root, findings, manifests) {
       for (const m of tableRefs(source)) {
         const ref = m.ref;
         if (owned.has(ref) && !m.functionCall) continue;
+        if (allowedMetallkursTableRef(file, source, m)) continue;
         if (/^public\.v_/.test(ref)) {
           if (!declaredPublicViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
           continue;
