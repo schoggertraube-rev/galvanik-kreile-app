@@ -94,15 +94,19 @@ self.addEventListener("fetch", (event) => {
 // creates a database, changes metadata, grants authentication or touches originals.
 async function privateLoginMarker() {
   if (!self.cookieStore) return null;
-  const values = await self.cookieStore.getAll("kreile_offline_cache_scope");
-  return values.length === 1 && /^[a-f0-9]{64}$/.test(values[0].value) ? values[0].value : null;
+  const cookies = await self.cookieStore.getAll();
+  const values = cookies.filter(({ name }) => name === "kreile_offline_cache_scope");
+  if (values.length !== 1 || !/^[a-f0-9]{64}$/.test(values[0].value)) return null;
+  const login = values[0].value;
+  return cookies.some(({ name }) => name === "kreile_offline_pause_" + login) ? false : login;
 }
 async function existingShell(scope, login) {
   if (!indexedDB.databases) return null;
-  const name = "kreile-pending-originals-v1-" + scope;
-  if (!(await indexedDB.databases()).some(db => db.name === name && db.version === 2)) return null;
+  const { databasePrefix, databaseVersion } = globalThis.KreileOfflineQueue;
+  const name = databasePrefix + scope;
+  if (!(await indexedDB.databases()).some(db => db.name === name && db.version === databaseVersion)) return null;
   return new Promise((resolve, reject) => {
-    const open = indexedDB.open(name, 2);
+    const open = indexedDB.open(name, databaseVersion);
     open.onupgradeneeded = () => { open.transaction.abort(); };
     open.onerror = () => reject(Error("OFFLINE_WORKER_METADATA_UNAVAILABLE"));
     open.onblocked = () => reject(Error("OFFLINE_WORKER_METADATA_BLOCKED"));
@@ -114,7 +118,8 @@ async function existingShell(scope, login) {
       tx.onabort = () => { db.close(); reject(Error("OFFLINE_WORKER_METADATA_ABORTED")); };
       tx.oncomplete = () => {
         db.close(); const row = read.result;
-        resolve(row && typeof row === "object" && Object.keys(row).length === 3 && row.scope === login && Number.isSafeInteger(row.cacheGeneration) && row.cacheGeneration > 0 && row.cacheGeneration < Number.MAX_SAFE_INTEGER && typeof row.updatedAt === "string" && Number.isFinite(Date.parse(row.updatedAt)) ? row : null);
+        const idleAllowed = globalThis.KreileOfflineQueue.remainingIdleClock(row?.idleDeadline) !== null;
+        resolve(row && typeof row === "object" && Object.keys(row).length === 4 && idleAllowed && row.scope === login && Number.isSafeInteger(row.cacheGeneration) && row.cacheGeneration > 0 && row.cacheGeneration < Number.MAX_SAFE_INTEGER && typeof row.updatedAt === "string" && Number.isFinite(Date.parse(row.updatedAt)) ? row : null);
       };
     };
   });
@@ -123,7 +128,8 @@ async function readPrivateNavigation(request) {
   try {
     const login = await privateLoginMarker(), names = await caches.keys();
     const pattern = /^kreile-private-([a-f0-9]{64})-([a-f0-9]{64})-([1-9][0-9]*)$/;
-    if (!login) {
+    if (login === false) return null;
+    if (login === null) {
       for (const name of names) if (pattern.test(name)) await caches.delete(name);
       return null;
     }
@@ -140,7 +146,8 @@ async function readPrivateNavigation(request) {
     const html=await response.clone().text(),root=/<html\b[^>]*>/i.exec(html)?.[0];
     if(!root||!root.includes('data-auth-status="authenticated"')||!root.includes('data-offline-24h="enabled"')||!root.includes('data-offline-scope="'+selected.scope+'"')||!root.includes('data-offline-login-scope="'+login+'"'))return null;
     const current = await existingShell(selected.scope, login);
-    if (await privateLoginMarker() !== login || !current || current.cacheGeneration !== selected.generation) return null;
+    if (await privateLoginMarker() !== login || !current || current.cacheGeneration !== selected.generation
+      || globalThis.KreileOfflineQueue.remainingIdleClock(current.idleDeadline) === null) return null;
     return response;
   } catch { console.error("[OFFLINE_WORKER_PRIVATE_READ_BLOCKED]"); return null; }
 }

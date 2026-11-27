@@ -1,9 +1,13 @@
 .sheet {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--kr-tag-luecke);
+  container-type: inline-size;
 }
 
 .sheet p { margin: 0; }
+.sheet > p, .sheet details p { color: var(--kr-tag-aux); line-height: 1.5; }
+.sheet summary { min-block-size: 44px; padding-block: .75rem; color: var(--kr-tag-blau); cursor: pointer; }
 
 .summary {
   display: grid;
@@ -16,7 +20,7 @@
   border-radius: var(--kr-tag-kartenradius);
 }
 
-.summary:has(.figure) { grid-template-columns: minmax(128px,.73fr) minmax(0,1.52fr); }
+.summary:has(.figure) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 .total span, .total small { display: block; color: var(--kr-tag-week-muted); }
 .total strong {
   display: block;
@@ -48,10 +52,12 @@
 .ledger th:first-child { text-align:start; }
 .ledger tbody tr { border-block-start:1px solid var(--kr-tag-band-kante); }
 .ledger tbody th small { display:block; font-weight:400; }
+.mobileLabel { display: none; }
 .current th { border-inline-start: .2rem solid var(--kr-tag-band-punkt); }
 
 .valueButton, .totalButton {
   min-width: 44px;
+  max-inline-size: 100%;
   min-height: 44px;
   border: 0;
   padding: 0;
@@ -62,7 +68,12 @@
   text-decoration: underline;
   text-underline-offset: .15em;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
+.valueButton { color: var(--kr-tag-blau); }
+.sheet :is(button, summary):focus-visible { outline: 2px solid var(--kr-tag-blau); outline-offset: 2px; }
+.sheet .totalButton:focus-visible { outline-color: var(--kr-tag-week-curve); }
+.valueButton:active, .totalButton:active { text-decoration-thickness: .15em; }
 .positionDay h3 { margin: 0 0 .5rem; }
 .positionDay ul { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
 .positionDay li {
@@ -74,11 +85,64 @@
   border-block-start: 1px solid var(--kr-tag-band-kante);
   padding-block: .35rem;
 }
+.positionDay li > * { max-inline-size: 100%; overflow-wrap: anywhere; white-space: normal; }
 
-@media (max-width: 767px) {
-  .summary:has(.figure) { grid-template-columns: 1fr; }
-  .total { display:grid; grid-template-columns: minmax(0,1fr) auto; align-items:center; gap:.2em .6em; }
-  .total strong { grid-area: 1 / 2 / 3; margin:0; }
-  .ledger { padding-inline: .4rem; }
-  .ledger th, .ledger td { font-size: .85rem; }
+@container (max-width: 34rem) {
+  .summary:has(.figure) { grid-template-columns: minmax(0, 1fr); }
+  .legend { justify-content: start; }
+  .plot text { font-size: 15px; }
+  .ledger { padding: 0; border: 0; background: transparent; }
+  .ledger table, .ledger tbody { display: grid; gap: var(--kr-tag-luecke); }
+  .ledger thead { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ledger tbody tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+    gap: .5rem;
+    padding: var(--kr-tag-band-padding);
+    border: 1px solid var(--kr-tag-band-kante);
+    border-radius: var(--kr-tag-platte-radius);
+    background: var(--kr-tag-band-grund);
+  }
+  .ledger tbody .current { border-inline-start: .2rem solid var(--kr-tag-band-punkt); }
+  .ledger tbody th, .ledger td { padding: 0; text-align: start; overflow-wrap: anywhere; }
+  .ledger tbody th { grid-column: 1 / -1; border: 0; }
+  .ledger td { border-block-start: 1px solid var(--kr-tag-band-kante); padding-block-start: .5rem; }
+  .mobileLabel { display: block; color: var(--kr-tag-aux); font-size: .8125rem; }
+}
+
+:global(dialog [data-overlay-body]) .calendarWeek :global(.kr-woche) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  align-items: start;
+  gap: var(--kr-tag-luecke);
+}
+.calendarWeek :global(.kr-tag) {
+  min-inline-size: 0;
+  border: 1px solid var(--kr-tag-band-kante);
+  border-radius: var(--kr-tag-platte-radius);
+  background: var(--kr-tag-kenn-grund);
+}
+.calendarWeek :global(.kr-tag-kopf) {
+  display: flex;
+  justify-content: space-between;
+  padding: .5rem .75rem;
+  border-radius: var(--kr-tag-platte-radius) var(--kr-tag-platte-radius) 0 0;
+  font-size: 1rem;
+}
+.calendarWeek :global(.kr-tag--heute .kr-tag-kopf) {
+  color: var(--kr-tag-week-light);
+  background: var(--kr-tag-week-ground);
+}
+.calendarWeek :global(.kr-tag-inhalt) { display: grid; gap: .5rem; padding: .5rem; }
+.calendarWeek :global(.kr-zeile) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .5rem;
+  min-block-size: 44px;
+  text-align: start;
+}
+.calendarWeek :global(.kr-zeile-t), .calendarWeek :global(.kr-zeile-s), .calendarWeek :global(.kr-id) {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }

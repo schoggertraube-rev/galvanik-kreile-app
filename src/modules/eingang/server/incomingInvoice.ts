@@ -21,6 +21,7 @@ export type InvoiceDependencies={
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>Promise<string>;
  resolveTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string})=>Promise<void>;
 };
+type InvoiceReadDependencies=Pick<InvoiceDependencies,'findSuppliers'|'readCustomer'>;
 type Source={id:string;version:number;at:string;channel:string;sender:string|null;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;einsatz:string;anliegen_offen:string[];aussortiert:string|null};
 const uuid=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
@@ -37,7 +38,11 @@ function failure(error:unknown):InvoiceFailure|Extract<InvoiceResult,{code:'DUPL
 }
 async function authorization(){
  const result=await resolveAuthorization();if(!result.ok)reject(result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED','Sitzung nicht verfügbar.');
- if(!hasAuthorizationArea(result.data,'buchhaltung'))reject('FORBIDDEN',FINANCIAL_ACCESS_COPY.bookkeepingMissing);return result.data;
+ return requireBookkeeping(result.data);
+}
+function requireBookkeeping(auth:AuthorizationSnapshot){
+ if(!auth.active||!hasAuthorizationArea(auth,'buchhaltung'))reject('FORBIDDEN',FINANCIAL_ACCESS_COPY.bookkeepingMissing);
+ return auth;
 }
 async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,byItem=false,lock=false){
  const rows=await tx.execute<IncomingInvoice>(sql`SELECT ${columns} FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId}
@@ -61,7 +66,7 @@ function fieldsFrom(invoice:IncomingInvoice):InvoiceFields{return {
  lieferantId:invoice.lieferant_id??'',nummer:invoice.nummer??'',datum:invoice.datum??'',netto:invoice.netto??'',ust:invoice.ust??'',brutto:invoice.brutto??'',
  faelligAm:invoice.faellig_am??'',iban:invoice.iban??'',ibanGeprueft:invoice.iban_geprueft,
 };}
-async function supplier(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,deps:InvoiceDependencies,lock=false):Promise<InvoiceSupplier|null>{
+async function supplier(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,deps:Pick<InvoiceDependencies,'readCustomer'>,lock=false):Promise<InvoiceSupplier|null>{
  if(!id)return null;const value=await deps.readCustomer(tx,auth.tenantId,id,lock);
  if(!value||value.customerType!=='lieferant')reject('VALIDATION_ERROR','Lieferant ist nicht verfügbar.',{lieferantId:'Lieferant fehlt oder ist kein Lieferant'});
  return {id:value.id,name:value.name,iban:value.iban,paymentTermDays:value.paymentTermDays};
@@ -86,9 +91,9 @@ function taxRates(suggestions:readonly {feld:string;wert:unknown}[],totalTax:str
  const original=suggestions.filter(value=>value.feld==='rechnung.steuersaetze').at(-1);
  return invoiceTaxBreakdown(original?original.wert:stored?.ust_saetze,totalTax);
 }
-export async function readIncomingInvoice(input:unknown,deps:InvoiceDependencies):Promise<InvoiceReadResult>{
+export async function readIncomingInvoice(input:unknown,deps:InvoiceReadDependencies,caller?:AuthorizationSnapshot):Promise<InvoiceReadResult>{
  if(!object(input)||!keys(input,['id'])||!uuid(input.id))return {code:'VALIDATION_ERROR',message:'Rechnungsaufruf ist ungültig.'};
- try{const auth=await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
+ try{const auth=caller?requireBookkeeping(caller):await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
   const invoice=await findInvoice(tx,auth,input.id as string)??await findInvoice(tx,auth,input.id as string,true);
   const row=await source(tx,auth,invoice?.item_id??input.id as string);
   const originals=await tx.execute<{id:string;name:string;mime:string;sha256:string}>(sql`SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256 FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'

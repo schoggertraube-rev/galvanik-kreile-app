@@ -1,40 +1,70 @@
 .tile {
   display: grid;
-  gap: var(--kr-tag-luecke);
+  gap: .25rem;
+  min-inline-size: 0;
   inline-size: 100%;
   margin-block: var(--kr-tag-luecke);
   padding: var(--kr-tag-band-padding);
   text-align: start;
-  border: 1px solid var(--kr-tag-band-kante);
+  color: var(--kr-tag-ink);
+  border: 1px solid var(--kr-tag-kenn-kante);
   border-radius: var(--kr-tag-kartenradius);
-  background: var(--kr-tag-band-grund);
+  background: radial-gradient(at var(--kr-tag-kenn-glanzort), var(--kr-tag-kenn-rechnung-glanz), transparent var(--kr-tag-kenn-reichweite)), var(--kr-tag-kenn-grund);
+  box-shadow: var(--kr-tag-kenn-schatten);
+  overflow-wrap: anywhere;
+  cursor: pointer;
 }
-.tile strong { font-size: var(--kr-tag-band-titel); font-variant-numeric: tabular-nums; }
+.tile strong { font-size: var(--kr-tag-kenn-zahl); line-height: 1.15; font-variant-numeric: tabular-nums; }
 .tileTitle { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
-.tileOverdue { color: var(--ral-fg); }
-.sheet, .rows { display: grid; gap: var(--kr-tag-luecke); }
+.tileTitle svg { color: var(--kr-tag-kenn-rechnung-akzent); }
+.tileOverdue, .row[data-overdue="true"] .due {
+  color: var(--kr-tag-risiko-ink);
+  background: var(--kr-tag-risiko-matte);
+  border-radius: var(--kr-tag-frist-radius);
+  padding: var(--kr-tag-frist-padding);
+}
+.tileOverdue { justify-self: start; margin-block-start: .25rem; }
+.sheet, .rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--kr-tag-luecke); }
 .totals {
   display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
   gap: var(--kr-tag-luecke);
   padding: var(--kr-tag-band-padding);
   border: 1px solid var(--kr-tag-band-kante);
   border-radius: var(--kr-tag-kartenradius);
   background: var(--kr-tag-band-grund);
 }
-.totals strong { display: block; font-variant-numeric: tabular-nums; }
+.totals > div { min-inline-size: 0; overflow-wrap: anywhere; }
+.totals strong { display: block; font-size: 1.25em; font-variant-numeric: tabular-nums; }
 .ratio { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--kr-tag-luecke); }
-.ratio strong { display: inline; }
-.ratio progress { flex: 1; accent-color: var(--ral); }
+.ratio strong { display: inline; font-size: inherit; }
+.ratio progress { flex: 1 1 7rem; min-inline-size: 0; max-inline-size: 100%; block-size: .5rem; accent-color: var(--kr-tag-kenn-risiko-akzent); }
 .rows { margin: 0; padding: 0; list-style: none; }
 .row {
   display: grid;
-  gap: var(--kr-tag-luecke);
+  grid-template-columns: minmax(0, 1fr);
+  gap: .5rem;
   padding: var(--kr-tag-band-padding);
   border: 1px solid var(--kr-tag-band-kante);
   border-radius: var(--kr-tag-kartenradius);
+  background: var(--kr-tag-kenn-grund);
 }
-.row[data-overdue="true"] { border-inline-start-color: var(--ral); }
-.entry { display: grid; color: inherit; overflow-wrap: anywhere; text-align: start; }
-button.entry { min-block-size: 44px; border: 0; background: transparent; }
-.row summary { cursor: pointer; }
+.row[data-overdue="true"] { border-inline-start: 3px solid var(--kr-tag-kenn-risiko-akzent); }
+.entry { display: grid; align-content: center; gap: .35rem; color: inherit; overflow-wrap: anywhere; text-align: start; }
+.headline span { display: inline-block; max-inline-size: 100%; font-variant-numeric: tabular-nums; }
+.meta { color: var(--kr-tag-aux); font-size: .875rem; line-height: 1.5; }
+.due { display: inline-block; }
+button.entry { min-block-size: 44px; padding: 0; border: 0; border-radius: var(--kr-tag-frist-radius); background: transparent; cursor: pointer; }
+.row details { border-block-start: 1px solid var(--kr-tag-band-kante); }
+.row summary { min-block-size: 44px; padding-block: .75rem; color: var(--kr-tag-blau); cursor: pointer; }
+.row details > div { display: flex; flex-wrap: wrap; gap: .5rem; padding-block-start: .5rem; }
+.row details button { max-inline-size: 100%; min-block-size: 44px; white-space: normal; overflow-wrap: anywhere; }
+.tile:focus-visible, .row :is(button, summary):focus-visible {
+  outline: 2px solid var(--kr-tag-blau);
+  outline-offset: 2px;
+}
+.tile:active, button.entry:active, .row summary:active { background-color: var(--kr-tag-kenn-rechnung-glanz); }
+@media (prefers-reduced-motion: no-preference) {
+  .tile { transition: transform var(--gb-bewegung-knopf) var(--gb-bewegung-kurve); }
+  .tile:active { transform: translateY(var(--gb-knopf-druckweg)); }
+}

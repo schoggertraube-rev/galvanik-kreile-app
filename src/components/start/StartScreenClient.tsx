@@ -5,6 +5,7 @@ import { Suspense, useEffect, useEffectEvent, useRef, useState, useSyncExternalS
 import { useSearchParams } from "next/navigation";
 import { login } from "@/app/actions/auth";
 import { loginWithPin } from "@/app/actions/auth.actions";
+import { reportTabletInput } from '@/lib/auth/sessionInactivity';
 import { usePageView } from "@/hooks/usePageView";
 import { useHydrated } from "@/hooks/useHydrated";
 import {clearPrivateReadStateBeforeLogin} from '@/lib/offline/privateReadCache';
@@ -148,7 +149,10 @@ function StartContent({
     try {
       const cleanup=await clearPrivateReadStateBeforeLogin();
       if(cleanup?.code==='UNAVAILABLE')setMessage(OFFLINE_DEVICE_STATUS_COPY.unavailable);
-      const result = await loginWithPin(selected.loginHandle, nextPin);
+      const tablet = reportTabletInput();
+      const result = tablet
+        ? await loginWithPin(selected.loginHandle, nextPin, tablet)
+        : await loginWithPin(selected.loginHandle, nextPin);
       if (result.ok) {
         try {
           window.localStorage.setItem(LAST_LOGIN_KEY, selected.loginHandle);
@@ -293,6 +297,8 @@ function StartContent({
   function submitEmail(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const tablet = reportTabletInput();
+    if (tablet) formData.set('tabletInput', tablet);
     startEmailTransition(async () => {
       const cleanup=await clearPrivateReadStateBeforeLogin();
       if(cleanup?.code==='UNAVAILABLE')setMessage(OFFLINE_DEVICE_STATUS_COPY.unavailable);

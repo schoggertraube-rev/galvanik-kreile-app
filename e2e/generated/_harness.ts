@@ -8,7 +8,7 @@ import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } 
 import { generatedFlowRuntime } from "./_model";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
 import { retryFixtureResetDeadlock,lockFixtureResetTables,fixtureResetTargets,settleFixtureReads,readFixtureResetBlockers } from "./_fixtureReset";
-import {protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from './_readFault';
+import {interruptedLoadControlId,protocolDiagnosticActionIds,isApplicationDataLoad,isApplicationServerAction} from './_readFault';
 
 export type FlowExpectation = {
   id?: string;
@@ -1131,6 +1131,7 @@ function interruptedActionId(controlId: string | undefined): string | undefined 
   const actions: Record<string, { exportedName: string; filename: string }> = {
     "eingang.buchen": { exportedName: "erfasseAuftragAusEingangAction", filename: "src/app/actions/eingang.actions.ts" },
     "navigation.nachrichten": { exportedName: "getIntakeMessagesAction", filename: "src/app/actions/eingang.actions.ts" },
+    "mailein": { exportedName: "getIntakeAssignmentAction", filename: "src/app/actions/eingang.actions.ts" },
     "nachrichten.vorschlag-ja": { exportedName: "assignIntakeCustomerAction", filename: "src/app/actions/eingang.actions.ts" },
     "aufgabe.speichern": { exportedName: "saveIntakeTaskAction", filename: "src/app/actions/eingang.actions.ts" },
     "kundebearbeiten.speichern": { exportedName: "updateCustomerAction", filename: "src/app/actions/customers.actions.ts" },
@@ -1307,7 +1308,7 @@ async function executeServerCommand(page: Page, step: FlowStep, state: FlowRunSt
   state.serverResult = readFlightActionResult(response.text);
 }
 
-async function executeStep(page: Page, step: FlowStep, state: FlowRunState, nextControlId?: string) {
+async function executeStep(page: Page, step: FlowStep, state: FlowRunState, nextStep?: FlowStep) {
   if (!step.aktion && step.erwartung) {
     await assertExpectation(page, step, state);
     return;
@@ -1328,7 +1329,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState, next
     return;
   }
   if (step.aktion === "netz_laden") {
-    await interruptNextLoad(page,nextControlId?.startsWith('navigation.')?nextControlId:undefined);
+    await interruptNextLoad(page, interruptedLoadControlId(nextStep));
     return;
   }
   if (step.aktion === "db_setzen") {
@@ -1920,7 +1921,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
     await expect(page.getByRole('button',{name:'Foto 1',exact:true})).toBeVisible();
     await expect(dataSpec(page,'reklamation.fotos')).toBeEnabled();
   }
-  for (const [index,step] of (flowCase.wenn ?? []).entries()) await executeStep(page, step, state,flowCase.wenn?.[index+1]?.id);
+  for (const [index,step] of (flowCase.wenn ?? []).entries()) await executeStep(page, step, state,flowCase.wenn?.[index+1]);
   await captureDbResults(dbExpectations, state);
   await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
   await assertDb(dbExpectations, state);

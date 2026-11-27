@@ -61,6 +61,8 @@ export default async function RootLayout({
       data-auth-status={authState.status}
       data-offline-scope={authState.status==='authenticated'?authState.user.offlineScope:undefined}
       data-offline-login-scope={authState.status==='authenticated'?authState.user.offlineLoginScope:undefined}
+      data-offline-idle-confirmed-at={authState.status==='authenticated'?authState.user.inactivity?.serverAt:undefined}
+      data-offline-idle-expires-at={authState.status==='authenticated'?authState.user.inactivity?.expiresAt:undefined}
       data-offline-24h={authState.status==='authenticated'&&authState.user.offline24h===true?'enabled':'disabled'}
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
       style={{ "--sans": inter.style.fontFamily, "--serif": fraunces.style.fontFamily } as CSSProperties}

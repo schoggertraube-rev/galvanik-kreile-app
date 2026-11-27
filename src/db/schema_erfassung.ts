@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, boolean, integer, uuid, numeric, date, jsonb } from "drizzle-orm/pg-core";
-import { orders, appUsers, inventoryItems } from "./schema";
+import { orders, items, appUsers, inventoryItems } from "./schema";
 
 export const vorlageZeit = pgTable("vorlage_zeit", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -36,17 +36,23 @@ export const arbeitszeitBuchung = pgTable("arbeitszeit_buchung", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: text("tenant_id").notNull(),
   auftragId: text("auftrag_id").notNull().references(() => orders.id),
+  itemId: text("item_id").references(() => items.id, { onDelete: "set null" }),
   employeeId: uuid("employee_id").notNull().references(() => appUsers.id),
   kostenstelleKuerzel: text("kostenstelle_kuerzel").notNull(),
   stationKuerzel: text("station_kuerzel").notNull(),
   startZeit: timestamp("start_zeit", { withTimezone: true }).notNull(),
   endZeit: timestamp("end_zeit", { withTimezone: true }),
   dauerMinuten: integer("dauer_minuten").notNull(),
-  kostensatzEurProStunde: numeric("kostensatz_eur_pro_stunde", { precision: 8, scale: 2 }).notNull(),
+  kostensatzEurProStunde: numeric("kostensatz_eur_pro_stunde", { precision: 8, scale: 2 }),
+  kostensatzQuelle: text("kostensatz_quelle"),
   erfasstModus: text("erfasst_modus").notNull(),
   warAusVorlage: boolean("war_aus_vorlage").default(false),
   vorlageId: uuid("vorlage_id").references(() => vorlageZeit.id),
   bemerkung: text("bemerkung"),
+  clientEventId: uuid("client_event_id"),
+  korrigiertId: uuid("korrigiert_id"),
+  korrekturGrund: text("korrektur_grund"),
+  laufId: uuid("lauf_id"),
   erstelltAm: timestamp("erstellt_am", { withTimezone: true }).defaultNow(),
   aktualisiertAm: timestamp("aktualisiert_am", { withTimezone: true }).defaultNow(),
 });

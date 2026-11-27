@@ -44,6 +44,14 @@ it('refreshes the current sender first and records the service outcome separatel
       AND source_seq<>built_seq AND kind IN ('quelle:tasks.aufgabe','quelle:takt.ausfall') ORDER BY kind`;
     expect(await unbuilt()).toEqual([{ kind: 'quelle:takt.ausfall' }, { kind: 'quelle:tasks.aufgabe' }]);
 
+    // The scheduled job's receipt can race a manual rebuild waiting for this row.
+    // The secondary projection must yield without consuming the job's budget.
+    await sql.begin(async transaction => {
+      await transaction`SELECT tenant_id FROM private.today_tenant_v1 WHERE tenant_id=${tenant} FOR UPDATE`;
+      expect(await refreshTodayModel(tenant, undefined, { bounded: true, taktErgebnis: true }))
+        .toEqual({ code: 'BUSY', built: 0, stale: 0 });
+    });
+    expect(await unbuilt()).toEqual([{ kind: 'quelle:takt.ausfall' }, { kind: 'quelle:tasks.aufgabe' }]);
     expect(await refreshTodayModel(tenant, undefined, { bounded: true, taktErgebnis: true }))
       .toEqual({ code: 'OK', built: 1, stale: 0 });
     expect(await unbuilt()).toEqual([{ kind: 'quelle:tasks.aufgabe' }]);
@@ -52,6 +60,7 @@ it('refreshes the current sender first and records the service outcome separatel
       .filter(entry => entry.phase === 'today.refresh' || entry.phase === 'today.taktAusfall');
     expect(phases.map(({ phase, counts }) => ({ phase, counts }))).toEqual([
       { phase: 'today.refresh', counts: { rows: 1, built: 1, stale: 0 } },
+      { phase: 'today.taktAusfall', counts: { rows: 0, built: 0, stale: 0 } },
       { phase: 'today.taktAusfall', counts: { rows: 1, built: 1, stale: 0 } },
     ]);
   } finally {

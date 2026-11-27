@@ -425,11 +425,11 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
         catalog_service_id: string;
         preis_netto: string;
         vat_rate_basis_points: number;
-        promised_due_date: string;
+        due_date: string;
       }[]>`
         SELECT c.street, c.zip_code, c.city, c.country, c.payment_preference,
                i.catalog_service_id, i.preis_netto::text, i.vat_rate_basis_points,
-               o.promised_due_date::date::text
+               o.due_date::date::text
         FROM public.orders o
         JOIN public.customers c ON c.id = o.customer_id AND c.tenant_id = o.tenant_id
         JOIN public.items i ON i.order_id = o.id AND i.tenant_id = o.tenant_id
@@ -444,7 +444,7 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
         catalog_service_id: catalogServiceId,
         preis_netto: "50.00",
         vat_rate_basis_points: 1900,
-        promised_due_date: "2026-09-30",
+        due_date: "2026-09-30",
       });
 
       await openRoute(adminPage, "/warendurchlauf/wareneingang");

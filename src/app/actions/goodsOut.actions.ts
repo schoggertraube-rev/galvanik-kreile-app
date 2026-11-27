@@ -2,11 +2,12 @@
 import {leseLagerMaterialpositionenInTransaction} from '@/modules/lager/server-public';
 import {readCustomerInvoiceTerms} from '@/modules/customers/server-public';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readAusschussBerechnenInTransaction,readLoggingSettings,readWerkstattMehrarbeitInTransaction} from '@/modules/fundament/server-public';
 import {isShipmentGroupInput,type ShipmentGroupInput,type ShipmentGroupResult} from '@/lib/domain/shipmentGroupContract';
-import {readManualShipmentGroup} from '@/modules/orders/server-public';
+import {leseAusschuss,leseMehrarbeitBuchungenInTransaction,readManualShipmentGroup} from '@/modules/orders/server-public';
 import {readInvoiceVat} from "@/modules/accounting/server-public";
 import {recognizeInvoicePdf} from '@/modules/eingang/server-public';
+import {ORDER_SCRAP_COPY} from '@/ui/ordersCopy';
 
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -29,7 +30,7 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
     clientEventId:invoiceClientEventId(input.clientEventId),agreement:input.agreement,
   }:null;
   const invoicePort=invoiceInput?await import("@/lib/server/commands/immutableInvoiceCommand"):null;
-  const [{lockDispatchCallsForGoodsOut,finishDispatchCallsAfterGoodsOut,recordDispatchCallResult},{completeOrderCallbackTask,createGoodsOutClarificationTask,synchronizeCollectionFollowupTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
+  const [{lockDispatchCallsForGoodsOut,finishDispatchCallsAfterGoodsOut,recordDispatchCallResult},{completeOrderCallbackTask,createGoodsOutClarificationTask,synchronizeCollectionFollowupTask,synchronizeFullScrapTask},{recordIntakeTaskEffect},{readCustomerProfile}]=await Promise.all([import('@/lib/server/dispatchCallPort'),import('@/modules/tasks/server-public'),import('@/modules/eingang/server-public'),import('@/modules/customers/server-public')]);
   const [{lockStorageFinalTasksForGoodsOut,finishStorageFinalTasksAfterGoodsOut},{completeStorageTaskAfterGoodsOut}]=await Promise.all([import('@/lib/server/storageFinalStagePort'),import('@/modules/tasks/server-public')]);
   const {recordStoragePostalResult}=await import('@/lib/server/storagePostalPort');
   const {retireOrderPrintJobsAfterGoodsOut}=await import('@/modules/orders/server-public');
@@ -42,7 +43,16 @@ async function goodsOutComposition(input:RecordGoodsOutInput):Promise<GoodsOutCo
     beforeOrderLock:async(tx,auth)=>{if(invoiceInput&&invoicePort)await invoicePort.lockInvoiceCreation(tx,auth.tenantId,invoiceInput);callTaskIds=await lockDispatchCallsForGoodsOut(tx,auth,input.orderId);finalTasks=await lockStorageFinalTasksForGoodsOut(tx,auth,input.orderId);},
     ...(invoiceInput&&invoicePort?{beforeWrite:async(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction)=>{
       const {readShippingSettingsInTransaction}=await import('@/modules/fundament/server-public');
-      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms,leseLagerMaterialpositionenInTransaction);
+      const invoice=await invoicePort.createInvoice(invoiceInput,tx,readInvoiceVat,readShippingSettingsInTransaction,recognizeInvoicePdf,readCustomerInvoiceTerms,leseLagerMaterialpositionenInTransaction,{
+        readReports:leseAusschuss,readChargeMode:readAusschussBerechnenInTransaction,
+        readWork:leseMehrarbeitBuchungenInTransaction,readWorkSettings:readWerkstattMehrarbeitInTransaction,
+        createFullScrapTask:async(writeTx,actor,orderId)=>{
+          await synchronizeFullScrapTask(writeTx,actor,{orderId,vollstaendig:true,titel:ORDER_SCRAP_COPY.task},{
+            readChargeScrap:readAusschussBerechnenInTransaction,
+            effect:(taskTx,taskActor,request)=>recordIntakeTaskEffect(taskTx,taskActor,request,readCustomerProfile),
+          });
+        },
+      });
       if (invoice.code === 'MATERIAL_PREIS_FEHLT' || invoice.code === 'MATERIAL_EINHEIT_OHNE_CODE') {
         return { code: 'VALIDATION_ERROR' as const, message: invoice.message };
       }

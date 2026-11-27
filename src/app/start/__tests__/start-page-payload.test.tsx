@@ -8,6 +8,7 @@ const ports = vi.hoisted(() => ({
   readActiveStartUsers: vi.fn(),
   reportProductActorOperationalFailure: vi.fn(),
   loginWithPin: vi.fn(),
+  resolveAuthorization: vi.fn(),
   searchParams: "",
 }));
 
@@ -17,6 +18,9 @@ vi.mock("@/lib/server/productActorReadiness", () => ({
 vi.mock("@/lib/server/startUserRead", () => ({
   readActiveStartUsers: ports.readActiveStartUsers,
 }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: ports.resolveAuthorization,
+}));
 vi.mock("@/hooks/usePageView", () => ({ usePageView: vi.fn() }));
 vi.mock("next/image", () => ({
   default: ({ alt }: { alt?: string }) => (
@@ -25,6 +29,7 @@ vi.mock("next/image", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(ports.searchParams),
+  redirect: (target: string) => { throw Error(`TEST_REDIRECT_TO_${target}`); },
 }));
 vi.mock("@/app/actions/start.actions", () => ({
   notifyAdminPinReset: vi.fn(),
@@ -59,7 +64,17 @@ describe("StartPage product actor boundary", () => {
       "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     );
     ports.loginWithPin.mockResolvedValue({ ok: false, message: "synthetic" });
+    ports.resolveAuthorization.mockResolvedValue({ ok: false, reason: "NO_SESSION" });
     ports.searchParams = "";
+  });
+
+  it("redirects only a session accepted by the complete authorization reader", async () => {
+    const { default: StartPage } = await import("@/app/start/page");
+    ports.resolveAuthorization.mockResolvedValueOnce({ ok: true });
+    await expect(StartPage()).rejects.toThrow("TEST_REDIRECT_TO_/");
+    expect(ports.readActiveStartUsers).not.toHaveBeenCalled();
+    ports.resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "INVALID_SESSION" });
+    expect((await StartPage()).props.users).toEqual(activeUsers);
   });
 
   it("emits only browser-safe handles for every active app user", async () => {

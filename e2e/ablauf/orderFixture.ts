@@ -22,18 +22,25 @@ export async function customerFixture(label:string){
  return customerId;
 }
 
-export async function intakeOrderFixture(label:string,customerId:string,handoverMode:'pickup'|'shipping'='pickup',quantity=1,unitPriceCents=10000){
+export async function intakeOrderFixture(label:string,customerId:string,handoverMode:'pickup'|'shipping'='pickup',quantity=1,unitPriceCents=10000,unit='Stück'){
  const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
- const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode,paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit:'Stück',unitPriceCents,vatRateBasisPoints:1900}]}));
+ const created=await withSession(full,()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode,paymentMode:'rechnung',note:'TEST '+label,items:[{catalogServiceId:null,name:'TEST '+label+' Teil',quantity,material:'Messing',surfaceRequested:'Verchromen',executionRequested:'offen',unit,unitPriceCents,vatRateBasisPoints:1900}]}));
  if(created.code!=='OK')throw Error('FIXTURE_ORDER:'+created.code);
  return created;
 }
 
+export async function invoiceCompanySettingsFixture(){
+ if(!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('FIXTURE_SYNTHETIC_TENANT_REQUIRED');
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days,versand_pauschale_netto_cents,material_aufschlag_prozent,lager_regelversion)
+ SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Ablauf Galvanik','TEST Weg 1','70176','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14,1000,20,'TEST-Ablauf'
+ WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+}
+
 /** Synthetic initial state for later boundaries, using the actual order writers. */
-export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'shipping'='pickup',existingCustomerId?:string,unitPriceCents=10000,quantity=1,beforeFinish?:(input:{orderId:string;itemId:string;version:number})=>Promise<number>){
+export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'shipping'='pickup',existingCustomerId?:string,unitPriceCents=10000,quantity=1,beforeFinish?:(input:{orderId:string;itemId:string;version:number})=>Promise<number>,unit='Stück'){
  const customerId=existingCustomerId??await customerFixture(label);
  const {transitionWareneingangToGalvanikAction,setOrderItemFinishedAction,setExtraWorkHourlyRateAction,freezeOrderAction,getExtraWorkMasterDataAction}=await import('@/app/actions/orders.actions');
- const created=await intakeOrderFixture(label,customerId,handoverMode,quantity,unitPriceCents);
+ const created=await intakeOrderFixture(label,customerId,handoverMode,quantity,unitPriceCents,unit);
  const orderId=created.receipt.orderId;
  const moved=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
  if(moved.code!=='OK')throw Error('FIXTURE_HANDOFF:'+moved.code);
@@ -51,10 +58,7 @@ export async function readyOrderForInvoice(label:string,handoverMode:'pickup'|'s
  // the current completion command solely to reach the later invoice/release gate.
  const frozen=await withSession(full,()=>freezeOrderAction({orderId,freezeId:randomUUID(),expectedVersion:finished.receipt.aggregateVersion,clientEventId:randomUUID()}));
  if(frozen.code!=='OK')throw Error('FIXTURE_FREEZE:'+frozen.code);
- if(!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('FIXTURE_SYNTHETIC_TENANT_REQUIRED');
- await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,iban,bic,bank_name,tax_id,invoice_vat_rate_basis_points,invoice_payment_term_days,versand_pauschale_netto_cents,material_aufschlag_prozent,lager_regelversion)
- SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST Ablauf Galvanik','TEST Weg 1','70176','Stuttgart','Deutschland','DE02120300000000202051','BYLADEM1001','TEST Bank','DE123456789',1900,14,1000,20,'TEST-Ablauf'
- WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ await invoiceCompanySettingsFixture();
  return {customerId,orderId,version:frozen.receipt.aggregateVersion,items:created.receipt.items};
 }
 
