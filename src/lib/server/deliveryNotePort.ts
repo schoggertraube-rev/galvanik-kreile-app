@@ -11,14 +11,13 @@ import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
 import {readOrderPaymentSummaries,mapPaymentSummaryEvidenceRow} from './paymentContract';
 import {readCreateInvoiceReceipts,mapInvoiceIssueReceipt} from './commands/immutableInvoiceCommand';
-import {readExistingDomainAttachment,readGoodsOutSignature,readStableDomainAttachment,storeDomainAttachmentBytes,DomainAttachmentStorageError} from './domainAttachmentStorage';
-import {readGoodsOutCollector} from './goodsOutCollector';
+import {readExistingDomainAttachment,readStableDomainAttachment,storeDomainAttachmentBytes,DomainAttachmentStorageError} from './domainAttachmentStorage';
 import type {InvoiceVatReader} from '@/modules/accounting/public';
 import type {CompanyLetterSettings} from '@/modules/fundament/public';
 import {readLiveOrderCard} from './orderCardRead';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 
-type Ports={readVat:InvoiceVatReader;readCompany:()=>Promise<{code:string;company?:CompanyLetterSettings;missingFields?:readonly string[]}>;readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerStoredProfile|null>;render:(snapshot:PaidDeliveryNoteSnapshot,signatures:ReadonlyMap<string,Uint8Array>)=>Promise<Uint8Array>};
+type Ports={readVat:InvoiceVatReader;readCompany:()=>Promise<{code:string;company?:CompanyLetterSettings;missingFields?:readonly string[]}>;readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerStoredProfile|null>;render:(snapshot:PaidDeliveryNoteSnapshot)=>Promise<Uint8Array>};
 type SourcePorts=Omit<Ports,'render'>;
 type Order={id:string;customer_id:string;order_number:string;version:number;title:string};
 type Original={id:string;sourceHash:string;snapshot:PaidDeliveryNoteSnapshot;pdfBase64:string;pdfSha256:string;actorId:string};
@@ -36,7 +35,7 @@ function sourceOf(snapshot:PaidDeliveryNoteSnapshot):Source{const {createdAt,...
 // version-1 originals retain their original byte/hash contract unchanged.
 function sourceHashOf(source:Source):string{return sha(canonicalJson(source.schemaVersion===1?source:{...source,orders:source.orders.map(({version,...facts})=>{void version;return facts;})}));}
 function references(source:Source):Record<string,DeliveryNoteSourceReference>{
- return Object.fromEntries(source.orders.map(order=>[order.id,{paymentHash:order.paymentSourceHash!,contentHash:sha(canonicalJson({company:source.company,customer:source.customer,id:order.id,number:order.number,title:order.title,parts:order.parts,...(order.handover?{handover:order.handover}:{})}))}]));
+ return Object.fromEntries(source.orders.map(order=>[order.id,{paymentHash:order.paymentSourceHash!,contentHash:sha(canonicalJson({company:source.company,customer:source.customer,id:order.id,number:order.number,title:order.title,parts:order.parts}))}]));
 }
 function parseOriginal(bytes:Uint8Array,expectedId:string,expectedHash:string):Original{
  const value=JSON.parse(Buffer.from(bytes).toString('utf8')) as Original;
@@ -82,9 +81,7 @@ async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   if(current.code!=='OK'||current.data.version!==order.version)throw Error('DELIVERY_NOTE_CURRENT_CONTENT_UNAVAILABLE');
   const parts=current.data.items.map(item=>({itemId:item.id,name:item.name,quantity:item.quantity}));
   if(!parts.length||parts.some(part=>!part.itemId||!part.name.trim()||!Number.isFinite(part.quantity)||part.quantity<=0))throw Error('DELIVERY_NOTE_PARTS_MISSING');
-  const saved=current.data.station==='abgeholt'?await readGoodsOutCollector(tx,auth.tenantId,order.id):null;
-  const handover=saved?{name:saved.collector.name,occurredAt:saved.occurredAt,storagePath:saved.collector.unterschrift.storagePath,sha256:saved.collector.unterschrift.sha256}:undefined;
-  result.orders.push({id:order.id,number:order.order_number,version:order.version,title:current.data.title,paymentSourceHash,parts,...(handover?{handover}:{}),payments:sources.map(({receipt,payment})=>({invoiceId:receipt.invoiceId,invoiceNumber:receipt.invoiceNumber,invoiceEventId:receipt.eventId,invoiceSha256:receipt.pdfSha256,paymentEventId:payment.eventId!,paymentReceiptId:payment.receiptId!,paymentVersion:payment.paymentVersion,amountCents:payment.paidAmountCents,paidAt:payment.paidAt!}))});
+  result.orders.push({id:order.id,number:order.order_number,version:order.version,title:current.data.title,paymentSourceHash,parts,payments:sources.map(({receipt,payment})=>({invoiceId:receipt.invoiceId,invoiceNumber:receipt.invoiceNumber,invoiceEventId:receipt.eventId,invoiceSha256:receipt.pdfSha256,paymentEventId:payment.eventId!,paymentReceiptId:payment.receiptId!,paymentVersion:payment.paymentVersion,amountCents:payment.paidAmountCents,paidAt:payment.paidAt!}))});
  }
  if(expected){const current=references(result);if(ids.some(id=>current[id].contentHash!==expected[id].contentHash))throw new DeliveryNoteSourceRejected({code:'CONFLICT',message:sourceCopy.orderChanged});}
  return result;
@@ -151,13 +148,7 @@ export async function generatePaidDeliveryNote(auth:AuthorizationSnapshot,input:
     if(!(error instanceof DomainAttachmentStorageError)||error.kind!=='NOT_READY')throw error;
     const clock=await tx.execute<{at:string}>(sql`SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at`);
     if(clock.length!==1||!Number.isFinite(Date.parse(clock[0].at)))throw Error('DELIVERY_NOTE_CLOCK_MISSING');
-    const snapshot:PaidDeliveryNoteSnapshot={...source,createdAt:clock[0].at};
-    const signatures=new Map<string,Uint8Array>();
-    for(const order of snapshot.orders)if(order.handover){
-     const signature=await readGoodsOutSignature(order.handover.storagePath,order.handover.sha256);
-     signatures.set(order.id,signature.bytes);
-    }
-    const pdf=await ports.render(snapshot,signatures);
+    const snapshot:PaidDeliveryNoteSnapshot={...source,createdAt:clock[0].at},pdf=await ports.render(snapshot);
     if(Buffer.from(pdf).subarray(0,5).toString()!=='%PDF-')throw Error('DELIVERY_NOTE_RENDER_INVALID');
     document={id:originalId,sourceHash,snapshot,pdfBase64:Buffer.from(pdf).toString('base64'),pdfSha256:sha(pdf),actorId:auth.userId};
     const bytes=Buffer.from(canonicalJson(document));await storeDomainAttachmentBytes(storagePath,bytes,'application/json');fileBytes=bytes.byteLength;

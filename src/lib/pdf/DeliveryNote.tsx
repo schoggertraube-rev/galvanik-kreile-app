@@ -12,12 +12,10 @@ export type PaidDeliveryNoteSnapshot={
  company:{companyName:string;street:string;zip:string;city:string;country:string;phone?:string|null;taxId?:string|null;logoUrl?:string|null};
  customer:{id:string;name:string;street:string;zip:string;city:string;country:string};
  orders:Array<{id:string;number:string;version:number;title:string;paymentSourceHash?:string;parts:Array<{itemId:string;name:string;quantity:number}>;
-  handover?:{name:string;occurredAt:string;storagePath:string;sha256:string};
   payments:Array<{invoiceId:string;invoiceNumber:string;invoiceEventId:string;invoiceSha256:string;paymentEventId:string;paymentReceiptId:string;paymentVersion:number;amountCents:number;paidAt:string}>}>;
 };
 const styles=StyleSheet.create({page:{padding:40,fontFamily:'Helvetica',fontSize:10,color:'#161616'},header:{flexDirection:'row',justifyContent:'space-between',marginBottom:32},company:{fontSize:9,textAlign:'right',lineHeight:1.5},title:{fontSize:24,marginBottom:20},recipient:{lineHeight:1.5,marginBottom:25},row:{flexDirection:'row',paddingVertical:7,borderBottomWidth:1,borderBottomColor:'#DDDDDD'},order:{width:'25%'},description:{width:'50%'},quantity:{width:'25%',textAlign:'right'},tableHead:{backgroundColor:'#F8F8F8',fontSize:9},section:{marginTop:22,marginBottom:6,fontSize:12},payment:{lineHeight:1.6,fontSize:9},footer:{position:'absolute',bottom:26,left:40,right:40,fontSize:8,color:'#666666'}});
 const date=(value:string)=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date(value));
-const time=(value:string)=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',dateStyle:'short',timeStyle:'short'}).format(new Date(value));
 /** Existing configured image source, with local files confined to public assets.
  * No fake logo or arbitrary file:// path is substituted for an unavailable logo. */
 async function companyLogo(value:string|null|undefined):Promise<Buffer|null>{
@@ -51,7 +49,7 @@ async function companyLogo(value:string|null|undefined):Promise<Buffer|null>{
  }
 }
 
-export const DeliveryNoteDocument=({snapshot:s,logo,signatures}:{snapshot:PaidDeliveryNoteSnapshot;logo:Buffer|null;signatures?:ReadonlyMap<string,Uint8Array>})=>(
+export const DeliveryNoteDocument=({snapshot:s,logo}:{snapshot:PaidDeliveryNoteSnapshot;logo:Buffer|null})=>(
  <Document title={copy.title} author={s.company.companyName} creationDate={new Date(s.createdAt)} modificationDate={new Date(s.createdAt)}>
   <Page size="A4" style={styles.page}>
    <View style={styles.header}><View>{logo?<PdfImage src={logo} style={{width:120,height:50,objectFit:'contain',marginBottom:10}}/>:null}<Text style={styles.title}>{copy.title}</Text><Text>{copy.date} {date(s.createdAt)}</Text></View><View style={styles.company}><Text>{s.company.companyName}</Text><Text>{s.company.street}</Text><Text>{s.company.zip} {s.company.city}</Text><Text>{s.company.country}</Text>{s.company.phone?.trim()?<Text>{sourceCopy.phone} {s.company.phone}</Text>:null}</View></View>
@@ -60,21 +58,9 @@ export const DeliveryNoteDocument=({snapshot:s,logo,signatures}:{snapshot:PaidDe
    {s.orders.flatMap(order=>order.parts.map(part=><View key={order.id+':'+part.itemId} style={styles.row} wrap={false}><Text style={styles.order}>{order.number}</Text><Text style={styles.description}>{order.title ? order.title+' · '+part.name : part.name}</Text><Text style={styles.quantity}>{part.quantity.toLocaleString('de-DE')}</Text></View>))}
    <View style={styles.section}/>
    {s.orders.flatMap(order=>order.payments.map(payment=><Text key={payment.invoiceId} style={styles.payment}>{order.number} · {payment.invoiceNumber} · {copy.payment(date(payment.paidAt),formatEuro(payment.amountCents))}</Text>))}
-   <View wrap={false} style={{flexDirection:'row',justifyContent:'space-between',marginTop:44}}>
-    <View style={{width:190,borderTopWidth:1,paddingTop:6}}><Text>{sourceCopy.handoverSignature}</Text></View>
-    <View style={{width:190,borderTopWidth:1,paddingTop:6}}>
-     <Text>{sourceCopy.takeoverSignature}</Text>
-     {s.orders.map(order=>{
-      const signature=signatures?.get(order.id);
-      return order.handover&&signature?<View key={order.id}>
-       <Text>{sourceCopy.handoverNote(time(order.handover.occurredAt),order.handover.name)}</Text>
-       <PdfImage src={Buffer.from(signature)} style={{width:180,height:72,objectFit:'contain'}}/>
-      </View>:null;
-     })}
-    </View>
-   </View>
+   <View wrap={false} style={{flexDirection:'row',justifyContent:'space-between',marginTop:44}}><View style={{width:190,borderTopWidth:1,paddingTop:6}}><Text>{sourceCopy.handoverSignature}</Text></View><View style={{width:190,borderTopWidth:1,paddingTop:6}}><Text>{sourceCopy.takeoverSignature}</Text></View></View>
    <View style={styles.footer} fixed><Text>{s.company.companyName} · {s.company.street} · {s.company.zip} {s.company.city}</Text>{s.company.taxId?.trim()?<Text>{INVOICE_VAT_COPY.vatId} {s.company.taxId}</Text>:null}</View>
   </Page>
  </Document>
 );
-export async function createDeliveryNotePdfDocument(snapshot:PaidDeliveryNoteSnapshot,signatures?:ReadonlyMap<string,Uint8Array>):Promise<ReactElement<DocumentProps>>{const logo=await companyLogo(snapshot.company.logoUrl);return <DeliveryNoteDocument snapshot={snapshot} logo={logo} signatures={signatures}/>;}
+export async function createDeliveryNotePdfDocument(snapshot:PaidDeliveryNoteSnapshot):Promise<ReactElement<DocumentProps>>{const logo=await companyLogo(snapshot.company.logoUrl);return <DeliveryNoteDocument snapshot={snapshot} logo={logo}/>;}
