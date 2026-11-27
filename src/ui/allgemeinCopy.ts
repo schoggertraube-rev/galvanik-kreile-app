@@ -15,7 +15,24 @@ export const EVIDENCE_VISIBILITY_COPY={
 export const DEFERRED_LEGACY_COPY={unavailable:"Kommt nach dem Start dazu - bis dahin ausgeschaltet."} as const;
 /** Existing compatibility denial text, now shared by canonical area gates. */
 export const LEGACY_ACTION_ACCESS_COPY={forbidden:"Keine Berechtigung für diese Aktion."} as const;
-export const PIN_LOGIN_COPY={unavailable:'Anmeldung gerade nicht möglich – wir sind dran.',incomplete:'Anmeldung konnte nicht sicher abgeschlossen werden.',blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`} as const;
+export const PIN_LOGIN_COPY={
+ unavailable:'Anmeldung gerade nicht möglich – wir sind dran.',
+ incomplete:'Anmeldung konnte nicht sicher abgeschlossen werden.',
+ blocked:(time:string)=>`Zu viele Versuche. Versuch es um ${time} wieder.`,
+ personenleiste:'Wähle dich aus',
+ kuerzelLabel:'Dein Kürzel',
+ nichtDu:(vorname:string)=>`Nicht ${vorname}? Mit deinem Kürzel anmelden`,
+ kuerzelOderCodeFalsch:'Kürzel oder Code passt nicht. Gib beides noch einmal ein.',
+ wartungAusgeblendet:(n:number)=>`${n} Logins sind ausgeblendet, weil Angaben fehlen. Die Wartung ergänzt sie in den Einstellungen.`,
+ nichtVerfuegbar:'Die Anmeldung ist gerade nicht erreichbar. Versuch es in einer Minute noch einmal.',
+ laedt:'Anmeldung wird geladen …',
+ mitEmail:'Mit E-Mail anmelden',
+ mitCode:'Mit Code anmelden',
+ meldetAn:'Anmeldung läuft …',
+ anmelden:'Anmelden',
+ pinStellen:(n:number)=>`${n} von 4 Stellen eingegeben`,
+ ziffernblock:'Ziffernblock',
+} as const;
 export const MAIL_REQUEST_CONFLICT_COPY='Diese Anfragekennung gehört zu einer anderen Nachricht. Öffne den gespeicherten Versand.';
 export const ACTOR_COPY={
  unreadable:'Zuständigkeit gerade nicht lesbar - lade den Auftrag neu.',reload:'Neu laden',

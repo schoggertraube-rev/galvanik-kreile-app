@@ -1,0 +1,57 @@
+.status {
+  grid-area: pin;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-inline-size: 0;
+}
+
+.punkte {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-block-size: 20px;
+  padding-inline: 5px;
+  border-radius: var(--radius-sm);
+}
+
+.punkte:focus-visible { outline: 2px solid var(--gold-600); outline-offset: 3px; }
+.punkte span {
+  inline-size: 12px;
+  block-size: 12px;
+  border: 1.5px solid var(--navy-300);
+  border-radius: 50%;
+  transition: background-color 120ms, transform 120ms;
+}
+.punkte span[data-filled='true'] { background: var(--navy-700); border-color: var(--navy-700); transform: scale(1.08); }
+.punkte[data-error='true'] span { border-color: var(--danger-red); }
+.punkte[data-schuetteln] { animation: schuetteln 420ms ease; }
+.meldung { color: var(--danger-red); margin: 0; font-size: .8125rem; text-wrap: balance; }
+.meldung:empty { display: none; }
+
+.tasten {
+  grid-area: keys;
+  --gb-knopf-symbolmass: var(--login-key-size, 54px);
+  --gb-bewegung-knopf: 120ms;
+  display: grid;
+  grid-template-columns: repeat(3, var(--gb-knopf-symbolmass));
+  gap: clamp(4px, 1.1dvh, 12px);
+  justify-self: center;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+.tasten button { font-size: clamp(1rem, 3.3dvh, 1.55rem); }
+.tasten button:focus-visible { outline-color: var(--gold-600); }
+
+@keyframes schuetteln {
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .punkte[data-schuetteln] { animation: none; }
+  .punkte span, .tasten button { transition: none; }
+}
