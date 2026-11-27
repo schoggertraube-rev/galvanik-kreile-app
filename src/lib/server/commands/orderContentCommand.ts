@@ -18,7 +18,7 @@ import {intakeHandoverDirective} from '@/modules/eingang/public';
 import {ORDER_HANDOVER_COPY, ORDER_ITEM_COMPLETION_COPY,PRODUCTION_PRICING_RETRY_COPY,ORDER_REQUEST_COPY,ORDER_CONTENT_COPY} from '@/ui/situationCatalog';
 import {appendProductionCompletion,appendProductionPricing,appendProductionReversals,ProductionPricingRetryNeeded,recordProductionPricingRetry,readProductionPricingRetrySource,repairProductionCompletionPricing} from '@/lib/server/productionSnapshotPort';
 import {canChangeOrderHandover} from '@/lib/auth/authorizationContract';
-import {readManualHandoverReceipt,type ManualHandoverReceipt} from '@/lib/server/orderHandoverSourcePort';
+import {readAssignedMailHandoverSource,readManualHandoverReceipt,readPreviousMailHandoverPreference,type HandoverPreferenceBefore,type ManualHandoverReceipt} from '@/lib/server/orderHandoverSourcePort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -124,20 +124,30 @@ type MailProof={id:string;version:number;customerId:string;orderId:string|null;o
 type MailHandoverDependencies={
  readMail:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;lock?:boolean})=>Promise<{code:'OK';mail:MailProof}|{code:'FORBIDDEN'|'NOT_FOUND'|'CONFLICT'|'VALIDATION_ERROR';message:string}>;
  recordEffect:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;version:number;orderId:string;clientEventId:string;taskId:string|null;mode:'pickup'|'shipping';requestedMode:'pickup'|'shipping'})=>Promise<void>;
- readCustomer:(tx:PrivilegedTenantTransaction,tenant:string,id:string)=>Promise<{id:string;name:string;phone:string|null;email:string|null;billingEmail:string|null}|null>;
- updateDefault:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{customerId:string;clientEventId:string;mode:'pickup'|'shipping'})=>Promise<{code:string}>;
+ readCustomer:(tx:PrivilegedTenantTransaction,tenant:string,id:string,lock?:boolean)=>Promise<{id:string;name:string;phone:string|null;email:string|null;billingEmail:string|null;handoverPreference:'pickup'|'shipping'|null}|null>;
+ updateDefault:(tx:PrivilegedTenantTransaction,context:{
+  tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canEditCustomer:boolean;canManageMoney:boolean};
+ },input:unknown)=>Promise<{code:string}>;
  createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;clientKey:string;title:string;note:string;manualEventId?:string},effect?: (id:string)=>Promise<void>)=>Promise<string>;
 };
 
+function updateHandoverPreference(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,write:MailHandoverDependencies['updateDefault'],
+ input:{customerId:string;clientEventId:string;mode:'pickup'|'shipping'|null}){
+ return write(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:false,
+  canEditCustomer:auth.permissions.includes('perm_data_customers'),canManageMoney:hasAuthorizationArea(auth,'zahlungen')}},
+ {customerId:input.customerId,clientEventId:input.clientEventId,handoverPreference:input.mode});
+}
+
 /** The sole handover-mode UPDATE and event INSERT for mail and login sources. */
-async function writeOrderHandover<R>(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{order:MailHandoverOrder;mode:'pickup'|'shipping';passed:boolean;clientEventId:string;eventId:string;eventType:'ORDER_HANDOVER_MAIL_V1'|'ORDER_HANDOVER_CHANGED_V1';requestHash:string;message:string;receipt:(version:number,at:string)=>R}){
+async function writeOrderHandover<R>(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{order:MailHandoverOrder;mode:'pickup'|'shipping';passed:boolean;clientEventId:string;eventId:string;eventType:'ORDER_HANDOVER_MAIL_V1'|'ORDER_HANDOVER_CHANGED_V1';requestHash:string;message:string;preferenceBefore?:HandoverPreferenceBefore;receipt:(version:number,at:string)=>R}){
  const {order}=input;
  const updated=input.passed?[{version:order.version}]:await tx.execute<{version:number}>(sql`UPDATE public.orders SET handover_mode=${input.mode},version=version+1
   WHERE tenant_id=${auth.tenantId} AND id=${order.id} AND version=${order.version} RETURNING version`);
  if(updated.length!==1)throw Error('HANDOVER_ORDER_VERSION_CONFLICT');
  const clocks=await tx.execute<{at:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at`);
  if(clocks.length!==1)throw Error('HANDOVER_CLOCK_MISSING');
- const result=input.receipt(updated[0].version,clocks[0].at),payload={requestHash:input.requestHash,before:{handoverMode:order.handover_mode},receipt:result};
+ const result=input.receipt(updated[0].version,clocks[0].at),payload={requestHash:input.requestHash,
+  before:{handoverMode:order.handover_mode,...(input.preferenceBefore?{preference:input.preferenceBefore}:{})},receipt:result};
  await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,aggregate_version,correlation_id,created_at)
   VALUES(${input.eventId},${auth.tenantId},${order.id},${input.eventType},${input.message},${JSON.stringify(payload)}::jsonb,'success',${auth.userId}::uuid,${input.clientEventId}::uuid,1,${updated[0].version},gen_random_uuid(),${clocks[0].at}::timestamptz AT TIME ZONE 'UTC')`);
  const proof=await tx.execute(sql`SELECT id FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${input.eventId}
@@ -152,7 +162,67 @@ async function readHandoverBoundary(tx:PrivilegedTenantTransaction,auth:Authoriz
  const shipments=await tx.execute<{carrier:string|null;label_url:string|null;status:string;shipped_at:unknown;delivered_at:unknown}>(sql`SELECT carrier,label_url,status,shipped_at,delivered_at FROM public.shipments WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} ORDER BY created_at,id FOR UPDATE`);
  const shipped=shipments.find(row=>row.shipped_at||row.delivered_at||!['pending','created','cancelled','canceled'].includes(row.status));
  const label=shipments.some(row=>Boolean(row.label_url?.trim())),passed=['abgeholt','versendet'].includes(order.station)||order.status==='storniert';
- return {late:Boolean(shipped||label||passed),label,passed,carrier:shipped?.carrier??null};
+ return {late:Boolean(shipped||label||passed),label,passed,carrier:shipped?.carrier??null,handedOver:Boolean(shipped||passed)};
+}
+
+export async function undoAssignedMailHandover(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
+ input:{itemId:string;orderId:string;customerId:string;clientEventId:string},
+ deps:Pick<MailHandoverDependencies,'readCustomer'|'updateDefault'>&{completeCallback:(taskId:string)=>Promise<void>},
+){
+ const source=await readAssignedMailHandoverSource(tx,auth.tenantId,input);
+ if(!source)return null;
+ if(!canChangeOrderHandover(auth,'mail'))return {code:'FORBIDDEN' as const};
+ const [order]=await tx.execute<MailHandoverOrder>(sql`SELECT id,order_number,customer_id,version,handover_mode,station,status
+  FROM public.orders WHERE tenant_id=${auth.tenantId} AND id=${input.orderId}
+   AND customer_id=${input.customerId} FOR UPDATE NOWAIT`);
+ if(!order)throw Error('HANDOVER_ORDER_VERSION_CONFLICT');
+ const {receipt,before}=source.payload;
+ let restoredOrderEventId:string|null=null,restoredPreferenceKey:string|null=null,closedTaskId:string|null=null;
+ const boundary=await readHandoverBoundary(tx,auth,order);
+ if(receipt.outcome==='call_customer'){
+  const [task]=await tx.execute<{id:string;status:string}>(sql`SELECT id::text,status FROM public.tasks
+   WHERE tenant_id=${auth.tenantId} AND id=${receipt.taskId}::uuid AND client_key=${source.client_event_id}::uuid
+    AND bezug_typ='auftrag' AND bezug_id=${order.id} AND art='rueckruf'
+    AND erstellt_von=${source.actor_id}::uuid FOR UPDATE NOWAIT`);
+  if(task?.status==='offen'){
+   await deps.completeCallback(task.id);
+   closedTaskId=task.id;
+  }
+ }
+ if(receipt.outcome==='changed'&&order.handover_mode===receipt.handoverMode&&
+  (before.handoverMode==='pickup'||before.handoverMode==='shipping')&&before.handoverMode!==receipt.handoverMode&&
+  !boundary.late){
+  const younger=await tx.execute(sql`SELECT id FROM public.events
+   WHERE tenant_id=${auth.tenantId} AND order_id=${order.id} AND aggregate_version>${source.order_version}
+    AND event_type IN ('ORDER_HANDOVER_MAIL_V1','ORDER_HANDOVER_CHANGED_V1') AND status='success'
+    AND payload#>>'{before,handoverMode}' IS DISTINCT FROM payload#>>'{receipt,handoverMode}' LIMIT 1`);
+  if(!younger.length){
+   const eventId=randomUUID(),mode=before.handoverMode,message=ORDER_HANDOVER_COPY.manualChanged(order.order_number??order.id,mode);
+   await writeOrderHandover<ManualHandoverReceipt>(tx,auth,{order,mode,passed:false,clientEventId:input.clientEventId,
+    eventId,eventType:'ORDER_HANDOVER_CHANGED_V1',requestHash:hash({sourceEventId:source.event_id,...input}),message,
+    receipt:(version,at)=>({eventId,orderId:order.id,orderNumber:order.order_number,customerId:input.customerId,
+     expectedVersion:order.version,orderVersion:version,handoverMode:mode,requestedHandoverMode:mode,outcome:'changed',
+     message,taskClientKey:null,taskTitle:null,passed:false,actor:{kind:'login',id:auth.userId,at}})});
+   restoredOrderEventId=eventId;
+  }
+ }
+ if(!boundary.handedOver){
+  const customer=await deps.readCustomer(tx,auth.tenantId,input.customerId,true);
+  if(customer?.handoverPreference===receipt.requestedHandoverMode){
+   const previous=await readPreviousMailHandoverPreference(tx,auth.tenantId,{
+    customerId:input.customerId,actorId:source.actor_id,clientEventId:handoverCustomerEventKey(source.client_event_id),
+    mode:receipt.requestedHandoverMode,recordedBefore:before.preference,
+   });
+   if(previous&&previous.mode!==customer.handoverPreference){
+    const key=handoverCustomerEventKey(input.clientEventId);
+    const restored=await updateHandoverPreference(tx,auth,deps.updateDefault,{customerId:input.customerId,clientEventId:key,mode:previous.mode});
+    if(restored.code!=='OK')throw Error('HANDOVER_CUSTOMER_DEFAULT_'+restored.code);
+    restoredPreferenceKey=key;
+   }
+  }
+ }
+ return {sourceEventId:source.event_id,restoredOrderEventId,restoredPreferenceKey,closedTaskId};
 }
 
 async function changeHandoverManually(raw:unknown,deps:MailHandoverDependencies){
@@ -211,9 +281,14 @@ async function changeHandoverFromMail(raw:unknown,deps:MailHandoverDependencies)
   if(value.expectedVersion!==undefined&&value.expectedVersion!==order.version)return {code:'CONFLICT' as const,message:'Auftrag wurde inzwischen geändert. Neu lesen.'};
   const source=await deps.readMail(tx,auth,{itemId:value.sourceItemId,version:value.sourceVersion});if(source.code!=='OK')return source;
   const {late,label,passed,carrier}=await readHandoverBoundary(tx,auth,order);
+  let preferenceBefore:HandoverPreferenceBefore|undefined;
   if(directive.forFuture){
-   const changed=await deps.updateDefault(tx,auth,{customerId:customer.id,clientEventId:handoverCustomerEventKey(value.clientEventId),mode:directive.mode});
+   const current=await deps.readCustomer(tx,auth.tenantId,customer.id,true);
+   if(!current)throw Error('HANDOVER_CUSTOMER_DEFAULT_NOT_FOUND');
+   const clientEventId=handoverCustomerEventKey(value.clientEventId);
+   const changed=await updateHandoverPreference(tx,auth,deps.updateDefault,{customerId:customer.id,clientEventId,mode:directive.mode});
    if(changed.code!=='OK')throw Error('HANDOVER_CUSTOMER_DEFAULT_'+changed.code);
+   preferenceBefore={clientEventId,mode:current.handoverPreference};
   }
   const eventId=randomUUID();let taskId:string|null=null;
   const message=late?ORDER_HANDOVER_COPY.late(order.order_number??order.id,customer.name,customer.phone,carrier,directive.mode,label,passed):ORDER_HANDOVER_COPY.changed(order.order_number??order.id,directive.mode,source.mail.sender,source.mail.receivedAt);
@@ -223,7 +298,7 @@ async function changeHandoverFromMail(raw:unknown,deps:MailHandoverDependencies)
   const mode=late?order.handover_mode!:directive.mode;
   // A callback about completed handover is a task, not another physical order mutation.
   // Keep the immutable goods-out receipt and its current order version valid.
-  const result=await writeOrderHandover(tx,auth,{order,mode,passed,clientEventId:value.clientEventId,eventId,eventType:'ORDER_HANDOVER_MAIL_V1',requestHash,message,
+  const result=await writeOrderHandover(tx,auth,{order,mode,passed,clientEventId:value.clientEventId,eventId,eventType:'ORDER_HANDOVER_MAIL_V1',requestHash,message,preferenceBefore,
    receipt:version=>({eventId,orderId:order.id,orderNumber:order.order_number,customerId:customer.id,orderVersion:version,handoverMode:mode,requestedHandoverMode:directive.mode,taskId,outcome:late?'call_customer':'changed',message,mailActor:{kind:'mail',sender:source.mail.sender,at:source.mail.receivedAt,originalItemId:source.mail.id,originalVersion:source.mail.version,graphMessageId:source.mail.graphMessageId,originalSha256:source.mail.originalSha256}})});
   return {code:'OK' as const,receipt:result,replayed:false};
  });}catch(error){console.error('[ORDER_MAIL_HANDOVER_FAILED]',error instanceof Error?error.message:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Übergabe-Anweisung nicht gespeichert. Original und dieselbe Kennung behalten.'};}

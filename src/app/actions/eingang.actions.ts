@@ -3,6 +3,7 @@ import {sql} from 'drizzle-orm';
 import {leseLagerMaterialpositionenInTransaction} from '@/modules/lager/server-public';
 import {repairCancelledCollectionRouting} from '@/lib/server/commands/immutableInvoiceCommand';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
+import {INTAKE_PICKUP_REPLY_COPY} from '@/ui/eingangCopy';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
@@ -79,9 +80,17 @@ export async function assignIntakeCustomerAction(input:unknown):ReturnType<typeo
 export async function assignIntakeCustomerAction(input:unknown){
  return observeAction('assignIntakeCustomerAction',subjectForAction('assignIntakeCustomerAction',input),async()=>{
   if(input&&typeof input==='object'&&'mode'in input&&input.mode==='undo'){
-   const {restoreCollectionReplyTask}=await import('@/modules/tasks/server-public');
-   return undoIntakeCustomerAssignment(input,(tx,auth,itemId,source)=>restoreCollectionReplyTask(tx,auth,itemId,source,
-    {effect:(writeTx,actor,effect)=>recordIntakeTaskEffect(writeTx,actor,effect,readCustomerProfile)}));
+   const [{restoreCollectionReplyTask,completeOrderCallbackTask},{undoAssignedMailHandover}]=await Promise.all([
+    import('@/modules/tasks/server-public'),import('@/lib/server/commands/orderContentCommand'),
+   ]);
+   const effects={effect:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,effect:TaskEffectRequest)=>
+    recordIntakeTaskEffect(tx,auth,effect,readCustomerProfile)};
+   return undoIntakeCustomerAssignment(input,
+    (tx,auth,itemId,source)=>restoreCollectionReplyTask(tx,auth,itemId,source,effects),
+    (tx,auth,request)=>undoAssignedMailHandover(tx,auth,request,{
+     readCustomer:readCustomerProfile,updateDefault:updateCustomerInTransaction,
+     completeCallback:id=>completeOrderCallbackTask(tx,auth,id,INTAKE_PICKUP_REPLY_COPY.undoAssignment,effects),
+    }));
   }
   return assignIntakeCustomer(input,readCustomerProfile);
  },readLoggingSettings);

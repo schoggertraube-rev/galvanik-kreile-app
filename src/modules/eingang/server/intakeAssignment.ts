@@ -114,10 +114,14 @@ export async function assignIntakeMailThread(auth:AuthorizationSnapshot,binding:
 
 type SelectedReplyEnd=NonNullable<Awaited<ReturnType<typeof readSelectedReplyTaskEnd>>>;
 type RestoreReplyTask=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,source:SelectedReplyEnd)=>Promise<string>;
+type UndoHandover=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
+ input:{itemId:string;orderId:string;customerId:string;clientEventId:string})=>Promise<{
+  sourceEventId:string;restoredOrderEventId:string|null;restoredPreferenceKey:string|null;closedTaskId:string|null;
+ }|{code:'FORBIDDEN'}|null>;
 export function canUndoIntakeCustomerAssignment(auth:AuthorizationSnapshot){
  return canAssignIntakeCustomer(auth)&&hasAuthorizationArea(auth,'mails');
 }
-export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTask:RestoreReplyTask){
+export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTask:RestoreReplyTask,undoHandover:UndoHandover){
  if(!object(input)||Object.keys(input).sort().join(',')!=='clientEventId,itemId,mode,version'||
     input.mode!=='undo'||!validIdentity(input))
   return {code:'VALIDATION_ERROR' as const,message:'Zuordnungsaufruf ist ungültig.'};
@@ -127,6 +131,11 @@ export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTas
   if(!canUndoIntakeCustomerAssignment(auth))reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
   return await withPrivilegedTenantTransaction(auth,async tx=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${auth.tenantId},0))`);
+   const selected=await source(tx,auth,value.itemId);
+   if(selected.version===value.version&&selected.kanal==='mail'&&selected.kunde_id&&selected.vorgang_art==='auftrag'){
+    // Acquire the same customer boundary as the forward handover before locking the intake row.
+    await tx.execute(sql`SELECT private.lock_shipping_customer_v1(${auth.tenantId},${selected.kunde_id})`);
+   }
    const row=await source(tx,auth,value.itemId,true);
    const intent={command:'eingang.zuordnung_zuruecknehmen',version:value.version};
    const prior=await tx.execute<{von:string;nachher:{intent:unknown;version:number;restoredTaskId:string|null}}>(sql`
@@ -142,6 +151,10 @@ export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTas
    if(row.version!==value.version||row.kanal!=='mail'||!row.kunde_id||row.zuordnung==='offen')
     reject('CONFLICT','Eingang wurde inzwischen geändert. Bitte neu lesen.');
    if(row.vorgang_art==='auftrag'&&row.vorgang_id)await lockIntakeConfirmationForAssignment(tx,auth.tenantId,row.id,row.vorgang_id);
+   const handover=row.vorgang_art==='auftrag'&&row.vorgang_id
+    ?await undoHandover(tx,auth,{itemId:row.id,orderId:row.vorgang_id,customerId:row.kunde_id,clientEventId:value.clientEventId})
+    :null;
+   if(handover&&'code' in handover)reject('FORBIDDEN','Zuordnen benötigt Eingang sowie das Recht des Ziels.');
    const replyCompletion=await readSelectedReplyTaskEnd(tx,auth,row.id);
    const restoredTaskId=replyCompletion?await restoreReplyTask(tx,auth,row.id,replyCompletion):null;
    const changed=await tx.execute(sql`UPDATE public.intake_item
@@ -149,7 +162,7 @@ export async function undoIntakeCustomerAssignment(input:unknown,restoreReplyTas
     geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp()
     WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${row.version} RETURNING id`);
    if(changed.length!==1)throw Error('INTAKE_ASSIGNMENT_WITHDRAWAL_NOT_SAVED');
-   await event(tx,auth,row,value.clientEventId,'zurueckgenommen',intent,{zuordnung:'offen',restoredTaskId,replyCompletion});
+   await event(tx,auth,row,value.clientEventId,'zurueckgenommen',intent,{zuordnung:'offen',restoredTaskId,replyCompletion,...(handover?{handover}:{})});
    return {code:'OK' as const,version:row.version+1,restoredTaskId,replayed:false};
   });
  }catch(error){return failed(error);}
