@@ -15,6 +15,7 @@ import {ORDER_STATION_COPY} from '@/ui/situationCatalog';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readIntakeMessagesForAuthorization} from './intakeMessages';
 import {planeMailWirkungen} from './mailPlaene';
+import {erlaubteWirkung} from './mailWirkungen';
 
 export type ZusageInput={
   art:'herausgabe'|'termin'|'menge'|'auftrag_aus_kv'|'preis_im_text'|'storno'|'stammdaten'|'kanal_versand'|
@@ -28,6 +29,8 @@ export type ZusageInput={
   sourceItemId?:string;
   sourceVersion?:number;
   kanal?:string;
+  anliegen?:string;
+  wirkung?:string;
   /** Positionen der vorhandenen Anfrage, sofern es noch keinen Auftrag oder KV gibt. */
   positionen?:IntakeSuggestionsInput['positions'];
 };
@@ -215,6 +218,11 @@ export async function pruefeZusage(auth:AuthorizationSnapshot,input:ZusageInput,
   const recht=fehlendesRecht(auth,input.art);
   if(recht)return {frei:false,grund:recht==='preise'?'preisrecht':'recht',
     text:MAIL_PROMISE_COPY.roleRight(ROLE_LABELS[auth.role],ACCESS_AREA_LABELS[recht].text)};
+  if(input.anliegen!==undefined||input.wirkung!==undefined){
+    if(typeof input.anliegen!=='string'||typeof input.wirkung!=='string'||!erlaubteWirkung(
+      input.anliegen,input.wirkung,{preisrecht:hasAuthorizationArea(auth,'preise')},
+    ))return unavailable;
+  }
   if(input.art==='preis_im_text')return {frei:true};
   if(input.art==='kanal_versand')return input.kanal==='mail'?{frei:true}:unknownChannel;
   try{

@@ -241,17 +241,22 @@ it('uses a secured incoming original for the phone handoff and only allows the c
     from:{emailAddress:{name:sender,address}},receivedDateTime:new Date().toISOString(),bodyPreview:body,
     body:{contentType:'text',content:body},hasAttachments:false,
   };
-  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name)
-    SELECT ${randomUUID()},${tenant},'TEST S-1 Mail' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
+  const pickupBody='TEST: Bitte nicht versenden. Ich hole die Ware am Freitag ab.';
+  const pickupMail={...message,id:'TEST-S1-'+randomUUID(),internetMessageId:`<${randomUUID()}@example.invalid>`,
+    subject:'TEST S-1 Abholung',bodyPreview:pickupBody,body:{contentType:'text',content:pickupBody}};
+  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
+    SELECT ${randomUUID()},${tenant},'TEST S-1 Mail',20,'TEST-S1'
+    WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
   // Only the external mailbox response is synthetic. Intake and MIME storage use the usual writer.
   vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
     const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
     if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-S1-mail-provider-token'.repeat(3)});
     if(url.hostname!=='graph.microsoft.com')return nativeFetch(input,init);
-    if(url.pathname.includes('/mailFolders/inbox/messages'))return Response.json({value:[message]});
-    if(url.pathname.endsWith('/$value'))return new Response(`From: ${address}\r\nMessage-ID: ${message.internetMessageId}\r\nSubject: ${message.subject}\r\n\r\n${body}`);
+    if(url.pathname.includes('/mailFolders/inbox/messages'))return Response.json({value:[message,pickupMail]});
+    const original=url.pathname.split('/').includes(pickupMail.id)?pickupMail:message;
+    if(url.pathname.endsWith('/$value'))return new Response(`From: ${address}\r\nMessage-ID: ${original.internetMessageId}\r\nSubject: ${original.subject}\r\n\r\n${original.body.content}`);
     if(url.pathname.endsWith('/attachments'))return Response.json({value:[]});
-    return Response.json(message);
+    return Response.json(original);
   });
   expect(await withSession(full,()=>getOpenIntakeMailsAction())).toMatchObject({code:'OK'});
   const [source]=await sql`SELECT item.id::text, item.version FROM public.intake_item item
@@ -272,6 +277,26 @@ it('uses a secured incoming original for the phone handoff and only allows the c
   expect(await pruefeZusage(authorization.data,{art:'kanal_versand',kanal:'mail'})).toEqual({frei:true});
   expect(await pruefeZusage(authorization.data,{art:'kanal_versand',kanal:'whatsapp'})).toMatchObject({frei:false,grund:'unbekannt_kanal'});
   expect(await sql`SELECT version FROM public.intake_item WHERE tenant_id=${tenant} AND id=${source.id}::uuid`).toEqual([{version:source.version}]);
+
+  const {receipt}=await intakeOrderFixture('TEST S-1 Abholmail',customerId,'shipping');
+  const [pickup]=await sql`SELECT item.id::text,item.version FROM public.intake_item item
+    JOIN public.intake_file file ON file.tenant_id=item.tenant_id AND file.item_id=item.id AND file.mime='message/rfc822'
+    WHERE item.tenant_id=${tenant} AND item.graph_message_id=${pickupMail.id}`;
+  if(!pickup)throw Error('TEST_S1_PICKUP_ORIGINAL_REQUIRED');
+  // Isolated confirmed association with the real order and secured original.
+  await sql`UPDATE public.intake_item SET kunde_id=${customerId},zuordnung='hand',vorgang_art='auftrag',vorgang_id=${receipt.orderId}
+    WHERE tenant_id=${tenant} AND id=${pickup.id}::uuid`;
+  const plan={art:'herausgabe' as const,anliegen:'A9',customerId,orderId:receipt.orderId,
+    sourceItemId:pickup.id,sourceVersion:pickup.version};
+  expect(await pruefeZusage(authorization.data,{...plan,wirkung:'antwort_senden'})).toEqual({frei:true});
+  for(const wirkung of ['recordGoodsOutAction','confirmPaymentAction','transitionWareneingangToGalvanikAction']){
+    expect(await pruefeZusage(authorization.data,{...plan,wirkung})).toEqual({
+      frei:false,grund:'unbekannt',text:MAIL_PROMISE_COPY.unavailable,
+    });
+  }
+  expect(await pruefeZusage(authorization.data,plan)).toMatchObject({frei:false});
+  expect(await sql`SELECT version,handover_mode FROM public.orders WHERE tenant_id=${tenant} AND id=${receipt.orderId}`)
+    .toEqual([{version:receipt.orderVersion,handover_mode:'shipping'}]);
 });
 
 it('reads the actual station and authorized material value without cancelling the order',async()=>{
