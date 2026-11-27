@@ -1,4 +1,6 @@
+import { sql } from 'drizzle-orm';
 import { foldSearchText } from '@/lib/domain/searchText';
+import type { PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import { normaliseCustomerPhone } from '@/modules/customers/public';
 import { findRecognizedCustomers } from '../customerRecognition';
 
@@ -9,6 +11,8 @@ export type KundenTreffer = Readonly<{
   regel: KundenTrefferregel;
   grundWert: string;
 }>;
+
+type Zuordnung = 'offen' | 'automatisch' | 'bestaetigt' | 'hand';
 
 type BewerteterKundenTreffer = KundenTreffer & { sicherheitWert: number };
 
@@ -21,7 +25,7 @@ type KandidatenEinstellungen = Readonly<{
 /** Bewertet belegte Treffer der Kundenleser, bevor der Erkennungslauf sie speichert. */
 export function waehleKundenKandidaten(input: {
   treffer: readonly KundenTreffer[];
-  zuordnung: 'offen' | 'automatisch' | 'bestaetigt' | 'hand';
+  zuordnung: Zuordnung;
   quellenVollstaendig: boolean;
   einstellungen: KandidatenEinstellungen;
 }) {
@@ -67,6 +71,55 @@ type Eingangsadresse = {
   lieferantenUstId: string | null;
   lieferantenName: string | null;
 };
+
+type LieferantenFeld = 'lieferant.ustid' | 'lieferant.name';
+type Eingangsquelle = Pick<Eingangsadresse, 'absenderAdresse' | 'absenderName' | 'absenderTelefon'> & {
+  version: number;
+  zuordnung: Zuordnung;
+  feld: LieferantenFeld | null;
+  wert: string | null;
+};
+
+export async function leseKandidatenQuellenInTransaction(
+  tx: PrivilegedTenantTransaction,
+  tenantId: string,
+  itemId: string,
+) {
+  const zeilen = await tx.execute<Eingangsquelle>(sql`
+    SELECT eingang.version, eingang.zuordnung, eingang.absender_adresse AS "absenderAdresse",
+      eingang.absender_name AS "absenderName", eingang.absender_telefon AS "absenderTelefon",
+      vorschlag.feld, CASE WHEN jsonb_typeof(vorschlag.wert)='string' THEN vorschlag.wert #>> '{}' END AS wert
+    FROM public.intake_item eingang
+    LEFT JOIN public.intake_suggestion vorschlag
+      ON vorschlag.tenant_id=eingang.tenant_id AND vorschlag.item_id=eingang.id
+      AND vorschlag.feld IN ('lieferant.ustid','lieferant.name') AND vorschlag.status IN ('offen','uebernommen')
+    WHERE eingang.tenant_id=${tenantId} AND eingang.id=${itemId}::uuid
+  `);
+  const erste = zeilen[0];
+  if (!erste) return null;
+  if (!Number.isSafeInteger(erste.version) || erste.version < 1) throw Error('I2_EINGANG_VERSION_UNGUELTIG');
+
+  function lieferantenHinweis(feld: LieferantenFeld) {
+    const werte = new Set(zeilen.filter(zeile => zeile.feld === feld).map(zeile => zeile.wert?.trim() || null));
+    const wert = werte.size === 1 ? [...werte][0] ?? null : null;
+    return { wert, lesbar: werte.size === 0 || wert !== null };
+  }
+
+  const ustId = lieferantenHinweis('lieferant.ustid');
+  const name = lieferantenHinweis('lieferant.name');
+  return {
+    version: erste.version,
+    zuordnung: erste.zuordnung,
+    hinweiseVollstaendig: ustId.lesbar && name.lesbar,
+    eingang: {
+      absenderAdresse: erste.absenderAdresse,
+      absenderName: erste.absenderName,
+      absenderTelefon: erste.absenderTelefon,
+      lieferantenUstId: ustId.wert,
+      lieferantenName: name.wert,
+    },
+  };
+}
 
 function mailDomain(adresse: string | null | undefined): string | null {
   const match = /^[^@\s]+@([^@\s]+\.[^@\s]+)$/u.exec(adresse?.trim() ?? '');
