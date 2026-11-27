@@ -153,11 +153,11 @@ async function accessToken(config: GraphConfig, fetchPort: FetchPort): Promise<s
   return payload.access_token;
 }
 
-function clean(value: unknown, max: number): string {
+function clean(value: unknown, max?: number): string {
   return typeof value === "string" ? value.replace(/\0/g, "").trim().slice(0, max) : "";
 }
 
-function parseMessage(value: unknown): GraphInboxMessage | null {
+function parseMessage(value: unknown, bodyLimit?: number): GraphInboxMessage | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const sender = row.from && typeof row.from === "object" && !Array.isArray(row.from)
@@ -181,7 +181,7 @@ function parseMessage(value: unknown): GraphInboxMessage | null {
     senderAddress,
     receivedAt: new Date(receivedAt).toISOString(),
     preview: clean(row.bodyPreview, 1000),
-    body: clean(body.content, 20_000),
+    body: clean(body.content, bodyLimit),
     hasAttachments: row.hasAttachments === true,
   };
 }
@@ -248,7 +248,7 @@ export async function listMicrosoftGraphInbox(
       if(total===null&&continuation?.cursorUrl==null&&typeof payload['@odata.count']==='number'&&Number.isSafeInteger(payload['@odata.count'])&&payload['@odata.count']>=0){total=payload['@odata.count'];startRemaining=total;}
       walked+=payload.value.length;
       for(const raw of payload.value){
-        const parsed=parseMessage(raw);
+        const parsed=parseMessage(raw, 20_000);
         if(parsed)data.push(parsed);
         else {if(!raw||typeof raw!=='object'||typeof raw.id!=='string'||!raw.id||raw.id.length>1024)throw Error('GRAPH_INBOX_MESSAGE_ID_REQUIRED');incomplete.push({id:raw.id});}
       }
