@@ -22,13 +22,22 @@ describe('Original: O07 metadata without Mails',()=>{
   const supplier={id:'TEST-Lieferant-B',name:'TEST Lieferant B',iban:null,paymentTermDays:null};
   const selected:InvoiceView={...source,fileId:second.id,supplier,fields:{...source.fields,lieferantId:supplier.id,
    nummer:'TEST-L-B',datum:'2026-11-18',netto:'55,00',ust:'0,00',brutto:'55,00',faelligAm:'2026-11-30'}};
-  const ports:InvoicePorts={read:vi.fn<InvoicePorts['read']>(async request=>({code:'OK',view:request.fileId===second.id?selected:source})),
+  let finishSelection:()=>void=()=>{throw Error('TEST_SELECTION_NOT_STARTED');};
+  const ports:InvoicePorts={read:vi.fn<InvoicePorts['read']>(async request=>request.fileId===second.id
+    ? new Promise(resolve=>{finishSelection=()=>resolve({code:'OK',view:selected});}) : {code:'OK',view:source}),
    save:vi.fn().mockResolvedValue({code:'UNAVAILABLE',message:'TEST Antwort'}),status:vi.fn(),clarify:vi.fn(),searchSuppliers:vi.fn(),
    openOriginal:vi.fn(),createSupplier:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),openTask:vi.fn()};
   render(<IncomingInvoiceDialogs ports={ports} allowed onRefresh={vi.fn()}/>);
   window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'rechnungein',arg:itemId},cancelable:true}));
   fireEvent.click(await screen.findByRole('button',{name:/TEST L-B.pdf/}));
   expect(ports.read).toHaveBeenCalledWith({id:itemId,fileId:second.id});
+  const oldNumber=document.querySelector('[data-invoice-field="nummer"]');
+  const oldSave=screen.getByRole('button',{name:/^Erfassen/});
+  expect(oldNumber).toBeDisabled();
+  expect(oldSave).toBeDisabled();
+  fireEvent.click(oldSave);
+  expect(ports.save).not.toHaveBeenCalled();
+  finishSelection();
   await waitFor(()=>expect(ports.openOriginal).toHaveBeenCalledWith(itemId,second.id));
   fireEvent.click(await screen.findByRole('button',{name:/^Erfassen/}));
   await waitFor(()=>expect(ports.save).toHaveBeenCalledWith(expect.objectContaining({itemId,fileId:second.id,

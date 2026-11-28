@@ -20,7 +20,10 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
     if(saved?.file_id===fileId)ports.openOriginal(result.view.item.id,fileId,saved.id);
     else ports.openOriginal(result.view.item.id,fileId);
    }
-  }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current)setFailure('Rechnung konnte nicht gelesen werden · Fehlercode: INVOICE_DIALOG_OPEN_FAILED.');}
+  }catch(error){console.error('[INVOICE_DIALOG_OPEN_FAILED]',error);if(current===generation.current){
+   const text='Rechnung konnte nicht gelesen werden · Fehlercode: INVOICE_DIALOG_OPEN_FAILED.';
+   if(fileId)setMessage({text});else setFailure(text);
+  }}
   finally{if(current===generation.current)setLoading(false);}
  },[allowed,ports]);
  useEffect(()=>{
@@ -34,7 +37,7 @@ export function IncomingInvoiceDialogs({ports,allowed,onRefresh}:{ports:InvoiceP
  return <>{message?<Toast text={message.text} aktion={message.taskId?{text:'Aufgabe ansehen',onClick:()=>ports.openTask(message.taskId!)}:undefined}/>:null}
   {(entry||loading||failure)&&typeof document!=='undefined'?createPortal(<KrApp geraet={device} portal>
    {entry?<IncomingInvoiceDialog key={entry.key} initial={entry.view} ports={ports} onClose={close} onMessage={notify}
-    onSelectOriginal={fileId=>void open(entry.view.item.id,fileId)}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<Button text="Schließen" onClick={close}/>}>
+    selectingOriginal={loading} onSelectOriginal={fileId=>void open(entry.view.item.id,fileId)}/>:<Dialog titel="Rechnung prüfen" onSchliessen={close} fuss={<Button text="Schließen" onClick={close}/>}>
     {loading?<p role="status">Rechnung wird geladen …</p>:<Hinweis ton="warn">{failure}</Hinweis>}</Dialog>}
   </KrApp>,document.body):null}</>;
 }
