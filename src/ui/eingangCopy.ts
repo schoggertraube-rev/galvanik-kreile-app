@@ -1,5 +1,16 @@
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
+export const WARE_OHNE_BEZUG_COPY={
+ ablagesort:'Gib den Ablageort an, damit du das Paket wiederfindest.',
+ eingangFehlt:'Öffne den Eingang erneut. Das Paket wurde hier nicht gefunden.',
+ auftragFehlt:'Wähle einen offenen Auftrag für das Paket.',
+ geaendert:'Öffne den Eingang erneut. Das Paket wurde inzwischen geändert.',
+ schonZugeordnet:'Das Paket gehört bereits zu einem Auftrag. Öffne den gespeicherten Bezug.',
+ recht:'Für die Ablage und Zuordnung brauchst du den Bereich Eingang.',
+ speichern:'Das Paket konnte nicht sicher gespeichert werden. Öffne den Eingang erneut.',
+ sitzung:'Melde dich an, um das Paket zu speichern.',
+ paketLiegt:(ort:string)=>`Paket ohne Bezug liegt in ${ort}`,
+} as const;
 export const INTAKE_CATALOG_LINK_COPY='Leistungskatalog';
 export const INTAKE_MISSING_LEAD_TIME_COPY=(leistung:string)=>`Durchlaufzeit für ${leistung} fehlt`;
 export const MAIL_IMPORT_COPY={timeUnknown:'Eingangszeit fehlt',failed:'Import fehlgeschlagen',detail:(failure:{reason:string|null;graphMessageId:string|null})=>['Import fehlgeschlagen',failure.reason??MAILBOX_SYNC_COPY.unavailable,failure.graphMessageId??MAILBOX_SYNC_COPY.unavailable].join(' · '),task:(id:string)=>`Mail ${id} importieren – Import fehlgeschlagen`} as const;
