@@ -8,7 +8,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
 import {full,nativeFetch,sql,withSession} from '../../e2e/ablauf/replayHarness';
-import {finishIntakeFileAction,getIntakeCaptureAction,prepareIntakeFileAction,saveIncomingInvoiceAction} from '@/app/actions/eingang.actions';
+import {finishIntakeFileAction,getIntakeCaptureAction,prepareIntakeFileAction,saveIncomingInvoiceAction,selectIntakeConcernAction} from '@/app/actions/eingang.actions';
 import {createCustomerAction} from '@/app/actions/customers.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -84,6 +84,10 @@ it('ordnet die erkannten Positionen nur ihrer gespeicherten Rechnungsseite zu',a
  const lieferant=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',
   companyName:'TEST H8 Sammelrechnung',country:'DE'}));
  if(lieferant.code!=='OK')throw Error('TEST_I3_H8_LIEFERANT:'+lieferant.code);
+ const erkannt=await withSession(full,()=>getIntakeCaptureAction(itemId));
+ if(erkannt.code!=='OK')throw Error('TEST_I3_H8_QUELLE:'+erkannt.code);
+ expect(await withSession(full,()=>selectIntakeConcernAction({itemId,version:erkannt.capture.version,
+  clientEventId:randomUUID(),concern:'lieferschein'}))).toMatchObject({code:'OK',capture:{concerns:expect.arrayContaining(['rechnung','lieferschein'])}});
  const rechnungen:string[]=[];
  for(const seite of [1,2]){
   const stand=await withSession(full,()=>getIntakeCaptureAction(itemId));
@@ -95,9 +99,10 @@ it('ordnet die erkannten Positionen nur ihrer gespeicherten Rechnungsseite zu',a
   if(erfasst.code!=='OK')throw Error('TEST_I3_H8_RECHNUNG:'+erfasst.code);
   rechnungen.push(erfasst.invoice.id);
   const gelesen=await lese(erfasst.invoice.id);
-  expect(gelesen).toMatchObject({rechnungId:erfasst.invoice.id,
+  expect(gelesen).toMatchObject({rechnungId:erfasst.invoice.id,belegart:'lieferantenrechnung',
    positionen:[{positionKey:'p'+seite,lieferantenArtikelNr:'TEST-ZEILE-'+seite}]});
  }
+ expect(await lese()).toMatchObject({belegart:'lieferschein',rechnungId:null});
  // Earlier OCR outputs had only the table and row. A stored correction must outlive the page lookup.
  await sql`UPDATE public.intake_suggestion SET fundstelle=fundstelle-'page',
   wert=CASE WHEN wert->>'positionKey'='p2' THEN jsonb_set(wert,'{bezeichnung}','"TEST gespeicherte Korrektur"') ELSE wert END

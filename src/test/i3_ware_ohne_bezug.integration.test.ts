@@ -7,7 +7,7 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
 import {full,sql,withSession} from '../../e2e/ablauf/replayHarness';
 import {chooseIntakeCaptureKindAction,finishIntakeFileAction,getGoodsReceiptsAction,getIntakeCaptureAction,getIntakeMessagesAction,
- legePaketOhneBezugAbAction,verknuepfePaketOhneBezugAction} from '@/app/actions/eingang.actions';
+ legePaketOhneBezugAbAction,saveGoodsReceiptAction,verknuepfePaketOhneBezugAction} from '@/app/actions/eingang.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {projiziereEingangTagFakten} from '@/lib/server/todayDashboard';
 import {customerFixture,intakeOrderFixture} from '../../e2e/ablauf/orderFixture';
@@ -73,4 +73,24 @@ it('legt das Original am angegebenen Ort ab und verbindet es später einmalig mi
  expect(await sql`SELECT art,befehl_id AS befehl,nachher->'paket'->>'ort' AS ort FROM public.intake_event
   WHERE tenant_id=${tenant} AND item_id=${itemId} AND art='ware' ORDER BY zeit`)
   .toEqual([{art:'ware',befehl:ablage.befehlId,ort:ablage.ort},{art:'ware',befehl:bindung.befehlId,ort:ablage.ort}]);
+
+ const weiteres=await storeIntakeGoodsPhoto();
+ expect(await withSession(full,()=>finishIntakeFileAction(weiteres.fileId),true)).toMatchObject({code:'OK'});
+ const offen=await withSession(full,()=>getIntakeCaptureAction(weiteres.itemId,undefined,{packageExpectation:false}));
+ if(offen.code!=='OK')throw Error('TEST_I3_PAKET_OFFEN:'+offen.code);
+ const lagerort=await withSession(full,()=>legePaketOhneBezugAbAction({itemId:weiteres.itemId,
+  version:offen.capture.version,befehlId:randomUUID(),ort:'TEST Regal 4'}));
+ if(lagerort.code!=='OK')throw Error('TEST_I3_PAKET_ABLAGE:'+lagerort.code);
+ expect(await paketZeilen()).toMatchObject([{key:'eingang.paketohnebezug:'+lagerort.paket.id}]);
+ const zweiter=await intakeOrderFixture('I3 gemeinsame Warenannahme',kunde);
+ const orderRead=await withSession(full,()=>getGoodsReceiptsAction(zweiter.receipt.orderId));
+ if(orderRead.code!=='OK')throw Error('TEST_I3_PAKET_AUFTRAG');
+ const annahme=await withSession(full,()=>saveGoodsReceiptAction({id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),
+  itemId:weiteres.itemId,orderId:orderRead.order.id,expectedOrderVersion:orderRead.order.version,expectedVersion:0,
+  mode:'erfassung',command:'draft',card:0,packagesReceived:null,packagesTotal:null,condition:null,deviations:[],
+  foundUnattended:false,foundAt:null,procedure:null,procedureNote:null,photos:[{fileId:weiteres.fileId,kind:'teile'}],quantities:[]}));
+ expect(annahme).toMatchObject({code:'OK',receipt:{item_id:weiteres.itemId,auftrag_id:orderRead.order.id}});
+ expect(await paketZeilen()).toEqual([]);
+ expect(await sql`SELECT auftrag_id,lagerort FROM public.goods_receipt WHERE tenant_id=${tenant} AND id=${lagerort.paket.id}::uuid`)
+  .toEqual([{auftrag_id:null,lagerort:'TEST Regal 4'}]);
 });

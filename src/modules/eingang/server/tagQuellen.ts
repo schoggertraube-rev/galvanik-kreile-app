@@ -67,6 +67,7 @@ export async function liesEingangTagFaktenInTransaction(tx:PrivilegedTenantTrans
       FROM public.goods_receipt paket JOIN public.intake_item eingang
         ON eingang.tenant_id=paket.tenant_id AND eingang.id=paket.item_id
       WHERE paket.tenant_id=${tenantId} AND paket.modus='ohne_bezug' AND paket.auftrag_id IS NULL
+        AND (eingang.vorgang_art IS DISTINCT FROM 'auftrag' OR eingang.vorgang_id IS NULL)
         AND paket.lagerort IS NOT NULL ORDER BY paket.id`);
     for(const paket of pakete)ergebnis.push({...paket,art:'paketohnebezug',preisgeschuetzt:false,tage:0,faellig:null});
   }

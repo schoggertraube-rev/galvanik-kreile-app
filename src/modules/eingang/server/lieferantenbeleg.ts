@@ -59,11 +59,8 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
       AND datei.erkennung_status NOT IN ('fertig','fehler')) AS "erkennungFertig"
   FROM public.intake_item item WHERE item.tenant_id=${tenantId} AND item.id=${itemId}::uuid`);
  if (!eingang || !eingang.dateien[0]) return null;
- const belegart = eingang.anliegen.includes('lieferschein') ? 'lieferschein'
-  : eingang.anliegen.includes('rechnung') ? 'lieferantenrechnung' : null;
- if (belegart === null) return null;
- if(rechnungId&&belegart!=='lieferantenrechnung')return null;
- const rechnungen=belegart==='lieferantenrechnung'?await tx.execute<Rechnung>(sql`
+ const lieferschein=eingang.anliegen.includes('lieferschein');
+ const rechnungen=rechnungId||!lieferschein&&eingang.anliegen.includes('rechnung')?await tx.execute<Rechnung>(sql`
   SELECT id::text,file_id::text AS "fileId",nummer,datum::text,zahlstatus,lieferant_id AS "lieferantId",
     seite_von AS "seiteVon",seite_bis AS "seiteBis"
   FROM public.supplier_invoice WHERE tenant_id=${tenantId} AND item_id=${itemId}::uuid
@@ -71,6 +68,8 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
  if(rechnungen.length>1)throw Error('CONFLICT');
  const rechnung=rechnungen[0];
  if(rechnungId&&!rechnung)return null;
+ const belegart=rechnung?'lieferantenrechnung':lieferschein?'lieferschein':eingang.anliegen.includes('rechnung')?'lieferantenrechnung':null;
+ if(!belegart)return null;
  const original=rechnung?eingang.dateien.find(datei=>datei.id===rechnung.fileId):eingang.dateien[0];
  if(!original)throw Error('EINGANG_BELEG_ORIGINAL_FEHLT');
  const seiten=rechnung&&rechnung.seiteVon!==null&&rechnung.seiteBis!==null
