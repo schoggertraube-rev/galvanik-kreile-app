@@ -54,13 +54,6 @@ async function wiederholung(tx:PrivilegedTenantTransaction,auth:AuthorizationSna
   &&paket?.itemId===itemId&&typeof paket.ort==='string'&&uuid.test(paket.id)?erfolgreich(paket,true):konflikt();
 }
 
-async function speichereBeleg(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,befehlId:string,absicht:unknown,paket:Paket){
- const belege=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-  VALUES (${auth.tenantId},${paket.itemId}::uuid,'ware',${befehlId}::uuid,${auth.userId},${JSON.stringify({absicht,paket})}::jsonb)
-  RETURNING id`);
- if(belege.length!==1)throw Error('WARE_OHNE_BEZUG_BELEG_FEHLT');
-}
-
 export async function legePaketOhneBezugAb(wert:unknown):Promise<Ergebnis>{
  const input=anfrage(wert);
  if(!input||typeof input.itemId!=='string'||!uuid.test(input.itemId)||typeof input.ort!=='string'||
@@ -129,11 +122,20 @@ export async function verknuepfePaketOhneBezug(wert:unknown):Promise<Ergebnis>{
    return {code:'VALIDATION_ERROR',message:copy.auftragFehlt};
   await bindIntakeOriginalToOrder(tx,auth,{itemId:vorher.itemId,orderId:auftrag.id,customerId:auftrag.customerId,
    clientEventId:befehlId,complete:false});
-  const [paket]=await tx.execute<Paket>(sql`UPDATE public.goods_receipt SET auftrag_id=${auftrag.id},verknuepft_am=statement_timestamp(),
-   version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${goodsReceiptId}::uuid
-    AND version=${version} AND auftrag_id IS NULL RETURNING ${paketSpalten}`);
-  if(!paket)throw Error('INTAKE_CAPTURE_ASSIGNMENT_CONFLICT');
-  await speichereBeleg(tx,auth,befehlId,absicht,paket);
+  const [gespeichert]=await tx.execute<Paket&{belegt:boolean}>(sql`
+   WITH verknuepft AS (
+    UPDATE public.goods_receipt SET auftrag_id=${auftrag.id},verknuepft_am=statement_timestamp(),
+     version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${goodsReceiptId}::uuid
+      AND version=${version} AND auftrag_id IS NULL RETURNING ${paketSpalten}
+   ), beleg AS (
+    INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+    SELECT ${auth.tenantId},paket."itemId"::uuid,'ware',${befehlId}::uuid,${auth.userId},
+      jsonb_build_object('absicht',${JSON.stringify(absicht)}::jsonb,'paket',to_jsonb(paket))
+    FROM verknuepft paket RETURNING id
+   ) SELECT verknuepft.*,EXISTS(SELECT 1 FROM beleg) AS belegt FROM verknuepft`);
+  if(!gespeichert)throw Error('INTAKE_CAPTURE_ASSIGNMENT_CONFLICT');
+  const {belegt,...paket}=gespeichert;
+  if(!belegt)throw Error('WARE_OHNE_BEZUG_BELEG_FEHLT');
   return erfolgreich(paket);
  });
 }
