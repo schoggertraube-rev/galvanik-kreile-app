@@ -1,6 +1,38 @@
 import {createHash} from 'node:crypto';
 import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import type {DispatchPolicy} from '@/modules/fundament/public';
+import {DISPATCH_BOARD_COPY as boardCopy} from '@/ui/ausgangCopy';
+
+export type DispatchBoardStep = {
+ color: 'rot'|'gelb'|'gruen'; status: string; action: string; orderId: string;
+ kind: 'complaint'|'overdue'|'release-proof'|'handover-mode'|'notify'|'payment'|'pickup'|'shipping';
+ complaintIds?: readonly string[];
+};
+
+type DispatchBoardRank = {color: DispatchBoardStep['color'] | null; readyAt: string | null; dueDate: string; orderId: string};
+
+export function compareDispatchBoardRank(first: DispatchBoardRank, second: DispatchBoardRank): number {
+ return Number(second.color === 'gruen') - Number(first.color === 'gruen')
+  || Number(first.readyAt === null) - Number(second.readyAt === null)
+  || (first.readyAt ?? '').localeCompare(second.readyAt ?? '')
+  || first.dueDate.localeCompare(second.dueDate)
+  || first.orderId.localeCompare(second.orderId);
+}
+
+export function dispatchBoardStep(input:{orderId:string;customerName:string|null;handover:'pickup'|'shipping'|null;
+ blockReason:string|null;informed:boolean;releaseAllowed:boolean;complaintIds:readonly string[]}):DispatchBoardStep|null {
+ const {orderId,customerName,handover,blockReason,informed,releaseAllowed,complaintIds}=input;
+ if(blockReason==='open_complaint')return {orderId,color:'rot',kind:'complaint',...boardCopy.complaint,complaintIds};
+ if(blockReason==='overdue_invoice')return {orderId,color:'rot',kind:'overdue',
+  status:boardCopy.overdue,action:boardCopy.payment.action};
+ if(blockReason==='not_frozen')return {orderId,color:'rot',kind:'release-proof',...boardCopy.releaseProofMissing};
+ if(!handover)return {orderId,color:'rot',kind:'handover-mode',...boardCopy.handoverMissing};
+ if(!informed)return {orderId,color:'rot',kind:'notify',status:boardCopy.notify.status,
+  action:boardCopy.notify.action(customerName)};
+ if(releaseAllowed)return {orderId,color:'gruen',kind:handover,status:boardCopy.ready.status,action:boardCopy.ready[handover]};
+ if(blockReason==='payment')return {orderId,color:'gelb',kind:'payment',...boardCopy.payment};
+ return null;
+}
 
 export type DispatchNoticeMember={orderId:string;orderNumber:string;noticeAt:string|null;noticeChannel?:'mail'|'telefon'|null;readyAt?:string|null;deliveryFailedAt?:string|null;freezeId?:string|null};
 export type PickupAppointmentProjection={eventId:string;date:string;resumeOn:string|null;paused:boolean|null};

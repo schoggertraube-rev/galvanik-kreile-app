@@ -6,10 +6,13 @@ import type {OperationalOrder} from '@/lib/types/operationalOrder';
 import {berlinCalendarDay,workingDaysBetween,plusWorkingDays} from '@/lib/domain/workingDays';
 import {readOrderPickupAppointment,pickupStorageDue} from '@/lib/server/pickupAppointmentPort';
 import type {DispatchPolicy} from '@/modules/fundament/public';
-import {planInitialDispatchReminder,type DispatchNoticeMember,type InitialDispatchReminderPlan,type PickupAppointmentProjection} from '../domain/outputEscalation';
+import {compareDispatchBoardRank,dispatchBoardStep,planInitialDispatchReminder,type DispatchBoardStep,type DispatchNoticeMember,type InitialDispatchReminderPlan,type PickupAppointmentProjection} from '../domain/outputEscalation';
 import type {DispatchResponseCheck} from '@/lib/server/dispatchResponsePort';
 import {readCollectionReminderHistory} from '@/lib/server/collectionReminderPort';
-import {readDispatchCalls} from '@/lib/server/dispatchCallPort';
+import {readDispatchCalls,readRecentHandoverProofs} from '@/lib/server/dispatchCallPort';
+import {readGoodsOutCollectorNames} from '@/lib/server/goodsOutCollector';
+import {getPaymentStatesBatch} from '@/lib/server/paymentSummaryRead';
+import {canReadPaymentSummary} from '@/lib/server/paymentContract';
 import {readRecordedDispatchReplies,replyDefersToAppointment,type DispatchReplyReceipt} from '@/lib/server/dispatchReplyPort';
 import {storageEligibility,storageLetterKey,finalStorageStage,type StorageEligibility} from '../domain/storageEligibility';
 import {COLLECTION_REMINDER_COPY,STORAGE_CHARGE_COPY} from '@/ui/situationCatalog';
@@ -25,9 +28,34 @@ type AusgangLeser={
  readBilledWork?:(tx:PrivilegedTenantTransaction,tenantId:string,orderIds:readonly string[])=>Promise<ReadonlyMap<string,Parameters<typeof berechneNichtBerechneteMehrarbeit>[1]>>;
 };
 
-export type FinishedDispatch={collectionSend?:{allowed:boolean;requiresMoney:boolean;message:string|null};orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true;mehrarbeitNachkalkulation?:MehrarbeitNachkalkulation};
+export type FinishedDispatch={collectionSend?:{allowed:boolean;requiresMoney:boolean;message:string|null};orderId:string;version:number;handover:'pickup'|'shipping'|null;color:'rot'|'gelb'|'gruen'|null;releaseAllowed:boolean;informedAt:string|null;channel:'mail'|'telefon'|null;blockReason:string|null;workingDays:number|null;gaps:string[];reminder?:InitialDispatchReminderPlan;storage?:StorageEligibility;pickupAppointment?:PickupAppointmentProjection;unavailable?:true;mehrarbeitNachkalkulation?:MehrarbeitNachkalkulation;boardStep?:DispatchBoardStep};
 function safeDispatchReadError(error:unknown){
  return {name:error instanceof Error&&/^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(error.name)?error.name:'UnknownError',code:error instanceof Error&&/^[A-Z][A-Z0-9_]{1,100}$/.test(error.message)?error.message:'DISPATCH_READ_FAILED'};
+}
+
+export async function readRecentDispatchHandovers(auth:AuthorizationSnapshot,customerId?:string,now=new Date()){
+ if(!auth.active||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN' as const};
+ try{
+  const {handovers,collectors}=await withPrivilegedTenantTransaction(auth,async tx=>{
+   const handovers=await readRecentHandoverProofs(tx,auth.tenantId,now,customerId);
+   const pickupEvents=handovers.filter(handover=>handover.mode==='abholung').map(handover=>handover.eventId);
+   const collectors=await readGoodsOutCollectorNames(tx,auth.tenantId,pickupEvents);
+   return {handovers,collectors};
+  });
+  const payments=canReadPaymentSummary(auth)?await getPaymentStatesBatch(auth,handovers.map(handover=>handover.orderId)):null;
+  const rows=handovers.map(handover=>{
+   const state=payments?.get(handover.orderId);
+   const qualified=state?.code==='OK'&&state.data.goodsOut?.eventId===handover.eventId?state.data:null;
+   const payment=qualified?.payment;
+   const paymentState=qualified?'available':!payments||state?.code==='FORBIDDEN'?'hidden':'unavailable';
+   return {...handover,paymentState,collectorName:collectors.get(handover.eventId)??null,
+    invoice:payment?{id:payment.invoiceId,number:payment.invoiceNumber,status:payment.status}:null};
+  });
+  return {code:'OK' as const,rows};
+ }catch(error){
+  console.error('[DISPATCH_HANDOVER_READ_FAILED]',safeDispatchReadError(error));
+  return {code:'UNAVAILABLE' as const};
+ }
 }
 
 /** Enrich existing operational rows; never a second saved queue or release rule. */
@@ -68,8 +96,12 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   const workingDays=policy===null||!notification.frozenAt?null:workingDaysBetween(berlinCalendarDay(new Date(notification.frozenAt)),berlinCalendarDay(),policy.holidays);
   if(workingDays!==null&&workingDays<0){result.push({orderId:order.id,version:order.version,handover:null,color:null,releaseAllowed:false,informedAt:null,channel:null,blockReason:COLLECTION_REMINDER_COPY.proofUnavailable,workingDays:null,gaps:['DISPATCH_CALENDAR_INVALID'],unavailable:true});continue;}
   const mehrarbeit=nachkalkulation.get(order.id);
-  result.push({orderId:order.id,version:order.version,handover:notification.handover,color:notification.ampel,releaseAllowed:notification.releaseAllowed,
+  const boardStep=dispatchBoardStep({orderId:order.id,customerName:order.customerName,handover:notification.handover,
+   blockReason:notification.blockReason,informed:notification.informed!==null,releaseAllowed:notification.releaseAllowed,
+   complaintIds:notification.complaintIds});
+  result.push({orderId:order.id,version:order.version,handover:notification.handover,color:boardStep?.color??notification.ampel,releaseAllowed:notification.releaseAllowed,
    informedAt:notification.informed?.recordedAt??null,channel:notification.informed?.channel??null,blockReason:notification.blockReason,
+   ...(boardStep?{boardStep}:{}),
    ...(mehrarbeit?{mehrarbeitNachkalkulation:mehrarbeit}:{}),
    workingDays,gaps:[...(!notification.handover?['HANDOVER_MISSING']:[]),...(policy===null?['BUSINESS_CALENDAR_SETTINGS_MISSING']:[]),
     ...(nachkalkulationErwartet.has(order.id)&&!mehrarbeit?['DISPATCH_EXTRA_WORK_SOURCE_UNAVAILABLE']:[])]});
@@ -219,6 +251,10 @@ export async function readFinishedDispatchQueue(auth:AuthorizationSnapshot,order
   }catch(error){console.error('[COLLECTION_SEND_ACCESS_UNAVAILABLE]',error instanceof Error?error.name:'UnknownError');row.collectionSend={allowed:false,requiresMoney:false,message:COLLECTION_REMINDER_COPY.proofUnavailable};}
  }
  const due=new Map(orders.map(order=>[order.id,order.dueDate||'9999-12-31']));
- result.sort((a,b)=>Number(b.color==='gruen')-Number(a.color==='gruen')||(due.get(a.orderId)??'9999').localeCompare(due.get(b.orderId)??'9999')||a.orderId.localeCompare(b.orderId));
- return {code:'OK' as const,rows:result};
+ const ranked=result.map(row=>{
+  const notice=notifications.get(row.orderId);
+  const readyAt=notice?.code==='OK'&&notice.orderVersion===row.version?notice.frozenAt:null;
+  return {row,orderId:row.orderId,color:row.color,readyAt,dueDate:due.get(row.orderId)??'9999-12-31'};
+ }).sort(compareDispatchBoardRank);
+ return {code:'OK' as const,rows:ranked.map(({row})=>row)};
 }
