@@ -24,6 +24,9 @@ import {INVOICE_DELIVERY_COPY} from '@/ui/situationCatalog';
 import {MAIL_RESEND_COPY} from '@/ui/situationCatalog';
 import {handedOverProofs} from '@/lib/server/dispatchCallPort';
 import {GOODS_OUT_FOLLOWUP_COPY} from '@/ui/situationCatalog';
+import {GOODS_OUT_NOTICE_TASK_COPY} from '@/ui/tasksCopy';
+import {readCommunicationTargetInTransaction,readGoodsOutNoticeMailEvent,type GoodsOutNoticeSource} from '@/lib/server/communicationPort';
+import {readGoodsOutReceiptById} from '@/lib/server/commands/recordGoodsOutCommand';
 import {COLLECTION_FOLLOWUP_COPY} from '@/ui/situationCatalog';
 import {readCollectionFollowup} from '@/lib/server/invoiceCollectionFollowupRead';
 import {readOfflineNoteConflictSource} from '@/lib/server/offlineNoteConflictPort';
@@ -45,12 +48,16 @@ import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenan
 import {canReadTaskArea,canCompleteTaskArea,hasLagerCapability,type AccessArea} from '@/lib/auth/authorizationContract';
 import {invoiceMailRemainderAllowsCompletion,TASK_KINDS,taskUuid,taskValidation,validTaskReference,type TaskReference,type TaskRecord,type TaskReferenceRead,type TaskSaveInput,type TaskFailure,type TaskResult,type TaskReadResult,type TaskCompleteInput,type TaskOpenRequest,type TaskCalendarRead} from '../contract';
 
-export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number;priceTaskReceipt?:true};
+export type TaskEffectRequest={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:TaskReferenceRead;itemId?:string;itemVersion?:number;priceTaskReceipt?:true;goodsOutNoticeMailEventId?:string};
 export type TaskEffects=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>Promise<void|TaskFailure>;
-type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:TaskRecord,input:TaskCompleteInput)=>Promise<void|TaskFailure>;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>};
+type Dependencies={effect:TaskEffects;beforeComplete?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,task:TaskRecord,input:TaskCompleteInput)=>Promise<void|TaskFailure>;readInvoice?:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>Promise<{name:string|null;status:string;taskId:string|null}|null>;goodsOutNotice?:{key:string;mailEventId?:string}};
 type TodayNoteSave={todayNote:true};
 export const TODAY_NOTE_TASK_PREFIX='e468e52f-2c30-5';
 const isTodayNoteTaskKey=(key:string)=>key.startsWith(TODAY_NOTE_TASK_PREFIX);
+const goodsOutNoticeTaskPrefix='b0c73fe8-5c69-5';
+const isGoodsOutNoticeTaskKey=(key:string)=>key.startsWith(goodsOutNoticeTaskPrefix);
+const goodsOutNoticeTaskKey=(eventId:string)=>goodsOutNoticeTaskPrefix+
+ eventKey(eventId,0,'goods-out-notice').slice(goodsOutNoticeTaskPrefix.length);
 
 function todayNoteTaskKey(tenantId:string,userId:string,day:string){
  const hash=createHash('sha256').update(JSON.stringify([TODAY_NOTE_TASK_PREFIX,tenantId,userId,day])).digest();
@@ -135,6 +142,7 @@ export async function saveTask(input:unknown,deps:Dependencies|TodayNoteSave):Pr
 async function persistTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskSaveInput,deps:Dependencies|TodayNoteSave,enforceReferenceVisibility=true,invoiceCommand=false,replyRestriction=false,qualifiedCreateId?:string):Promise<Extract<TaskResult,{code:'OK'}>>{
   const todayNote='todayNote'in deps;
   if(isTodayNoteTaskKey(value.clientKey)!==todayNote)reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
+  if(isGoodsOutNoticeTaskKey(value.clientKey)&&(todayNote||deps.goodsOutNotice?.key!==value.clientKey))reject('FORBIDDEN',GOODS_OUT_NOTICE_TASK_COPY.requiresReceipt);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${value.clientKey},0))`);
   const candidates=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.tasks WHERE tenant_id=${auth.tenantId} AND client_key=${value.clientKey}::uuid FOR UPDATE`);
   if(candidates.length>1)throw Error('TASK_CLIENT_KEY_AMBIGUOUS');
@@ -272,6 +280,10 @@ export async function createInvoiceClarificationTask(tx:PrivilegedTenantTransact
 /** Shared completion writer. Invoice tasks remain inaccessible to the normal completion action. */
 async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:TaskCompleteInput,deps:Dependencies,invoiceId?:string,quoteOperation?:{quoteId:string;keys:string[]},storageOperation?:{orderId:string;clientKey:string},replyEventId?:string,lagerOperation?:{type:'bestand';artikelId:string}|{type:'preis';artikelId:string;clientKey:string}):Promise<Extract<TaskResult,{code:'OK'}>>{
   const before=await find(tx,auth,value.taskId,true);if(!before)reject('NOT_FOUND','Aufgabe nicht verfügbar.');
+  const isNotice=isGoodsOutNoticeTaskKey(before.client_key);
+  const notice=isNotice?deps.goodsOutNotice:undefined;
+  if(isNotice&&
+   (notice?.key!==before.client_key||!notice.mailEventId||!hasAuthorizationArea(auth,'mails')))reject('CONFLICT',GOODS_OUT_NOTICE_TASK_COPY.requiresReceipt);
   const todayNote=isTodayNoteTaskKey(before.client_key);
   if(todayNote&&!ownsTodayNoteTask(auth,before))reject('FORBIDDEN',LEGACY_ACTION_ACCESS_COPY.forbidden);
   const reissue=await reissueTaskSource(tx,auth,before);
@@ -310,7 +322,7 @@ async function finishTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
   const reference=await context(tx,auth,{type:before.bezug_typ,id:before.bezug_id},true,false);
   await tx.execute(sql`UPDATE public.tasks SET status='erledigt',erledigt_von=${auth.userId}::uuid,erledigt_am=statement_timestamp(),erledigt_notiz=${note},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.id}::uuid AND version=${value.version}`);
   const after=await find(tx,auth,before.id);if(!after||after.version!==value.version+1||after.status!=='erledigt')throw Error('TASK_COMPLETION_READBACK_FAILED');
-  const effect=todayNote?undefined:await deps.effect(tx,auth,{key:eventKey(after.id,after.version,'complete'),taskId:after.id,action:'erledigt',kind:after.art,title:after.titel,note,reference,...(preisaufgabe?{priceTaskReceipt:true}:{})});if(effect)throw new Rejected(effect);
+  const effect=todayNote?undefined:await deps.effect(tx,auth,{key:eventKey(after.id,after.version,'complete'),taskId:after.id,action:'erledigt',kind:after.art,title:after.titel,note,reference,...(preisaufgabe?{priceTaskReceipt:true}:{}),...(notice?.mailEventId?{goodsOutNoticeMailEventId:notice.mailEventId}:{})});if(effect)throw new Rejected(effect);
   return {code:'OK',task:after,replayed:false};
 }
 export async function resolveInvoiceClarificationTask(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string},deps:Dependencies):Promise<void>{
@@ -591,6 +603,54 @@ export async function createGoodsOutClarificationTask(tx:PrivilegedTenantTransac
  const title=GOODS_OUT_FOLLOWUP_COPY.incomplete(reference.label);
  const value:TaskSaveInput={clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:await readClarificationArea(tx,auth.tenantId),reference:{type:'auftrag',id:input.orderId},note:title};
  return (await persistTask(tx,auth,value,deps)).task.id;
+}
+
+/** One task per physical handover, completed against the persisted outbound proof. */
+export async function synchronizeGoodsOutNoticeTask(
+ tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
+ source:GoodsOutNoticeSource,receipt:{threadId:string;messageId:string}|null,
+ deps:{effect:TaskEffects},
+):Promise<string|null>{
+ const canMail=hasAuthorizationArea(auth,'mails');
+ if((!canMail&&(!hasAuthorizationArea(auth,'auftraege')||receipt))||
+  !taskUuid(source.goodsOutEventId)||!validTaskReference({type:'auftrag',id:source.orderId}))
+  reject('FORBIDDEN',GOODS_OUT_NOTICE_TASK_COPY.unavailable);
+ const key=goodsOutNoticeTaskKey(source.goodsOutEventId);
+ await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('task:'||${auth.tenantId}||':'||${key},0))`);
+ const before=await find(tx,auth,source.goodsOutEventId,true);
+ if(before&&(before.client_key!==key||before.art!=='aufgabe'||before.bezug_typ!=='auftrag'||
+  before.bezug_id!==source.orderId||before.fuer_login!==null||before.fuer_bereich!=='mails'))
+  reject('CONFLICT',GOODS_OUT_NOTICE_TASK_COPY.unavailable);
+ const mailEventId=canMail?await readGoodsOutNoticeMailEvent(auth,source,receipt??undefined,tx):null;
+ if(receipt&&!mailEventId)reject('CONFLICT',GOODS_OUT_NOTICE_TASK_COPY.requiresReceipt);
+ if(mailEventId){
+  if(before?.status==='offen')await finishTask(tx,auth,{taskId:before.id,version:before.version,note:GOODS_OUT_NOTICE_TASK_COPY.sent},
+   {...deps,goodsOutNotice:{key,mailEventId}});
+  return before?.id??null;
+ }
+ const release=await readGoodsOutReceiptById(tx,auth.tenantId,source.orderId,source.goodsOutEventId);
+ const mode=source.kind==='abholbescheid'?'abholung':source.kind==='versandbescheid'?'versand':null;
+ if(!release||release.mode!==mode||(!before||!canMail)&&release.actorId!==auth.userId)
+  reject('CONFLICT',GOODS_OUT_NOTICE_TASK_COPY.unavailable);
+ if(before)return before.id;
+ const target=await readCommunicationTargetInTransaction(tx,auth,'ORDER',source.orderId);
+ if(!target?.customerName.trim())reject('NOT_FOUND',GOODS_OUT_NOTICE_TASK_COPY.unavailable);
+ const {title,note}=GOODS_OUT_NOTICE_TASK_COPY.taskText(source.kind,target.customerName);
+ const [clock]=await tx.execute<{today:string}>(sql`SELECT to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY-MM-DD') AS today`);
+ return (await persistTask(tx,auth,{
+  clientKey:key,version:0,kind:'aufgabe',title,dueDate:clock.today,time:null,forLogin:null,forArea:'mails',
+  reference:{type:'auftrag',id:source.orderId},note,
+ },{...deps,goodsOutNotice:{key}},false,false,false,source.goodsOutEventId)).task.id;
+}
+
+/** Only Mails can reopen the exact release behind a pending notice task. */
+export async function readGoodsOutNoticeTaskSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,taskId:string):Promise<GoodsOutNoticeSource|null>{
+ if(!hasAuthorizationArea(auth,'mails')||!taskUuid(taskId))return null;
+ const task=await find(tx,auth,taskId);
+ if(!task||task.client_key!==goodsOutNoticeTaskKey(taskId)||task.status!=='offen'||task.art!=='aufgabe'||
+  task.fuer_bereich!=='mails'||task.fuer_login!==null||task.bezug_typ!=='auftrag'||!task.bezug_id)return null;
+ const release=await readGoodsOutReceiptById(tx,auth.tenantId,task.bezug_id,taskId);
+ return release?{orderId:release.orderId,goodsOutEventId:taskId,kind:release.mode==='versand'?'versandbescheid':'abholbescheid'}:null;
 }
 
 /** Exact pending physical source, one ordinary task; never a system actor. */

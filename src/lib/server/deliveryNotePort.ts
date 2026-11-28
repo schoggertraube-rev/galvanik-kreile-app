@@ -19,7 +19,7 @@ import type {CustomerStoredProfile} from '@/modules/customers/public';
 
 type Ports={readVat:InvoiceVatReader;readCompany:()=>Promise<{code:string;company?:CompanyLetterSettings;missingFields?:readonly string[]}>;readCustomer:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerStoredProfile|null>;render:(snapshot:PaidDeliveryNoteSnapshot)=>Promise<Uint8Array>};
 type SourcePorts=Omit<Ports,'render'>;
-type Order={id:string;customer_id:string;order_number:string;version:number;title:string};
+type Order={id:string;customer_id:string;order_number:string;version:number};
 type Original={id:string;sourceHash:string;snapshot:PaidDeliveryNoteSnapshot;pdfBase64:string;pdfSha256:string;actorId:string};
 type Source=Omit<PaidDeliveryNoteSnapshot,'createdAt'>;
 type Stored={id:string;user_id:string;payload:{sourceHash:string;storagePath:string;fileBytes:number;pdfSha256:string;version:number;orderIds:string[];snapshot:PaidDeliveryNoteSnapshot}};
@@ -34,8 +34,8 @@ function sourceOf(snapshot:PaidDeliveryNoteSnapshot):Source{const {createdAt,...
 // Version is concurrency metadata, never a printed delivery-note fact. Legacy
 // version-1 originals retain their original byte/hash contract unchanged.
 function sourceHashOf(source:Source):string{return sha(canonicalJson(source.schemaVersion===1?source:{...source,orders:source.orders.map(({version,...facts})=>{void version;return facts;})}));}
-function references(source:Source):Record<string,DeliveryNoteSourceReference>{
- return Object.fromEntries(source.orders.map(order=>[order.id,{paymentHash:order.paymentSourceHash!,contentHash:sha(canonicalJson({company:source.company,customer:source.customer,id:order.id,number:order.number,title:order.title,parts:order.parts}))}]));
+function references(source:Source,previewOrderIds:ReadonlySet<string>):Record<string,DeliveryNoteSourceReference>{
+ return Object.fromEntries(source.orders.map(order=>[order.id,{paymentHash:order.paymentSourceHash!,contentHash:sha(canonicalJson({company:source.company,customer:source.customer,id:order.id,number:order.number,title:order.title,parts:order.parts,...(previewOrderIds.has(order.id)?{vorab:source.vorab}:{})}))}]));
 }
 function parseOriginal(bytes:Uint8Array,expectedId:string,expectedHash:string):Original{
  const value=JSON.parse(Buffer.from(bytes).toString('utf8')) as Original;
@@ -46,10 +46,23 @@ function parseOriginal(bytes:Uint8Array,expectedId:string,expectedHash:string):O
  return value;
 }
 
-async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:string[],ports:SourcePorts,expected?:Record<string,DeliveryNoteSourceReference>):Promise<Source|null>{
- const orders=await tx.execute<Order>(sql`SELECT id,customer_id,order_number,version,title FROM public.orders WHERE tenant_id=${auth.tenantId} AND id IN (${sql.join(ids.map(id=>sql`${id}`),sql`,`)}) ORDER BY id FOR SHARE`);
+async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:string[],ports:SourcePorts,expected?:Record<string,DeliveryNoteSourceReference>){
+ const orderIds=sql.join(ids.map(id=>sql`${id}`),sql`, `);
+ const orders=await tx.execute<Order>(sql`SELECT id,customer_id,order_number,version FROM public.orders
+  WHERE tenant_id=${auth.tenantId} AND id IN (${orderIds}) ORDER BY id FOR SHARE`);
  if(orders.length!==ids.length)throw new DeliveryNoteSourceRejected({code:'NOT_FOUND',message:copy.invalid});
  if(orders.some(row=>row.customer_id!==orders[0].customer_id))throw new DeliveryNoteSourceRejected({code:'VALIDATION_ERROR',message:sourceCopy.mixedCustomers});
+ // Zahlungsbuchungen sperren denselben Auftrag vor dem Schreiben.
+ const releaseStates=await tx.execute<{id:string;vorab:boolean}>(sql`
+  SELECT orders.id,(private.order_release_allowed_v1(orders.tenant_id,orders.id) OR EXISTS (
+    SELECT 1 FROM private.v_goods_out_ui_state_v1 release
+    WHERE release.tenant_id=orders.tenant_id AND release.order_id=orders.id
+     AND release.order_version=orders.version AND release.integrity_ok AND release.goods_out_event_id IS NOT NULL
+  )) IS NOT TRUE AS vorab
+  FROM public.orders orders WHERE orders.tenant_id=${auth.tenantId} AND orders.id IN (${orderIds})
+ `);
+ if(releaseStates.length!==orders.length)throw Error('DELIVERY_NOTE_RELEASE_STATE_MISSING');
+ const previewOrderIds=new Set(releaseStates.filter(order=>order.vorab).map(order=>order.id));
  const company=await ports.readCompany();
  if(company.code==='NOT_FOUND'||company.code==='VALIDATION_ERROR'){
   const field=company.missingFields?.[0]??'companyName';
@@ -61,37 +74,37 @@ async function readSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnaps
  const missing=(['name','street','houseNumber','zipCode','city','country'] as const).find(key=>typeof customer[key]!=='string'||!customer[key]!.trim());
  if(missing)throw new DeliveryNoteSourceRejected({code:'VALIDATION_ERROR',message:sourceCopy.addressMissing(MANUAL_SHIPPING_FIELDS[missing]),remedy:{href:'/customers/'+encodeURIComponent(orders[0].customer_id),field:missing,datei:'src/app/actions/customers.actions.ts',funktion:'getCustomerSummaryAction',argumente:{customerId:orders[0].customer_id}}});
  const result:Source={schemaVersion:2,company:company.company,customer:{id:orders[0].customer_id,name:customer.companyName??customer.name,street:[customer.street,customer.houseNumber].join(' '),zip:customer.zipCode!,city:customer.city!,country:customer.country!},orders:[]};
+ if(previewOrderIds.size)result.vorab='delivery_note.preview_payment_required';
  for(const order of orders){
   const rows=await readOrderPaymentSummaries(tx,auth.tenantId,order.id);
   const paymentSourceHash=sha(canonicalJson(rows.map(row=>({invoiceId:row.invoice_id,invoiceNumber:row.invoice_number,total:row.total_amount_cents,mode:row.payment_mode,paymentStatus:row.payment_status,paymentVersion:row.payment_version,eventId:row.payment_event_id,receiptId:row.payment_receipt_id,paidAt:row.payment_paid_at instanceof Date?row.payment_paid_at.toISOString():row.payment_paid_at,paidAmount:row.payment_paid_amount_cents,openAmount:row.payment_open_amount_cents})).sort((a,b)=>a.invoiceId.localeCompare(b.invoiceId))));
   if(expected&&expected[order.id].paymentHash!==paymentSourceHash)throw new DeliveryNoteSourceRejected({code:'CONFLICT',message:copy.changed});
-  if(!rows.length||rows.filter(row=>row.belegart==='auftrag').length!==1)return null;
-  const payments=rows.map(row=>mapPaymentSummaryEvidenceRow(row,auth.tenantId));
-  if(payments.some(row=>row.status!=='bezahlt'||row.openAmountCents!==0||!row.eventId||!row.receiptId||!row.paidAt))return null;
-  const originals=await readCreateInvoiceReceipts(tx,{orderId:order.id});
+  if(rows.length&&rows.filter(row=>row.belegart==='auftrag').length!==1)throw Error('DELIVERY_NOTE_MAIN_INVOICE_MISSING');
+  const payments=rows.map(row=>mapPaymentSummaryEvidenceRow(row,auth.tenantId))
+   .filter(row=>row.status==='bezahlt'&&row.openAmountCents===0&&row.eventId&&row.receiptId&&row.paidAt);
+  const originals=payments.length?await readCreateInvoiceReceipts(tx,{orderId:order.id}):[];
   const sources=payments.map(payment=>{
    const original=originals.filter(row=>row.invoice_id===payment.invoiceId);
    if(original.length!==1)throw Error('DELIVERY_NOTE_INVOICE_SOURCE_MISSING');
    const receipt=mapInvoiceIssueReceipt(original[0],auth.tenantId,original[0].actor_id,ports.readVat);
    return {row:original[0],receipt,payment};
   });
-  const main=sources.find(row=>rows.find(payment=>payment.invoice_id===row.receipt.invoiceId)?.belegart==='auftrag');
-  if(!main)throw Error('DELIVERY_NOTE_MAIN_INVOICE_MISSING');
   const current=await readLiveOrderCard(auth,{orderId:order.id});
   if(current.code!=='OK'||current.data.version!==order.version)throw Error('DELIVERY_NOTE_CURRENT_CONTENT_UNAVAILABLE');
   const parts=current.data.items.map(item=>({itemId:item.id,name:item.name,quantity:item.quantity}));
   if(!parts.length||parts.some(part=>!part.itemId||!part.name.trim()||!Number.isFinite(part.quantity)||part.quantity<=0))throw Error('DELIVERY_NOTE_PARTS_MISSING');
   result.orders.push({id:order.id,number:order.order_number,version:order.version,title:current.data.title,paymentSourceHash,parts,payments:sources.map(({receipt,payment})=>({invoiceId:receipt.invoiceId,invoiceNumber:receipt.invoiceNumber,invoiceEventId:receipt.eventId,invoiceSha256:receipt.pdfSha256,paymentEventId:payment.eventId!,paymentReceiptId:payment.receiptId!,paymentVersion:payment.paymentVersion,amountCents:payment.paidAmountCents,paidAt:payment.paidAt!}))});
  }
- if(expected){const current=references(result);if(ids.some(id=>current[id].contentHash!==expected[id].contentHash))throw new DeliveryNoteSourceRejected({code:'CONFLICT',message:sourceCopy.orderChanged});}
- return result;
+ const orderReferences=references(result,previewOrderIds);
+ if(expected&&ids.some(id=>orderReferences[id].contentHash!==expected[id].contentHash))throw new DeliveryNoteSourceRejected({code:'CONFLICT',message:sourceCopy.orderChanged});
+ return {document:result,orderReferences};
 }
 
 /** Read-only projection of the very same collector used under the document lock. */
 export async function readDeliveryNoteSource(auth:AuthorizationSnapshot,orderIds:string[],ports:SourcePorts):Promise<DeliveryNoteSourceRead>{
  if(!auth.active||!hasAuthorizationArea(auth,'auftraege'))return {code:'FORBIDDEN',message:LEGACY_ACTION_ACCESS_COPY.forbidden};
  if(!orderIds.length||orderIds.some(id=>typeof id!=='string'||!id.trim()||id!==id.trim()||id.length>128)||new Set(orderIds).size!==orderIds.length)return {code:'VALIDATION_ERROR',message:copy.invalid};
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{const source=await readSource(tx,auth,[...orderIds].sort(),ports);if(!source)return {code:'VALIDATION_ERROR' as const,message:copy.sourceMissing};return {code:'OK' as const,source:{orderIds:source.orders.map(order=>order.id),expectedVersions:Object.fromEntries(source.orders.map(order=>[order.id,order.version])),expectedSources:references(source)}};});}
+ try{return await withPrivilegedTenantTransaction(auth,async tx=>{const {document,orderReferences}=await readSource(tx,auth,[...orderIds].sort(),ports);return {code:'OK' as const,source:{orderIds:document.orders.map(order=>order.id),expectedVersions:Object.fromEntries(document.orders.map(order=>[order.id,order.version])),expectedSources:orderReferences}};});}
  catch(error){if(error instanceof DeliveryNoteSourceRejected)return error.result;console.error('[DELIVERY_NOTE_SOURCE_READ_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE',message:serverMessage};}
 }
 
@@ -132,7 +145,7 @@ export async function generatePaidDeliveryNote(auth:AuthorizationSnapshot,input:
    return {code:'OK',receipt,pdfBase64:document.pdfBase64,replayed};
   }
   const prior=await fromRequest(command.clientEventId);if(prior)return prior;
-  const source=await readSource(tx,auth,selected,ports,command.expectedSources);if(!source)return fail('VALIDATION_ERROR',copy.sourceMissing);
+  const {document:source}=await readSource(tx,auth,selected,ports,command.expectedSources);
   const sourceHash=sourceHashOf(source),key=command.clientEventId;
   const originalId=uuid('delivery-original:'+auth.tenantId+':'+sourceHash),storagePath='domain-attachments/v1/'+originalId+'.json';
   const existing=await tx.execute<Stored>(sql`SELECT id,user_id::text,payload FROM public.events WHERE tenant_id=${auth.tenantId} AND id=${originalId} AND event_type='DELIVERY_NOTE_ORIGINAL_V1' AND status='success'`);

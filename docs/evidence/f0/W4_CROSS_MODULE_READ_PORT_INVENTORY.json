@@ -89,6 +89,9 @@
       "private.v_open_quotes_v1",
       "private.v_operational_station_queue_v1"
     ],
+    "src/lib/server/deliveryNotePort.ts": [
+      "private.v_goods_out_ui_state_v1"
+    ],
     "src/lib/server/dispatchCallPort.ts": [
       "private.v_order_freeze_state_v1"
     ],
