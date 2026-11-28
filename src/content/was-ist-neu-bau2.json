@@ -1,5 +1,14 @@
 [
   {
+    "datum": "2026-11-28",
+    "pr": 355,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Herausgabebereite Ware steht oben. Innerhalb der Gruppen stehen die am längsten liegenden Aufträge zuerst."
+    ]
+  },
+  {
     "datum": "2026-11-27",
     "pr": 331,
     "seite": "auftraege",
