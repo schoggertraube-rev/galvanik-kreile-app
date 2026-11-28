@@ -37,6 +37,8 @@ export {
 // Einstellungs-Leser lager
 export {readLagerEinstellungen} from "./server/s16dSpurDSettingsPort";
 export type {LagerEinstellungen} from "./server/s16dSpurDSettingsPort";
+export {readLagerBelegEinstellungen} from "./server/s16dSpurDSettingsPort";
+export type {LagerBelegEinstellungen} from "./server/s16dSpurDSettingsPort";
 
 // Einstellungs-Leser quotes
 export {readQuoteSettings,readQuoteSettingsInTransaction,saveQuoteSettings} from './server/quoteSettingsPort';

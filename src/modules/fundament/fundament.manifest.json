@@ -77,6 +77,8 @@
     "@/modules/fundament/public#parsePageReadSettings",
     "@/modules/fundament/server-public#LagerEinstellungen",
     "@/modules/fundament/server-public#readLagerEinstellungen",
+    "@/modules/fundament/server-public#readLagerBelegEinstellungen",
+    "@/modules/fundament/server-public#LagerBelegEinstellungen",
     "@/modules/fundament/server-public#readAusschussBerechnenInTransaction",
     "@/modules/fundament/server-public#readBetriebsruheInTransaction",
     "@/modules/fundament/server-public#readBetriebswaechterEinstellungenInTransaction",
@@ -107,7 +109,8 @@
     "20261123145308_einstellungen_aufbewahrung_kp12.sql",
     "20261123145309_einstellungen_umsatzsteuer_u10.sql",
     "20261123145310_einstellungen_umsatzsteuer_u10_position.sql",
-    "20261123145312_einstellungen_einstellungen_leseindizes.sql"
+    "20261123145312_einstellungen_einstellungen_leseindizes.sql",
+    "20261128104909_h5_lager_beleg_einstellungen.sql"
   ],
   "viewsFunctions": [],
   "ownsTables": [
