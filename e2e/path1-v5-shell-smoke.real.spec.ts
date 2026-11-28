@@ -7,6 +7,7 @@ import postgres from "postgres";
 import { ROLE_ACCESS_AREA_TEMPLATES } from "../src/lib/auth/authorizationContract";
 import { createPinLoginHandle } from "../src/lib/server/pinLoginHandle";
 import { SALES_STAGE_FEATURES } from "../src/modules/fundament/featureCatalog";
+import { PIN_LOGIN_COPY } from "../src/ui/allgemeinCopy";
 
 const TENANT = "galvanik-kreile";
 const V5_SHA256 = "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA";
@@ -18,8 +19,8 @@ const VIEWPORTS = [
   { name: "mobile", width: 390, height: 844 },
 ] as const;
 const ACTORS = [
-  { key: "rolf", id: "11111111-1111-4111-8111-111111111111", pin: "4186", role: "meister" },
-  { key: "phillip", id: "22222222-2222-4222-8222-222222222222", pin: "7315", role: "werkstatt" },
+  { key: "rolf", id: "11111111-1111-4111-8111-111111111111", shortCode: "RO", pin: "4186", role: "meister" },
+  { key: "phillip", id: "22222222-2222-4222-8222-222222222222", shortCode: "PH", pin: "7315", role: "werkstatt" },
 ] as const;
 const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
 const FIXTURE_ACTORS = [...ACTORS, { id: GREGOR_ACTOR_ID, role: "admin" as const }];
@@ -105,11 +106,18 @@ async function assertSignedSession(page: Page, actorId: string, secret: string) 
   expect(JSON.parse(payloadText)).toMatchObject({ userId: actorId, tenantId: TENANT });
 }
 
-async function loginPin(page: Page, actor: (typeof ACTORS)[number], secret: string) {
+async function loginPin(page: Page, actor: (typeof ACTORS)[number], viewport: (typeof VIEWPORTS)[number], secret: string) {
   await page.goto("/start", { waitUntil: "domcontentloaded" });
   const userCard = page.getByTestId(`pin-user-card-${createPinLoginHandle(actor.id)}`);
-  await userCard.click();
-  await expect(userCard).toHaveAttribute("aria-pressed", "true");
+  if (viewport.name === "mobile") {
+    const shortCode = page.getByRole("textbox", { name: PIN_LOGIN_COPY.kuerzelLabel, exact: true });
+    await shortCode.fill(actor.shortCode);
+    await shortCode.press("Enter");
+    await expect(userCard).toHaveCount(0);
+  } else {
+    await userCard.click();
+    await expect(userCard).toHaveAttribute("aria-pressed", "true");
+  }
   const keypad = page.locator('[data-spec-id="login.anmelden"]');
   await expect(keypad).toBeVisible();
   const home = page.waitForURL((url) => url.pathname === "/", { waitUntil: "commit" });
@@ -256,8 +264,8 @@ test.describe("PATH1 V5 Shell Smoke", () => {
       await sql`
         INSERT INTO public.app_users (id, tenant_id, email, full_name, kuerzel, bezeichnung, role, pin_hash, active, created_at, updated_at)
         VALUES
-          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'R', 'Meister', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'P', 'Werkstatt', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', ${ACTORS[0].shortCode}, 'Meister', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', ${ACTORS[1].shortCode}, 'Werkstatt', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
           (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'G', 'Entwickler', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
         ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, kuerzel = excluded.kuerzel, bezeichnung = excluded.bezeichnung, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
@@ -284,7 +292,7 @@ test.describe("PATH1 V5 Shell Smoke", () => {
         const context = await browser.newContext({ viewport, hasTouch: viewport.width < 1300 });
         try {
           const page = await context.newPage();
-          await loginPin(page, actor, sessionSecret);
+          await loginPin(page, actor, viewport, sessionSecret);
           await assertPage(page, actor.key, viewport, "/", problems, screens);
           screens.push(await capture(page, actor.key, viewport));
           if (viewport.name !== "mobile") {
