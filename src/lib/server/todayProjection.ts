@@ -8,7 +8,7 @@ import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/serv
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
-import {readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
+import {readHandoffIntakeOriginalsInTransaction,readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
 import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors} from '@/modules/quotes/server-public';
 import {liesAufgabenFuerTag,readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {liesTaktAusfallZeilen} from '@/modules/takt/server-public';
@@ -107,7 +107,7 @@ function productivePorts():TodayProjectionPorts{
   }
   return value;
  };
- const orderPorts:TodayOrderReadPorts={readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
+ const orderPorts:TodayOrderReadPorts={readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,readIntakePhotos:readHandoffIntakeOriginalsInTransaction,
   readCredit:(tx,tenantId,customerId)=>readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile),
   readShipments:(auth,ids,readSettings)=>readManualShippingBatch(auth,ids,{readSettings,readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,
    readAllocation:(tx,tenantId,customerId,input)=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)})};

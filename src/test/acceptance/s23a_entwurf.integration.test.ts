@@ -8,6 +8,11 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {createFixture,full,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {getIntakeDraftsAction,loeseEntwurfskonfliktAction,saveIntakeDraftAction} from '@/app/actions/eingang.actions';
 
+const database=process.env.DATABASE_URL;
+if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'){
+ throw Error('S23A_ENTWURF_LOOPBACK_REQUIRED');
+}
+
 it('bietet bei zwei Fassungen beide Eingaben an und speichert die Wahl höchstens einmal',async()=>{
  const id=randomUUID(),clientKey=randomUUID(),first={payload:{clientKey,text:'TEST Erste Fassung'},lastField:null};
  const newer={payload:{clientKey,text:'TEST Vom anderen Gerät'},lastField:'eingang.menge'};

@@ -8,7 +8,7 @@ import {type InvoicePorts} from '@/modules/eingang/public';
 import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import {saveIntakeTaskAction,completeIntakeTaskAction,getIntakeTaskAction,createCustomerForIntakeAction,getIntakeAssignmentAction,assignIntakeCustomerAction,setIntakeNoBusinessAction} from '@/app/actions/eingang.actions';
 import type {TaskPorts,AssignmentPorts} from '@/modules/eingang/public';
-import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
+import {fuehreEingangVorschlagAusAction,leseEingangVorschlagAction} from "@/app/actions/eingang.actions";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
 import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, createIntakeContinuationAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
 import {getOrderIntakeSuggestionsAction,getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,confirmIntakeOriginalAction,retryIntakeRecognitionAction} from "@/app/actions/eingang.actions";
@@ -213,7 +213,8 @@ export function GlobalCreateAppAdapter() {
         readCaptureNote: recognizeIntakeNoteAction,
         prepareCaptureFile: prepareIntakeFileAction,
         finishCaptureFile: finishIntakeFileAction,
-        chooseCaptureKind: chooseIntakeCaptureKindAction,
+        readCaptureProposal: leseEingangVorschlagAction,
+        runCaptureProposal: fuehreEingangVorschlagAusAction,
         openCaptureObject: (ziel, arg) => !window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg }, cancelable: true })),
         canCreateOrder: hasArea("eingang"),
         canCreateQuote,

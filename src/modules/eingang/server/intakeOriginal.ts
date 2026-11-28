@@ -13,6 +13,7 @@ import {readLiveOrderCard} from "@/lib/server/orderCardRead";
 import {allowedOriginalExtension,automaticMimeReply,safeOriginalBytes} from "../originalSafety";
 import type {IntakeCapture} from '../captureContract';
 import type {InvoicePageRange} from '../invoiceContract';
+import {intakeFileContextEvidence,intakeFileHandoffEvidence} from './intakeFileContext';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -20,14 +21,15 @@ export const gespeichertesBelegoriginal = sql`file.art<>'mime' AND file.mime<>'m
  AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
   AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text
   AND (event.nachher->>'sha256' IS NULL OR event.nachher->>'sha256'=file.sha256))`;
-type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:string;mime:string;bytes:string;sha256:string;speicherpfad:string;geoeffnet:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;zuordnung_regel:string|null;invoice_context:boolean};
+type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:string;mime:string;bytes:string;sha256:string;speicherpfad:string;geoeffnet:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;zuordnung_regel:string|null;invoice_context:boolean;handoff_context:boolean;handoff_proven:boolean};
 
 type IncomingMime={itemId:string;version:number};
 
 async function readOriginalFileInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,fileId:string,mime?:IncomingMime){
  const rows=await tx.execute<OriginalRow>(sql`
   SELECT file.id::text,file.item_id::text,file.art,source.kanal,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.geoeffnet,source.kunde_id,source.vorgang_id,source.vorgang_art,source.zuordnung_regel,
-   (source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context
+   (source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context,
+   coalesce(${intakeFileContextEvidence} ? 'uebergabeVersion',false) AS handoff_context,${intakeFileHandoffEvidence} AS handoff_proven
   FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
   WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid
    ${mime?sql`AND source.id=${mime.itemId}::uuid AND source.version=${mime.version} AND source.kanal='mail' AND source.richtung='rein'
@@ -133,6 +135,36 @@ export async function readOrderIntakeOriginals(orderId:unknown){
  return readDomainIntakeOriginals('ORDER',orderId);
 }
 
+export async function readHandoffIntakeOriginalsInTransaction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,
+ input:{orderId:string;itemId?:string}|{orderIds:readonly string[]}){
+  const orderIds='orderId' in input?[input.orderId]:input.orderIds;
+  const itemId='itemId' in input?input.itemId:undefined;
+  if(!orderIds.length)return [];
+  const rows=await tx.execute<{id:string;name:string;mime:string;bytes:string;at:string;itemId:string;orderId:string}>(sql`
+   SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,source.erstellt_am::text AS at,
+    ${intakeFileContextEvidence}->>'teilId' AS "itemId",source.vorgang_id AS "orderId"
+   FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
+   WHERE file.tenant_id=${auth.tenantId} AND source.vorgang_art='auftrag'
+    AND source.vorgang_id IN (${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)})
+    AND source.zuordnung_regel='kontext' AND file.foto_art='teile' AND file.phase='arbeit'
+    AND ${intakeFileContextEvidence}->>'teilId' IS NOT NULL AND ${intakeFileHandoffEvidence}
+    ${itemId===undefined?sql``:sql`AND ${intakeFileContextEvidence}->>'teilId'=${itemId}`}
+    AND EXISTS(SELECT 1 FROM public.intake_event stored WHERE stored.tenant_id=file.tenant_id AND stored.item_id=file.item_id
+      AND stored.art='original_gespeichert' AND stored.nachher->>'fileId'=file.id::text AND stored.nachher->>'sha256'=file.sha256)
+   ORDER BY source.erstellt_am DESC,file.id`);
+  return rows.map(row=>({...row,bytes:Number(row.bytes)}));
+}
+
+export async function readHandoffIntakeOriginals(auth:AuthorizationSnapshot,input:{orderId:string;itemId?:string}){
+ try{
+  const data=await withPrivilegedTenantTransaction(auth,tx=>readHandoffIntakeOriginalsInTransaction(tx,auth,input));
+  return {code:'OK' as const,data};
+ }catch(error){
+  console.error('[INTAKE_HANDOFF_ORIGINALS_READ_FAILED]',error);
+  return {code:'UNAVAILABLE' as const,message:'Neue Werkstattfotos konnten nicht geladen werden. Code: INTAKE_HANDOFF_ORIGINALS_READ_FAILED.'};
+ }
+}
+
 export async function readDomainIntakeOriginals(target:'ORDER'|'CUSTOMER',id:unknown){
  if(target==='ORDER'?(typeof id!=='string'||!UUID.test(id)):!validCustomerId(id))return {code:'VALIDATION_ERROR' as const,message:target==='ORDER'?'Auftragskennung ist ungültig.':'Kundenkennung ist ungültig.'};
  const targetId=id as string;
@@ -187,6 +219,9 @@ export async function openIntakeOriginal(input:unknown){
  try{
   const file=await readOriginalFile(auth.data,value.fileId);
   if(!file)return {code:"NOT_FOUND" as const,message:"Original wurde nicht gefunden."};
+  if(file.handoff_context&&(!value.orderId||!file.handoff_proven||!auth.data.permissions.includes('perm_op_photos'))){
+   return {code:'FORBIDDEN' as const,message:'Original gehört nicht zu diesem sichtbaren Auftrag.'};
+  }
   const orderAccess=value.orderId&&auth.data.permissions.includes('perm_view_leitstand')?await withPrivilegedTenantTransaction(auth.data,async tx=>{
    const linked=await tx.execute(sql`SELECT source.id FROM public.intake_item source
     WHERE source.tenant_id=${auth.data.tenantId} AND source.vorgang_art='auftrag' AND source.vorgang_id=${value.orderId}

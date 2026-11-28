@@ -12,6 +12,11 @@ import {readErkennungsEinstellungenInTransaction} from '@/modules/fundament/serv
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
+const database=process.env.DATABASE_URL;
+if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database).hostname!=='127.0.0.1'){
+ throw Error('S23A_VORSCHLAG_LOOPBACK_REQUIRED');
+}
+
 it('leitet den Kundenvorschlag aus der gespeicherten Erkennung ab und bestätigt ihn über die vorhandene Zuordnung',async()=>{
  const kundeId=await customerFixture('TEST S23a Vorschlag');
  const itemId=randomUUID();

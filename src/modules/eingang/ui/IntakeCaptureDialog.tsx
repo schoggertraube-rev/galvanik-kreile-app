@@ -8,7 +8,8 @@ import {PACKAGE_ONSITE_COPY} from "@/ui/situationCatalog";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button, Dialog, Textfeld, Hinweis, Icon } from "@/ui/kr";
 import type { GlobalCreatePorts } from "../GlobalCreateFlow";
-import { recognizeNoteConcerns, type IntakeCapture } from "../captureContract";
+import {recognizeNoteConcerns,type EingangVorschlag,type EingangVorschlagOption,type IntakeCapture} from "../captureContract";
+import {EINGANG_VORSCHLAG_COPY} from '@/ui/eingangCopy';
 import { retainPendingOriginal, readPendingOriginals, acknowledgePendingOriginal } from "../pendingOriginals";
 import { findRecognizedCustomers } from "../customerRecognition";
 import { uploadIntakeOriginal } from "../intakeOriginalUpload";
@@ -17,7 +18,6 @@ import Image from "next/image";
 import { getIntakeDeviceId, type IntakeDeviceRequest } from "../deviceContract";
 import {intakeStartTitle,SITUATION_COPY,CAPTURE_COPY,type IntakeQuoteCandidate} from '@/ui/situationCatalog';
 import {IntakeSituation} from "./IntakeSituation";
-import type { CaptureKind } from "../captureRecognition";
 
 type Props = { resumePendingId?:string|null;resumeSourceId?:string|null; ports: GlobalCreatePorts; handoverToken?: string | null; mode?:"eingang"|"datei"|"eingangsfoto"|"visitenkarte"; onClose: (message?: string) => void;
   onAdopt?:(capture:IntakeCapture,message:string)=>void; onOrder: (customerId?: string, capture?: IntakeCapture) => void; onCustomer: (capture?: IntakeCapture) => void | string };
@@ -27,7 +27,7 @@ const subscribeDevice = (changed: () => void) => { const query = matchMedia(CAME
 const deviceSnapshot = () => matchMedia(CAMERA_DEVICE_QUERY).matches;
 const serverDeviceSnapshot = () => false;
 export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, handoverToken, mode, onAdopt, onClose, onOrder, onCustomer }: Props) {
-  const { readCaptureNote, searchIntakeCustomers, getCaptureScope, getCapture:readCapture, deviceRequest, saveCaptureNote, discardCapture } = ports;
+  const {readCaptureNote,searchIntakeCustomers,getCaptureScope,getCapture:readCapture,deviceRequest,saveCaptureNote,discardCapture,readCaptureProposal,runCaptureProposal}=ports;
   const getCapture=useMemo(()=>readCapture?async(id:string)=>readCapture(id,undefined,{packageExpectation:false}):undefined,[readCapture]);
   const [onsite,setOnsite]=useState(Boolean(resumeSourceId));
   const [itemId, setItemId] = useState(() => crypto.randomUUID());
@@ -66,9 +66,8 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
   const [closeRequested, setCloseRequested] = useState(false);
   const [hidePreviousResult,setHidePreviousResult]=useState(false);
   const discardKey=useRef(crypto.randomUUID());
-  const kindKeys = useRef(new Map<string, string>());
-  const [kindWorking, setKindWorking] = useState<Exclude<CaptureKind, "unklar"> | null>(null);
-  const [goodsChoice, setGoodsChoice] = useState(false);
+  const proposalKeys=useRef(new Map<string,string>());
+  const [proposal,setProposal]=useState<{key:string;value:EingangVorschlag}|null>(null);
   const localInput = useRef(false);
   const earlyNote = useRef<{ text: string; stand: string; dismissed: string[] } | null>(null);
   const photoRequestId = photoRequest?.id;
@@ -89,6 +88,15 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
   const expectationVersions=useRef(new Map<string,Promise<IntakeCapture['packageContext']>>());
   const packageContext=capture?.packageContext;
   const expectationId=capture?.id,expectationVersion=capture?.version,expectationKind=capture?.recognition?.kind,hasExpectation=Boolean(capture?.packageContext);
+  const proposalKey=expectationId&&expectationVersion!==undefined?`${expectationId}:${expectationVersion}`:null;
+  useEffect(()=>{
+    if(mode||receiving||!expectationId||!proposalKey||!readCaptureProposal)return;
+    let active=true;
+    void readCaptureProposal(expectationId).then(result=>{
+      if(active&&result.code==='OK')setProposal({key:proposalKey,value:result.vorschlag});
+    }).catch(cause=>console.error('[INTAKE_PROPOSAL_READ_FAILED]',cause));
+    return()=>{active=false;};
+  },[mode,receiving,expectationId,proposalKey,readCaptureProposal]);
   useEffect(()=>{
     if(!expectationId||expectationVersion===undefined||expectationKind!=='ware'||!readCapture)return;
     const key=expectationId+':'+expectationVersion;
@@ -492,26 +500,28 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
       const refreshed=await getCapture(capture.id);if(refreshed.code!=='OK'){setError(refreshed.message);return;}setCapture(refreshed.capture);
     }catch(cause){console.error('[PACKAGE_CUSTOMER_ASSIGN_FAILED]',cause);setError(PACKAGE_ASSIGN_COPY.failed);}finally{inFlight.current=false;setBusy(false);}
   };
-  const chooseKind = async (kind: Exclude<CaptureKind, "unklar">) => {
-    if (!capture || inFlight.current) return;
-    if (!ports.chooseCaptureKind) { setError("Die Art des Eingangs kann nicht gespeichert werden · Code: INTAKE_KIND_PORT_MISSING."); return; }
-    inFlight.current = true; setBusy(true); setError(null); setKindWorking(kind);
-    const request = capture.id + ":" + capture.version + ":" + kind;
-    if (!kindKeys.current.has(request)) kindKeys.current.set(request, crypto.randomUUID());
-    try {
-      const result = await ports.chooseCaptureKind({ itemId: capture.id, version: capture.version, clientEventId: kindKeys.current.get(request)!, kind });
-      if (result.code !== "OK") { setError(result.message); return; }
-      setCapture(result.capture);
-      if (kind === "anfrage") onOrder(result.capture.customerId ?? undefined, result.capture);
-      else if (kind === "rechnung") {
-        if (ports.canManageMoney) openObject("rechnungein", result.capture.id);
-        else onClose("Gespeichert · Büro prüft");
-      } else if (kind === "ware") {
-        setGoodsChoice(true);
-      } else openObject("mailein", result.capture.id + "#rein");
-    } catch (cause) { console.error("[INTAKE_KIND_UI_WRITE_FAILED]", cause); setError("Die Art des Eingangs wurde nicht bestätigt · Original bleibt erhalten. Code: INTAKE_KIND_UI_WRITE_FAILED."); }
-    finally { inFlight.current = false; setBusy(false); setKindWorking(null); }
+  const runProposal=async(option:EingangVorschlagOption)=>{
+    if(inFlight.current||!capture||!proposalKey||!runCaptureProposal||!getCapture)return;
+    inFlight.current=true;setBusy(true);setError(null);
+    const clientEventId=proposalKeys.current.get(option.vorschlagId)??crypto.randomUUID();
+    proposalKeys.current.set(option.vorschlagId,clientEventId);
+    try{
+      const result=await runCaptureProposal({itemId:capture.id,vorschlagId:option.vorschlagId,clientEventId});
+      if(result.code!=='OK'){setError(result.message);if(result.code!=='CONFLICT')return;}
+      const fresh=await getCapture(capture.id);
+      if(fresh.code!=='OK'){setError(fresh.message);return;}
+      if(fresh.capture.id!==capture.id){setError(EINGANG_VORSCHLAG_COPY.veraltet);return;}
+      setCapture(fresh.capture);savedCapture.current=fresh.capture;
+      if(result.vorschlag)setProposal({key:fresh.capture.id+':'+fresh.capture.version,value:result.vorschlag});
+    }catch(cause){console.error('[INTAKE_PROPOSAL_RUN_FAILED]',cause);setError(EINGANG_VORSCHLAG_COPY.veraltet);}
+    finally{inFlight.current=false;setBusy(false);}
   };
+  const choice=proposal?.key===proposalKey?proposal.value:null;
+  const executable=choice?.haupt&&runCaptureProposal&&getCapture?choice.haupt:null;
+  const proposalAction=executable?<div><p>{executable.satz}</p><Button art="primaer" text={executable.knopf} disabled={busy} onClick={()=>void runProposal(executable)}/></div>
+    :choice?.frage&&runCaptureProposal&&getCapture?<div><p>{choice.frage.satz}</p>{choice.frage.kandidaten.map(option=><div key={option.vorschlagId}>
+       <Button text={option.kunde} disabled={busy} onClick={()=>void runProposal(option)}/><p>{option.grund}</p></div>)}</div>
+    :choice?.satz?<p>{choice.satz}</p>:null;
   const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&(capture.files.some(file=>file.secured===true)||situationRequested&&Boolean(capture.recognition?.text.trim())&&!["notiz","unklar"].includes(capture.recognition?.kind??"unklar")));
   const readSituation=async()=>{if(inFlight.current)return;inFlight.current=true;setBusy(true);try{const saved=await saveNote();if(saved){setSituationRequested(true);setHidePreviousResult(false);}}catch(cause){console.error("[INTAKE_NOTE_SAVE_FAILED]",cause);setError("Speichern fehlgeschlagen · Text bleibt erhalten. Code: INTAKE_NOTE_SAVE_FAILED.");}finally{inFlight.current=false;setBusy(false);}};
   const resultMain = capture && hasCapturedContent && !mode && !receiving && !busy && !showCamera && !hidePreviousResult ? recognizedKind === "anfrage" ?
@@ -543,7 +553,7 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
       {receiving ? <Button data-spec-id="rein.handy-fertig" art={showCamera ? "leise" : "erledigen"} text={CAPTURE_COPY.done} disabled={busy || deviceWorking || pending.length > 0} onClick={() => void finishPhotos("fertig")} />
         : mode && capture && hasCapturedContent && !showCamera && !hidePreviousResult ? <Button data-spec-id={failedFile ? "rein.als-dokument" : "rein.uebernehmen"} art="erledigen" text={failedFile ? "Als Dokument übernehmen" : "Übernehmen"} disabled={busy} onClick={adopt} />
           : !mode && hasContent ? <Button data-spec-id="rein.spaeter-zuordnen" text={CAPTURE_COPY.later} disabled={busy} onClick={() => void close()} /> : null}
-      {resultMain}
+      {proposalAction??resultMain}
       {firstOriginal && !showCamera && !receiving ? <Button data-spec-id="rein.original" art="leise" text={CAPTURE_COPY.original} title={firstOriginal.name}
         onClick={() => openObject("original", capture!.id + "#" + firstOriginal.id)} /> : null}
       {!mode && !receiving && hasContent && (!capture || ["anfrage", "kontakt", "rechnung", "ware"].includes(recognizedKind)) ?
@@ -556,7 +566,7 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
     }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); chooseFiles(event.dataTransfer.files); }}
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
       {showSituation&&capture&&recognizedKind==='ware'&&!capture.customerId&&ports.receiveOnsiteQuote&&ports.canCreateQuote&&ports.canCreateCustomer&&capture.packageContext?.status==='OK'&&capture.packageContext.candidates.length===0?<Button text={PACKAGE_ONSITE_COPY.open} onClick={()=>setOnsite(true)} disabled={busy}/>:null}
-      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy} quotes={quoteCandidates} onCustomerCandidate={id=>void choosePackageCustomer(id)} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onKind={kind=>void chooseKind(kind)} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
+      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy} quotes={quoteCandidates} onCustomerCandidate={id=>void choosePackageCustomer(id)} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} proposal={proposalAction} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
       <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         {!mode&&ports.actorDisplayName?.trim()?<h2>{intakeStartTitle(ports.actorDisplayName)}</h2>:null}
         {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}
@@ -606,21 +616,14 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId, ports, han
           <Button art="leise" icon="inbox" title="Taste A" text={CAPTURE_COPY.order} disabled={contextLoading || Boolean(contextError)} data-spec-id="rein.auftrag-erfassen" onClick={() => onOrder(createContext?.customerId)} />
           <Button art="leise" icon="user" title="Taste K" text={CAPTURE_COPY.customer} data-spec-id="rein.kunde-anlegen" onClick={() => onCustomer()} />
         </section> : null}
-        {busy ? <p role="status">{kindWorking ? `Art „${kindNames[kindWorking]}“ wird gespeichert …` : `${progress.done} von ${progress.total} hochgeladen · wird übertragen und geprüft …`}</p> : null}
+        {busy ? <p role="status">{`${progress.done} von ${progress.total} hochgeladen · wird übertragen und geprüft …`}</p> : null}
         {capture&&hasCapturedContent&&!hidePreviousResult ? <div data-spec-id={capture.files.some(file => file.status === "fehler") ? "rein.zustand.fehler" : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? "rein.zustand.laden" : "rein.zustand.erkannt"}>
           <strong>{capture.files.some(file => file.status === "fehler") ? capture.files.every(file => file.secured === true) ? "Nicht lesbar · Original gesichert" : "Original noch nicht gesichert" : capture.files.some(file => ["wartet", "laeuft"].includes(file.status)) ? "Wird gelesen · Original gesichert" : mode === "eingangsfoto" ? "Eingangsfoto gesichert" : (capture.recognition?.source === "hand" ? "Gewählt · " : "Erkannt · ") + kindNames[recognizedKind]}</strong>
-          {!mode && !receiving && recognizedKind === "unklar" && !busy ? <section data-spec-id="rein.was-ist-das" className="kr-stapel"><h3>Was ist das?</h3><div className="ev-rein-karten">
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.auftrag" onClick={() => void chooseKind("anfrage")}><Icon name="inbox"/><b>Auftrag/KV</b></button>
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.ware" onClick={() => void chooseKind("ware")}><Icon name="box"/><b>Ware</b></button>
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.rechnung" onClick={() => void chooseKind("rechnung")}><Icon name="file"/><b>Eingangsrechnung</b></button>
-            <button type="button" className="ev-karte" data-spec-id="rein.was-ist.dokument" onClick={() => void chooseKind(capture.files.length ? "dokument" : "notiz")}><Icon name="file"/><b>Dokument/Notiz zum Kunden</b></button>
-          </div></section> : null}
           {capture.recognition?.text ? <p className="ev-rein-original">{capture.recognition.text}</p> : null}
           {capture.files.map(file => <div key={file.id}><p>{file.name} · {file.secured === true ? "Original gesichert" : "Übertragung offen"}</p>
             {file.secured === true ? <Button data-spec-id={"rein.original." + file.id} art="leise" text={file.name + " anzeigen"} onClick={() => openObject("original", capture.id + "#" + file.id)} /> : null}
           </div>)}
           {!mode && (recognizedKind === "unklar" || recognizedKind === "ware") && Boolean(capture.expectedOrders?.length) ? <section data-spec-id="rein.erwartet" className="kr-stapel"><h3>Erwartete Ware</h3>
-            {goodsChoice ? <p role="status">Auftrag für die erwartete Ware wählen</p> : null}
             {capture.expectedOrders!.map(order => <Button key={order.id} data-spec-id="rein.erwartet-waehlen" text={order.number + " · " + (order.customerName ?? "Kunde fehlt") + " · " + (order.title ?? "Titel fehlt")}
               onClick={() => openObject("ware", order.id + "#" + capture.id)} />)}
           </section> : null}

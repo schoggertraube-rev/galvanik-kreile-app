@@ -9,9 +9,9 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
-import {TEST_PHOTO_BYTES} from '../../../e2e/ablauf/photoFixture';
+import {TEST_PHOTO_BYTES,reserveLegacyDocument} from '../../../e2e/ablauf/photoFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
-import {reserveDomainAttachmentAction,getDomainAttachmentOriginalAction} from '@/app/actions/domainAttachments.actions';
+import {getDomainAttachmentOriginalAction} from '@/app/actions/domainAttachments.actions';
 import {finalizeDomainAttachment} from '@/lib/server/domainAttachment';
 
 const dedicated=process.env.KREILE_S11_LEGACY_BOUNDARY==='true'&&!!process.env.DATABASE_URL&&new URL(process.env.DATABASE_URL).port==='54352';
@@ -20,7 +20,7 @@ it.skipIf(!dedicated)('F11-3 actual pre-S11 original is explicitly backfilled as
  expect(files).toHaveLength(177);
  expect(await sql`SELECT count(*)::integer AS n FROM supabase_migrations.schema_migrations`).toEqual([{n:173}]);
  const customerId=await customerFixture('TEST S11 echtes Altfoto'),hash=createHash('sha256').update(TEST_PHOTO_BYTES).digest('hex');
- const reserved=await withSession(full,()=>reserveDomainAttachmentAction({targetType:'CUSTOMER',targetId:customerId,clientRequestId:randomUUID(),mimeType:'image/png',fileBytes:TEST_PHOTO_BYTES.length,contentSha256:hash}));
+ const reserved=await withSession(full,()=>reserveLegacyDocument({targetType:'CUSTOMER',targetId:customerId,clientRequestId:randomUUID(),mimeType:'image/png',fileBytes:TEST_PHOTO_BYTES.length,contentSha256:hash}));
  if(reserved.code!=='OK'||!reserved.data.upload)throw Error('TEST_S11_LEGACY_RESERVATION');
  const attachmentId=reserved.data.receipt.attachmentId,url=new URL('/storage/v1/object/upload/sign/scans/'+reserved.data.upload.path,process.env.NEXT_PUBLIC_SUPABASE_URL);
  expect(url.hostname).toBe('127.0.0.1');url.searchParams.set('token',reserved.data.upload.token);

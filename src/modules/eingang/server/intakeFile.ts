@@ -1,6 +1,7 @@
 import "server-only";
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {INTAKE_FILE_CONTEXT_COPY} from '@/ui/eingangCopy';
+import {isOrderStationPhoto,readHandoffIntakePhotoTarget} from '@/lib/server/orderStationAttachment';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import { createHash } from "node:crypto";
@@ -12,7 +13,7 @@ import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} fr
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
 import {isIntakeFileContext,isIntakeOriginalTakeover} from '../captureContract';
-import {intakeFileContextEvidence,mayCaptureContextFile,qualifyIntakeFileContext,
+import {intakeFileContextEvidence,intakeFileHandoffEvidence,mayCaptureContextFile,qualifyIntakeFileContext,
   type IntakeFileCustomerReader,type StoredIntakeFileContext} from './intakeFileContext';
 
 import { erkenneOriginal, recordIntakeRecognitionFailure, type ReadRecognitionSettings } from "./erkennung";
@@ -23,6 +24,7 @@ const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FinishedFile = Failure | (Extract<IntakeCaptureResult,{code:'OK'}>&{kontextSichtbarkeit?:boolean});
 const {contextMismatch,contextForbidden}=INTAKE_FILE_CONTEXT_COPY;
+class StationContextRejected extends Error {constructor(readonly failure:Failure){super(failure.code);}}
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string; reihenfolge:number };
 type IntakeFileCompletion = { retryKey?: string; readSettings: ReadRecognitionSettings;
   scheduleRecognition?: (work: () => Promise<void>) => void; importingMail?: true;
@@ -45,6 +47,8 @@ function inputFile(value: unknown): value is IntakeFileInput {
 }
 export async function prepareIntakeFile(input: unknown, ensureOriginal=false, readCustomer?:IntakeFileCustomerReader): Promise<IntakeFileGrant | Failure> {
   if (!inputFile(input)) return { code: "VALIDATION_ERROR", message: "Datei benötigt Name, Typ, SHA-256 und 1 bis 150 MB Inhalt." };
+  if(input.kontext?.uebergabeVersion!==undefined&&!isOrderStationPhoto(input.mime,input.bytes))
+    return {code:'VALIDATION_ERROR',message:INTAKE_FILE_CONTEXT_COPY.stationPhoto};
   const auth = await fileAuthorization(input.takeover!==undefined);
   if ("code" in auth) return auth as Failure;
   if(input.kontext&&!mayCaptureContextFile(auth,input.kontext))return {code:'FORBIDDEN',message:contextForbidden};
@@ -81,9 +85,15 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false, re
       const row = files[0];
       if (files.length !== 1 || row.item_id !== input.itemId || row.dateiname !== input.name || row.mime !== input.mime || Number(row.bytes) !== input.bytes || row.sha256 !== input.sha256 || row.aufgenommen_auf !== (input.deviceId ?? null) || row.aufnahme_herkunft !== (input.captureOrigin ?? "dokument")) throw new Error("INTAKE_FILE_CLIENT_KEY_CONFLICT");
       if(inserted.length===1&&kontext){
+        const station=kontext.uebergabeVersion===undefined?null:await readHandoffIntakePhotoTarget(tx,auth,{
+          orderId:kontext.auftragId!,itemId:kontext.teilId!,expectedVersion:kontext.uebergabeVersion,
+        });
+        if(station&&station.code!=='OK')throw new StationContextRejected(station);
+        if(station&&station.customerId!==kontext.kundeId)throw new StationContextRejected({code:'CONFLICT',message:contextMismatch});
         const belege=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
           VALUES(${auth.tenantId},${input.itemId}::uuid,'zugeordnet',${input.fileId}::uuid,${auth.userId},
-          ${JSON.stringify({action:'original_kontext',fileId:input.fileId,sha256:input.sha256,kontext})}::jsonb) RETURNING id`);
+          ${JSON.stringify({action:'original_kontext',fileId:input.fileId,sha256:input.sha256,kontext,
+            ...(station?{uebergabeEreignisId:station.transitionEventId}:{})})}::jsonb) RETURNING id`);
         if(belege.length!==1)throw Error('INTAKE_FILE_CONTEXT_NOT_SAVED');
       }else if(!isDeepStrictEqual(kontext,row.kontext)||kontext&&row.aufgenommen_von!==auth.userId)throw Error('INTAKE_FILE_CONTEXT_CONFLICT');
       if(input.deviceCapturedAt!==undefined){
@@ -103,6 +113,7 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false, re
     if (grant.error || !grant.data || grant.data.path !== pending.speicherpfad) throw new Error("INTAKE_FILE_UPLOAD_GRANT_UNAVAILABLE");
     return { code: "OK", upload: { bucket: BUCKET, path: grant.data.path, token: grant.data.token, url: grant.data.signedUrl } };
   } catch(error){
+    if(error instanceof StationContextRejected)return error.failure;
     if(error instanceof Error&&error.message==='INTAKE_FILE_CONTEXT_CONFLICT')return {code:'CONFLICT',message:contextMismatch};
     recordObservedFailure('INTAKE_FILE_PREPARE_FAILED');
     return { code: "UNAVAILABLE", message: "Datei ist noch nicht vollständig gesichert. Eingaben bleiben erhalten. Fehlercode: INTAKE_FILE_PREPARE_FAILED." };
@@ -115,13 +126,13 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
   if ("code" in auth) return auth;
   let recognitionStarted=false;
   try {
-    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string;invoice_context:boolean;kontext:unknown;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;zuordnung_regel:string|null}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,file.aufgenommen_von::text,file.reihenfolge,source.kanal,source.kunde_id,source.vorgang_id,source.vorgang_art,source.zuordnung_regel,
-      ${intakeFileContextEvidence} AS kontext,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
+    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string;invoice_context:boolean;kontext:unknown;uebergabe:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;zuordnung_regel:string|null}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,file.aufgenommen_von::text,file.reihenfolge,source.kanal,source.kunde_id,source.vorgang_id,source.vorgang_art,source.zuordnung_regel,
+      ${intakeFileContextEvidence} AS kontext,${intakeFileHandoffEvidence} AS uebergabe,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
     if (files.length !== 1) return { code: "NOT_FOUND", message: "Datei wurde nicht gefunden." };
     const file = files[0];
     const kontext=isIntakeFileContext(file.kontext)&&file.kontext.kundeId?file.kontext as StoredIntakeFileContext:null;
     if((file.kontext!==null||file.zuordnung_regel==='kontext')&&(!kontext||!mayCaptureContextFile(auth,kontext)||
-      !retryKey&&file.aufgenommen_von!==auth.userId||kontext.kundeId!==file.kunde_id||
+      !retryKey&&file.aufgenommen_von!==auth.userId||kontext.kundeId!==file.kunde_id||kontext.uebergabeVersion!==undefined&&!file.uebergabe||
       (kontext.auftragId??null)!==file.vorgang_id||(kontext.auftragId?'auftrag':null)!==file.vorgang_art))return {code:'FORBIDDEN',message:contextForbidden};
     const mailOriginal=file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'),invoiceAccess=hasAuthorizationArea(auth,'buchhaltung')&&file.invoice_context===true&&!mailOriginal;
     if(!kontext&&!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN',message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};

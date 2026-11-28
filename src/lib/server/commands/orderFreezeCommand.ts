@@ -4,7 +4,7 @@ import {ORDER_ITEM_PHOTO_COPY} from '@/ui/situationCatalog';
 import { sql } from "drizzle-orm";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction,type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {appendProductionCompletion,appendFrozenProductionExtraWork} from '@/lib/server/productionSnapshotPort';
 
 const EVENT_TYPE = "ORDER_FROZEN_V1";
@@ -246,7 +246,9 @@ function receiptMatchesIntent(receipt: OrderFrozenReceipt, input: FreezeOrderInp
     && receipt.aggregateVersion === input.expectedVersion + 1;
 }
 
-export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderResult> {
+type IntakePhotoReader=(tx:PrivilegedTenantTransaction,auth:{tenantId:string},input:{orderId:string})=>Promise<readonly {itemId:string}[]>;
+
+export async function freezeOrder(input: FreezeOrderInput,readIntakePhotos?:IntakePhotoReader): Promise<FreezeOrderResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültiger Fertig-Abschluss." };
   }
@@ -370,7 +372,12 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
           AND photo.source_kind='ORDER_STATION_ATTACHMENT' AND photo.integrity_ok=true AND photo.original_state='VERIFIED'
           AND photo.original_mime_type IN ('image/jpeg','image/png','image/webp')
           AND photo.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',item.order_id),jsonb_build_object('targetType','ORDER_ITEM','targetId',item.id)))`);
-      if(missingPhotos.length)return {code:'VALIDATION_ERROR',message:ORDER_ITEM_PHOTO_COPY.required};
+      if(missingPhotos.length){
+        if(!readIntakePhotos)return {code:'VALIDATION_ERROR',message:ORDER_ITEM_PHOTO_COPY.required};
+        const originals=await readIntakePhotos(tx,authorization.data,{orderId:order.id});
+        const covered=new Set(originals.map(original=>original.itemId));
+        if(missingPhotos.some(item=>!covered.has(item.id)))return {code:'VALIDATION_ERROR',message:ORDER_ITEM_PHOTO_COPY.required};
+      }
 
       const rateRows = await tx.execute<RateRow>(sql`
         SELECT id::text AS id, tenant_id, hourly_rate_cents, version

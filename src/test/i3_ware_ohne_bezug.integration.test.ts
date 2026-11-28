@@ -6,7 +6,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
 import {full,sql,withSession} from '../../e2e/ablauf/replayHarness';
-import {chooseIntakeCaptureKindAction,finishIntakeFileAction,getGoodsReceiptsAction,getIntakeCaptureAction,getIntakeMessagesAction,
+import {finishIntakeFileAction,getGoodsReceiptsAction,getIntakeCaptureAction,getIntakeMessagesAction,
  legePaketOhneBezugAbAction,saveGoodsReceiptAction,verknuepfePaketOhneBezugAction} from '@/app/actions/eingang.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {projiziereEingangTagFakten} from '@/lib/server/todayDashboard';
@@ -42,10 +42,7 @@ it('legt das Original am angegebenen Ort ab und verbindet es später einmalig mi
  if(davor.code!=='OK')throw Error('TEST_I3_PAKET_QUELLE:'+davor.code);
  expect(davor.capture.concerns).toContain('ware_ohne_bezug');
  expect(await paketZeilen()).toEqual([]);
- const ware=await withSession(full,()=>chooseIntakeCaptureKindAction({itemId,version:davor.capture.version,
-  clientEventId:randomUUID(),kind:'ware'}));
- if(ware.code!=='OK')throw Error('TEST_I3_PAKET_ART:'+ware.code);
- const ablage={itemId,version:ware.capture.version,befehlId:randomUUID(),ort:'TEST Regal 2'};
+ const ablage={itemId,version:davor.capture.version,befehlId:randomUUID(),ort:'TEST Regal 2'};
  expect(await withSession(full,()=>legePaketOhneBezugAbAction({...ablage,ort:''}))).toMatchObject({code:'VALIDATION_ERROR'});
  const abgelegt=await withSession(full,()=>legePaketOhneBezugAbAction(ablage));
  expect(abgelegt).toMatchObject({code:'OK',paket:{itemId,ort:ablage.ort,auftragId:null,verknuepftAm:null},wiederholt:false});

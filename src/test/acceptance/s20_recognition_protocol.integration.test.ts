@@ -7,9 +7,6 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession} from '../../../e2e/ablauf/replayHarness';
-import {customerFixture} from '../../../e2e/ablauf/orderFixture';
-import {TEST_PHOTO_BYTES} from '../../../e2e/ablauf/photoFixture';
-import {reserveDomainAttachmentAction,finalizeDomainAttachmentAction,analyzeDomainAttachmentAction,getDomainAttachmentOriginalAction} from '@/app/actions/domainAttachments.actions';
 import {prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction} from '@/app/actions/eingang.actions';
 import {uploadIntakeOriginal} from '@/modules/eingang/public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('S20_DEDICATED_TEST_REPLAY_REQUIRED');
@@ -52,48 +49,5 @@ it('records actual OCR provider OK/HTTP failure/timeout and secured original has
    expect(attempts).toBe(before+1);
    expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND dienst='belegerkennung' AND original_ref=${input.fileId}`).toHaveLength(1);
   }
- }finally{provider.mockRestore();vi.unstubAllEnvs();}
-});
-
-it('the existing secured domain attachment/OCR writer reports its own actual original, and missing provider configuration never produces an external success',async()=>{
- const customerId=await customerFixture('TEST S20 existing document');
- const hash=createHash('sha256').update(TEST_PHOTO_BYTES).digest('hex');
- const reserved=await withSession(full,()=>reserveDomainAttachmentAction({targetType:'CUSTOMER',targetId:customerId,clientRequestId:randomUUID(),mimeType:'image/png',fileBytes:TEST_PHOTO_BYTES.length,contentSha256:hash}));
- if(reserved.code!=='OK'||!reserved.data.upload)throw Error('TEST_REAL_DOMAIN_GRANT_REQUIRED');
- const attachmentId=reserved.data.receipt.attachmentId;
- const url=new URL('/storage/v1/object/upload/sign/scans/'+reserved.data.upload.path,process.env.NEXT_PUBLIC_SUPABASE_URL);if(url.hostname!=='127.0.0.1')throw Error('TEST_STORAGE_LOOPBACK_REQUIRED');
- url.searchParams.set('token',reserved.data.upload.token);
- expect((await fetch(url,{method:'PUT',headers:{'content-type':'image/png','x-upsert':'false'},body:new Blob([new Uint8Array(TEST_PHOTO_BYTES).buffer],{type:'image/png'})})).ok).toBe(true);
- const finish={attachmentId,fileBytes:TEST_PHOTO_BYTES.length,contentSha256:hash};
- expect(await withSession(full,()=>finalizeDomainAttachmentAction(finish))).toMatchObject({code:'OK'});
- // The existing download reader accepts secured originals. Read its real grant
- // before the existing OCR writer transitions the row to ocr_review.
- const original=await withSession(full,()=>getDomainAttachmentOriginalAction({attachmentId}));expect(original).toMatchObject({code:'OK'});
- if(original.code!=='OK')throw Error('TEST_REAL_ORIGINAL_READ_REQUIRED');
- const input={attachmentId,targetType:'CUSTOMER' as const,targetId:customerId};
- vi.stubEnv('AZURE_DOCINTEL_ENDPOINT','');vi.stubEnv('AZURE_DOCINTEL_KEY','');
- try{
-  expect(await withSession(full,()=>analyzeDomainAttachmentAction(input))).toMatchObject({code:'IN_KLAERUNG'});
-  expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND dienst='belegerkennung' AND original_ref=${attachmentId}`).toHaveLength(0);
- }finally{vi.unstubAllEnvs();}
- vi.stubEnv('AZURE_DOCINTEL_ENDPOINT','https://test-s20-domain-ocr.invalid/');vi.stubEnv('AZURE_DOCINTEL_KEY','TEST_PRIVATE_PROVIDER_KEY');
- const originalFetch=globalThis.fetch;let attempts=0;
- const provider=vi.spyOn(globalThis,'fetch').mockImplementation(async(source,init)=>{
-  const request=new URL(typeof source==='string'?source:source instanceof URL?source.href:source.url);
-  if(request.hostname!=='test-s20-domain-ocr.invalid')return originalFetch(source,init);
-  if(init?.method==='POST'){attempts++;return new Response(null,{status:202,headers:{'operation-location':'https://test-s20-domain-ocr.invalid/documentintelligence/documentModels/prebuilt-layout/analyzeResults/TEST'}});}
-  return Response.json({status:'succeeded',analyzeResult:{content:'TEST PRIVATE_DOMAIN_DOCUMENT'}});
- });
- try{
-  expect(await withSession(full,()=>analyzeDomainAttachmentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'OK'});
-  expect(attempts).toBe(1);
-  const entries=await sql`SELECT * FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND dienst='belegerkennung' AND original_ref=${attachmentId}`;
-  expect(entries).toHaveLength(1);expect(entries[0]).toMatchObject({user_id:full.actorId,subject_id:attachmentId,original_sha256:hash,ergebnis:'ok'});
-  expect(JSON.stringify(entries)).not.toContain('PRIVATE_DOMAIN_DOCUMENT');expect(JSON.stringify(entries)).not.toContain('PRIVATE_PROVIDER_KEY');
-  expect(await sql`SELECT status,original_hash FROM public.scan_uploads WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${attachmentId}`).toEqual([{status:'ocr_review',original_hash:hash}]);
-  const reread=await fetch(original.data.downloadUrl);expect(reread.ok).toBe(true);
-  expect(createHash('sha256').update(Buffer.from(await reread.arrayBuffer())).digest('hex')).toBe(hash);
-  // An analyzed original is not silently analyzed again on a fresh command.
-  expect(await withSession(full,()=>analyzeDomainAttachmentAction(JSON.parse(JSON.stringify(input))))).toMatchObject({code:'NOT_FOUND'});expect(attempts).toBe(1);
  }finally{provider.mockRestore();vi.unstubAllEnvs();}
 });

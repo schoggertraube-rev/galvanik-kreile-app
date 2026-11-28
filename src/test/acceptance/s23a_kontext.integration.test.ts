@@ -9,10 +9,12 @@ import {createFixture,full,sql,withSession} from '../../../e2e/ablauf/replayHarn
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {finishIntakeFileAction,getIntakeCaptureAction,openIntakeOriginalAction,prepareIntakeFileAction} from '@/app/actions/eingang.actions';
 import {createAdminClient} from '@/lib/supabase/admin';
-import {finalizeDomainAttachmentAction,getDomainAttachmentOriginalAction,getDomainAttachmentsAction,reserveDomainAttachmentAction} from '@/app/actions/domainAttachments.actions';
+import {getDomainAttachmentOriginalAction,getDomainAttachmentsAction} from '@/app/actions/domainAttachments.actions';
 import {readSecuredOrderPhotoIds} from '@/lib/server/domainAttachment';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+
+import {reserveLegacyDocument,finishLegacyDocument} from '../../../e2e/ablauf/photoFixture';
 
 const photo=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1EAAAAASUVORK5CYII=','base64');
 
@@ -84,13 +86,13 @@ it('liest auf der Kundenkarte den neuen Eingang und den bisherigen Anhang und ö
   grant.upload.token,photo,{contentType:'image/png',upsert:false})).error).toBeNull();
  expect(await withSession(fotoLogin,()=>finishIntakeFileAction(fileId,deviceRead),true)).toMatchObject({code:'OK',capture:{customerId:kunde}});
  const target={targetType:'CUSTOMER' as const,targetId:kunde};
- const historisch=await withSession(full,()=>reserveDomainAttachmentAction({...target,clientRequestId:randomUUID(),
+ const historisch=await withSession(full,()=>reserveLegacyDocument({...target,clientRequestId:randomUUID(),
   mimeType:'image/png',fileBytes:photo.length,contentSha256:sha256}));
  if(historisch.code!=='OK'||!historisch.data.upload)throw Error('TEST_S23A_ALT_UPLOAD:'+historisch.code);
  const altId=historisch.data.receipt.attachmentId,altUpload=historisch.data.upload;
  expect((await createAdminClient().storage.from('scans').uploadToSignedUrl(altUpload.path,altUpload.token,photo,
   {contentType:'image/png',upsert:false})).error).toBeNull();
- expect(await withSession(full,()=>finalizeDomainAttachmentAction({attachmentId:altId,fileBytes:photo.length,contentSha256:sha256})))
+ expect(await withSession(full,()=>finishLegacyDocument({attachmentId:altId,fileBytes:photo.length,contentSha256:sha256})))
   .toMatchObject({code:'OK'});
  expect(await withSession(kundenLogin,()=>getDomainAttachmentsAction(target))).toMatchObject({code:'FORBIDDEN'});
  const liste=await withSession(fotoLogin,()=>getDomainAttachmentsAction(target));
@@ -102,4 +104,46 @@ it('liest auf der Kundenkarte den neuen Eingang und den bisherigen Anhang und ö
  expect(await withSession(fotoLogin,()=>openIntakeOriginalAction({fileId,customerId:anderer,clientEventId:randomUUID()})))
   .toMatchObject({code:'FORBIDDEN'});
  expect(await withSession(full,()=>getDomainAttachmentOriginalAction({attachmentId:altId}))).toMatchObject({code:'OK'});
+});
+
+it('speichert das Werkstattfoto einmal im Eingang und liest es am tatsächlich übergebenen Teil',async()=>{
+ const kunde=await customerFixture('TEST S23a Werkstatt'),auftrag=await intakeOrderFixture('TEST S23a Übergabe',kunde);
+ const orderId=auftrag.receipt.orderId,teilId=auftrag.receipt.items[0].id;
+ const itemId=randomUUID(),fileId=randomUUID(),sha256=createHash('sha256').update(photo).digest('hex');
+ const input={itemId,fileId,name:'TEST-Werkstatt.png',mime:'image/png',bytes:photo.length,sha256,
+  kontext:{auftragId:orderId,teilId,fotoArt:'teile' as const,phase:'arbeit' as const,uebergabeVersion:1}};
+ const {freezeOrderAction,setExtraWorkHourlyRateAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+ const {getGalvanikHandoffAttachmentsAction,reserveGalvanikHandoffAttachmentAction}=await import('@/app/warendurchlauf/actions');
+ const transition=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
+ expect(transition).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>prepareIntakeFileAction(input))).toMatchObject({code:'CONFLICT'});
+ expect(await sql`SELECT id FROM public.intake_item WHERE tenant_id=${tenant} AND id=${itemId}::uuid`).toEqual([]);
+ const [order]=await sql`SELECT version FROM public.orders WHERE tenant_id=${tenant} AND id=${orderId}`;
+ expect(await withSession(full,()=>setExtraWorkHourlyRateAction({rateId:randomUUID(),expectedVersion:0,hourlyRateCents:14000,clientEventId:randomUUID()})))
+  .toMatchObject({code:'OK'});
+ const freeze={orderId,expectedVersion:Number(order.version),freezeId:randomUUID(),clientEventId:randomUUID()};
+ expect(await withSession(full,()=>freezeOrderAction(freeze))).toMatchObject({code:'VALIDATION_ERROR'});
+ const request={...input,kontext:{...input.kontext,uebergabeVersion:Number(order.version)}};
+ expect(await withSession(full,()=>reserveGalvanikHandoffAttachmentAction({orderId,itemId:teilId,expectedVersion:Number(order.version),
+  clientRequestId:randomUUID(),mimeType:'image/png',fileBytes:photo.length,contentSha256:sha256}))).toMatchObject({code:'FORBIDDEN'});
+ const grant=await withSession(full,()=>prepareIntakeFileAction(request));
+ if(grant.code!=='OK')throw Error('TEST_S23A_WERKSTATT_UPLOAD:'+grant.code);
+ if(grant.upload)expect((await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,grant.upload.token,photo,
+  {contentType:'image/png',upsert:false})).error).toBeNull();
+ expect(await withSession(full,()=>finishIntakeFileAction(fileId),true)).toMatchObject({code:'OK',capture:{orderId,files:[{id:fileId,secured:true}]}});
+ expect(await withSession(full,()=>finishIntakeFileAction(fileId))).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getGalvanikHandoffAttachmentsAction({orderId,itemId:teilId})))
+  .toMatchObject({code:'OK',data:{receipts:[],intakeFiles:[{id:fileId,name:input.name,mime:input.mime,bytes:photo.length}]}});
+ expect(await withSession(full,()=>openIntakeOriginalAction({orderId,fileId,clientEventId:randomUUID()})))
+  .toMatchObject({code:'OK',original:{id:fileId,sha256}});
+ expect(await withSession(full,()=>openIntakeOriginalAction({fileId,clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+ const auth=await withSession(full,resolveAuthorization);
+ if(!auth.ok)throw Error('TEST_S23A_WERKSTATT_AUTH');
+ const {readOrderEvidenceBatch}=await import('@/lib/server/evidenceRead');
+ const {readHandoffIntakeOriginalsInTransaction}=await import('@/modules/eingang/server-public');
+ expect((await readOrderEvidenceBatch(auth.data,[orderId],readHandoffIntakeOriginalsInTransaction)).get(orderId))
+  .toMatchObject({code:'OK',intakePhotoParts:[teilId]});
+ expect(await withSession(full,()=>freezeOrderAction(freeze))).toMatchObject({code:'OK'});
+ expect(await sql`SELECT count(*)::int AS count FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid
+  AND art='zugeordnet' AND nachher->>'action'='original_kontext' AND nachher->>'uebergabeEreignisId' IS NOT NULL`).toEqual([{count:1}]);
 });

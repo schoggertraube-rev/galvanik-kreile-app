@@ -12,10 +12,12 @@ import {canTransportInvoiceDocument} from '@/lib/auth/authorizationContract';
 import {maskTodayOrderCard} from './orderCardRead';
 import {maskOrderPaymentCredit} from './paymentSummaryRead';
 import {readV45OrderRule} from './v45OrderRead';
+import type {HandoffIntakePhotoReader} from './evidenceRead';
 
 type ShippingRead=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<ShippingSettings|null>;
 /** Only the authorized App/approved projector composition binds module readers. */
 export type TodayOrderReadPorts={
+ readIntakePhotos?:HandoffIntakePhotoReader;
  readVat:InvoiceVatReader;
  readSettings:ShippingRead;
  readCredit:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>;
@@ -33,14 +35,15 @@ export function projectTodayOrderSources(auth:AuthorizationSnapshot,sources:Awai
   const shipping=canTransportInvoiceDocument(auth)?raw.shipping:undefined;
   const payment=raw.payment===undefined?undefined:maskOrderPaymentCredit(auth,raw.payment);
   try{
-   const nextActionRule=readV45OrderRule(auth,card,raw.informed?{orderId:card.id,value:raw.informed}:undefined,{orderId:card.id,records:raw.records},{shipping,payment,shipment:raw.shipment});
+   const nextActionRule=readV45OrderRule(auth,card,raw.informed?{orderId:card.id,value:raw.informed}:undefined,
+    {orderId:card.id,records:raw.records,intakePhotoParts:raw.intakePhotoParts},{shipping,payment,shipment:raw.shipment});
    return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:raw.appointment,nextActionRule}}};
   }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
  });
 }
 export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrderReadAuthorization,orderIds:string[],ports:TodayOrderReadPorts){
   const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
-  const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,orderIds))]);
+  const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,orderIds,ports.readIntakePhotos))]);
   const [{readInvoiceShippingConsequencesBatch},{readOrdersInformed},{readOrderPickupAppointment},{getPaymentStatesBatch,maskOrderPaymentCredit}]=await Promise.all([
    import('@/lib/server/commands/immutableInvoiceCommand'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/paymentSummaryRead')]);
   const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
@@ -70,7 +73,7 @@ export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrde
      card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
     ]);
     if(informed?.code==='OK'&&informed.orderVersion!==card.version)return {orderId,result:{code:'UNAVAILABLE' as const,message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'}};
-    return {orderId,result:{code:'OK' as const,data:{card,records:proof.data,shipping,informed,payment,shipment,appointment}}};
+    return {orderId,result:{code:'OK' as const,data:{card,records:proof.data,intakePhotoParts:proof.intakePhotoParts,shipping,informed,payment,shipment,appointment}}};
    }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
   }));
   return rows;

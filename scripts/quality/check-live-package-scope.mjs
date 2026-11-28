@@ -582,7 +582,6 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/app/actions/timeline.actions.ts",
   "src/app/customers/CustomerCardAppAdapter.tsx",
   "src/app/warendurchlauf/actions.ts",
-  "src/components/layout/F1SourceDialogs.tsx",
   "src/components/layout/PwaRegister.tsx",
   "src/components/attachments/DomainAttachmentPanel.module.css",
   "src/components/attachments/DomainAttachmentPanel.tsx",
@@ -596,7 +595,6 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/lib/server/commands/immutableInvoiceCommand.ts",
   "src/lib/server/communicationPort.ts",
   "src/lib/server/customerSummaryRead.ts",
-  "src/lib/server/documentIntelligencePort.ts",
   "src/lib/server/azureDocumentIntelligence.ts",
   "src/lib/server/intakeSuggestions.ts",
   "src/lib/server/intakeTextRecognition.ts",
@@ -2285,7 +2283,6 @@ export function runSelftest(root = process.cwd()) {
     "src/modules/tasks/public.ts",
     "src/db/schema.ts",
     "src/lib/server/microsoftGraph.ts",
-    "src/components/layout/F1SourceDialogs.tsx",
   ]) {
     const allowedErrors = checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-1");
     if (allowedErrors.length > 0) throw new Error(`TA-B2f AP-EIN path rejected (${rel}): ${allowedErrors.join(" | ")}`);

@@ -57,7 +57,7 @@ import {IntakeTermBlock,type IntakeTermSelection} from "./ui/IntakeTermBlock";
 import type {IntakeTermOrigin} from "@/lib/intakeSuggestionsContract";
 import { IntakeCaptureDialog } from "./ui/IntakeCaptureDialog";
 import { Rueckfrage } from "@/ui/kr/Dialog";
-import type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeFileInput, IntakeFileGrant, IntakeCaptureKindInput } from "./captureContract";
+import type { EingangVorschlagResult, IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeFileInput, IntakeFileGrant } from "./captureContract";
 import { recognizeNoteConcerns } from "./captureContract";
 import { findRecognizedCustomers } from "./customerRecognition";
 import { ORDER_POSITION_UNITS, ORDER_POSITION_SURFACES, normaliseOrderPositionUnit, normaliseOrderPositionSurface, orderPositionQuantityError, orderPositionPriceError, FREE_TEXT_VAT_RATE_BASIS_POINTS } from "@/lib/orderPositionContract";
@@ -226,7 +226,8 @@ export type GlobalCreatePorts = {
   readCaptureNote?: (text: string) => Promise<{ code: "OK"; data: IntakeNoteReading } | { code: "FORBIDDEN" | "VALIDATION_ERROR"; message: string }>;
   prepareCaptureFile?: (input: IntakeFileInput,pendingScope?:string) => Promise<IntakeFileGrant>;
   finishCaptureFile?: (id: string,pendingScope?:string) => Promise<IntakeCaptureResult>;
-  chooseCaptureKind?: (input: IntakeCaptureKindInput) => Promise<IntakeCaptureResult>;
+  readCaptureProposal?: (itemId:string)=>Promise<EingangVorschlagResult>;
+  runCaptureProposal?: (input:{itemId:string;vorschlagId:string;clientEventId:string})=>Promise<EingangVorschlagResult>;
   openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => boolean;
   canCreateOrder: boolean;
   canCreateQuote: boolean;

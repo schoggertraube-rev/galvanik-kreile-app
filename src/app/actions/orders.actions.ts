@@ -304,8 +304,10 @@ export async function recordPhoneExtraWorkApprovalAction(
 
 export async function freezeOrderAction(input: FreezeOrderInput): Promise<FreezeOrderResult> {
  return observeAction('freezeOrderAction',subjectForAction('freezeOrderAction',input),async()=>{
-  const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
-  return freezeOrder(input);
+  const [{freezeOrder},{readHandoffIntakeOriginalsInTransaction}]=await Promise.all([
+   import('@/lib/server/commands/orderFreezeCommand'),import('@/modules/eingang/server-public'),
+  ]);
+  return freezeOrder(input,readHandoffIntakeOriginalsInTransaction);
 
  },readLoggingSettings);
 }
@@ -552,9 +554,10 @@ async function readLiveOrderCardForPage(
   try {
     const authorization = await resolveOrderCardAuthorization();
     if (!authorization.ok) return authorization.result;
-    const [{ readLiveOrderCard }, { readEvidenceRecordsByTarget }] = await Promise.all([
+    const [{ readLiveOrderCard }, { readOrderEvidenceBatch },{readHandoffIntakeOriginalsInTransaction}] = await Promise.all([
       import("@/lib/server/orderCardRead"),
       import("@/lib/server/evidenceRead"),
+      import('@/modules/eingang/server-public'),
     ]);
     const card = await readLiveOrderCard(authorization.data, input);
     if (card.code !== "OK") return card;
@@ -591,7 +594,7 @@ async function readLiveOrderCardForPage(
       card.data.handoverNotice?.taskId?(async()=>{const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');return withPrivilegedTenantTransaction(authorization.data,tx=>tasks.readOrderHandoverTaskState(tx,authorization.data,{orderId:card.data.id,taskId:card.data.handoverNotice!.taskId!}));})():Promise.resolve(undefined),
       card.data.handoverMode==='shipping'?fundament.readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true}):Promise.resolve(undefined),
       readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId},readInvoiceVat,fundament.readShippingSettingsInTransaction),
-      readEvidenceRecordsByTarget(authorization.data,{targetType:'ORDER',targetId:input.orderId}),
+      readOrderEvidenceBatch(authorization.data,[input.orderId],readHandoffIntakeOriginalsInTransaction).then(results=>results.get(input.orderId)),
       orders.readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version}),
       card.data.handoverMode==='shipping'?readManualShippingForOrder(authorization.data,input.orderId):Promise.resolve(undefined),
       readOrderInformed(authorization.data,input.orderId),orders.readOrderPrintQueue(authorization.data,input.orderId),
@@ -605,9 +608,10 @@ async function readLiveOrderCardForPage(
       card.data.shippingService=shippingSettings.code==='OK'?shippingSettings.settings.service:null;
       if(shippingSettings.code!=='OK')card.data.shippingServiceError=shippingSettings.message;
     }
+    if(!evidence)return {code:'UNAVAILABLE',message:'Nachweise konnten nicht sicher geladen werden.'};
     if(evidence.code!=='OK')return evidence;
     if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
-    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope,nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,terminAnzeige,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope,nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data,intakePhotoParts:evidence.intakePhotoParts},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,terminAnzeige,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,
@@ -624,8 +628,10 @@ async function manualShippingPorts(){
  return {readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,readSettings:readShippingSettingsInTransaction,readAllocation:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string,input:Parameters<typeof readShippingMergeAllocation>[3])=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
 }
 async function todayOrderSourcePorts():Promise<import('@/lib/server/todayOrderRead').TodayOrderReadPorts>{
- const [{readInvoiceVat},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public')]);
- return {readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
+ const [{readInvoiceVat},{readShippingSettingsInTransaction},{readHandoffIntakeOriginalsInTransaction}]=await Promise.all([
+  import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public'),import('@/modules/eingang/server-public'),
+ ]);
+ return {readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,readIntakePhotos:readHandoffIntakeOriginalsInTransaction,
   readCredit:async(tx,tenantId,customerId)=>{
    const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
    return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);

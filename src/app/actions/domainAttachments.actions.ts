@@ -1,18 +1,16 @@
 "use server";
 
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readErkennungsEinstellungenInTransaction,readLoggingSettings} from '@/modules/fundament/server-public';
+import {readLoggingSettings} from '@/modules/fundament/server-public';
 import { unstable_noStore as noStore } from "next/cache";
 import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
-import { attachIntakeDraftAttachment, finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
+import { attachIntakeDraftAttachment, getDomainAttachmentOriginal } from "@/lib/server/domainAttachment";
 import { readEvidenceRecordsByTarget,readEvidenceVisibilityByKeys } from "@/lib/server/evidenceRead";
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {EVIDENCE_READ_COPY} from '@/ui/situationCatalog';
-import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 import { readDomainIntakeOriginals } from "@/modules/eingang/server-public";
 import {changeEvidenceVisibility} from '@/lib/server/evidenceVisibilityCommand';
-import {splitUploadVisibility} from '@/lib/domain/evidenceVisibility';
 import {applyEvidenceUploadVisibility,type UploadVisibilityResult} from '@/lib/server/evidenceVisibilityUpload';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {EVIDENCE_VISIBILITY_COPY} from '@/ui/situationCatalog';
@@ -34,28 +32,6 @@ async function authorization() {
   } catch {
     return { ok: false as const, code: "UNAVAILABLE" as const };
   }
-}
-
-export async function reserveDomainAttachmentAction(input: Parameters<typeof reserveDomainAttachment>[1]) {
- return observeAction('reserveDomainAttachmentAction',subjectForAction('reserveDomainAttachmentAction',input),async()=>{
-  const auth = await authorization();
-  return auth.ok ? reserveDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-
- },readLoggingSettings);
-}
-
-export async function finalizeDomainAttachmentAction(input: Parameters<typeof finalizeDomainAttachment>[1]) {
- return observeAction('finalizeDomainAttachmentAction',subjectForAction('finalizeDomainAttachmentAction',input),async()=>{
-  const option=splitUploadVisibility(input);
-  if(!option.valid)return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
-  const auth = await authorization();
-  if(!auth.ok)return {code:auth.code,message:EVIDENCE_READ_COPY.unavailable};
-  const result=await finalizeDomainAttachment(auth.data,option.base);
-  if(result.code!=='OK')return result;
-  const flag=await finishUploadedEvidenceVisibility(auth.data,'legacy-scan-upload:'+result.data.receipt.attachmentId,option.requested);
-  return flag.code==='OK'?{...result,data:{...result.data,visibilityPending:flag.visibilityPending,...(flag.visibility?{visibility:flag.visibility}:{})}}:flag;
-
- },readLoggingSettings);
 }
 
 type UploadVisibilityInput={mode:'upload';evidenceKey:string;customerVisible?:boolean};
@@ -129,12 +105,4 @@ export async function getDocumentIntelligenceStatusAction() {
   return readAzureDocumentIntelligenceStatus().code === "READY"
     ? { code: "OK" as const }
     : { code: "IN_KLAERUNG" as const, message: "Azure Document Intelligence · In Klärung." };
-}
-
-export async function analyzeDomainAttachmentAction(input: Parameters<typeof analyzeDomainAttachment>[1]) {
- return observeAction('analyzeDomainAttachmentAction',subjectForAction('analyzeDomainAttachmentAction',input),async()=>{
-  const auth = await authorization();
-  return auth.ok ? analyzeDomainAttachment(auth.data, input, readErkennungsEinstellungenInTransaction)
-    : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
- },readLoggingSettings);
 }

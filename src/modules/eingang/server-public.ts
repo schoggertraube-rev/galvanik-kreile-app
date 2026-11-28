@@ -12,14 +12,14 @@ export {recordIntakeComplaintEffect} from './server/intakeComplaintEffect';
 export {saveIntakeProspect} from './server/intakeProspect';
 export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead";
 export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from './server/intakeMailImport';
-export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals,readDomainIntakeOriginals} from "./server/intakeOriginal";
+export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals,readDomainIntakeOriginals,readHandoffIntakeOriginals,readHandoffIntakeOriginalsInTransaction} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction } from "./server/goodsReceipt";
 export {legePaketOhneBezugAb,verknuepfePaketOhneBezug} from './server/wareOhneBezug';
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
 export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation, loeseEntwurfskonflikt } from "./server/intakeDraft";
 export { leseEingangVorschlag, fuehreEingangVorschlagAus } from './server/vorschlag';
 
-export { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendingScope, discardIntakeCapture, chooseIntakeCaptureKind } from "./server/intakeCapture";
+export { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendingScope, discardIntakeCapture } from "./server/intakeCapture";
 export { prepareIntakeFile, finishIntakeFile, retryIntakeRecognition } from "./server/intakeFile";
 
 export { erfasseAuftragAusEingangCommand, type EingangCustomerPreflight } from "./server/erfasseAuftragAusEingangCommand";

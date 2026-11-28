@@ -483,6 +483,24 @@ describe("W4 Galvanik handoff attachment panel", () => {
     expect(ports.getAttachments).toHaveBeenCalledTimes(2);
   });
 
+  it("sends a new workshop original to the shared intake and shows it beside older photos", async () => {
+    const capture=vi.fn(async()=>({code:'OK' as const,id:NEW_RESERVATION}));
+    const saved={id:NEW_RESERVATION,name:'TEST Werkstattfoto.png',mime:'image/png',bytes:FILE_BYTES.byteLength,at:'2026-08-11T10:06:00.000Z'};
+    const older=envelope([finalized()]);
+    ports.getAttachments.mockResolvedValueOnce(older).mockResolvedValueOnce({...older,data:{...older.data,intakeFiles:[saved]}});
+    render(<ModuleGalvanikHandoffAttachmentPanel orderId={ORDER_ID} expectedVersion={2} items={[{id:ITEM_ID,name:'Teil A'}]}
+      ports={{...attachmentPanelPorts,capture}} />);
+    await screen.findByText('Bestätigt');
+    await chooseFile();
+    expect(await screen.findByText(saved.name)).toBeInTheDocument();
+    expect(capture).toHaveBeenCalledWith({orderId:ORDER_ID,itemId:ITEM_ID,expectedVersion:2,
+      file:expect.objectContaining({type:'image/png',size:FILE_BYTES.byteLength})});
+    expect(ports.reserve).not.toHaveBeenCalled();
+    expect(ports.upload).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent(saved.name);
+  });
+
   it("uploads the exact hashed bytes and shows success only after FINALIZED fresh readback", async () => {
     const reserve = deferred<ReturnType<typeof reserveOk>>();
     const upload = deferred<{ data: { path: string }; error: null }>();

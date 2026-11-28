@@ -7,7 +7,7 @@ import { getIntakeCaptureAction, openIntakeOriginalAction } from "@/app/actions/
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { retainPendingOriginal } from "@/lib/offline/pendingStore";
 import { syncOriginals } from "@/lib/offline/syncOriginals";
-import { getIntakeDeviceId } from "@/modules/eingang/public";
+import { getIntakeDeviceId, type IntakeFileContext } from "@/modules/eingang/public";
 import { INTAKE_FILE_CONTEXT_COPY } from "@/ui/eingangCopy";
 import styles from "./DomainAttachmentPanel.module.css";
 
@@ -20,18 +20,21 @@ function sizeLabel(bytes: number | null) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** Shared upload path for the existing order panel and complaint originals. */
 export async function uploadDomainAttachment(targetType:'CUSTOMER'|'ORDER',targetId:string,file:File,scope:string|null) {
   if(!ACCEPTED.has(file.type)||file.size<1||file.size>MAX_BYTES)throw Error('Erlaubt sind PDF, JPG, PNG und WebP bis 20 MB.');
+  return uploadContextOriginal(targetType==='ORDER'?{auftragId:targetId}:{kundeId:targetId},file,scope);
+}
+
+/** The cards and the workshop use the same original queue and read-back. */
+export async function uploadContextOriginal(kontext:IntakeFileContext,file:File,scope:string|null) {
   if(!scope)return {code:'FORBIDDEN' as const,message:INTAKE_FILE_CONTEXT_COPY.contextForbidden};
   const itemId=crypto.randomUUID(),id=crypto.randomUUID();
-  const kontext=targetType==='ORDER'?{auftragId:targetId}:{kundeId:targetId};
   await retainPendingOriginal(scope,{id,itemId,kind:'file',file,deviceId:getIntakeDeviceId(),kontext});
   const pending={code:'PENDING' as const,message:INTAKE_FILE_CONTEXT_COPY.pending};
   if(!navigator.onLine)return pending;
   try{
     await syncOriginals(scope,()=>scope,{followUp:true});
-    const source=await getIntakeCaptureAction(itemId,targetType==='ORDER'?{orderId:targetId}:{customerId:targetId});
+    const source=await getIntakeCaptureAction(itemId,kontext.auftragId?{orderId:kontext.auftragId}:{customerId:kontext.kundeId});
     return source.code==='OK'&&source.capture.files.some(original=>original.id===id&&original.secured)
       ?{code:'OK' as const,id}:pending;
   }catch{return pending;}

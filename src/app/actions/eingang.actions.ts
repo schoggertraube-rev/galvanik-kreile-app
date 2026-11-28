@@ -307,11 +307,7 @@ async function syncIntakeMailbox():Promise<string|null>{
   return failureNotice&&pendingNotice?failureNotice+'\n'+pendingNotice:failureNotice??pendingNotice;
  }catch{recordObservedFailure('INTAKE_MAIL_SYNC_FAILED');return MAILBOX_SYNC_COPY.unavailable;}
 }
-import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
-export async function chooseIntakeCaptureKindAction(input: unknown) {
- return observeAction('chooseIntakeCaptureKindAction',subjectForAction('chooseIntakeCaptureKindAction',input),async()=>{ return chooseIntakeCaptureKind(input);
- },readLoggingSettings);
-}
+import { processIntakeDeviceRequest, discardIntakeCapture } from "@/modules/eingang/server-public";
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation, loeseEntwurfskonflikt } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
 import {legePaketOhneBezugAb,verknuepfePaketOhneBezug} from '@/modules/eingang/server-public';
