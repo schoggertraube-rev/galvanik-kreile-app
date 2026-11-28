@@ -87,6 +87,10 @@ it("reads a secured Excel workbook with the document model and preserves the ori
     expect(requests[0].url.pathname).toBe("/documentintelligence/documentModels/prebuilt-layout:analyze");
     expect(requests[0].url.searchParams.has("features")).toBe(false);
     expect(JSON.parse(String(requests[0].body)).base64Source).toBe(bytes.toString("base64"));
+    expect(await sql`SELECT von::text AS actor,nachher FROM public.intake_event
+      WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid AND art='erkannt'`).toEqual([{
+      actor: full.actorId, nachher: { fileId, kind: "notiz", modelle: ["prebuilt-layout"], code: "OK", textGekuerzt: false },
+    }]);
 
     const opened = await withSession(full, () => openIntakeOriginalAction({ fileId, clientEventId: randomUUID() }));
     if (opened.code !== "OK" || !opened.original.downloadUrl) throw Error("TEST_I1_WORKBOOK_ORIGINAL");

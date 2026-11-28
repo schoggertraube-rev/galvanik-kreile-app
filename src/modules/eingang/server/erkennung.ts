@@ -146,8 +146,9 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const recognitionCode = xmlResult?.code === 'OK' ? 'OK' : isXml ? 'UNSUPPORTED_XML'
         : rawStorageFailed ? 'INTAKE_RAW_NOT_SAVED'
         : recognized?.code ?? (bytes.byteLength > 20 * 1024 * 1024 ? 'INTAKE_RECOGNITION_TOO_LARGE' : 'UNSUPPORTED_DOCUMENT_TYPE');
+      const receipt = { fileId, kind, modelle: model === null ? [] : [model], code: recognitionCode, textGekuerzt: false };
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-        SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify({ fileId, kind, code: recognitionCode })}::jsonb
+        SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify(receipt)}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);
     });
   } catch (error) {
@@ -166,7 +167,7 @@ export async function recordIntakeRecognitionFailure(auth: { tenantId: string },
           AND (erkennung_status='wartet' OR erkennung_status='laeuft' AND ${claimOwned} AND (SELECT event.befehl_id FROM public.intake_event event
             WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.art='einsatz' AND event.nachher->>'action'='erkennung_gestartet' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1)=${claimKey}::uuid) RETURNING id`);
         if(changed.length)await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-          SELECT ${auth.tenantId},item_id,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify({fileId,code:"INTAKE_FILE_FINISH_FAILED"})}::jsonb
+          SELECT ${auth.tenantId},item_id,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify({fileId,kind:null,modelle:[],code:"INTAKE_FILE_FINISH_FAILED",textGekuerzt:false})}::jsonb
           FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid
           ON CONFLICT DO NOTHING`);
       });
