@@ -19,6 +19,12 @@ export type LagerEinstellungen = Readonly<{
   bilanzbewertung_methode: Bilanzbewertung;
 }>;
 
+export type LagerBelegEinstellungen = Readonly<{
+  lager_beleg_preisabweichung_prozent: number | null;
+  lager_beleg_abgleich_tage: number | null;
+  ki_sicherheitsschwelle: number | null;
+}>;
+
 export type KanalAnhangGrenzen = Readonly<{ anhang_max_mb: number; mime_original_max_mb: number }>;
 
 export type BetriebswaechterEinstellungen = Readonly<{
@@ -83,13 +89,12 @@ type KanalFristen = Readonly<{
   bank_email: string | null;
 }>;
 
-type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellungen,"kurs_metalle"> & LagerEinstellungen & KanalAnhangGrenzen & BetriebswaechterEinstellungen
+type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellungen,"kurs_metalle"> & LagerEinstellungen & LagerBelegEinstellungen & KanalAnhangGrenzen & BetriebswaechterEinstellungen
   & Omit<MahnEinstellungen,"mahnstufen_tage_nach_faelligkeit">
   & Omit<ZahlungsmusterEinstellungen,"vorkasse_startgrenzen_cent"> & {
   betrieb_messgrenzen: unknown;
   kanal_zielgeraete: readonly string[];
   kanal_aufbewahrung: string;
-  ki_sicherheitsschwelle: number | null;
   erkennung_modelle: Readonly<{ dokument: string; rechnung: string | null; bon: string | null }>;
   eingang_vorschlaege_max?: number | null;
   eingang_liegefrist_arbeitsstunden?: number | null;
@@ -126,6 +131,7 @@ type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellung
 async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string): Promise<Stand> {
   const rows = await tx.execute<{ stand: Stand }>(sql`
     SELECT CASE WHEN firma.id IS NULL THEN private.s16d_spur_d_standardwerte()
+      || jsonb_build_object('lager_beleg_preisabweichung_prozent',NULL::numeric,'lager_beleg_abgleich_tage',NULL::integer)
       ELSE jsonb_build_object(
         'offline_max_stunden', firma.offline_max_stunden,
         'geraetefreigabe_aktiv', firma.geraetefreigabe_aktiv,
@@ -196,6 +202,8 @@ async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string)
         'betrieb_messgrenzen', firma.betrieb_messgrenzen,
         'kanal_aufbewahrung', firma.kanal_aufbewahrung,
         'ki_sicherheitsschwelle', firma.ki_sicherheitsschwelle,
+        'lager_beleg_preisabweichung_prozent', firma.lager_beleg_preisabweichung_prozent,
+        'lager_beleg_abgleich_tage', firma.lager_beleg_abgleich_tage,
         'erkennung_modelle', CASE WHEN firma.erkennung_modelle->'dokument' = 'null'::jsonb
           THEN jsonb_set(firma.erkennung_modelle, '{dokument}', private.s16d_spur_d_standardwerte()->'erkennung_modelle'->'dokument')
           ELSE firma.erkennung_modelle END,
@@ -231,6 +239,17 @@ export async function readLagerEinstellungen(
       lager_regelversion, entnahme_regel_je_rubrik, bezugskosten_einbeziehen, bilanzbewertung_methode };
   };
   return tx ? read(tx) : withPrivilegedTenantTransaction({ tenantId }, read);
+}
+
+export async function readLagerBelegEinstellungen(
+  tenantId: string, tx?: PrivilegedTenantTransaction,
+): Promise<LagerBelegEinstellungen> {
+  const read = async (transaction: PrivilegedTenantTransaction) => {
+    const {lager_beleg_preisabweichung_prozent,lager_beleg_abgleich_tage,ki_sicherheitsschwelle} =
+      await readSpurDStand(transaction, tenantId);
+    return {lager_beleg_preisabweichung_prozent,lager_beleg_abgleich_tage,ki_sicherheitsschwelle};
+  };
+  return tx ? read(tx) : withPrivilegedTenantTransaction({tenantId},read);
 }
 
 /** Im bestehenden Rechnungs- und Ausgangsbefehl innerhalb seiner Transaktion lesen. */
