@@ -14,7 +14,7 @@ beforeAll(enableOutlookTestFixture);
 it('I1-a preserves the complete text and bytes of a long Outlook original on retry',async()=>{
  const id='TEST-I1-long-'+randomUUID();
  const first20k='T'.repeat(19_999)+'🧾';
- const text=first20k+'\r\nTEST unverändertes Ende';
+ const text=first20k+'\r\nTEST unverändertes Ende\r\nE-Mail: test-ende@example.invalid';
  const message={
   id,internetMessageId:'<'+id+'@example.invalid>',subject:'TEST lange Mail',
   from:{emailAddress:{address:'TEST-i1@example.invalid'}},receivedDateTime:new Date().toISOString(),
@@ -51,7 +51,11 @@ it('I1-a preserves the complete text and bytes of a long Outlook original on ret
  expect(stored.error).toBeNull();
  expect(new Uint8Array(await stored.data!.arrayBuffer())).toEqual(original);
  const events=await sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${imported.itemId}::uuid AND art='erkannt'`;
- expect(events).toEqual([{nachher:expect.objectContaining({textGekuerzt:true})}]);
+ expect(events).toEqual([{nachher:expect.objectContaining({textGekuerzt:true,code:'OK',modelle:[]})}]);
+ expect(await sql`SELECT wert FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${imported.itemId}::uuid
+  AND feld='mail.text' AND status='offen'`).toEqual([{wert:expect.objectContaining({fields:expect.arrayContaining([
+    expect.objectContaining({field:'email',value:'test-ende@example.invalid'}),
+  ])})}]);
 });
 
 it('secures a mail attachment before recognition and reads it only once on delivery retry', async () => {

@@ -2,10 +2,12 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { recordObservedFailure } from "@/lib/server/actionObservation";
+import { recognizeIntakeText } from "@/lib/server/intakeTextRecognition";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { analyzeWithAzureDocumentIntelligence, azureOfficeFormat, readAzureRecognitionOriginal, supportsAzureDocument } from "@/lib/server/azureDocumentIntelligence";
 import type { DocumentSuggestion } from "@/lib/server/azureDocumentIntelligence";
 import { concernForCaptureKind, PARCEL_CARRIER, recognizeCaptureDocument } from "../captureRecognition";
+import { recognizeNoteConcerns } from "../captureContract";
 import { safeOfficeRecognitionBytes } from "../originalSafety";
 import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
@@ -41,6 +43,21 @@ type RecognitionContext = {
   onlyInvoiceAccess: boolean;
   retryKey?: string;
 };
+
+async function readSecuredMailText(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string, fileId: string, sha256: string) {
+  const rows = await tx.execute<{ subject: string; body: string; receivedAt: string; truncated: boolean }>(sql`
+    SELECT item.betreff AS subject, source.nachher->>'text' AS body, item.empfangen_am::text AS "receivedAt",
+      length(source.nachher->>'text')>20000 AS truncated
+    FROM public.intake_item item
+    JOIN public.intake_event source ON source.tenant_id=item.tenant_id AND source.item_id=item.id AND source.art='angelegt'
+    JOIN public.intake_event receipt ON receipt.tenant_id=item.tenant_id AND receipt.item_id=item.id
+      AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=${fileId} AND receipt.nachher->>'sha256'=${sha256}
+    WHERE item.tenant_id=${tenantId} AND item.id=${itemId}::uuid AND item.kanal='mail'
+      AND item.empfangen_am IS NOT NULL AND source.nachher->>'graphMessageId'=item.graph_message_id
+      AND source.nachher->'replyChain'->>'originalSha256'=${sha256} AND jsonb_typeof(source.nachher->'text')='string'`);
+  if (rows.length > 1) throw Error("INTAKE_MAIL_RECOGNITION_SOURCE_AMBIGUOUS");
+  return rows[0] ?? null;
+}
 
 const headFields = [
   ["beleg.nummer", /^(?:beleg|bon|quittungs) ?(?:nummer|nr)$/u],
@@ -90,16 +107,22 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     });
     if (!claimed) return;
     claimOwned=true;
+    const isMail = file.mime === "message/rfc822";
+    const mail = isMail ? await withPrivilegedTenantTransaction(auth,
+      tx => readSecuredMailText(tx, auth.tenantId, file.item_id, fileId, file.sha256)) : null;
+    const mailReading = mail ? recognizeIntakeText(mail.body, new Date(mail.receivedAt), true) : null;
+    const mailHasValues = mailReading && (mailReading.fields.length || mailReading.positions.length
+      || mailReading.quoteChanges || mailReading.deliveryWeeks || mailReading.instructions?.length);
     // Structured originals use the same XML parser; unstructured documents retain the OCR path.
     const prefix=Buffer.from(bytes.subarray(0,512)).toString('utf8').replace(/^\uFEFF/u,'').trimStart();
     const officeFormat = azureOfficeFormat(file.mime);
-    const isXml=!officeFormat&&(/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<'));
+    const isXml=!isMail&&!officeFormat&&(/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<'));
     const xmlResult=isXml?recognizeInvoiceXml(bytes):file.mime==='application/pdf'?await recognizeInvoicePdf(bytes):null;
-    const canRead = isXml ? xmlResult?.code==='OK'
+    const canRead = isMail ? mail !== null : isXml ? xmlResult?.code==='OK'
       : supportsAzureDocument(file.mime, bytes.byteLength, true)
         && (!officeFormat || safeOfficeRecognitionBytes(file.dateiname, bytes, officeFormat));
-    const needsOcr = !isXml && xmlResult?.code !== "OK" && canRead;
-    const usesDocumentReader = !isXml && xmlResult?.code !== "OK";
+    const usesDocumentReader = !isMail && !isXml && xmlResult?.code !== "OK";
+    const needsOcr = usesDocumentReader && canRead;
     const settings = usesDocumentReader || xmlResult?.code === "OK"
       ? await withPrivilegedTenantTransaction(auth, tx => einstellungen(tx, auth.tenantId))
       : null;
@@ -138,7 +161,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const goodsPhoto = file.aufnahme_herkunft === "warenfoto" && file.mime.startsWith("image/");
     const primaryHeads = ocr ? readHeadFields(ocr.data.suggestions, goodsPhoto) : [];
     const parcelLabel = goodsPhoto && primaryHeads.some(read => read.field === "paketdienst" || read.field === "sendungsnummer" && /\d/u.test(read.value));
-    const kind = xmlResult?.code === "OK" ? "rechnung" : parcelLabel ? "ware"
+    const kind = mail ? recognizeCaptureDocument({ text: mail.body }).kind
+      : xmlResult?.code === "OK" ? "rechnung" : parcelLabel ? "ware"
       : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
     const models = settings?.erkennung_modelle;
     const specialistModel = ocr && models && !officeFormat
@@ -155,9 +179,9 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
         AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);
       if(active[0]?.befehl_id!==claimKey){console.info('[INTAKE_RECOGNITION_SUPERSEDED]',{fileId});return;}
-      const hasValues=ocr!==null||xmlResult?.code==='OK';
-      const documentText = ocr?.data.suggestions.find(suggestion => suggestion.field === "DOCUMENT_TEXT")?.value ?? null;
-      const replaceDocumentText = ocr !== null && (documentText !== null || !rawStorageFailed);
+      const hasValues=mail!==null||ocr!==null||xmlResult?.code==='OK';
+      const documentText = mail?.body ?? ocr?.data.suggestions.find(suggestion => suggestion.field === "DOCUMENT_TEXT")?.value ?? null;
+      const replaceDocumentText = mail !== null || ocr !== null && (documentText !== null || !rawStorageFailed);
       const pages = ocr?.original?.pages ?? null;
       const model = ocr?.original?.model ?? null;
       const complete = ocrDisabled || hasValues && !rawStorageFailed && !specialistArchiveFailed;
@@ -197,7 +221,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         return { field: 'position', value: { ...position, positionKey }, confidence, source,
           model: primaryPositions.length ? model : specialistOcr?.original?.model ?? null };
       });
-      const suggestions = xmlResult?.code === 'OK' ? xmlResult.suggestions.map(suggestion=>({...suggestion,model:null})) : [
+      const suggestions = mailReading && mailHasValues ? [{ field: 'mail.text', value: mailReading, confidence: null, source: { format: 'EML' }, model: null }]
+        : xmlResult?.code === 'OK' ? xmlResult.suggestions.map(suggestion=>({...suggestion,model:null})) : [
         ...primarySuggestions.map(suggestion=>({...suggestion,model})),
         ...specialistSuggestions.map(suggestion=>({...suggestion,model:specialistOcr?.original?.model??null})),
       ];
@@ -208,24 +233,26 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         const jsonValue = JSON.stringify(suggestion.value);
         const source = { ...suggestion.source, seite: file.reihenfolge };
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,sicherheit_wert,modell,regel,grund,fundstelle,status)
-            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${suggestion.model},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(source)}::jsonb,'offen'
+            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${suggestion.model},${mail?'mail':'datei'},${mail?'Signal im Originaltext':xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(source)}::jsonb,'offen'
           WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid
             AND feld=${suggestion.field} AND (feld<>'position' OR wert->>'positionKey'=(${jsonValue}::jsonb)->>'positionKey')
             AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
       }
-      const concern = kind === null ? null : concernForCaptureKind(kind);
-      if (concern !== null && (!onlyInvoiceAccess || concern === "rechnung")) await tx.execute(sql`UPDATE public.intake_item
+      const documentConcern = kind === null ? null : concernForCaptureKind(kind);
+      const concerns = mail ? recognizeNoteConcerns((mail.subject??'')+'\n'+mail.body,'mail').map(row=>row.id)
+        : documentConcern === null ? [] : [documentConcern];
+      for (const concern of concerns) if (!onlyInvoiceAccess || concern === "rechnung") await tx.execute(sql`UPDATE public.intake_item
         SET anliegen=array_append(anliegen,${concern}::text),
           anliegen_offen=CASE WHEN ${concern}::text=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,${concern}::text) END,
           version=version+1, geaendert_von=${akteur}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
         WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT (${concern}::text=ANY(anliegen))`);
-      const recognitionCode = xmlResult?.code === 'OK' ? 'OK' : isXml ? 'UNSUPPORTED_XML'
+      const recognitionCode = mail || xmlResult?.code === 'OK' ? 'OK' : isXml ? 'UNSUPPORTED_XML'
         : ocrDisabled ? 'AUSGESCHALTET' : ocrSettingMissing ? 'IN_KLAERUNG'
         : rawStorageFailed || specialistArchiveFailed ? 'INTAKE_RAW_NOT_SAVED'
         : specialist && !specialistOcr ? 'TEILWEISE'
         : recognized?.code ?? (bytes.byteLength > 20 * 1024 * 1024 ? 'INTAKE_RECOGNITION_TOO_LARGE' : 'UNSUPPORTED_DOCUMENT_TYPE');
       const receipt = { fileId, kind, modelle: [model,specialistModel].filter((name):name is string=>name!==null),
-        code: recognitionCode, textGekuerzt: false };
+        code: recognitionCode, textGekuerzt: mail?.truncated ?? false };
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify(receipt)}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);

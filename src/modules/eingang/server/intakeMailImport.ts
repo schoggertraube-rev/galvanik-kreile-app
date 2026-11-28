@@ -8,7 +8,6 @@ import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {createAdminClient} from '@/lib/supabase/admin';
-import {recognizeNoteConcerns} from '../captureContract';
 import {mimeHeaderLines} from '../originalSafety';
 import {prepareIntakeFile,finishIntakeFile} from './intakeFile';
 import type {ReadRecognitionSettings} from './erkennung';
@@ -77,11 +76,10 @@ async function captureGraphMailRow(tx:PrivilegedTenantTransaction,auth:Authoriza
  if(proof&&created.n===0){
   const current=existing[0],legacyEligible=!current||current.kunde_id===null&&current.vorgang_id===null&&current.vorgang_art===null&&current.zuordnung==='offen';
   const actual=mail as Mail,previous=readPrevious&&legacyEligible?await readPrevious(tx,auth,mail.id):null;
-  const concerns=recognizeNoteConcerns(actual.subject+'\n'+actual.body,'mail').map(row=>row.id),values=sql`ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[]`;
   // A parked row has no original yet. Fill it from the actual provider original,
   // preserving any real assignment already made through the assignment writer.
   await tx.execute(sql`UPDATE public.intake_item SET empfangen_am=${actual.receivedAt}::timestamptz,absender_name=${actual.senderName},absender_adresse=${actual.senderAddress},betreff=${actual.subject},text=left(${actual.body}::text,20000),gruppe_adresse=${actual.senderAddress.trim().toLowerCase()},
-   anliegen=${values},anliegen_offen=${values},kunde_id=coalesce(kunde_id,${previous?.customerId??null}),vorgang_art=coalesce(vorgang_art,${previous?.orderId?'auftrag':null}),vorgang_id=coalesce(vorgang_id,${previous?.orderId??null}),
+   kunde_id=coalesce(kunde_id,${previous?.customerId??null}),vorgang_art=coalesce(vorgang_art,${previous?.orderId?'auftrag':null}),vorgang_id=coalesce(vorgang_id,${previous?.orderId??null}),
    zuordnung=CASE WHEN kunde_id IS NOT NULL THEN zuordnung ELSE ${previous?.customerId?'hand':'offen'} END,version=version+${existing.length?1:0} WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid`);
   await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.tenantId},${id}::uuid,'angelegt',${id}::uuid,${auth.userId},${JSON.stringify({kanal:'mail',graphMessageId:mail.id,text:actual.body,replyChain:proof.replyChain,...(proof.deliveryReport?{deliveryReport:proof.deliveryReport}:{}),...(previous?.customerId?{importedCorrespondence:previous}:{})})}::jsonb)`);
  }
@@ -110,32 +108,16 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
     const saved=await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,grant.upload.token,original.bytes,{contentType:original.mime,upsert:false});
     if(saved.error)throw Error('INTAKE_MAIL_ORIGINAL_UPLOAD_FAILED');
    }
-   const secured=await finishIntakeFile(fileId,original===mailOriginal?{originalOnly:true}:{
-    readSettings:recognition.readSettings,importingMail:true,scheduleRecognition:work=>{background.push(work);},
+   const secured=await finishIntakeFile(fileId,{
+    readSettings:recognition.readSettings,importingMail:true,
+    scheduleRecognition:original===mailOriginal?undefined:work=>{background.push(work);},
    });
    if(secured.code!=='OK')return secured;
    if(!secured.capture.files.some(file=>file.id===fileId&&file.secured))throw Error('INTAKE_MAIL_ORIGINAL_NOT_CONFIRMED');
   }
   const completeKey=intakeMailIdentity(result.itemId+':mail-import-complete');
-  const mailFileId=intakeMailIdentity(result.itemId+':original:'+mailOriginal.key);
   await withPrivilegedTenantTransaction(auth,async tx=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${result.itemId},0))`);
-   await tx.execute(sql`
-    WITH recognized AS (
-     UPDATE public.intake_file file SET erkannter_text=source.nachher->>'text', lesbar=true
-     FROM public.intake_event source
-     WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${result.itemId}::uuid AND file.id=${mailFileId}::uuid
-      AND file.mime='message/rfc822' AND file.erkannter_text IS NULL
-      AND source.tenant_id=file.tenant_id AND source.item_id=file.item_id AND source.art='angelegt'
-      AND source.nachher->'replyChain'->>'originalSha256'=file.sha256 AND length(source.nachher->>'text')>20000
-      AND EXISTS(SELECT 1 FROM public.intake_event receipt
-       WHERE receipt.tenant_id=file.tenant_id AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert'
-        AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256)
-     RETURNING file.id, file.item_id
-    )
-    INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-    SELECT ${auth.tenantId},item_id,'erkannt',id,${auth.userId},jsonb_build_object('fileId',id,'code','OK','textGekuerzt',true)
-    FROM recognized`);
    await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
     SELECT ${auth.tenantId},${result.itemId}::uuid,'einsatz',${completeKey}::uuid,${auth.userId},${JSON.stringify({action:'mail_import_complete',fileIds:originals.map(file=>intakeMailIdentity(result.itemId+':original:'+file.key)),originalCount:originals.filter(file=>file.mime!=='message/rfc822').length,filteredAttachments})}::jsonb
     WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${result.itemId}::uuid AND art='einsatz' AND befehl_id=${completeKey}::uuid)`);

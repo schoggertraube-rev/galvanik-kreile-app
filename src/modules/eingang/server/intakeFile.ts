@@ -17,9 +17,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string; reihenfolge:number };
-type IntakeFileCompletion =
-  | { originalOnly: true; retryKey?: never }
-  | { originalOnly?: false; retryKey?: string; readSettings: ReadRecognitionSettings; scheduleRecognition?: (work: () => Promise<void>) => void; importingMail?: true };
+type IntakeFileCompletion = { retryKey?: string; readSettings: ReadRecognitionSettings;
+  scheduleRecognition?: (work: () => Promise<void>) => void; importingMail?: true };
 async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'buchhaltung')))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};return result.data;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -84,7 +83,7 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
   }
 }
 export async function finishIntakeFile(fileId: string, options: IntakeFileCompletion): Promise<IntakeCaptureResult> {
-  const { originalOnly = false, retryKey } = options;
+  const { retryKey } = options;
   if (!UUID.test(fileId)) return { code: "VALIDATION_ERROR", message: "Ungültige Dateikennung." };
   const auth = await fileAuthorization();
   if ("code" in auth) return auth;
@@ -97,8 +96,7 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
     if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN',message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
     if((file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
     const onlyInvoiceAccess=invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails'));
-    const importingMail=!options.originalOnly&&options.importingMail===true;
-    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,onlyInvoiceAccess,originalOnly||importingMail);
+    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,onlyInvoiceAccess,options.importingMail===true);
     if(retryKey){
       const retry=await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
@@ -113,22 +111,11 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
       if(!retry)return snapshot();
       file.erkennung_status='wartet';
     }
-    if (!originalOnly && ["fertig", "fehler"].includes(file.erkennung_status)) return snapshot();
+    if (["fertig", "fehler"].includes(file.erkennung_status)) return snapshot();
     const stored = await createAdminClient().storage.from(BUCKET).download(file.speicherpfad);
     if (stored.error || !stored.data) throw new Error("INTAKE_FILE_UPLOAD_INCOMPLETE");
     const bytes = new Uint8Array(await stored.data.arrayBuffer());
     if (bytes.byteLength !== Number(file.bytes) || createHash("sha256").update(bytes).digest("hex") !== file.sha256) throw new Error("INTAKE_FILE_ORIGINAL_HASH_MISMATCH");
-    if(options.originalOnly){
-      await withPrivilegedTenantTransaction(auth,async tx=>{
-        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
-        await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-        SELECT ${auth.tenantId},${file.item_id}::uuid,'original_gespeichert',${fileId}::uuid,${auth.userId},${JSON.stringify({fileId,sha256:file.sha256,bytes:bytes.byteLength})}::jsonb
-        WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='original_gespeichert' AND befehl_id=${fileId}::uuid)`);
-        // This path records secured bytes without attempting OCR.
-        await tx.execute(sql`UPDATE public.intake_file SET erkennung_status='fertig',lesbar=false WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status IN ('wartet','fehler')`);
-      });
-      return snapshot();
-    }
     // The original is secured before recognition. A provider failure cannot undo this event.
     await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);

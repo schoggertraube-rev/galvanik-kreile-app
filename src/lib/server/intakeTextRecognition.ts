@@ -58,8 +58,8 @@ function nextDate(day: number, month: number, year: number | null, today: Date):
   return candidate.toISOString().slice(0, 10);
 }
 
-export function recognizeIntakeText(text: string, today = new Date()): IntakeTextRecognition {
-  if (text.length > 20_000) throw new Error("INTAKE_TEXT_TOO_LONG");
+export function recognizeIntakeText(text: string, today = new Date(), securedMailOriginal = false): IntakeTextRecognition {
+  if (!securedMailOriginal && text.length > 20_000) throw new Error("INTAKE_TEXT_TOO_LONG");
   const normalized = text.trim();
   if (!normalized) return { fields: [], positions: [] };
   const fields: IntakeTextRecognitionField[] = [];
