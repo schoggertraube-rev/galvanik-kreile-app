@@ -410,7 +410,7 @@ async function matchesPendingActor(scope:string|undefined){
 export async function prepareIntakeFileAction(input: unknown,pendingScope?:string) {
  return observeAction('prepareIntakeFileAction',subjectForAction('prepareIntakeFileAction',input),async()=>{
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- return prepareIntakeFile(input);
+ return prepareIntakeFile(input,false,readCustomerProfile);
 
  },readLoggingSettings);
 }
@@ -418,10 +418,12 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  return observeAction('finishIntakeFileAction',subjectForAction('finishIntakeFileAction',{fileId}),async()=>{
  if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after,kandidaten:intakeCandidatePorts}),fileId);if(result.code!=='OK')return result;
+ const finished=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after,kandidaten:intakeCandidatePorts}),fileId);if(finished.code!=='OK')return finished;
+ const {kontextSichtbarkeit,...result}=finished;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
  const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
- const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,
+ const requestedVisibility=kontextSichtbarkeit===false?undefined:kontextSichtbarkeit??customerVisible;
+ const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,requestedVisibility,
   {synchronizeTask:(tx,actor,id)=>synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
    {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)})});
  // No visibility intent means the unchanged native capture receipt. Its fresh

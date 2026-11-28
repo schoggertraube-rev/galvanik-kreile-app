@@ -1,4 +1,6 @@
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
+export const INTAKE_FILE_CONTEXT_COPY={contextMismatch:'Eingang gehört nicht zu diesem Kontext.',
+ contextForbidden:'Dokumente und Fotos sind nicht erlaubt.'} as const;
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
 
 export const eingangCopy = {
