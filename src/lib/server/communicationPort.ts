@@ -43,7 +43,7 @@ export async function readQueuedMailSentEvent(auth:AuthorizationSnapshot,clientR
  return rows.length===1?rows[0].id:null;
 }
 
-type GoodsOutNoticeSource={
+export type GoodsOutNoticeSource={
   orderId:string;
   goodsOutEventId:string;
   kind:'versandbescheid'|'abholbescheid';
@@ -62,9 +62,9 @@ function goodsOutNoticeRequestId(tenantId:string,source:GoodsOutNoticeSource):st
 }
 
 async function readGoodsOutNoticeMail(
-  auth:AuthorizationSnapshot,source:GoodsOutNoticeSource,
+  auth:AuthorizationSnapshot,source:GoodsOutNoticeSource,transaction?:PrivilegedTenantTransaction,
 ):Promise<{requestId:string;proof:GoodsOutNoticeMailProof|null}|null>{
-  return withPrivilegedTenantTransaction(auth,async tx=>{
+  const read=async (tx:PrivilegedTenantTransaction)=>{
     const mode=source.kind==='versandbescheid'?'versand':source.kind==='abholbescheid'?'abholung':null;
     if(!mode)return null;
     const {readGoodsOutReceiptById}=await import('./commands/recordGoodsOutCommand');
@@ -90,17 +90,19 @@ async function readGoodsOutNoticeMail(
       LIMIT 2
     `);
     return {requestId,proof:rows.length===1?rows[0]:null};
-  });
+  };
+  return transaction?read(transaction):withPrivilegedTenantTransaction(auth,read);
 }
 
 /** Closing a notice needs the original outbound proof, regardless of who handles the retry. */
 export async function readGoodsOutNoticeMailEvent(
-  auth:AuthorizationSnapshot,source:GoodsOutNoticeSource,receipt:OutgoingMailIds,
+  auth:AuthorizationSnapshot,source:GoodsOutNoticeSource,receipt?:OutgoingMailIds,transaction?:PrivilegedTenantTransaction,
 ):Promise<string|null>{
   if(!canWrite(auth))return null;
-  const result=await readGoodsOutNoticeMail(auth,source);
+  const result=await readGoodsOutNoticeMail(auth,source,transaction);
   const proof=result?.proof;
-  return proof&&proof.threadId===receipt.threadId&&proof.messageId===receipt.messageId?proof.eventId:null;
+  if(!proof||receipt&&(proof.threadId!==receipt.threadId||proof.messageId!==receipt.messageId))return null;
+  return proof.eventId;
 }
 
 /** The first send and every retry share a key tied to an immutable goods-out receipt. */
