@@ -417,7 +417,9 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId,startOnsite
     if (!getCaptureScope) return;
     const initialize = async () => { for (let attempt=0;attempt<3&&current;attempt+=1) { try {
       const knownScope=await readWithDeviceFallback(async()=>{const result=await getCaptureScope();if(result.code!=='OK')throw Error('INTAKE_PENDING_SCOPE_UNAVAILABLE');return result.scope;},async()=>{if(!ports.offlineScope)throw Error('INTAKE_PENDING_SCOPE_UNAVAILABLE');return ports.offlineScope;},!!ports.offlineScope);
-      const originals = (await readPendingOriginals(knownScope)).filter(original=>(original.kind!=='file'||!original.context)&&(!resumePendingId||original.itemId===resumePendingId));
+      const originals = (await readPendingOriginals(knownScope)).filter(original =>
+        (original.kind !== "file" || (!original.context && !original.kontext))
+        && (!resumePendingId || original.itemId === resumePendingId));
       if (current) {
         setScope(knownScope);
         setError(message=>message?.includes("INTAKE_PENDING_RESUME_FAILED")||message?.includes("Lokale Sicherung wird vorbereitet")?null:message);

@@ -112,7 +112,7 @@ it('speichert das Werkstattfoto einmal im Eingang und liest es am tatsÃ¤chlich Ã
  const itemId=randomUUID(),fileId=randomUUID(),sha256=createHash('sha256').update(photo).digest('hex');
  const input={itemId,fileId,name:'TEST-Werkstatt.png',mime:'image/png',bytes:photo.length,sha256,
   kontext:{auftragId:orderId,teilId,fotoArt:'teile' as const,phase:'arbeit' as const,uebergabeVersion:1}};
- const {freezeOrderAction,setExtraWorkHourlyRateAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+ const {freezeOrderAction,getLiveOrderCardAction,setExtraWorkHourlyRateAction,transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
  const {getGalvanikHandoffAttachmentsAction,reserveGalvanikHandoffAttachmentAction}=await import('@/app/warendurchlauf/actions');
  const transition=await withSession(full,()=>transitionWareneingangToGalvanikAction({orderId,expectedVersion:1,clientEventId:randomUUID()}));
  expect(transition).toMatchObject({code:'OK'});
@@ -142,6 +142,8 @@ it('speichert das Werkstattfoto einmal im Eingang und liest es am tatsÃ¤chlich Ã
  const {readOrderEvidenceBatch}=await import('@/lib/server/evidenceRead');
  expect((await readOrderEvidenceBatch(auth.data,[orderId])).get(orderId))
   .toMatchObject({code:'OK',intakePhotoParts:[teilId]});
+ expect(await withSession(full,()=>getLiveOrderCardAction({orderId})))
+  .toMatchObject({code:'OK',data:{intakePhotoParts:[teilId]}});
  expect(await withSession(full,()=>freezeOrderAction(freeze))).toMatchObject({code:'OK'});
  expect(await sql`SELECT count(*)::int AS count FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid
   AND art='zugeordnet' AND nachher->>'action'='original_kontext' AND nachher->>'uebergabeEreignisId' IS NOT NULL`).toEqual([{count:1}]);

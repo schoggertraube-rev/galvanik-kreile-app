@@ -547,7 +547,7 @@ export async function getLiveOrderCardAction(input:{orderId:string}):ReturnType<
 
 async function readLiveOrderCardForPage(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ serverReadAt?:string; cacheLoginScope?:string; handoverConsequences?:Awaited<ReturnType<typeof import('@/lib/server/commands/immutableInvoiceCommand').readInvoiceShippingConsequences>>; nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
+): Promise<OrderCardActionResult<{ serverReadAt?:string; cacheLoginScope?:string; handoverConsequences?:Awaited<ReturnType<typeof import('@/lib/server/commands/immutableInvoiceCommand').readInvoiceShippingConsequences>>; nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; intakePhotoParts?:readonly string[]|null; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
@@ -608,7 +608,22 @@ async function readLiveOrderCardForPage(
     if(!evidence)return {code:'UNAVAILABLE',message:'Nachweise konnten nicht sicher geladen werden.'};
     if(evidence.code!=='OK')return evidence;
     if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
-    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope,nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data,intakePhotoParts:evidence.intakePhotoParts},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,terminAnzeige,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    return {
+      code: "OK",
+      data: {
+        ...(handoverConsequences ? { handoverConsequences } : {}),
+        serverReadAt: new Date().toISOString(),
+        cacheLoginScope,
+        nextActionRule: readV45OrderRule(authorization.data, card.data, { orderId:input.orderId, value:customerInformed },
+          { orderId:input.orderId, records:evidence.data, intakePhotoParts:evidence.intakePhotoParts },
+          { shipping:handoverConsequences, payment, shipment:manualShipping }),
+        card: { ...card.data, terminAnzeige, ...(actors.code === "OK" ? { actors:actors.actors } : { actorReadError:actors.message }) },
+        evidence: evidence.data,
+        intakePhotoParts: evidence.intakePhotoParts,
+        customerInformed, printQueue, pickupAppointment,
+        ...(manualShipping ? { manualShipping } : {}),
+      },
+    };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,

@@ -27,6 +27,22 @@ it('resumes the selected offline original and binds its actual capture command t
  await waitFor(()=>expect(acknowledgePendingOriginal).toHaveBeenCalledWith(scope,id,textstand,capture.takeovers));
 });
 
+it("resumes the general note without taking a queued workshop photo from its own upload",async()=>{
+ vi.stubGlobal("matchMedia",vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ vi.spyOn(navigator,"onLine","get").mockReturnValue(false);
+ const scope="a".repeat(64),photoId=crypto.randomUUID(),noteId=crypto.randomUUID();
+ vi.mocked(readPendingOriginals).mockResolvedValue([
+  {kind:"file",id:photoId,itemId:crypto.randomUUID(),file:new File(["TEST"],"TEST-Werkstatt.png",{type:"image/png"}),
+   kontext:{auftragId:crypto.randomUUID(),teilId:crypto.randomUUID(),fotoArt:"teile",phase:"arbeit"}},
+  {kind:"note",id:noteId,itemId:noteId,text:"TEST allgemeine Notiz",textstand:crypto.randomUUID(),dismissed:[]},
+ ]);
+ const ports={offlineScope:scope,getCaptureScope:vi.fn()} as unknown as GlobalCreatePorts;
+ render(<IntakeCaptureDialog ports={ports} onClose={vi.fn()} onOrder={vi.fn()} onCustomer={vi.fn()}/>);
+ expect(await screen.findByDisplayValue("TEST allgemeine Notiz")).toBeVisible();
+ expect(screen.queryByText("TEST-Werkstatt.png")).not.toBeInTheDocument();
+ expect(acknowledgePendingOriginal).not.toHaveBeenCalled();
+});
+
 it('PE204 loads package expectation once per version outside the file polling interval',async()=>{
  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
  const capture:IntakeCapture={id:crypto.randomUUID(),version:1,text:'TEST Paket',customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],recognition:{kind:'ware',text:'TEST Paket'},files:[{id:crypto.randomUUID(),name:'TEST-paket.png',mime:'image/png',bytes:1,readable:false,secured:true,status:'fertig'}]};

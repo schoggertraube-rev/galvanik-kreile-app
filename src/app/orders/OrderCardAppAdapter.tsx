@@ -176,6 +176,7 @@ function mapCard(
   evidence: EvidenceReadRecord[],
   payment: OrderCardPaymentContext,
   catalog: NonNullable<OrderCardModel["catalog"]>,
+  intakePhotoParts: OrderCardModel["intakePhotoParts"],
 ): OrderCardModel {
   return {
     actors:card.actors,
@@ -218,6 +219,7 @@ function mapCard(
         frozen: line.frozen,
       })),
     })),
+    intakePhotoParts,
     evidence: evidence.map((record) => ({
       key: record.evidenceKey,
       source: record.source,
@@ -365,7 +367,7 @@ export function OrderCardAppAdapter({
         setSnapshot(next);
         setState({
           kind: "data",
-          card: {...mapCard(card, result.data.evidence, context, next.catalog),...(result.data.customerInformed?.code==='OK'&&result.data.customerInformed.invoiceMailQueued===true?{invoiceMailWaiting:INVOICE_DELIVERY_COPY.queued(card.customerName)}:{})},
+          card: {...mapCard(card, result.data.evidence, context, next.catalog, result.data.intakePhotoParts),...(result.data.customerInformed?.code==='OK'&&result.data.customerInformed.invoiceMailQueued===true?{invoiceMailWaiting:INVOICE_DELIVERY_COPY.queued(card.customerName)}:{})},
         });
         return next;
       } catch (error) {
