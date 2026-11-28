@@ -104,6 +104,76 @@ it("reads a secured Excel workbook with the document model and preserves the ori
 });
 
 it.each([
+  { kind: "rechnung", text: "Rechnung\nRechnungsnummer TEST", specialist: null, code: "OK" },
+  { kind: "rechnung", text: "Rechnung\nRechnungsnummer TEST", specialist: "test-i1-invoice", code: "OK" },
+  { kind: "quittung", text: "Quittung: TEST", specialist: "test-i1-receipt", code: "TEILWEISE" },
+])("keeps the first reading with the configured second model ($kind, $specialist)", async ({ kind, text, specialist, code }) => {
+  const documentModel = "test-i1-document";
+  const settings = { dokument: documentModel, rechnung: kind === "rechnung" ? specialist : null,
+    bon: kind === "quittung" ? specialist : null };
+  const [previous] = await sql`UPDATE public.company_settings SET erkennung_modelle=${sql.json(settings)}
+    WHERE tenant_id=${tenant} RETURNING id`;
+  if (!previous) throw Error("TEST_I1_COMPANY_MISSING");
+  const itemId = randomUUID(), fileId = randomUUID();
+  const bytes = Buffer.concat([Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3l8AAAAASUVORK5CYII=", "base64",
+  ), Buffer.from(fileId)]);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const grant = await withSession(full, () => prepareIntakeFileAction({
+    itemId, fileId, name: "TEST-Beleg.png", mime: "image/png", bytes: bytes.length, sha256,
+  }));
+  if (grant.code !== "OK" || !grant.upload) throw Error("TEST_I1_SPECIALIST_UPLOAD");
+  const storage = createAdminClient().storage.from(grant.upload.bucket);
+  expect((await storage.uploadToSignedUrl(grant.upload.path, grant.upload.token, bytes, { contentType: "image/png" })).error).toBeNull();
+  const endpoint = "https://i1-models.example.invalid";
+  vi.stubEnv("AZURE_DOCINTEL_ENDPOINT", endpoint);
+  vi.stubEnv("AZURE_DOCINTEL_KEY", "TEST-i1-models");
+  const calls: string[] = [];
+  const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.origin !== endpoint) return nativeFetch(input, init);
+    const modelId = /^\/documentintelligence\/documentModels\/([^:/]+)/.exec(url.pathname)?.[1];
+    if (init?.method === "POST") {
+      if (!modelId) throw Error("TEST_I1_MODEL_REQUEST");
+      calls.push(modelId);
+      if (modelId === "test-i1-receipt") return new Response(null, { status: 503 });
+      return new Response(null, { status: 202, headers: {
+        "operation-location": `${endpoint}/documentintelligence/documentModels/${modelId}/analyzeResults/TEST-I1`,
+      } });
+    }
+    return Response.json({ status: "succeeded", analyzeResult: modelId === documentModel
+      ? { modelId, content: text, pages: [{ pageNumber: 1 }] }
+      : { modelId, pages: [{ pageNumber: 1 }], documents: [{ fields: {
+        InvoiceId: { content: "TEST-RE-94", confidence: 0.8, boundingRegions: [{ pageNumber: 1, polygon: [] }] },
+      } }] },
+    });
+  });
+  try {
+    expect(await withSession(full, () => finishIntakeFileAction(fileId), true)).toMatchObject({ code: "OK" });
+    const names = specialist ? [documentModel, specialist] : [documentModel];
+    expect(calls).toEqual(names);
+    expect(await withSession(full, () => getIntakeCaptureAction(itemId))).toMatchObject({
+      code: "OK", capture: { files: [{ id: fileId, status: "fertig", secured: true, recognizedText: text }] },
+    });
+    expect(await sql`SELECT nachher FROM public.intake_event
+      WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid AND art='erkannt'`).toEqual([{
+      nachher: { fileId, kind, modelle: names, code, textGekuerzt: false },
+    }]);
+    if (specialist === "test-i1-invoice") {
+      expect(await sql`SELECT wert,modell,fundstelle FROM public.intake_suggestion
+        WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='rechnung.nummer' AND status='offen'`)
+        .toEqual([{ wert: "TEST-RE-94", modell: specialist, fundstelle: { page: 1, polygon: [] } }]);
+      expect((await storage.download(`${tenant}/${sha256}.erkennung.${specialist}.json`)).error).toBeNull();
+    }
+  } finally {
+    fetched.mockRestore();
+    vi.unstubAllEnvs();
+    await sql`UPDATE public.company_settings SET erkennung_modelle='{"dokument":null,"rechnung":null,"bon":"test-quittung"}'::jsonb
+      WHERE tenant_id=${tenant}`;
+  }
+});
+
+it.each([
   { text: "TEST Rechnung", damagedArchive: true, documentModel: null },
   { text: null, damagedArchive: true, documentModel: null },
   { text: null, damagedArchive: false, documentModel: "test-kreile-layout" },

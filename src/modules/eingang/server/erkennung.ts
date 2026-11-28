@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { recordObservedFailure } from "@/lib/server/actionObservation";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { analyzeWithAzureDocumentIntelligence, EXCEL_WORKBOOK_MIME, readAzureRecognitionOriginal, supportsAzureDocument } from "@/lib/server/azureDocumentIntelligence";
+import type { DocumentSuggestion } from "@/lib/server/azureDocumentIntelligence";
 import { concernForCaptureKind, recognizeCaptureDocument } from "../captureRecognition";
 import { safeOriginalBytes } from "../originalSafety";
 import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
@@ -13,9 +14,21 @@ import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
 const BUCKET = "scans";
 
 export type ReadRecognitionSettings = (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
-  erkennung_modelle: { dokument: string };
+  erkennung_modelle: { dokument: string; rechnung: string | null; bon: string | null };
   ki_sicherheitsschwelle: number | null;
 }>;
+
+function documentSuggestions(suggestions: readonly DocumentSuggestion[]) {
+  return [
+    ...suggestions.filter(suggestion => suggestion.field !== "DOCUMENT_TEXT"),
+    ...recognizeInvoiceFields(suggestions),
+  ];
+}
+
+function suggestionKey(suggestion: ReturnType<typeof documentSuggestions>[number]) {
+  return JSON.stringify([suggestion.field, suggestion.source.page,
+    suggestion.field.startsWith("rechnung.") ? null : suggestion.value]);
+}
 
 function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
 
@@ -62,29 +75,43 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       : null;
     const threshold = settings?.ki_sicherheitsschwelle ?? null;
     const deadline = AbortSignal.timeout(30_000);
-    let recognized = needsOcr && settings ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
-      (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
-      undefined, { subject: { type: "intake", id: file.item_id }, originalRef: fileId, model: settings.erkennung_modelle.dokument, allowWorkbook: workbook })
-      : null;
-    if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
-    let rawPath: string | null = null;
-    if (recognized?.code === "OK" && recognized.original) {
-      const original = recognized.original;
-      try {
-        const saved = await saveIntakeRecognitionOriginal({
-          bucket: BUCKET, tenantId: auth.tenantId, originalSha256: file.sha256,
-          model: original.model, bytes: original.bytes,
-        });
-        if (saved.bytes !== original.bytes) recognized = readAzureRecognitionOriginal(saved.bytes, original.model);
-        rawPath = saved.path;
-      } catch {
-        recordObservedFailure('INTAKE_RAW_NOT_SAVED');
+    const readModel = async (model: string, keyValuePairs: boolean) => {
+      let result = await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
+        (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
+        undefined, { subject: { type: "intake", id: file.item_id }, originalRef: fileId, model,
+          allowWorkbook: workbook, keyValuePairs });
+      if (result.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
+      let rawPath: string | null = null;
+      if (result.code === "OK" && result.original) {
+        const original = result.original;
+        try {
+          const saved = await saveIntakeRecognitionOriginal({
+            bucket: BUCKET, tenantId: auth.tenantId, originalSha256: file.sha256,
+            model: original.model, bytes: original.bytes,
+          });
+          if (saved.bytes !== original.bytes) result = readAzureRecognitionOriginal(saved.bytes, original.model);
+          rawPath = saved.path;
+        } catch {
+          recordObservedFailure('INTAKE_RAW_NOT_SAVED');
+        }
       }
-    }
+      return { result, rawPath };
+    };
+    const primary = needsOcr && settings ? await readModel(settings.erkennung_modelle.dokument, true) : null;
+    const recognized = primary?.result ?? null;
+    const rawPath = primary?.rawPath ?? null;
     const ocr = recognized?.code === "OK" ? recognized : null;
     const rawStorageFailed = ocr !== null && rawPath === null;
     const kind = xmlResult?.code === "OK" ? "rechnung" : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
-    const positionRows = ocr?.original ? readAzurePositionRows(ocr.original.tables) : [];
+    const models = settings?.erkennung_modelle;
+    const specialistModel = ocr && models && !workbook
+      ? kind === "rechnung" ? models.rechnung : kind === "quittung" ? models.bon : null : null;
+    const specialist = specialistModel ? await readModel(specialistModel, false) : null;
+    const specialistOcr = specialist?.result.code === "OK" ? specialist.result : null;
+    const specialistArchiveFailed = specialistOcr !== null && !specialist?.rawPath;
+    const primaryPositions = ocr?.original ? readAzurePositionRows(ocr.original.tables) : [];
+    const positionRows = primaryPositions.length || !specialistOcr?.original
+      ? primaryPositions : readAzurePositionRows(specialistOcr.original.tables);
     await withPrivilegedTenantTransaction(auth, async tx => {
       if (positionRows.length > 0) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
@@ -96,15 +123,19 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const replaceDocumentText = ocr !== null && (documentText !== null || !rawStorageFailed);
       const pages = ocr?.original?.pages ?? null;
       const model = ocr?.original?.model ?? null;
-      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${hasValues && !rawStorageFailed ? "fertig" : "fehler"},
+      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${hasValues && !rawStorageFailed && !specialistArchiveFailed ? "fertig" : "fehler"},
           erkannter_text=CASE WHEN ${replaceDocumentText} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
           erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
-      const suggestions=xmlResult?.code==='OK'?xmlResult.suggestions:ocr?[
-        ...ocr.data.suggestions.filter(suggestion => suggestion.field !== "DOCUMENT_TEXT"),
-        ...recognizeInvoiceFields(ocr.data.suggestions),
-      ]:[];
+      const primarySuggestions=ocr?documentSuggestions(ocr.data.suggestions):[];
+      const primaryKeys=new Set(primarySuggestions.map(suggestionKey));
+      const specialistSuggestions=specialistOcr?documentSuggestions(specialistOcr.data.suggestions).filter(suggestion=>{
+        const key=suggestionKey(suggestion);
+        if(primaryKeys.has(key))return false;
+        primaryKeys.add(key);
+        return true;
+      }):[];
       const existingPositions = positionRows.length === 0 ? [] : await tx.execute<{
         fileId: string; positionKey: string; tableIndex: string | null; rowIndex: string | null;
       }>(sql`SELECT file_id::text AS "fileId", wert->>'positionKey' AS "positionKey",
@@ -124,15 +155,20 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const positionSuggestions = positionRows.map(({ position, confidence, source }) => {
         const row = `${source.tableIndex}:${source.rowIndex}`;
         const positionKey = storedPositionKeys.get(row) ?? `p${++lastPositionNumber}`;
-        return { field: 'position', value: { ...position, positionKey }, confidence, source };
+        return { field: 'position', value: { ...position, positionKey }, confidence, source,
+          model: primaryPositions.length ? model : specialistOcr?.original?.model ?? null };
       });
+      const suggestions = xmlResult?.code === 'OK' ? xmlResult.suggestions.map(suggestion=>({...suggestion,model:null})) : [
+        ...primarySuggestions.map(suggestion=>({...suggestion,model})),
+        ...specialistSuggestions.map(suggestion=>({...suggestion,model:specialistOcr?.original?.model??null})),
+      ];
       for (const suggestion of [...suggestions, ...positionSuggestions]) {
         const confidence = suggestion.confidence;
         const certainty = confidence === null || threshold === null
           ? 'vorschlag' : confidence >= threshold ? 'sicher' : 'unsicher';
         const jsonValue = JSON.stringify(suggestion.value);
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,sicherheit_wert,modell,regel,grund,fundstelle,status)
-            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${model},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
+            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${suggestion.model},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
           WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid
             AND feld=${suggestion.field} AND (feld<>'position' OR wert->>'positionKey'=(${jsonValue}::jsonb)->>'positionKey')
             AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
@@ -144,9 +180,11 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
           version=version+1, geaendert_von=${akteur}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
         WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT (${concern}::text=ANY(anliegen))`);
       const recognitionCode = xmlResult?.code === 'OK' ? 'OK' : isXml ? 'UNSUPPORTED_XML'
-        : rawStorageFailed ? 'INTAKE_RAW_NOT_SAVED'
+        : rawStorageFailed || specialistArchiveFailed ? 'INTAKE_RAW_NOT_SAVED'
+        : specialist && !specialistOcr ? 'TEILWEISE'
         : recognized?.code ?? (bytes.byteLength > 20 * 1024 * 1024 ? 'INTAKE_RECOGNITION_TOO_LARGE' : 'UNSUPPORTED_DOCUMENT_TYPE');
-      const receipt = { fileId, kind, modelle: model === null ? [] : [model], code: recognitionCode, textGekuerzt: false };
+      const receipt = { fileId, kind, modelle: [model,specialistModel].filter((name):name is string=>name!==null),
+        code: recognitionCode, textGekuerzt: false };
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify(receipt)}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);

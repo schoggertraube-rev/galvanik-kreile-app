@@ -70,13 +70,48 @@ function classify(label: string): DocumentSuggestion["field"] {
   return "OTHER";
 }
 
+const modelFieldLabels = {
+  InvoiceId: "Invoice ID",
+  InvoiceDate: "Invoice date",
+  DueDate: "Due date",
+  VendorName: "Lieferant",
+  VendorTaxId: "Umsatzsteuer-ID",
+  PurchaseOrder: "Bestellnummer",
+  MerchantName: "Händler",
+  TransactionDate: "Belegdatum",
+} as const;
+
+function modelSuggestions(documents: unknown): DocumentSuggestion[] {
+  if (!Array.isArray(documents)) return [];
+  const result: DocumentSuggestion[] = [];
+  for (const document of documents) {
+    const fields = document?.fields;
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) continue;
+    for (const [name, label] of Object.entries(modelFieldLabels)) {
+      const field = fields[name];
+      if (!field || typeof field !== "object") continue;
+      const value = typeof field.valueDate === "string" ? field.valueDate
+        : typeof field.content === "string" ? field.content.trim() : "";
+      const confidence = field.confidence ?? null;
+      const region = Array.isArray(field.boundingRegions) && field.boundingRegions.length === 1
+        ? field.boundingRegions[0] : null;
+      if (!value || !region || !Number.isSafeInteger(region.pageNumber) || region.pageNumber < 1
+        || confidence !== null && (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1)) continue;
+      const polygon = Array.isArray(region.polygon) ? region.polygon.filter((point: unknown): point is number =>
+        typeof point === "number" && Number.isFinite(point)).slice(0, 16) : [];
+      result.push({ field: classify(label), label, value, confidence, source: { page: region.pageNumber, polygon } });
+    }
+  }
+  return result;
+}
+
 function suggestions(payload: unknown): DocumentSuggestion[] {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
   const result = (payload as Record<string, unknown>).analyzeResult;
   if (!result || typeof result !== "object" || Array.isArray(result)) return [];
   const analysis = result as Record<string, unknown>;
   const pairs = Array.isArray(analysis.keyValuePairs) ? analysis.keyValuePairs : [];
-  const output: DocumentSuggestion[] = [];
+  const output: DocumentSuggestion[] = modelSuggestions(analysis.documents);
   for (const pairValue of pairs) {
     if (!pairValue || typeof pairValue !== "object" || Array.isArray(pairValue)) continue;
     const pair = pairValue as Record<string, unknown>;
@@ -104,7 +139,7 @@ export async function analyzeWithAzureDocumentIntelligence(
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowWorkbook?:boolean},
+  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowWorkbook?:boolean;keyValuePairs?:boolean},
 ): Promise<AzureResult> {
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
@@ -122,7 +157,7 @@ export async function analyzeWithAzureDocumentIntelligence(
     const analyzeUrl = new URL(`documentintelligence/documentModels/${model}:analyze`, endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");
     analyzeUrl.searchParams.set("api-version", API_VERSION);
-    if (mimeType !== EXCEL_WORKBOOK_MIME) analyzeUrl.searchParams.set("features", "keyValuePairs");
+    if (mimeType !== EXCEL_WORKBOOK_MIME && diagnostic?.keyValuePairs !== false) analyzeUrl.searchParams.set("features", "keyValuePairs");
     attempted=true;
     const response = await fetchPort(analyzeUrl, {
       method: "POST",
