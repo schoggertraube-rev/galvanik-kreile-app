@@ -117,7 +117,7 @@ it('I2 E10 hält eine Rechnung mit unterschiedlicher gedruckter und eingebettete
 
 it.each([
  {name:'andere Nummer',nummernEnde:'-DRUCK',brutto:'336,90',ziel:'offen',haelt:true,vat:'DE900000081'},
- {name:'anderer Bruttobetrag',nummernEnde:'',brutto:'337,90',ziel:'bezahlt',haelt:true,vat:'DE900000082'},
+ {name:'anderer Bruttobetrag im Scan',nummernEnde:'',brutto:'337,90',ziel:'bezahlt',haelt:true,vat:'DE900000082',scan:true},
  {name:'übereinstimmende Angaben',nummernEnde:'',brutto:'336,90',ziel:'offen',haelt:false,vat:'DE900000083'},
 ])('I2 E10 vergleicht getrennte gesicherte Originale bei $name',async(fall)=>{
  const nummer='TEST-I2-E10-'+randomUUID().slice(0,8);
@@ -127,8 +127,13 @@ it.each([
  const xml=Buffer.from(readFileSync('e2e/fixtures/e-rechnung/TEST_xrechnung_ubl.xml','utf8')
   .replace('DE 123456789',fall.vat).replace('123456XX',nummer));
  const pdf=await PDFDocument.create(),page=pdf.addPage();
- page.drawText('Rechnungsnummer: '+nummer+fall.nummernEnde,{x:24,y:740,size:12});
- page.drawText('Brutto: '+fall.brutto+' EUR',{x:24,y:710,size:12});
+ if(fall.scan){
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1EAAAAASUVORK5CYII=','base64');
+  page.drawImage(await pdf.embedPng(png),{x:24,y:710,width:30,height:30});
+ }else{
+  page.drawText('Rechnungsnummer: '+nummer+fall.nummernEnde,{x:24,y:740,size:12});
+  page.drawText('Brutto: '+fall.brutto+' EUR',{x:24,y:710,size:12});
+ }
  const itemId=randomUUID(),pdfId=randomUUID(),xmlId=randomUUID();
  async function sichereOriginal(fileId:string,name:string,mime:string,bytes:Uint8Array){
   const sha256=createHash('sha256').update(bytes).digest('hex');
@@ -139,8 +144,36 @@ it.each([
   expect(original.error).toBeNull();
   expect(await withSession(full,()=>finishIntakeFileAction(fileId),true)).toMatchObject({code:'OK'});
  }
- await sichereOriginal(pdfId,'TEST_i2_getrennt.pdf','application/pdf',await pdf.save());
- await sichereOriginal(xmlId,'TEST_i2_getrennt.xml','application/xml',xml);
+ if(fall.scan){
+  const [vorher]=await sql<{enabled:boolean}[]>`SELECT enabled FROM public.tenant_features WHERE tenant=${tenant} AND feature_id='E04'`;
+  await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES (${tenant},'E04',true)
+   ON CONFLICT (tenant,feature_id) DO UPDATE SET enabled=true`;
+  const host='https://i2-test-scan.example.invalid';
+  vi.stubEnv('AZURE_DOCINTEL_ENDPOINT',host);
+  vi.stubEnv('AZURE_DOCINTEL_KEY','TEST-I2-Scan');
+  const upstream=vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+   const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+   if(url.origin!==host)return nativeFetch(input,init);
+   const model=url.pathname.match(/documentModels\/([^:/]+)/u)?.[1];
+   if(init?.method==='POST')return new Response(null,{status:202,headers:{'operation-location':
+    host+'/documentintelligence/documentModels/'+model+'/analyzeResults/TEST-I2-Scan'}});
+   return Response.json({status:'succeeded',analyzeResult:{modelId:model,content:'Rechnung\nRechnungsnummer: '+nummer,
+    pages:[{pageNumber:1}],keyValuePairs:[['Rechnungsnummer',nummer],['Brutto',fall.brutto]].map(([key,value])=>
+     ({key:{content:key},value:{content:value},confidence:0.99}))}});
+  });
+  try{
+   await sichereOriginal(xmlId,'TEST_i2_getrennt.xml','application/xml',xml);
+   await sichereOriginal(pdfId,'TEST_i2_getrennt.pdf','application/pdf',await pdf.save());
+  }finally{
+   upstream.mockRestore();
+   vi.unstubAllEnvs();
+   if(vorher)await sql`UPDATE public.tenant_features SET enabled=${vorher.enabled} WHERE tenant=${tenant} AND feature_id='E04'`;
+   else await sql`DELETE FROM public.tenant_features WHERE tenant=${tenant} AND feature_id='E04'`;
+  }
+ }else{
+  await sichereOriginal(pdfId,'TEST_i2_getrennt.pdf','application/pdf',await pdf.save());
+  await sichereOriginal(xmlId,'TEST_i2_getrennt.xml','application/xml',xml);
+ }
  const abgleiche=await sql`SELECT file_id,grund,sicherheit,wert->>'pdfId' AS pdf,wert->>'xmlId' AS xml
   FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${itemId}
   AND feld='rechnung.abgleich' AND status='offen' ORDER BY file_id`;

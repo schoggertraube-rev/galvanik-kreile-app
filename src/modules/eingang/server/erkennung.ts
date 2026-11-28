@@ -133,7 +133,6 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const pdfResult=file.mime==='application/pdf'&&!isXml?await recognizeInvoicePdf(bytes):null;
     const xmlResult=isXml?recognizeInvoiceXml(bytes):pdfResult;
     const druckbild=pdfResult?.code==='UNSUPPORTED'?pdfResult.druckwerte:null;
-    const getrennterAbgleich=Boolean(druckbild?.length)||(isXml&&xmlResult?.code==='OK');
     const canRead = isMail ? mail !== null : isXml ? xmlResult?.code==='OK'
       : supportsAzureDocument(file.mime, bytes.byteLength, true)
         && (!officeFormat || safeOfficeRecognitionBytes(file.dateiname, bytes, officeFormat));
@@ -189,6 +188,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const specialist = specialistModel ? await readModel(specialistModel, false) : null;
     const specialistOcr = specialist?.result.code === "OK" ? specialist.result : null;
     const specialistArchiveFailed = specialistOcr !== null && !specialist?.rawPath;
+    const getrennterAbgleich=Boolean(druckbild?.length)||(isXml&&xmlResult?.code==='OK')
+      || (pdfResult?.code==='UNSUPPORTED'&&Boolean(rawPath)&&ocr!==null);
     const primaryPositions = ocr?.original ? readAzurePositionRows(ocr.original.tables) : [];
     const positionRows = primaryPositions.length || !specialistOcr?.original
       ? primaryPositions : readAzurePositionRows(specialistOcr.original.tables);

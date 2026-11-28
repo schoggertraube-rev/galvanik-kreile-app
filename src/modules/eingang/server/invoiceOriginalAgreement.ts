@@ -12,28 +12,36 @@ type Original={id:string;art:'pdf'|'xml';werte:Druckwert[]};
 
 export async function liesGetrenntenRechnungswiderspruch(tx:PrivilegedTenantTransaction,
  tenantId:string,itemId:string,fileId:string,pages:InvoicePageRange|null=null){
- const quellen=await tx.execute<{fileId:string;feld:string;wert:unknown}>(sql`
-  SELECT file.id::text AS "fileId",s.feld,s.wert
+ const quellen=await tx.execute<{fileId:string;art:'pdf'|'xml';feld:string;wert:unknown;seite:string|null}>(sql`
+  SELECT file.id::text AS "fileId",CASE WHEN file.mime='application/pdf' THEN 'pdf' ELSE 'xml' END AS art,
+    s.feld,s.wert,s.fundstelle->>'page' AS seite
   FROM public.intake_file file JOIN public.intake_suggestion s
     ON s.tenant_id=file.tenant_id AND s.item_id=file.item_id AND s.file_id=file.id
   WHERE file.tenant_id=${tenantId} AND file.item_id=${itemId}::uuid AND ${gespeichertesBelegoriginal}
     AND s.status IN ('offen','uebernommen') AND (
-     file.mime='application/pdf' AND s.feld='rechnung.druckbild'
+     file.mime='application/pdf' AND (s.feld='rechnung.druckbild' OR (
+      file.erkennung_roh_pfad IS NOT NULL AND s.feld IN ('rechnung.nummer','rechnung.betrag')
+      AND s.fundstelle->>'format' IS NULL
+      AND NOT EXISTS(SELECT 1 FROM public.intake_suggestion druck WHERE druck.tenant_id=file.tenant_id
+       AND druck.file_id=file.id AND druck.feld='rechnung.druckbild' AND druck.status IN ('offen','uebernommen'))))
      OR file.mime<>'application/pdf' AND s.fundstelle->>'format' IN ('UBL','CII')
         AND s.feld IN ('rechnung.nummer','rechnung.betrag'))
   ORDER BY file.reihenfolge,file.id,s.id`);
  const originale=new Map<string,Original>();
  for(const quelle of quellen){
-  const istPdf=quelle.feld==='rechnung.druckbild';
-  const original:Original=originale.get(quelle.fileId)??{id:quelle.fileId,art:istPdf?'pdf':'xml',werte:[]};
-  if(istPdf&&Array.isArray(quelle.wert)){
+  const original:Original=originale.get(quelle.fileId)??{id:quelle.fileId,art:quelle.art,werte:[]};
+  if(quelle.feld==='rechnung.druckbild'&&Array.isArray(quelle.wert)){
    for(const wert of quelle.wert){
     if(!wert||typeof wert!=='object'||!['rechnung.nummer','rechnung.betrag'].includes(wert.field)
       ||!Number.isSafeInteger(wert.page)||wert.page<1)continue;
     if(pages&&quelle.fileId===fileId&&(wert.page<pages.from||wert.page>pages.to))continue;
     original.werte.push({field:wert.field,value:wert.value,page:wert.page});
    }
-  }else if(!istPdf)original.werte.push({field:quelle.feld,value:quelle.wert,page:null});
+  }else if(quelle.feld!=='rechnung.druckbild'){
+   const seite=quelle.seite&&/^\d+$/u.test(quelle.seite)?Number(quelle.seite):null;
+   if(!pages||quelle.fileId!==fileId||quelle.art==='xml'||seite!==null&&seite>=pages.from&&seite<=pages.to)
+    original.werte.push({field:quelle.feld,value:quelle.wert,page:seite});
+  }
   originale.set(original.id,original);
  }
  const gewaehltes=originale.get(fileId);
