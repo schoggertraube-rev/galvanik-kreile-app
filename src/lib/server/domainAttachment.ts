@@ -262,6 +262,17 @@ export async function importDomainAttachmentBytes(authorization: AuthorizationSn
 /** Secured photo ownership stays with the attachment owner, in the caller transaction. */
 export async function readSecuredOrderPhotoIds(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,orderId:string,ids:readonly string[]):Promise<string[]> {
   if(!ids.length)return [];
-  const rows=await tx.execute<{id:string}>(sql`SELECT id::text AS id FROM public.scan_uploads WHERE tenant_id=${authorization.tenantId} AND id IN (${sql.join(ids.map(id=>sql`${id}`),sql`, `)}) AND linked_order_id=${orderId} AND status='secured' AND file_type LIKE 'image/%'`);
+  const requested=sql.join(ids.map(id=>sql`${id}`),sql`, `);
+  const rows=await tx.execute<{id:string}>(sql`
+    SELECT id::text AS id FROM public.scan_uploads WHERE tenant_id=${authorization.tenantId} AND id IN (${requested})
+      AND linked_order_id=${orderId} AND status='secured' AND file_type LIKE 'image/%'
+    UNION
+    SELECT file.id::text FROM public.intake_file file JOIN public.intake_item source
+      ON source.tenant_id=file.tenant_id AND source.id=file.item_id
+    WHERE file.tenant_id=${authorization.tenantId} AND file.id IN (${requested}) AND file.mime LIKE 'image/%'
+      AND source.vorgang_art='auftrag' AND source.vorgang_id=${orderId} AND source.zuordnung_regel='kontext'
+      AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id
+        AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert'
+        AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256)`);
   return rows.map(row=>row.id);
 }

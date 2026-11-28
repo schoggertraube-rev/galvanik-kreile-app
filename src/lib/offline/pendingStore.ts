@@ -6,7 +6,7 @@ import type {ActionResult} from '@/lib/server/authHelper';
 import {canonicalJson} from '@/lib/domain/canonicalJson';
 import {isWorkshopRejectionReceipt,type WorkshopRejectionReceipt} from './workshopRejectionContract';
 import {hasCacheScopeMarker,readCacheScopeMarker} from './cacheScopeMarker';
-import type {IntakeOriginalTakeover} from '@/modules/eingang/public';
+import type {IntakeFileContext,IntakeOriginalTakeover} from '@/modules/eingang/public';
 import type {setOrderItemFinishedAction,changeOrderItemExtraWorkAction,OrderResponse} from '@/app/actions/orders.actions';
 import type {cancelInvoiceAction} from '@/app/actions/invoices.actions';
 import type {sendCustomerMailAction} from '@/app/actions/communications.actions';
@@ -16,7 +16,7 @@ import {isShipmentGroupInput,isShipmentGroupReceipt,type ShipmentGroupInput} fro
 import {isDeliveryNoteInput,isDeliveryNoteReceipt,type DeliveryNoteInput} from '@/lib/domain/deliveryNoteContract';
 import '../../../public/kreile-offline-queue.js';
 // Unacknowledged originals in one scoped queue. Server remains authoritative.
-export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; customerVisible?:boolean; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
+export type PendingOriginal = ({ id: string; itemId: string; kind: "file"; file: File; customerVisible?:boolean; deviceId?:string|null; deviceCapturedAt?:string; captureOrigin?: "warenfoto" | "dokument"; kontext?:IntakeFileContext; context?:{orderId:string;receiptId:string;clientKey:string;photoKind:"uebersicht"|"teile"|"abweichung"} }
   | { id: string; itemId: string; kind: "note"; text: string; textstand: string; dismissed: string[];expectedVersion?:number;deviceCapturedAt?:string;context?:{customerId?:string;orderId?:string} }) & {queueSequence?:number;takeover?:IntakeOriginalTakeover;takeoverSourceCanonical?:string};
 export type PendingQuarantine={id:string;kind:"quarantine";capturedAt:string;payload:Record<string,unknown>};
 export type PendingFinancialCommand=
@@ -468,6 +468,11 @@ function goodsPhotoContext(value:unknown):value is NonNullable<Extract<PendingOr
   &&typeof row.receiptId==='string'&&uuid.test(row.receiptId)&&typeof row.clientKey==='string'&&uuid.test(row.clientKey)
   &&typeof row.photoKind==='string'&&['uebersicht','teile','abweichung'].includes(row.photoKind);
 }
+
+function pendingFileContext(value:unknown):value is IntakeFileContext {
+ return value!==null&&typeof value==='object'&&!Array.isArray(value)&&
+  ('auftragId' in value&&typeof value.auftragId==='string'||'kundeId' in value&&typeof value.kundeId==='string');
+}
 export async function adoptQuarantinedOriginal(scope:string,sourceId:string,deviceId:string,currentScope:()=>string|null=()=>scope){
  const login=readCacheScopeMarker();if(currentScope()!==scope)return {code:'SOURCE_INCOMPLETE' as const};
  const rows=await transaction<unknown[]>(scope,'readonly',store=>store.getAll());
@@ -478,13 +483,14 @@ export async function adoptQuarantinedOriginal(scope:string,sourceId:string,devi
  if(source.text===undefined&&source.file===undefined&&source.payload&&typeof source.payload==='object'&&!Array.isArray(source.payload))source=source.payload as Record<string,unknown>;
  const file=typeof File!=='undefined'&&source.file instanceof File?source.file:null;
  if(file&&Object.hasOwn(source,'customerVisible')&&typeof source.customerVisible!=='boolean')return {code:'SOURCE_INCOMPLETE' as const};
+ if(file&&Object.hasOwn(source,'kontext')&&!pendingFileContext(source.kontext))return {code:'SOURCE_INCOMPLETE' as const};
  const text=typeof source.text==='string'&&source.text.trim()?source.text:!file&&!containsBinary(source)?quarantineCanonical(source):null;
  if(!file&&(!text||text.length>20000))return {code:'SOURCE_INCOMPLETE' as const};
  const serialized=quarantineCanonical(raw);if(serialized.length>250000)return {code:'SOURCE_INCOMPLETE' as const};
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(serialized))),byte=>byte.toString(16).padStart(2,'0')).join('');
  const capturedAt=typeof source.deviceCapturedAt==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(source.deviceCapturedAt)&&Number.isFinite(Date.parse(source.deviceCapturedAt))&&new Date(source.deviceCapturedAt).toISOString()===source.deviceCapturedAt?source.deviceCapturedAt:new Date().toISOString();
  const id=crypto.randomUUID(),metadata={takeover:{sourceId,deviceId,sha256:hash,originalRecord:serialized},takeoverSourceCanonical:serialized,deviceCapturedAt:capturedAt};
- const original:PendingOriginal=file?{...metadata,kind:'file',id,itemId:crypto.randomUUID(),file,deviceId,captureOrigin:source.captureOrigin==='warenfoto'?'warenfoto':'dokument',...(goodsPhotoContext(source.context)?{context:source.context}:{}),...(typeof source.customerVisible==='boolean'?{customerVisible:source.customerVisible}:{})}:{...metadata,kind:'note',id,itemId:id,text:text!,textstand:crypto.randomUUID(),dismissed:[],expectedVersion:0};
+ const original:PendingOriginal=file?{...metadata,kind:'file',id,itemId:crypto.randomUUID(),file,deviceId,captureOrigin:source.captureOrigin==='warenfoto'?'warenfoto':'dokument',...(goodsPhotoContext(source.context)?{context:source.context}:{}),...(pendingFileContext(source.kontext)?{kontext:source.kontext}:{}),...(typeof source.customerVisible==='boolean'?{customerVisible:source.customerVisible}:{})}:{...metadata,kind:'note',id,itemId:id,text:text!,textstand:crypto.randomUUID(),dismissed:[],expectedVersion:0};
  const db=await database(scope);
  return new Promise<{code:'OK';original:PendingOriginal}|{code:'SOURCE_INCOMPLETE'}>((resolve,reject)=>{
   const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE),read=store.getAll();let saved:PendingOriginal|undefined;
@@ -511,7 +517,8 @@ export async function readPendingEntries(scope:string):Promise<PendingEntry[]> {
   const projectedId="quarantine:"+quarantineKey(row.id);
   const isOriginal=typeof row.id==='string'&&typeof row.itemId==="string"&&(row.kind==="note"&&typeof row.text==="string"&&typeof row.textstand==="string"&&Array.isArray(row.dismissed)&&row.dismissed.every(item=>typeof item==="string")||row.kind==="file"&&typeof row.file==="object"&&row.file!==null&&typeof (row.file as File).arrayBuffer==="function"&&typeof (row.file as File).name==="string");
   const visibilityKnown=row.kind!=='file'||!Object.hasOwn(row,'customerVisible')||typeof row.customerVisible==='boolean';
-  if(isOriginal&&visibilityKnown)return original;
+  const contextKnown=row.kind!=='file'||!Object.hasOwn(row,'kontext')||pendingFileContext(row.kontext);
+  if(isOriginal&&visibilityKnown&&contextKnown)return original;
   if(isPendingWorkshopOriginal(row)){
    if(!row.rejection||isWorkshopRejectionReceipt(scope,row,row.rejection))return row;
    return {id:projectedId,kind:'quarantine',capturedAt:'',payload:row};

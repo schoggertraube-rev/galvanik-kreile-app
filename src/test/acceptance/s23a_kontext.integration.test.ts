@@ -9,6 +9,12 @@ import {createFixture,full,sql,withSession} from '../../../e2e/ablauf/replayHarn
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {finishIntakeFileAction,getIntakeCaptureAction,openIntakeOriginalAction,prepareIntakeFileAction} from '@/app/actions/eingang.actions';
 import {createAdminClient} from '@/lib/supabase/admin';
+import {finalizeDomainAttachmentAction,getDomainAttachmentOriginalAction,getDomainAttachmentsAction,reserveDomainAttachmentAction} from '@/app/actions/domainAttachments.actions';
+import {readSecuredOrderPhotoIds} from '@/lib/server/domainAttachment';
+import {resolveAuthorization} from '@/lib/server/authorization';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+
+const photo=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1EAAAAASUVORK5CYII=','base64');
 
 it('speichert ein Teilefoto im vorhandenen Eingang mit belegtem Auftrag und derselben Originalquittung',async()=>{
  await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES (${tenant},'E04',false)
@@ -16,7 +22,7 @@ it('speichert ein Teilefoto im vorhandenen Eingang mit belegtem Auftrag und ders
  const kunde=await customerFixture('TEST S23a'),auftrag=await intakeOrderFixture('TEST S23a Upload',kunde);
  const auftragId=auftrag.receipt.orderId;
  const [teil]=await sql`SELECT id FROM public.items WHERE tenant_id=${tenant} AND order_id=${auftragId} ORDER BY id LIMIT 1`;
- const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1EAAAAASUVORK5CYII=','base64');
+ const bytes=photo;
  const itemId=randomUUID(),fileId=randomUUID(),sha256=createHash('sha256').update(bytes).digest('hex');
  const input={itemId,fileId,name:'TEST-Teilefoto.png',mime:'image/png',bytes:bytes.length,sha256,
   kontext:{auftragId,teilId:teil.id,fotoArt:'teile',phase:'arbeit',fuerKunde:false}};
@@ -41,6 +47,12 @@ it('speichert ein Teilefoto im vorhandenen Eingang mit belegtem Auftrag und ders
   .toMatchObject({code:'OK',capture:{customerId:kunde,orderId:auftragId}});
  expect(await withSession(auftragsLogin,()=>openIntakeOriginalAction({fileId,orderId:auftragId,clientEventId:randomUUID()})))
   .toMatchObject({code:'OK',original:{id:fileId,sha256}});
+ expect(await withSession(auftragsLogin,()=>getDomainAttachmentsAction({targetType:'ORDER',targetId:auftragId})))
+  .toMatchObject({code:'OK',data:[{attachmentId:fileId,intakeOriginal:true,intakeSecured:true}]});
+ const auth=await withSession(auftragsLogin,resolveAuthorization);
+ if(!auth.ok)throw Error('TEST_S23A_KONTEXT_AUTH');
+ expect(await withPrivilegedTenantTransaction(auth.data,tx=>readSecuredOrderPhotoIds(tx,auth.data,auftragId,[fileId])))
+  .toEqual([fileId]);
  expect(await sql`SELECT file.foto_art,file.phase,item.zuordnung_regel,event.nachher->'kontext' AS kontext
   FROM public.intake_file file JOIN public.intake_item item ON item.tenant_id=file.tenant_id AND item.id=file.item_id
   JOIN public.intake_event event ON event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.befehl_id=file.id
@@ -51,4 +63,43 @@ it('speichert ein Teilefoto im vorhandenen Eingang mit belegtem Auftrag und ders
  expect(await sql`SELECT id FROM public.scan_uploads WHERE tenant_id=${tenant} AND linked_order_id=${auftragId}`).toEqual([]);
  // The same live reader remains usable by the full operator.
  expect(await withSession(full,()=>getIntakeCaptureAction(itemId,{orderId:auftragId}))).toMatchObject({code:'OK'});
+});
+
+it('liest auf der Kundenkarte den neuen Eingang und den bisherigen Anhang und öffnet nur Originale des gewählten Kunden',async()=>{
+ const kunde=await customerFixture('TEST S23a Kundenkarte');
+ const anderer=await customerFixture('TEST S23a anderer Kunde');
+ const kundenLogin=await createFixture(['kunden']);
+ const fotoLogin=await createFixture(['kunden','auftraege']);
+ const itemId=randomUUID(),fileId=randomUUID(),sha256=createHash('sha256').update(photo).digest('hex');
+ const deviceRead=await withSession(fotoLogin,async()=>{
+  const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S23A_KUNDEN_AUTH');
+  const {offlinePartition}=await import('@/lib/server/offlinePartition');return offlinePartition(auth.data);
+ });
+ const input={itemId,fileId,name:'TEST-Kundenfoto.png',mime:'image/png',bytes:photo.length,sha256,deviceId:randomUUID(),
+  deviceCapturedAt:new Date().toISOString(),kontext:{kundeId:kunde}};
+ expect(await withSession(kundenLogin,()=>prepareIntakeFileAction(input))).toMatchObject({code:'FORBIDDEN'});
+ const grant=await withSession(fotoLogin,()=>prepareIntakeFileAction(input,deviceRead));
+ if(grant.code!=='OK')throw Error('TEST_S23A_KUNDE_UPLOAD:'+grant.code);
+ if(grant.upload)expect((await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,
+  grant.upload.token,photo,{contentType:'image/png',upsert:false})).error).toBeNull();
+ expect(await withSession(fotoLogin,()=>finishIntakeFileAction(fileId,deviceRead),true)).toMatchObject({code:'OK',capture:{customerId:kunde}});
+ const target={targetType:'CUSTOMER' as const,targetId:kunde};
+ const historisch=await withSession(full,()=>reserveDomainAttachmentAction({...target,clientRequestId:randomUUID(),
+  mimeType:'image/png',fileBytes:photo.length,contentSha256:sha256}));
+ if(historisch.code!=='OK'||!historisch.data.upload)throw Error('TEST_S23A_ALT_UPLOAD:'+historisch.code);
+ const altId=historisch.data.receipt.attachmentId,altUpload=historisch.data.upload;
+ expect((await createAdminClient().storage.from('scans').uploadToSignedUrl(altUpload.path,altUpload.token,photo,
+  {contentType:'image/png',upsert:false})).error).toBeNull();
+ expect(await withSession(full,()=>finalizeDomainAttachmentAction({attachmentId:altId,fileBytes:photo.length,contentSha256:sha256})))
+  .toMatchObject({code:'OK'});
+ expect(await withSession(kundenLogin,()=>getDomainAttachmentsAction(target))).toMatchObject({code:'FORBIDDEN'});
+ const liste=await withSession(fotoLogin,()=>getDomainAttachmentsAction(target));
+ expect(liste).toMatchObject({code:'OK',data:expect.arrayContaining([
+  expect.objectContaining({attachmentId:fileId,intakeOriginal:true,intakeSecured:true}),expect.objectContaining({attachmentId:altId}),
+ ])});
+ expect(await withSession(fotoLogin,()=>openIntakeOriginalAction({fileId,customerId:kunde,clientEventId:randomUUID()})))
+  .toMatchObject({code:'OK',original:{id:fileId,sha256}});
+ expect(await withSession(fotoLogin,()=>openIntakeOriginalAction({fileId,customerId:anderer,clientEventId:randomUUID()})))
+  .toMatchObject({code:'FORBIDDEN'});
+ expect(await withSession(full,()=>getDomainAttachmentOriginalAction({attachmentId:altId}))).toMatchObject({code:'OK'});
 });

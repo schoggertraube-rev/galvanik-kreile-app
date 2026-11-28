@@ -12,7 +12,7 @@ export {INTAKE_MAIL_ADOPT_EVENT} from './mailSelectionContract';
 export type {MailImportFailure,IntakeMailSummary,IntakeMailSelectionResult} from './mailSelectionContract';
 export {IntakeMessageDialogs} from './ui/IntakeMessageDialogs';
 export type {MailSelectionPorts} from './ui/MailSelectionDialog';
-export type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeContext, IntakeConcern, IntakeCaptureKindInput } from "./captureContract";
+export type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeContext, IntakeFileContext, IntakeConcern, IntakeCaptureKindInput } from "./captureContract";
 export { uploadIntakeOriginal } from "./intakeOriginalUpload";
 export type {
   GlobalCreateIntent,

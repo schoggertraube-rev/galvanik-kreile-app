@@ -104,7 +104,7 @@ export function GlobalCreateAppAdapter() {
   // PL22.11.13:57: the existing deferred event transport loads dialog
   // receivers on the first real open request, never during layout idle.
   const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,...(canAction('createQuote')?{createQuote:(source:{id:string;number:string;customerId:string})=>requestGlobalCreate({intent:'QUOTE',prefill:{sourceComplaint:source}})}:{}),read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,sendReminder:sendeNacharbeitBegleitscheinAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
-    addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
+    addPhoto:(orderId,file)=>uploadDomainAttachment('ORDER',orderId,file,offlineScope),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
       const rows=await getDomainAttachmentsAction({targetType:'ORDER',targetId:orderId});
       if(rows.code!=='OK')throw Error(rows.message);
@@ -115,7 +115,7 @@ export function GlobalCreateAppAdapter() {
       if(!url)throw Error('Original ist nicht freigegeben.');
       window.open(url,'_blank','noopener,noreferrer');
     },
-  }),[areas,openOrder,canAction]);
+  }),[areas,openOrder,canAction,offlineScope]);
 
   const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
     openOriginal:(itemId,fileId,invoiceId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{

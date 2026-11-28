@@ -3,14 +3,14 @@
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
 import {readErkennungsEinstellungenInTransaction,readLoggingSettings} from '@/modules/fundament/server-public';
 import { unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { attachIntakeDraftAttachment, finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
 import { readEvidenceRecordsByTarget,readEvidenceVisibilityByKeys } from "@/lib/server/evidenceRead";
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {EVIDENCE_READ_COPY} from '@/ui/situationCatalog';
 import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
-import { readOrderIntakeOriginals } from "@/modules/eingang/server-public";
+import { readDomainIntakeOriginals } from "@/modules/eingang/server-public";
 import {changeEvidenceVisibility} from '@/lib/server/evidenceVisibilityCommand';
 import {splitUploadVisibility} from '@/lib/domain/evidenceVisibility';
 import {applyEvidenceUploadVisibility,type UploadVisibilityResult} from '@/lib/server/evidenceVisibilityUpload';
@@ -88,7 +88,8 @@ export async function getDomainAttachmentsAction(input: { targetType: "CUSTOMER"
   if (!auth.ok) return { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   const result = await readEvidenceRecordsByTarget(auth.data, input);
   if (result.code !== "OK") return result;
-  const originals=input.targetType==='ORDER'?await readOrderIntakeOriginals(input.targetId):null;
+  const originals=input.targetType==='ORDER'||hasAuthorizationArea(auth.data,'kunden')
+    ?await readDomainIntakeOriginals(input.targetType,input.targetId):null;
   if(originals&&originals.code!=='OK')return originals;
   let intakeVisibility:Awaited<ReturnType<typeof readEvidenceVisibilityByKeys>>|null=null;
   try{
@@ -110,7 +111,8 @@ export async function getDomainAttachmentsAction(input: { targetType: "CUSTOMER"
       recordedAt: record.recordedAt,
       visibility: record.visibility,
     })),...(originals?.code==='OK'?originals.originals.map(original=>({attachmentId:original.id,mimeType:original.mime,fileBytes:original.bytes,
-      recordedAt:original.at,visibility:intakeVisibility?.get('intake-file:'+original.id)??null,intakeOriginal:true as const,intakeItemId:original.itemId,intakeName:original.name,intakePart:original.part,intakeTotal:original.total,intakeSecured:original.secured})):[])],
+      recordedAt:original.at,visibility:intakeVisibility?.get('intake-file:'+original.id)??null,intakeOriginal:true as const,intakeItemId:original.itemId,intakeName:original.name,intakePart:original.part,intakeTotal:original.total,intakeSecured:original.secured})):[])]
+      .sort((left,right)=>Date.parse(right.recordedAt)-Date.parse(left.recordedAt)),
   };
 }
 
