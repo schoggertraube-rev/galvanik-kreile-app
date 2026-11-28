@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { bildeSchluessel, klassifiziereTeil } from '@/lib/erfassung/klassifikator';
-import { leseBelegteKundenTreffer, waehleKundenKandidaten, type KundenTreffer, type KundenTrefferregel } from './kandidaten';
+import { leseBelegteKundenTreffer, waehleKundenKandidaten, waehleVorgangsKandidaten, type KundenTreffer, type KundenTrefferregel } from './kandidaten';
 
 // Synthetische Treffer der isolierten Auswahlprüfung.
 const einstellungen = {
@@ -14,6 +14,20 @@ const treffer = (kundenId: string, regel: KundenTrefferregel): KundenTreffer => 
   grundWert: 'TEST ' + regel,
 });
 const offen = { zuordnung: 'offen', quellenVollstaendig: true, einstellungen } as const;
+
+it('behält den stärksten Vorgangsbeleg und sortiert gleiche Stufen nach dem jüngsten Vorgang', () => {
+  const vorgeschlagen = waehleVorgangsKandidaten([
+    { art: 'auftrag', id: 'A', regel: 'ware_erwartet', erstelltAm: 20 },
+    { art: 'kv', id: 'B', regel: 'teil', erstelltAm: 30 },
+    { art: 'auftrag', id: 'C', regel: 'teil', erstelltAm: 40 },
+    { art: 'auftrag', id: 'A', regel: 'mailfaden', erstelltAm: 20 },
+  ], {
+    ...einstellungen, eingang_vorschlaege_max: 2,
+    eingang_kandidat_stufen: { ...einstellungen.eingang_kandidat_stufen, mailfaden: 1, teil: 0.8, ware_erwartet: 0.6 },
+  });
+  expect(vorgeschlagen.map(({ id, regel, sicherheitWert }) => [id, regel, sicherheitWert]))
+    .toEqual([['A', 'mailfaden', 1], ['C', 'teil', 0.8]]);
+});
 
 it('liefert bei fehlenden Treffern keine Vorschläge', () => {
   expect(waehleKundenKandidaten({ ...offen, treffer: [] })).toEqual({

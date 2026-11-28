@@ -29,7 +29,7 @@ async function source(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
 async function customer(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,read:CustomerReader):Promise<AssignmentCustomer>{
  const row=await read(tx,auth.tenantId,id);if(!row)reject('NOT_FOUND','Kunde nicht verfügbar.');return {id:row.id,name:row.name,type:row.customerType,reason:null};
 }
-async function suggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){return tx.execute<{id:string;wert:unknown;grund:string|null}>(sql`SELECT id::text,wert,grund FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${id}::uuid AND feld='kunde' AND status='offen' ORDER BY id`);}
+async function suggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){return tx.execute<{id:string;wert:unknown;grund:string|null}>(sql`SELECT id::text,wert,grund FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${id}::uuid AND feld='kunde' AND status='offen' ORDER BY sicherheit_wert DESC NULLS LAST,id`);}
 export async function readIntakeAssignment(input:unknown,readCustomer:CustomerReader):Promise<AssignmentReadResult>{
  if(!object(input)||Object.keys(input).sort().join(',')!=='itemId,mode'||!uuid(input.itemId)||!['normal','rein','kein','umhaengen'].includes(String(input.mode)))return {code:'VALIDATION_ERROR',message:'Zuordnungsaufruf ist ungültig.'};
  try{const auth=await session();if(!hasAuthorizationArea(auth,'eingang')&&!(input.mode==='kein'&&hasAuthorizationArea(auth,'mails')))reject('FORBIDDEN','Zuordnung benötigt Eingang.');
@@ -90,6 +90,70 @@ export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:Au
 }
 async function lockIntakeAssignment(tx:PrivilegedTenantTransaction,tenantId:string){
  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-assignment:'||${tenantId},0))`);
+}
+
+export type IntakeCandidate = {
+  feld: 'kunde' | 'vorgang';
+  wert: string | { id: string; art: 'auftrag' | 'kv' };
+  sicherheit: 'sicher' | 'unsicher' | 'vorschlag';
+  stufe: number;
+  regel: string;
+  grund: string;
+};
+
+/** A recognition result only changes the source version it actually read. The normal move action undoes it. */
+export async function saveIntakeCandidatesInTransaction(
+  tx: PrivilegedTenantTransaction,
+  context: { tenantId: string; akteur: string },
+  input: { itemId: string; version: number; befehlId: string; arten: IntakeCandidate['feld'][]; vorschlaege: IntakeCandidate[]; kundeId: string | null },
+) {
+  const { tenantId, akteur } = context;
+  const { itemId, version, befehlId, arten, vorschlaege, kundeId } = input;
+  const [result] = await tx.execute<{ gespeichert: boolean; neueVorschlaege: number; zuordnungen: number; quittungen: number }>(sql`
+    WITH stand AS (
+      SELECT id, kunde_id, vorgang_art, vorgang_id, zuordnung, version
+      FROM public.intake_item WHERE tenant_id=${tenantId} AND id=${itemId}::uuid AND version=${version}
+        AND (NOT ${arten.includes('kunde')} OR zuordnung='offen') FOR UPDATE
+    ), neu AS (
+      SELECT * FROM jsonb_to_recordset(${JSON.stringify(vorschlaege)}::jsonb)
+        AS v(feld text, wert jsonb, sicherheit text, stufe numeric, regel text, grund text)
+    ), zugeordnet AS (
+      UPDATE public.intake_item ziel SET kunde_id=${kundeId}, zuordnung='automatisch', version=ziel.version+1,
+        geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
+      FROM stand WHERE ziel.tenant_id=${tenantId} AND ziel.id=stand.id AND ziel.zuordnung='offen'
+        AND ${kundeId}::text IS NOT NULL AND EXISTS (SELECT 1 FROM neu WHERE feld='kunde'
+          AND wert=to_jsonb(${kundeId}::text) AND sicherheit='sicher')
+      RETURNING ziel.id, ziel.version
+    ), verworfen AS (
+      UPDATE public.intake_suggestion v
+        SET status='verworfen', entschieden_von=${akteur}, entschieden_am=statement_timestamp()
+      FROM stand WHERE v.tenant_id=${tenantId} AND v.item_id=stand.id AND v.status='offen'
+        AND ${JSON.stringify(arten)}::jsonb ? v.feld
+    ), eingefuegt AS (
+      INSERT INTO public.intake_suggestion(tenant_id,item_id,feld,order_id,wert,sicherheit,sicherheit_wert,regel,grund,status,entschieden_von,entschieden_am)
+      SELECT ${tenantId},stand.id,neu.feld,CASE WHEN neu.feld='vorgang' AND neu.wert->>'art'='auftrag' THEN neu.wert->>'id' END,
+        neu.wert,neu.sicherheit,neu.stufe,neu.regel,neu.grund,
+        CASE WHEN uebernommen.wert THEN 'uebernommen' ELSE 'offen' END,
+        CASE WHEN uebernommen.wert THEN 'system' END,
+        CASE WHEN uebernommen.wert THEN statement_timestamp() END
+      FROM stand CROSS JOIN neu CROSS JOIN LATERAL (
+        SELECT neu.feld='kunde' AND neu.wert=to_jsonb(${kundeId}::text) AND EXISTS(SELECT 1 FROM zugeordnet) AS wert
+      ) uebernommen RETURNING id
+    ), quittung AS (
+      INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher)
+      SELECT ${tenantId},stand.id,'zugeordnet',${befehlId}::uuid,'system',
+        jsonb_build_object('version',stand.version,'kundeId',stand.kunde_id,'zuordnung',stand.zuordnung,'vorgangArt',stand.vorgang_art,'vorgangId',stand.vorgang_id),
+        jsonb_build_object('version',zugeordnet.version,'kundeId',${kundeId}::text,'zuordnung','automatisch','additional',0)
+      FROM stand JOIN zugeordnet USING(id) RETURNING id
+    )
+    SELECT EXISTS(SELECT 1 FROM stand) AS gespeichert,
+      (SELECT count(*)::int FROM eingefuegt) AS "neueVorschlaege",
+      (SELECT count(*)::int FROM zugeordnet) AS zuordnungen, (SELECT count(*)::int FROM quittung) AS quittungen
+  `);
+  if (!result?.gespeichert) return false;
+  if (result.neueVorschlaege !== vorschlaege.length || result.zuordnungen !== (kundeId === null ? 0 : 1)
+    || result.quittungen !== result.zuordnungen) throw Error('I2_KANDIDAT_QUITTUNG_FEHLT');
+  return true;
 }
 /** 3.1 from 3.4 composes the existing customer writer and the same assignment writer atomically. */
 export async function createCustomerForIntake(input:unknown,writeCustomer:CustomerWriter,readCustomer:CustomerReader):Promise<CustomerCreateCommandResult|AssignmentFailure>{

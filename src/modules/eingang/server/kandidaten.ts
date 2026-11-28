@@ -1,10 +1,14 @@
 import { sql } from 'drizzle-orm';
 import { foldSearchText } from '@/lib/domain/searchText';
-import type { PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
+import { withTenantSavepoint, type PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import { normaliseCustomerPhone } from '@/modules/customers/public';
+import { eingangCopy } from '@/ui/eingangCopy';
 import { findRecognizedCustomers } from '../customerRecognition';
+import { saveIntakeCandidatesInTransaction, type IntakeCandidate } from './intakeAssignment';
 
 export type KundenTrefferregel = 'ustid' | 'adresse' | 'domain' | 'name' | 'telefon';
+type VorgangsTrefferregel = 'mailfaden' | 'teil' | 'ware_erwartet';
+type Trefferregel = KundenTrefferregel | VorgangsTrefferregel;
 
 export type KundenTreffer = Readonly<{
   kundenId: string;
@@ -21,6 +25,18 @@ type KandidatenEinstellungen = Readonly<{
   eingang_kandidat_stufen: Readonly<Record<KundenTrefferregel, number>>;
   ki_sicherheitsschwelle: number | null;
 }>;
+
+export type EingangKandidatenEinstellungen = KandidatenEinstellungen & Readonly<{
+  eingang_kandidat_stufen: Readonly<Record<VorgangsTrefferregel, number>>;
+}>;
+
+type Vorgangsbezug = { id: string; art: 'auftrag' | 'kv'; erstelltAm: number };
+export type VorgangsTreffer = Vorgangsbezug & { regel: VorgangsTrefferregel };
+
+function stufenwert(stufe: number) {
+  if (!Number.isFinite(stufe) || stufe < 0 || stufe > 1) throw Error('I2_KANDIDAT_STUFE_UNGUELTIG');
+  return stufe;
+}
 
 /** Bewertet belegte Treffer der Kundenleser, bevor der Erkennungslauf sie speichert. */
 export function waehleKundenKandidaten(input: {
@@ -39,10 +55,7 @@ export function waehleKundenKandidaten(input: {
 
   const proKunde = new Map<string, BewerteterKundenTreffer>();
   for (const treffer of input.treffer) {
-    const sicherheitWert = stufen[treffer.regel];
-    if (!Number.isFinite(sicherheitWert) || sicherheitWert < 0 || sicherheitWert > 1) {
-      throw Error('I2_KANDIDAT_STUFE_UNGUELTIG');
-    }
+    const sicherheitWert = stufenwert(stufen[treffer.regel]);
     const bisher = proKunde.get(treffer.kundenId);
     if (!bisher || sicherheitWert > bisher.sicherheitWert) {
       proKunde.set(treffer.kundenId, { ...treffer, sicherheitWert });
@@ -56,6 +69,20 @@ export function waehleKundenKandidaten(input: {
     vorschlaege: geordnet.slice(0, maximum),
     automatischKundenId: input.quellenVollstaendig && sichere.length === 1 ? sichere[0].kundenId : null,
   };
+}
+
+export function waehleVorgangsKandidaten(treffer: readonly VorgangsTreffer[], einstellungen: EingangKandidatenEinstellungen) {
+  const beste = new Map<string, VorgangsTreffer & { sicherheitWert: number }>();
+  for (const kandidat of treffer) {
+    const key = kandidat.art + ':' + kandidat.id;
+    const sicherheitWert = stufenwert(einstellungen.eingang_kandidat_stufen[kandidat.regel]);
+    const bisher = beste.get(key);
+    if (!bisher || sicherheitWert > bisher.sicherheitWert) {
+      beste.set(key, { ...kandidat, sicherheitWert });
+    }
+  }
+  return [...beste.values()].sort((a, b) => b.sicherheitWert - a.sicherheitWert || b.erstelltAm - a.erstelltAm
+    || a.art.localeCompare(b.art) || a.id.localeCompare(b.id)).slice(0, einstellungen.eingang_vorschlaege_max);
 }
 
 type Kundenquelle = {
@@ -76,7 +103,10 @@ type LieferantenFeld = 'lieferant.ustid' | 'lieferant.name';
 type Eingangsquelle = Pick<Eingangsadresse, 'absenderAdresse' | 'absenderName' | 'absenderTelefon'> & {
   version: number;
   zuordnung: Zuordnung;
-  feld: LieferantenFeld | null;
+  kundeId: string | null;
+  kanal: string;
+  ware: boolean;
+  feld: LieferantenFeld | 'position' | null;
   wert: string | null;
 };
 
@@ -86,13 +116,17 @@ export async function leseKandidatenQuellenInTransaction(
   itemId: string,
 ) {
   const zeilen = await tx.execute<Eingangsquelle>(sql`
-    SELECT eingang.version, eingang.zuordnung, eingang.absender_adresse AS "absenderAdresse",
+    SELECT eingang.version, eingang.zuordnung, eingang.kunde_id AS "kundeId", eingang.kanal,
+      ('ware'=ANY(eingang.anliegen) OR EXISTS(SELECT 1 FROM public.intake_file etikett
+        WHERE etikett.tenant_id=eingang.tenant_id AND etikett.item_id=eingang.id AND etikett.foto_art='etikett')) AS ware,
+      eingang.absender_adresse AS "absenderAdresse",
       eingang.absender_name AS "absenderName", eingang.absender_telefon AS "absenderTelefon",
-      vorschlag.feld, CASE WHEN jsonb_typeof(vorschlag.wert)='string' THEN vorschlag.wert #>> '{}' END AS wert
+      vorschlag.feld, CASE WHEN vorschlag.feld='position' THEN vorschlag.wert->>'bezeichnung'
+        WHEN jsonb_typeof(vorschlag.wert)='string' THEN vorschlag.wert #>> '{}' END AS wert
     FROM public.intake_item eingang
     LEFT JOIN public.intake_suggestion vorschlag
       ON vorschlag.tenant_id=eingang.tenant_id AND vorschlag.item_id=eingang.id
-      AND vorschlag.feld IN ('lieferant.ustid','lieferant.name') AND vorschlag.status IN ('offen','uebernommen')
+      AND vorschlag.feld IN ('lieferant.ustid','lieferant.name','position') AND vorschlag.status IN ('offen','uebernommen')
     WHERE eingang.tenant_id=${tenantId} AND eingang.id=${itemId}::uuid
   `);
   const erste = zeilen[0];
@@ -111,6 +145,10 @@ export async function leseKandidatenQuellenInTransaction(
     version: erste.version,
     zuordnung: erste.zuordnung,
     hinweiseVollstaendig: ustId.lesbar && name.lesbar,
+    kundeId: erste.kundeId,
+    kanal: erste.kanal,
+    ware: erste.ware,
+    teile: [...new Set(zeilen.flatMap(zeile => zeile.feld === 'position' && zeile.wert?.trim() ? [zeile.wert.trim()] : []))],
     eingang: {
       absenderAdresse: erste.absenderAdresse,
       absenderName: erste.absenderName,
@@ -204,4 +242,112 @@ export async function leseBelegteKundenTreffer(
     quellenVollstaendig: geleseneQuellen > 0 && vollstaendig,
     kandidaten: geleseneQuellen === 0 ? 'keine' as const : vollstaendig ? 'ok' as const : 'teilweise' as const,
   };
+}
+
+type VorgangsSuche = NonNullable<Awaited<ReturnType<typeof leseKandidatenQuellenInTransaction>>>;
+
+async function leseVorgangsTreffer(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string,
+  quelle: VorgangsSuche, kandidaten: readonly string[]) {
+  const kunden = sql.join(kandidaten.map(id => sql`${id}`), sql`,`);
+  const treffer: VorgangsTreffer[] = [];
+  let gelesen = false;
+  let vollstaendig = true;
+  const erfasse = async (regel: VorgangsTrefferregel, lesen: (nested: PrivilegedTenantTransaction) => Promise<readonly Vorgangsbezug[]>) => {
+    try {
+      const zeilen = await withTenantSavepoint(tx, lesen);
+      for (const zeile of zeilen) treffer.push({ ...zeile, regel });
+      gelesen = true;
+    } catch {
+      vollstaendig = false;
+    }
+  };
+
+  if (kandidaten.length && quelle.teile.length) {
+    const teile = new Set(quelle.teile.map(foldSearchText).filter(Boolean));
+    await erfasse('teil', async nested => {
+      const offen = await nested.execute<Vorgangsbezug & { teile: string[] }>(sql`
+        SELECT art,id,extract(epoch FROM erstellt_am)::float8 AS "erstelltAm",teile
+        FROM public.v_eingang_vorgaenge_v1 WHERE customer_id IN (${kunden})`);
+      return offen.filter(vorgang => vorgang.teile.some(name => typeof name === 'string' && teile.has(foldSearchText(name))));
+    });
+  }
+  if (quelle.kanal === 'mail') await erfasse('mailfaden', nested => nested.execute<Vorgangsbezug>(sql`
+    SELECT DISTINCT vorgang.art,vorgang.id,extract(epoch FROM vorgang.erstellt_am)::float8 AS "erstelltAm"
+    FROM public.intake_item aktuell
+    JOIN public.intake_item vorher ON vorher.tenant_id=aktuell.tenant_id AND vorher.id<>aktuell.id AND vorher.kanal='mail'
+    JOIN public.v_eingang_vorgaenge_v1 vorgang ON vorgang.art=vorher.vorgang_art AND vorgang.id=vorher.vorgang_id
+    WHERE aktuell.tenant_id=${tenantId} AND aktuell.id=${itemId}::uuid
+      AND (aktuell.conversation_id IS NOT NULL AND aktuell.conversation_id=vorher.conversation_id
+        OR EXISTS (SELECT 1 FROM public.intake_event original
+          WHERE original.tenant_id=aktuell.tenant_id AND original.item_id=aktuell.id
+            AND original.art='angelegt' AND original.nachher->'replyChain'->>'source'='original_mime'
+            AND original.nachher->'replyChain'->>'status'='present'
+            AND (original.nachher->'replyChain'->'inReplyTo' ? vorher.internet_message_id
+              OR original.nachher->'replyChain'->'references' ? vorher.internet_message_id)
+            AND EXISTS (SELECT 1 FROM public.intake_file datei
+              JOIN public.intake_event belegt ON belegt.tenant_id=datei.tenant_id AND belegt.item_id=datei.item_id
+                AND belegt.art='original_gespeichert' AND belegt.nachher->>'fileId'=datei.id::text
+                AND belegt.nachher->>'sha256'=datei.sha256
+              WHERE datei.tenant_id=aktuell.tenant_id AND datei.item_id=aktuell.id AND datei.mime='message/rfc822'
+                AND datei.sha256=original.nachher->'replyChain'->>'originalSha256')))`));
+  if (kandidaten.length && quelle.ware) await erfasse('ware_erwartet', nested => nested.execute<Vorgangsbezug>(sql`
+    SELECT vorgang.art,vorgang.id,extract(epoch FROM vorgang.erstellt_am)::float8 AS "erstelltAm"
+    FROM public.v_intake_expected_goods_v1 ware
+    JOIN public.v_eingang_vorgaenge_v1 vorgang ON vorgang.art='auftrag' AND vorgang.id=ware.id::text
+    WHERE ware.tenant_id=${tenantId} AND ware.customer_id IN (${kunden}) AND NOT ware.storniert`));
+  return { treffer, gelesen, vollstaendig };
+}
+
+type Firmenhinweis = { name: string | null; ustId: string | null };
+export type KandidatenPorts = {
+  firma: () => Promise<Firmenhinweis | null>;
+  leseKunden: (tx: PrivilegedTenantTransaction, query: string, absender: string | null, option?: { exactSupplier: 'vat' }) => Promise<Kundenquelle>;
+};
+
+export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransaction,
+  kontext: { tenantId: string; akteur: string }, itemId: string, befehlId: string,
+  einstellungen: EingangKandidatenEinstellungen, ports: KandidatenPorts) {
+  await tx.execute(sql`SET LOCAL statement_timeout='2000ms'`);
+  const quelle = await leseKandidatenQuellenInTransaction(tx, kontext.tenantId, itemId);
+  if (!quelle) return 'keine';
+  const arten: IntakeCandidate['feld'][] = [];
+  const vorschlaege: IntakeCandidate[] = [];
+  let automatischKundenId: string | null = null;
+  let kundenVollstaendig = true;
+  const kundenIds = new Set(quelle.kundeId ? [quelle.kundeId] : []);
+  const einfuegen = (feld: IntakeCandidate['feld'], wert: IntakeCandidate['wert'], regel: Trefferregel, stufe: number) => {
+    const schwelle = einstellungen.ki_sicherheitsschwelle;
+    vorschlaege.push({ feld, wert, regel, stufe, grund: eingangCopy.kandidatGrund[regel],
+      sicherheit: schwelle === null ? 'vorschlag' : stufe >= schwelle ? 'sicher' : 'unsicher' });
+  };
+
+  if (quelle.zuordnung === 'offen') {
+    let firma: Firmenhinweis | null = null;
+    try { firma = await ports.firma(); } catch { kundenVollstaendig = false; }
+    const erkannt = await leseBelegteKundenTreffer(quelle.eingang, firma ?? { name: null, ustId: null },
+      (query, option) => withTenantSavepoint(tx, nested => ports.leseKunden(nested, query, quelle.eingang.absenderAdresse, option)));
+    kundenVollstaendig &&= erkannt.quellenVollstaendig && quelle.hinweiseVollstaendig && firma !== null;
+    if (erkannt.kandidaten !== 'keine') {
+      arten.push('kunde');
+      const auswahl = waehleKundenKandidaten({ zuordnung: quelle.zuordnung, quellenVollstaendig: kundenVollstaendig,
+        treffer: erkannt.treffer, einstellungen });
+      automatischKundenId = auswahl.automatischKundenId;
+      for (const kunde of auswahl.vorschlaege) {
+        kundenIds.add(kunde.kundenId);
+        einfuegen('kunde', kunde.kundenId, kunde.regel, kunde.sicherheitWert);
+      }
+    }
+  }
+  const vorgaenge = await leseVorgangsTreffer(tx, kontext.tenantId, itemId, quelle, [...kundenIds]);
+  if (vorgaenge.gelesen) {
+    arten.push('vorgang');
+    for (const vorgang of waehleVorgangsKandidaten(vorgaenge.treffer, einstellungen)) {
+      einfuegen('vorgang', { art: vorgang.art, id: vorgang.id }, vorgang.regel, vorgang.sicherheitWert);
+    }
+  }
+  if (!arten.length) return 'keine';
+  const gespeichert = await saveIntakeCandidatesInTransaction(tx, kontext, {
+    itemId, befehlId, version: quelle.version, arten, vorschlaege, kundeId: automatischKundenId,
+  });
+  return !gespeichert ? 'keine' : kundenVollstaendig && vorgaenge.vollstaendig ? 'ok' : 'teilweise';
 }
