@@ -10,7 +10,7 @@ import {resolveAuthorization} from '@/lib/server/authorization';
 import {authorizationReadContext} from '@/lib/server/authorizationReadContext';
 import {liesNachrichtenFuerTag} from '@/lib/server/todayProjection';
 import {projiziereEingangTagFakten} from '@/lib/server/todayDashboard';
-import {projectIntakeMessageSources,readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
+import {projectIntakeMessageSources} from '@/modules/eingang/server-public';
 
 it('liest die gespeicherte Liegefrist und blendet den deaktivierten Eingang aus',async()=>{
  const seit='2026-11-23T08:00:00+01:00', jetzt=new Date('2026-11-24T09:00:00+01:00');
@@ -30,7 +30,7 @@ it('liest die gespeicherte Liegefrist und blendet den deaktivierten Eingang aus'
   return result.tagFakten;
  };
  const live=await liesNachrichtenFuerTag(auth,jetzt);
- const source=await readIntakeMessagesForAuthorization(authorizationReadContext(auth),'offen',undefined,undefined,read);
+ const source=await liesNachrichtenFuerTag(authorizationReadContext(auth),jetzt);
  const gelesen=projectIntakeMessageSources(auth,JSON.parse(JSON.stringify(source)));
  if(live.code!=='OK'||!live.tagFakten||gelesen.code!=='OK'||!gelesen.tagFakten)throw Error('TEST_I2_TAG_FAKTEN');
  const erwartung={code:'OK',zeilen:[{key:'eingang.offen:datei',ziel:'/nachrichten',befehl:null}]};

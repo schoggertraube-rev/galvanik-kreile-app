@@ -104,7 +104,7 @@ const TODAY_PROJECTOR_READ_FACADES = new Map([
   ])],
   ['quotes',new Set(['listOpenQuotesCommand','readQuoteCommand','readQuoteActors'])],
   ['complaints',new Set(['readComplaintsForAuthorization'])],
-  ['eingang',new Set(['readIntakeMessagesForAuthorization','liesEingangTagFaktenInTransaction'])],
+  ['eingang',new Set(['readIntakeMessagesForAuthorization'])],
   ['tasks',new Set(['readTaskForAuthorization','readQuoteFollowupTasksForToday','liesAufgabenFuerTag'])],
   ['takt',new Set(['liesTaktAusfallZeilen'])],
 ]);

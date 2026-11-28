@@ -11,7 +11,8 @@ import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} fr
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {normaliseIban,type CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
-import {invoicePageFilter,readIntakeInvoicePageSource,readSecuredIntakeMailOriginal} from './intakeOriginal';
+import {gespeichertesBelegoriginal as invoiceOriginal,invoicePageFilter,readIntakeInvoicePageSource,readSecuredIntakeMailOriginal} from './intakeOriginal';
+import {liesGetrenntenRechnungswiderspruch} from './invoiceOriginalAgreement';
 import {speichereErkennungskorrekturen,type Erkennungskorrektur} from './eingangsRegeln';
 import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFieldErrors,invoiceFieldShape,invoiceTaxBreakdown,
  type IncomingInvoice,type InvoiceChangeInput,type InvoiceDuplicate,type InvoiceFailure,type InvoiceFields,
@@ -32,10 +33,6 @@ const optionalText=(v:unknown,max:number)=>v===null||typeof v==='string'&&v.leng
 const keys=(v:object,names:string[])=>Object.keys(v).sort().join(',')===[...names].sort().join(',');
 const columns=sql`id::text,nummer_intern,item_id::text,file_id::text,seite_von,seite_bis,lieferant_id,nummer,datum::text,netto::text,ust::text,brutto::text,faellig_am::text,
  iban,iban_geprueft,ust_saetze,zahlstatus,bezahlt_am::text,nachweis_file_id::text,verweis_id::text,dublette_grund,unklar_grund,aufgabe_id::text,ungueltig_grund,erfasst_von::text,erfasst_am::text,version`;
-const invoiceOriginal=sql`file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'
- AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
-  AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text
-  AND (event.nachher->>'sha256' IS NULL OR event.nachher->>'sha256'=file.sha256))`;
 const invalidInvoiceRequest='Rechnungsaufruf ist ungültig.';
 class Rejected extends Error{constructor(readonly result:InvoiceFailure|Extract<InvoiceResult,{code:'DUPLICATE'}>){super(result.code);}}
 function reject(code:InvoiceFailure['code'],message:string,fields?:Record<string,string>):never{throw new Rejected({code,message,...(fields?{fields}:{})});}
@@ -94,10 +91,19 @@ async function duplicate(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsh
 async function invoiceSuggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,fileId:string|null,pages:InvoicePageRange|null,includeItemHints=true){
  const original=pages?sql`file_id=${fileId}::uuid AND ${invoicePageFilter(pages)}`
   :sql`(file_id=${fileId}::uuid OR ${includeItemHints} AND file_id IS NULL)`;
- return tx.execute<{feld:string;wert:unknown;sicherheit:string;verified:boolean}>(sql`SELECT feld,wert,sicherheit,geprueft_am IS NOT NULL AS verified FROM public.intake_suggestion
+ const vorschlaege=await tx.execute<{feld:string;wert:unknown;sicherheit:string;verified:boolean}>(sql`SELECT feld,wert,sicherheit,geprueft_am IS NOT NULL AS verified FROM public.intake_suggestion
   WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND ${original}
   AND feld IN ('rechnung.nummer','rechnung.datum','rechnung.betrag','rechnung.faellig','rechnung.iban','rechnung.absender','rechnung.steuersaetze','rechnung.abgleich')
   AND status<>'verworfen' ORDER BY id`);
+ if(fileId&&!hatRechnungswiderspruch(vorschlaege)){
+  const abgleich=await liesGetrenntenRechnungswiderspruch(tx,auth.tenantId,itemId,fileId,pages);
+  if(abgleich)vorschlaege.push({feld:'rechnung.abgleich',wert:abgleich,sicherheit:'unsicher',verified:false});
+ }
+ return vorschlaege;
+}
+
+function hatRechnungswiderspruch(vorschlaege:readonly {feld:string;sicherheit:string}[]){
+ return vorschlaege.some(vorschlag=>vorschlag.feld==='rechnung.abgleich'&&vorschlag.sicherheit==='unsicher');
 }
 function storedPages(invoice:IncomingInvoice|null):InvoicePageRange|null{
  return invoice&&invoice.seite_von!==null&&invoice.seite_bis!==null?{from:invoice.seite_von,to:invoice.seite_bis}:null;
@@ -254,7 +260,7 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
    AND seite_von IS NOT DISTINCT FROM ${pages?.from??null}::integer AND seite_bis IS NOT DISTINCT FROM ${pages?.to??null}::integer`);
   if(savedOriginal.length)reject('CONFLICT','Dieser Eingang hat bereits eine Rechnung.');
   const vorschlaege=await invoiceSuggestions(tx,auth,row.id,input.fileId,pages,existingInvoice===null);
-  const widerspruch=vorschlaege.some(vorschlag=>vorschlag.feld==='rechnung.abgleich'&&vorschlag.sicherheit==='unsicher');
+  const widerspruch=hatRechnungswiderspruch(vorschlaege);
   const missingSupplier=input.status==='offen'&&!input.fields.lieferantId;
   const savedStatus=widerspruch||missingSupplier?'unklar':input.status;
   const unclearReason=widerspruch?eingangCopy.rechnungswiderspruch:missingSupplier?'Lieferant fehlt':input.unclearReason;
@@ -301,7 +307,8 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   const repeated=await replay(tx,auth,row,input.clientKey,command,input);if(repeated)return repeated;
   const before=await findInvoice(tx,auth,input.invoiceId,false,true);if(!before)reject('NOT_FOUND','Rechnung nicht verfügbar.');
   if(before.version!==input.version)reject('CONFLICT','Rechnung wurde inzwischen geändert · Eingaben bleiben erhalten.');
-  if(before.unklar_grund===eingangCopy.rechnungswiderspruch&&['offen','bezahlt'].includes(input.result))
+  const vorschlaege=await invoiceSuggestions(tx,auth,row.id,before.file_id,storedPages(before),row.vorgang_id===before.id);
+  if((before.unklar_grund===eingangCopy.rechnungswiderspruch||hatRechnungswiderspruch(vorschlaege))&&['offen','bezahlt'].includes(input.result))
    reject('CONFLICT',eingangCopy.rechnungswiderspruch);
   if(clarify?before.zahlstatus!=='unklar':!['offen','bezahlt'].includes(before.zahlstatus))reject('VALIDATION_ERROR',clarify?'Rechnung ist nicht unklar':'Dieser Status wird ausschließlich in Rechnung klären geändert.');
   if(!clarify&&input.fields!==null)reject('VALIDATION_ERROR','Status ändern verändert keine Rechnungsfelder.');
@@ -313,7 +320,6 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   await validate(tx,auth,fields,input.result,input.paidDate,input.proofFileId,row.id,deps);
   await verifyDuplicate(tx,auth,fields,input.result,input.duplicateId,before.dublette_grund,before.id);
   const money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
-  const vorschlaege=await invoiceSuggestions(tx,auth,row.id,before.file_id,storedPages(before),row.vorgang_id===before.id);
   const breakdown=taxRates(vorschlaege,fields.ust,before);
   await tx.execute(sql`UPDATE public.supplier_invoice SET lieferant_id=${fields.lieferantId||null},nummer=${fields.nummer.trim()||null},datum=${fields.datum||null}::date,
    netto=${money(fields.netto)}::numeric,ust=${money(fields.ust)}::numeric,brutto=${money(fields.brutto)}::numeric,ust_saetze=${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,faellig_am=${fields.faelligAm||null}::date,iban=${normaliseIban(fields.iban)||null},iban_geprueft=${fields.ibanGeprueft},

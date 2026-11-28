@@ -15,6 +15,7 @@ import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
 import { sucheKandidatenInTransaction, type KandidatenPorts, type EingangKandidatenEinstellungen } from "./kandidaten";
 import { findeVerdachtsmuster, istEigenerLieferantenwert, istLieferantenwert } from "./eingangsRegeln";
 import { istBelegart, schlageBelegidentitaetVor } from "./belegIdentitaet";
+import { speichereGetrenntenRechnungswiderspruch } from "./invoiceOriginalAgreement";
 import { eingangCopy } from "@/ui/eingangCopy";
 
 const BUCKET = "scans";
@@ -131,6 +132,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const isXml=!isMail&&!officeFormat&&(/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<'));
     const pdfResult=file.mime==='application/pdf'&&!isXml?await recognizeInvoicePdf(bytes):null;
     const xmlResult=isXml?recognizeInvoiceXml(bytes):pdfResult;
+    const druckbild=pdfResult?.code==='UNSUPPORTED'?pdfResult.druckwerte:null;
+    const getrennterAbgleich=Boolean(druckbild?.length)||(isXml&&xmlResult?.code==='OK');
     const canRead = isMail ? mail !== null : isXml ? xmlResult?.code==='OK'
       : supportsAzureDocument(file.mime, bytes.byteLength, true)
         && (!officeFormat || safeOfficeRecognitionBytes(file.dateiname, bytes, officeFormat));
@@ -193,7 +196,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     await withPrivilegedTenantTransaction(auth, async tx => {
       if (belegart) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(
         'intake-belegidentitaet:'||${tenantId}||':'||${belegart},0))`);
-      if (positionRows.length > 0) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
+      if (positionRows.length > 0||getrennterAbgleich) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
         AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);
@@ -212,6 +215,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
           erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
+      else if(druckbild?.length)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen'
+        WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND feld='rechnung.druckbild' AND status='offen'`);
       const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions), ...primaryHeads]:[];
       const primaryKeys=new Set(primarySuggestions.map(suggestionKey));
       const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions), ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto)].filter(suggestion=>{
@@ -250,6 +255,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const widerspruch=pdfResult?.code==='OK'?pdfResult.widerspruch:null;
       const widerspruchsbeleg=widerspruch?[{field:'rechnung.abgleich',value:{xml:widerspruch.xml,pdf:widerspruch.pdf},confidence:null,model:null,
         source:{format:'ZUGFeRD',page:widerspruch.page}}]:[];
+      const druckbeleg=druckbild?.length?[{field:'rechnung.druckbild',value:druckbild,confidence:null,model:null,source:{format:'PDF'}}]:[];
       const muster = findeVerdachtsmuster(documentText ?? '', settings?.eingang_verdacht_muster ?? []);
       const verdacht = muster.length ? [{field:'text.verdacht',value:{muster},confidence:null,model:null,
         source:mail ? {format:'EML'} : {page:null}}] : [];
@@ -261,7 +267,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
           recordObservedFailure('INTAKE_COMPANY_IDENTITY_UNAVAILABLE');
           return null;
         }) : null;
-      for (const suggestion of [...suggestions, ...positionSuggestions, ...widerspruchsbeleg, ...verdacht]) {
+      for (const suggestion of [...suggestions, ...positionSuggestions, ...widerspruchsbeleg, ...druckbeleg, ...verdacht]) {
         const confidence = suggestion.confidence;
         const eigeneFirma = istEigenerLieferantenwert(suggestion, firma);
         const certainty = suggestion.field==='rechnung.abgleich' || suggestion.field==='text.verdacht' ? 'unsicher' : confidence === null || threshold === null
@@ -293,6 +299,10 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         : recognized?.code ?? (bytes.byteLength > 20 * 1024 * 1024 ? 'INTAKE_RECOGNITION_TOO_LARGE' : 'UNSUPPORTED_DOCUMENT_TYPE');
       const receiptKey = recognitionReceiptKey(fileId, retryKey);
       let kandidaten: 'ok' | 'teilweise' | 'keine' | undefined;
+      if(getrennterAbgleich){
+        try{await withTenantSavepoint(tx,nested=>speichereGetrenntenRechnungswiderspruch(nested,tenantId,file.item_id,fileId));}
+        catch{recordObservedFailure('INTAKE_INVOICE_ORIGINAL_AGREEMENT_FAILED');}
+      }
       if (ports) {
         try {
           kandidaten = await withTenantSavepoint(tx, async nested => {

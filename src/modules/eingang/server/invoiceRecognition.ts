@@ -136,8 +136,9 @@ export function recognizeInvoiceXml(bytes:Uint8Array):{code:'OK';suggestions:Xml
 }
 
 type XmlRead=Extract<ReturnType<typeof recognizeInvoiceXml>,{code:'OK'}>;
+type PdfDruckwert={field:'rechnung.nummer'|'rechnung.betrag';value:unknown;page:number};
 type PdfRead=(XmlRead & {widerspruch?:NonNullable<ReturnType<typeof findeRechnungswiderspruch>> & {page:number}})
- | {code:'UNSUPPORTED'};
+ | {code:'UNSUPPORTED';druckwerte?:readonly PdfDruckwert[]};
 
 /** Read the embedded invoice and compare it with labelled values in the PDF text layer. */
 export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<PdfRead>{
@@ -156,10 +157,9 @@ export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<PdfRead>{
     // PL09:21: different valid originals must never be selected arbitrarily.
     if(valid.length>1)return {code:'UNSUPPORTED'};
    }
-   if(valid.length!==1)return {code:'UNSUPPORTED'};
-   const xml=valid[0].result;
+   const xml=valid[0]?.result;
    try{
-    const sichtbareWerte:{field:string;value:unknown;page:number}[]=[];
+    const sichtbareWerte:PdfDruckwert[]=[];
     for(let page=1;page<=document.numPages;page++){
      const original=await document.getPage(page);
      const {items}=await original.getTextContent();
@@ -171,6 +171,7 @@ export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<PdfRead>{
       if(brutto&&invoiceCents(brutto)!==null)sichtbareWerte.push({field:'rechnung.betrag',value:{brutto},page});
      }
     }
+    if(!xml)return sichtbareWerte.length?{code:'UNSUPPORTED',druckwerte:sichtbareWerte}:{code:'UNSUPPORTED'};
     const widerspruch=findeRechnungswiderspruch(xml.suggestions,sichtbareWerte);
     if(!widerspruch)return xml;
     const feld=widerspruch.xml.nummer!==null&&widerspruch.pdf.nummer!==null&&widerspruch.xml.nummer!==widerspruch.pdf.nummer
@@ -179,7 +180,7 @@ export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<PdfRead>{
     return page===undefined?xml:{...xml,widerspruch:{...widerspruch,page}};
    }catch(error){
     console.error('[INVOICE_PDF_TEXT_READ_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});
-    return xml;
+    return xml??{code:'UNSUPPORTED'};
    }
   }finally{await task.destroy();}
  }catch(error){console.error('[INVOICE_PDF_XML_READ_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});return {code:'UNSUPPORTED'};}

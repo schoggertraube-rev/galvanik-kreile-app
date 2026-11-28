@@ -12,8 +12,8 @@ import { createCustomerAction } from '@/app/actions/customers.actions';
 import { importOutlookMailAction } from '@/app/actions/communications.actions';
 import { getIntakeAssignmentAction, finishIntakeFileAction, getIncomingInvoiceAction, prepareIntakeFileAction, saveIncomingInvoiceAction } from '@/app/actions/eingang.actions';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { liesEingangTagFaktenInTransaction } from '@/modules/eingang/server-public';
-import { withPrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
+import {liesNachrichtenFuerTag} from '@/lib/server/todayProjection';
+import {resolveAuthorization} from '@/lib/server/authorization';
 
 async function createTestCustomer(name: string, email: string, phone: string) {
   const result = await createCustomerAction({
@@ -115,6 +115,51 @@ it('I2 E10 hält eine Rechnung mit unterschiedlicher gedruckter und eingebettete
   .toMatchObject({code:'OK',replayed:true,invoice:{id:result.invoice.id,zahlstatus:'unklar'}});
 });
 
+it.each([
+ {name:'andere Nummer',nummernEnde:'-DRUCK',brutto:'336,90',ziel:'offen',haelt:true,vat:'DE900000081'},
+ {name:'anderer Bruttobetrag',nummernEnde:'',brutto:'337,90',ziel:'bezahlt',haelt:true,vat:'DE900000082'},
+ {name:'übereinstimmende Angaben',nummernEnde:'',brutto:'336,90',ziel:'offen',haelt:false,vat:'DE900000083'},
+])('I2 E10 vergleicht getrennte gesicherte Originale bei $name',async(fall)=>{
+ const nummer='TEST-I2-E10-'+randomUUID().slice(0,8);
+ const supplier=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',
+  companyName:'TEST E10 Getrennte Originale '+fall.vat,vatId:fall.vat,country:'DE'}));
+ if(supplier.code!=='OK')throw Error('TEST_E10_SUPPLIER:'+supplier.code);
+ const xml=Buffer.from(readFileSync('e2e/fixtures/e-rechnung/TEST_xrechnung_ubl.xml','utf8')
+  .replace('DE 123456789',fall.vat).replace('123456XX',nummer));
+ const pdf=await PDFDocument.create(),page=pdf.addPage();
+ page.drawText('Rechnungsnummer: '+nummer+fall.nummernEnde,{x:24,y:740,size:12});
+ page.drawText('Brutto: '+fall.brutto+' EUR',{x:24,y:710,size:12});
+ const itemId=randomUUID(),pdfId=randomUUID(),xmlId=randomUUID();
+ async function sichereOriginal(fileId:string,name:string,mime:string,bytes:Uint8Array){
+  const sha256=createHash('sha256').update(bytes).digest('hex');
+  const grant=await withSession(full,()=>prepareIntakeFileAction({itemId,fileId,name,mime,bytes:bytes.length,sha256}));
+  if(grant.code!=='OK'||!grant.upload)throw Error('TEST_E10_UPLOAD_GRANT');
+  const original=await createAdminClient().storage.from(grant.upload.bucket)
+   .uploadToSignedUrl(grant.upload.path,grant.upload.token,bytes,{contentType:mime,upsert:false});
+  expect(original.error).toBeNull();
+  expect(await withSession(full,()=>finishIntakeFileAction(fileId),true)).toMatchObject({code:'OK'});
+ }
+ await sichereOriginal(pdfId,'TEST_i2_getrennt.pdf','application/pdf',await pdf.save());
+ await sichereOriginal(xmlId,'TEST_i2_getrennt.xml','application/xml',xml);
+ const abgleiche=await sql`SELECT file_id,grund,sicherheit,wert->>'pdfId' AS pdf,wert->>'xmlId' AS xml
+  FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${itemId}
+  AND feld='rechnung.abgleich' AND status='offen' ORDER BY file_id`;
+ expect(abgleiche).toEqual(fall.haelt?[pdfId,xmlId].sort().map(file_id=>({file_id,grund:'PDF und XML widersprechen',
+  sicherheit:'unsicher',pdf:pdfId,xml:xmlId})):[]);
+ const read=await withSession(full,()=>getIncomingInvoiceAction({id:itemId,fileId:xmlId}));
+ if(read.code!=='OK')throw Error('TEST_E10_READ:'+read.code);
+ const save={itemId,fileId:xmlId,version:read.view.item.version,clientKey:randomUUID(),
+  fields:{...read.view.fields,lieferantId:supplier.customer.id,faelligAm:'2026-12-01',iban:''},status:fall.ziel,
+  paidDate:fall.ziel==='bezahlt'?'2026-11-27':null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null};
+ const result=await withSession(full,()=>saveIncomingInvoiceAction(save));
+ expect(result).toMatchObject({code:'OK',invoice:fall.haelt
+  ?{zahlstatus:'unklar',unklar_grund:'PDF und XML widersprechen',aufgabe_id:expect.any(String),bezahlt_am:null}
+  :{zahlstatus:'offen',unklar_grund:null}});
+ if(result.code!=='OK')throw Error('TEST_E10_SAVE:'+result.code);
+ expect(await withSession(full,()=>saveIncomingInvoiceAction({...save})))
+  .toMatchObject({code:'OK',replayed:true,invoice:{id:result.invoice.id,zahlstatus:fall.haelt?'unklar':'offen'}});
+});
+
 it('schlägt denselben Beleg am jüngeren Eingang nach Foto und Mail vor',async()=>{
  await enableOutlookTestFixture();
  await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E04',true)`;
@@ -176,9 +221,18 @@ it('liest eine alte offene Quelle einmal je Kanal und lässt sie bei längerer L
  const id=randomUUID(),seit='2026-11-23T08:00:00+01:00';
  await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,quelle,erstellt_von,wartet_seit)
   VALUES (${id},${tenant},${id},'datei','geraet',${full.actorId},${seit}::timestamptz)`;
+ await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES (${tenant},'E01',true)
+  ON CONFLICT (tenant,feature_id) DO UPDATE SET enabled=true`;
  const jetzt=new Date('2026-11-24T09:00:00+01:00');
- const read=(liegefrist:number)=>withPrivilegedTenantTransaction({tenantId:tenant},tx=>
-  liesEingangTagFaktenInTransaction(tx,tenant,jetzt,{liegefrist,nachfassfrist:2,schwelle:0.9,ruhe:new Set()}));
- expect((await read(24)).filter(fakt=>fakt.art==='offen')).toMatchObject([{kanal:'datei'}]);
- expect((await read(48)).filter(fakt=>fakt.art==='offen')).toEqual([]);
+ const session=await withSession(full,resolveAuthorization);
+ if(!session.ok)throw Error('TEST_I2_TAG_AUTH');
+ const read=async(liegefrist:number)=>{
+  await sql`UPDATE public.company_settings SET eingang_liegefrist_arbeitsstunden=${liegefrist} WHERE tenant_id=${tenant}`;
+  const result=await liesNachrichtenFuerTag(session.data,jetzt);
+  if(result.code!=='OK'||result.tagFakten?.code!=='OK'||!result.tagFakten.fakten)throw Error('TEST_I2_TAG_FAKTEN');
+  expect(result.messages.some(nachricht=>nachricht.id===id)).toBe(true);
+  return result.tagFakten.fakten.filter(fakt=>fakt.art==='offen');
+ };
+ expect(await read(24)).toMatchObject([{kanal:'datei'}]);
+ expect(await read(48)).toEqual([]);
 });

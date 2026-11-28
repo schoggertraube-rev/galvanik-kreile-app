@@ -51,8 +51,8 @@ export function findeVerdachtsmuster(text: string, muster: readonly string[]) {
     ? /\b(?:https?:\/\/|www\.)[^\s<>]+/iu.test(text)
     : wert === 'qr' ? /\bqr(?:[- ]?code)?\b/iu.test(text) : gefaltet.includes(wert))))];
 }
-export function findeRechnungswiderspruch(xml: readonly Belegwert[], pdf: readonly Belegwert[]) {
-  const eindeutigerWert = <T>(quelle: readonly Belegwert[], feld: string, lesen: (wert: unknown) => T | null) => {
+export function rechnungsBelegwerte(quelle: readonly Belegwert[]) {
+  const eindeutigerWert = <T>(feld: string, lesen: (wert: unknown) => T | null) => {
     const werte = new Set(quelle.filter(v => v.field === feld).map(v => lesen(v.value)).filter(wert => wert !== null));
     return werte.size === 1 ? [...werte][0] : null;
   };
@@ -61,12 +61,12 @@ export function findeRechnungswiderspruch(xml: readonly Belegwert[], pdf: readon
     if (!wert || typeof wert !== "object" || !("brutto" in wert)) return null;
     return typeof wert.brutto === "string" || typeof wert.brutto === "number" ? invoiceCents(String(wert.brutto)) : null;
   };
-  const xmlNummer = eindeutigerWert(xml, "rechnung.nummer", nummer);
-  const pdfNummer = eindeutigerWert(pdf, "rechnung.nummer", nummer);
-  const xmlBrutto = eindeutigerWert(xml, "rechnung.betrag", brutto);
-  const pdfBrutto = eindeutigerWert(pdf, "rechnung.betrag", brutto);
-  return (xmlNummer !== null && pdfNummer !== null && xmlNummer !== pdfNummer)
-    || (xmlBrutto !== null && pdfBrutto !== null && xmlBrutto !== pdfBrutto)
-    ? { xml: { nummer: xmlNummer, bruttoCent: xmlBrutto }, pdf: { nummer: pdfNummer, bruttoCent: pdfBrutto } }
-    : null;
+  return {nummer:eindeutigerWert('rechnung.nummer',nummer),bruttoCent:eindeutigerWert('rechnung.betrag',brutto)};
+}
+
+export function findeRechnungswiderspruch(xml: readonly Belegwert[], pdf: readonly Belegwert[]) {
+  const links=rechnungsBelegwerte(xml),rechts=rechnungsBelegwerte(pdf);
+  return (links.nummer!==null&&rechts.nummer!==null&&links.nummer!==rechts.nummer)
+    || (links.bruttoCent!==null&&rechts.bruttoCent!==null&&links.bruttoCent!==rechts.bruttoCent)
+    ? {xml:links,pdf:rechts} : null;
 }

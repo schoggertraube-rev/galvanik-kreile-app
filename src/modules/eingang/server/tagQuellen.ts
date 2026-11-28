@@ -26,22 +26,15 @@ function arbeitsstunden(seit:Date,jetzt:Date,ruhe:ReadonlySet<string>){
     -(isWorkingDay(ende,ruhe)?24-stunden(jetzt):0);
 }
 
-type TagEinstellungen={liegefrist:number;nachfassfrist:number;schwelle:number|null;ruhe:ReadonlySet<string>};
-type EingangFakt={id:string;kanal:string;gruppe:string|null;seit:string|null;betreff:string|null;sicherheit:boolean;preisgeschuetzt:boolean};
+export type TagEinstellungen={jetzt:Date;liegefrist:number;nachfassfrist:number;schwelle:number|null;ruhe:ReadonlySet<string>};
+export type EingangFakt={id:string;kanal:string;gruppe:string|null;seit:string|null;betreff:string|null;sicherheit:boolean;preisgeschuetzt:boolean};
 
 export async function liesEingangTagFaktenInTransaction(tx:PrivilegedTenantTransaction,tenantId:string,
-  jetzt:Date,settings:TagEinstellungen):Promise<EingangTagFakt[]>{
-  const [{liegefrist,nachfassfrist,schwelle,ruhe},heute]=[settings,berlinCalendarDay(jetzt)] as const;
+  settings:TagEinstellungen,nachrichten:readonly EingangFakt[]):Promise<EingangTagFakt[]>{
+  const {jetzt,liegefrist,nachfassfrist,ruhe}=settings;
+  const heute=berlinCalendarDay(jetzt);
   if(!Number.isSafeInteger(liegefrist)||liegefrist<1||!Number.isSafeInteger(nachfassfrist)||nachfassfrist<0)
     throw Error('I2_TAG_FRISTEN_FEHLEN');
-  const fakten=await tx.execute<EingangFakt>(sql`
-    SELECT item.id::text,item.kanal,item.gruppe_adresse AS gruppe,item.wartet_seit::text AS seit,item.betreff,
-      EXISTS (${priceTaskReceipt('item')}) AS preisgeschuetzt,
-      EXISTS(SELECT 1 FROM public.intake_suggestion s WHERE s.tenant_id=item.tenant_id
-        AND s.item_id=item.id AND s.status='offen'
-        AND (s.sicherheit='unsicher' OR s.sicherheit_wert<${schwelle}::numeric)) AS sicherheit
-    FROM public.intake_item item WHERE item.tenant_id=${tenantId} AND item.richtung='rein'
-      AND item.einsatz='offen' AND item.aussortiert IS NULL ORDER BY item.wartet_seit NULLS LAST,item.id`);
   const termine=await tx.execute<{id:string;nummer:string;gruppe:string|null;gesendet:string;preisgeschuetzt:boolean}>(sql`
     SELECT DISTINCT ON (v.id) v.id,v.nummer,mail.gruppe_adresse AS gruppe,mail.gesendet_am::text AS gesendet,
       EXISTS (${priceTaskReceipt('mail')}) AS preisgeschuetzt
@@ -50,6 +43,7 @@ export async function liesEingangTagFaktenInTransaction(tx:PrivilegedTenantTrans
     WHERE v.term_status='gegenvorschlag' AND mail.gesendet_am IS NOT NULL
     ORDER BY v.id,mail.gesendet_am DESC,mail.id`);
   const ergebnis:EingangTagFakt[]=[];
+  const fakten=[...nachrichten].sort((a,b)=>(a.seit?Date.parse(a.seit):Infinity)-(b.seit?Date.parse(b.seit):Infinity)||a.id.localeCompare(b.id));
   for(const fakt of fakten){
     const {id,kanal,gruppe,betreff,preisgeschuetzt}=fakt;
     const seit=fakt.seit?new Date(fakt.seit):null;
