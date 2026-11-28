@@ -3,17 +3,12 @@ import {sql} from 'drizzle-orm';
 import {assertPageReadBudgetActive,configurePageReadBudget,expirePageReadBudget,outsidePageReadBudget,withPageReadBudget,withPageReadPhase} from '@/db/readBudget';
 import {canReadTaskArea,getFixedAccessAreasForRole,getPermissionsForAreas,isAccessArea,isAppRole,normalizeAccessAreasForRole,type AccessArea,type PermissionKey} from '@/lib/auth/authorizationContract';
 import {boundedTodayRefreshBudgetMs,type TodayReadSettings} from '@/modules/fundament/public';
-import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction,
- isFeatureEnabled,readErkennungsEinstellungenInTransaction,readKanalFristenInTransaction} from '@/modules/fundament/server-public';
+import {readTodayReadSettings,readCompanyLetterSettings,readShippingSettingsInTransaction,readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
 import {readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
-import type {IntakeMessagesPorts} from '@/modules/eingang/public';
-import type {AuthorizationSnapshot} from './authorization';
-import type {AuthorizedReadContext} from './authorizationReadContext';
-import {leseBetriebsruhetage} from '@/lib/domain/workingDays';
 import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors} from '@/modules/quotes/server-public';
 import {liesAufgabenFuerTag,readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {liesTaktAusfallZeilen} from '@/modules/takt/server-public';
@@ -102,34 +97,6 @@ async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthoriz
 
 /** Per-run composition of the productive readers. No session/actor is forged;
  * personal rules, assignment ownership and command grants stay on the live path. */
-async function liesEingangTagStand(auth: {tenantId:string}, jetzt:Date) {
- try{
-  const aktiv=await isFeatureEnabled(auth,'E01');
-  if(aktiv.code!=='OK')throw Error('I2_TAG_MODULSTAND_FEHLT');
-  if(!aktiv.enabled)return {code:'OK' as const,einstellungen:null};
-  const einstellungen=await withPrivilegedTenantTransaction(auth,async tx=>{
-  const {eingang_liegefrist_arbeitsstunden,ki_sicherheitsschwelle}=await readErkennungsEinstellungenInTransaction(tx,auth.tenantId);
-  const {nachfassfrist_gegenvorschlag_arbeitstage}=await readKanalFristenInTransaction(tx,auth.tenantId);
-  const kalender=await readBetriebsruheInTransaction(tx,auth.tenantId),ruhe=leseBetriebsruhetage(kalender.betriebsruhe);
-  if(eingang_liegefrist_arbeitsstunden==null||!ruhe)throw Error('I2_TAG_EINSTELLUNGEN_FEHLEN');
-  return {jetzt,liegefrist:eingang_liegefrist_arbeitsstunden,
-   nachfassfrist:nachfassfrist_gegenvorschlag_arbeitstage,schwelle:ki_sicherheitsschwelle,ruhe};
-  });
-  return {code:'OK' as const,einstellungen};
- }catch{
-  console.error('[I2_TAG_HINWEISE_NICHT_VERFUEGBAR]');
-  return {code:'SOURCE_INCOMPLETE' as const};
- }
-}
-
-export function liesNachrichtenFuerTag(auth:AuthorizationSnapshot,jetzt:Date):ReturnType<IntakeMessagesPorts['list']>;
-export function liesNachrichtenFuerTag(auth:AuthorizedReadContext,jetzt:Date):ReturnType<typeof readIntakeMessagesForAuthorization>;
-export function liesNachrichtenFuerTag(auth:AuthorizationSnapshot|AuthorizedReadContext,jetzt:Date){
- const stand=()=>liesEingangTagStand(auth,jetzt);
- return 'canReadArea'in auth ? readIntakeMessagesForAuthorization(auth,'offen',undefined,undefined,stand)
-  : readIntakeMessagesForAuthorization(auth,'offen',undefined,undefined,stand);
-}
-
 function productivePorts():TodayProjectionPorts{
  const orderLists=new WeakMap<ProjectorAuthorization,ReturnType<typeof getOperationalOrders>>();
  const orders=(auth:ProjectorAuthorization)=>{
@@ -179,7 +146,8 @@ function productivePorts():TodayProjectionPorts{
    }
    const bestandsLeser:Readonly<Record<string,()=>Promise<TodayProjectionResult>>>={
     orders:async()=>source(access.orders?await orders(auth):{code:'FORBIDDEN'}),
-    messages:async()=>{const read=await liesNachrichtenFuerTag(auth,jetzt);return source(read,known(read));},
+    messages:async()=>{const read=await readIntakeMessagesForAuthorization(auth,'offen',undefined,undefined,
+     {jetzt,leseEinstellungen:readTodayReadSettings});return source(read,known(read));},
     complaints:async()=>{const read=await readComplaintsForAuthorization(auth);return source(read,known(read));},
     company:async()=>{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise'),fresh:true});return source(read,known(read));},
     quote_followups:async()=>source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day))),

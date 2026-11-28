@@ -12,6 +12,7 @@ import {ACCESS_AREA_LABELS} from '@/lib/auth/authorizationContract';
 import {parseProtocolSettings} from '../protocolSettings';
 import {isDeepStrictEqual} from 'node:util';
 import {dispatchPolicyValid} from '../dispatchPolicy';
+import {leseBetriebsruhetage} from '@/lib/domain/workingDays';
 import {STORAGE_CHARGE_COPY,SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
 import "server-only";
 
@@ -39,7 +40,8 @@ import type {
   SystemSettingsSnapshot,
   UpdateManagedUserInput,
 } from "../public";
-import { mapTenantFeatureRows, readTenantFeatureRows } from "./tenantFeaturePort";
+import { isFeatureEnabled, mapTenantFeatureRows, readTenantFeatureRows } from "./tenantFeaturePort";
+import {readBetriebsruheInTransaction,readErkennungsEinstellungenInTransaction,readKanalFristenInTransaction} from './s16dSpurDSettingsPort';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const validTodayRefreshLeaseSeconds=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=1&&value*1000<=MAX_TODAY_REFRESH_MS;
@@ -89,7 +91,33 @@ export async function readPageReadSettings(context:{tenantId:string}){
  return readPageReadSettingsRow(context.tenantId);
 }
 
-export async function readTodayReadSettings(context:{tenantId:string;fresh?:true}){
+type TodaySettingsContext={tenantId:string;fresh?:true};
+type EingangTagSettingsContext={tenantId:string;zweck:'eingang-tag'};
+
+async function readEingangTagSettings({tenantId}:EingangTagSettingsContext){
+ try{
+  const aktiv=await isFeatureEnabled({tenantId},'E01');
+  if(aktiv.code!=='OK')throw Error('I2_TAG_MODULSTAND_FEHLT');
+  if(!aktiv.enabled)return {code:'OK' as const,einstellungen:null};
+  const einstellungen=await withPrivilegedTenantTransaction({tenantId},async tx=>{
+   const {eingang_liegefrist_arbeitsstunden,ki_sicherheitsschwelle}=await readErkennungsEinstellungenInTransaction(tx,tenantId);
+   const {nachfassfrist_gegenvorschlag_arbeitstage}=await readKanalFristenInTransaction(tx,tenantId);
+   const kalender=await readBetriebsruheInTransaction(tx,tenantId),ruhe=leseBetriebsruhetage(kalender.betriebsruhe);
+   if(eingang_liegefrist_arbeitsstunden==null||!ruhe)throw Error('I2_TAG_EINSTELLUNGEN_FEHLEN');
+   return {liegefrist:eingang_liegefrist_arbeitsstunden,nachfassfrist:nachfassfrist_gegenvorschlag_arbeitstage,
+    schwelle:ki_sicherheitsschwelle,ruhe};
+  });
+  return {code:'OK' as const,einstellungen};
+ }catch{
+  console.error('[I2_TAG_HINWEISE_NICHT_VERFUEGBAR]');
+  return {code:'SOURCE_INCOMPLETE' as const};
+ }
+}
+
+export function readTodayReadSettings(context:TodaySettingsContext):Promise<ReturnType<typeof todaySettingsFromRows>>;
+export function readTodayReadSettings(context:EingangTagSettingsContext):ReturnType<typeof readEingangTagSettings>;
+export async function readTodayReadSettings(context:TodaySettingsContext|EingangTagSettingsContext){
+ if('zweck'in context)return readEingangTagSettings(context);
  const rows=await (context.fresh?readFreshPageSettingsSourcesRow:readPageSettingsSourcesRow)(context.tenantId);
  return todaySettingsFromRows(rows);
 }

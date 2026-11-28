@@ -769,7 +769,6 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
 
   it("E2 rejects Action directives, writers, whole facades, re-exports and any additional public API", () => {
     const source = `${IMP} 'server-only';\n${IMP} { readCustomerProfile } from '@/modules/customers/server-public';\n${EXP} type ProjectorAuthorization = Readonly<{tenantId:string}>;\n${EXP} async function refreshTodayModel(){return readCustomerProfile();}\n${EXP} async function rebuildTodayModel(){return readCustomerProfile();}\n`;
-    expect(validTodayProjectorComposition(source+`${EXP} function liesNachrichtenFuerTag(){return readCustomerProfile();}\n`)).toBe(true);
     const invalid = [
       source.replace(`${IMP} 'server-only';\n`, ""),
       `'use server';\n${source}`,
@@ -779,7 +778,6 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
       source.replace("{ readCustomerProfile }", "* as reader"),
       source.replace("{ readCustomerProfile }", "reader"),
       source+`${EXP} const anotherRead=1;\n`,
-      source+`${EXP} const liesNachrichtenFuerTag=1;\n`,
       source+`${EXP} default refreshTodayModel;\n`,
       source+`${EXP} {readCustomerProfile};\n`,
       source+`${EXP} * from '@/modules/customers/server-public';\n`,

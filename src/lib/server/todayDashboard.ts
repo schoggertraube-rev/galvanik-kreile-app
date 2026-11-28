@@ -23,7 +23,7 @@ import type {HeuteZeile} from '@/lib/today/todaySourceRegistry';
 import type {EingangTagFakten} from '@/modules/eingang/public';
 import {eingangCopy} from '@/ui/eingangCopy';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
-import {getIntakeTaskAction} from "@/app/actions/eingang.actions";
+import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {complaintAttention,type ComplaintReadResult} from '@/modules/complaints/public';
 import { projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,isOverdueInvoiceForToday,type TodayOrderScheduleRow,projectOrderSchedule,readTodayCalendar,projectTodayChallenges,sortTodayByResponsibility,classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/today/todayDashboardPolicy";
@@ -352,11 +352,6 @@ function readTodayTaskCalendar(){
  return withPageReadPhase('today.tasks',()=>getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]})));
 }
 
-async function readTodayIntakeMessages(auth:AuthorizationSnapshot,jetzt:Date){
- const {liesNachrichtenFuerTag}=await import('./todayProjection');
- return liesNachrichtenFuerTag(auth,jetzt);
-}
-
 export function projiziereEingangTagFakten(auth:AuthorizationSnapshot,stand:EingangTagFakten):TagQuellenLesestand{
  if(!hasAuthorizationArea(auth,'mails'))return {code:'OK',zeilen:[]};
  if(stand.code!=='OK')return stand;
@@ -389,7 +384,7 @@ export async function collectTodaySources(auth: AuthorizationSnapshot,readCompla
   const tasksRead=graphAllowed?readTodayTaskCalendar():null;
   const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
     withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'},readTerminEinstellungen)).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
-    withPageReadPhase('today.graph',()=>graphAllowed ? readTodayIntakeMessages(auth,readNow).catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
+    withPageReadPhase('today.graph',()=>graphAllowed ? getIntakeMessagesAction({purpose:'tag',jetzt:readNow}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
     withPageReadPhase('today.support',()=>readTodaySupport(auth,today,access)),
     withPageReadPhase('today.complaints',()=>access.complaints?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]})),
     withPageReadPhase('today.followups',()=>graphAllowed?readQuoteFollowups().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'quote-followups',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};}):Promise.resolve({code:'OK' as const,tasks:[]})),
@@ -920,7 +915,7 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'},ports.readTerminEinstellungen)}),needsOrderTerms):cachedOperationalSource;
   const unknownGraph:TodayDashboardSources['graph']={code:'SOURCE_INCOMPLETE',message:PAGE_READ_COPY.sourceIncomplete};
  const cachedGraph=access.messages?project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)):unknownGraph;
- const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',cachedGraph,()=>readTodayIntakeMessages(auth,readAt),cachedGraph.code==='OK'&&cachedGraph.tagFakten?.code!=='OK'):{code:'FORBIDDEN' as const,message:''};
+ const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',cachedGraph,()=>getIntakeMessagesAction({purpose:'tag',jetzt:readAt}),cachedGraph.code==='OK'&&cachedGraph.tagFakten?.code!=='OK'):{code:'FORBIDDEN' as const,message:''};
   const unknownMoney=unknownTodayMoneySupport();
   const cachedMoney=maskTodayMoneySupport(auth,project<Parameters<typeof maskTodayMoneySupport>[1]>('money',unknownMoney,payload=>{
    const row=modelRecord(payload);if(!row||!Array.isArray(row.supportMissing)||!Array.isArray(row.invoices)||!Array.isArray(row.prepayments)||!Array.isArray(row.collections)

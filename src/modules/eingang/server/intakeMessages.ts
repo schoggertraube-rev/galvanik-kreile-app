@@ -21,27 +21,27 @@ function invalidMessageRead(filter:unknown,sourceItemId?:string,changedSince?:st
  return null;
 }
 /** One projection of intake_item; no communications/phone_notes shadow inbox. */
-export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>{
+export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessagesResult>{
  const invalid=invalidMessageRead(filter,sourceItemId,changedSince);if(invalid)return invalid;
  try{
   const result=await resolveAuthorization();if(!result.ok)return {code:result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden. Code: INTAKE_MESSAGES_SESSION.'};
-  return readIntakeMessagesForAuthorization(result.data,filter,sourceItemId,changedSince);
+  return readIntakeMessagesForAuthorization(result.data,filter,sourceItemId,changedSince,tagAnfrage);
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }
 /** Same SQL/originals for the live wrapper and the identity-free source reader.
  * Current login, effective areas and live U2 commands remain session output. */
-type TagStand={code:'OK';einstellungen:TagEinstellungen|null}|{code:'SOURCE_INCOMPLETE'};
-type LeseTagStand=()=>Promise<TagStand>;
-export function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot,filter?:unknown,sourceItemId?:string,changedSince?:string,leseTagStand?:LeseTagStand):Promise<IntakeMessagesResult>;
-export function readIntakeMessagesForAuthorization(auth:AuthorizedReadContext,filter?:unknown,sourceItemId?:string,changedSince?:string,leseTagStand?:LeseTagStand):Promise<IntakeMessageSourcesResult>;
-export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot|AuthorizedReadContext,filter:unknown='offen',sourceItemId?:string,changedSince?:string,leseTagStand?:LeseTagStand):Promise<IntakeMessagesResult|IntakeMessageSourcesResult>{
+type TagStand={code:'OK';einstellungen:Omit<TagEinstellungen,'jetzt'>|null}|{code:'SOURCE_INCOMPLETE'};
+type TagAnfrage={jetzt:Date;leseEinstellungen:(context:{tenantId:string;zweck:'eingang-tag'})=>Promise<TagStand>};
+export function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot,filter?:unknown,sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessagesResult>;
+export function readIntakeMessagesForAuthorization(auth:AuthorizedReadContext,filter?:unknown,sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessageSourcesResult>;
+export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot|AuthorizedReadContext,filter:unknown='offen',sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessagesResult|IntakeMessageSourcesResult>{
  const invalid=invalidMessageRead(filter,sourceItemId,changedSince);if(invalid)return invalid;
  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
  try{
   if(!readAuth.canReadArea('mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
   const canReadPrices=readAuth.canReadArea('preise');
-  const tagStand=await leseTagStand?.();
-  const tag=tagStand?.code==='OK'?tagStand.einstellungen:null;
+  const tagStand=await tagAnfrage?.leseEinstellungen({tenantId:auth.tenantId,zweck:'eingang-tag'});
+  const tag=tagStand?.code==='OK'&&tagStand.einstellungen&&tagAnfrage?{jetzt:tagAnfrage.jetzt,...tagStand.einstellungen}:null;
   const source=await withPrivilegedTenantTransaction(auth,async tx=>{
    const deviceMatches=(alias:'source'|'candidate')=>{const row=sql.identifier(alias);return sql`(${openIntakePredicate(alias)} OR EXISTS(SELECT 1 FROM public.intake_event changed WHERE changed.tenant_id=${row}.tenant_id AND changed.item_id=${row}.id AND changed.zeit>=${changedSince}::timestamptz))`;};
    const matches=changedSince!==undefined?deviceMatches('candidate'):filter==='offen'?openIntakePredicate('candidate')

@@ -6,7 +6,7 @@ import { KALENDER_COPY } from "@/ui/kalenderCopy";
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
-import {readBetriebsruheInTransaction,readCompanyLetterSettings,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readCompanyLetterSettings,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings,readTodayReadSettings} from '@/modules/fundament/server-public';
 import {bindIntakeCandidatePorts} from '@/lib/server/intakeSuggestions';
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
@@ -75,7 +75,14 @@ export async function getOrderIntakeSuggestionsAction(
   }
 }
 
-export async function getIntakeMessagesAction(filter:unknown='offen'){const device=!!filter&&typeof filter==='object'&&!Array.isArray(filter)&&Object.keys(filter).length===1&&'purpose' in filter&&filter.purpose==='device';const result=await readIntakeMessages(device?'alle':filter,undefined,device?new Date(Date.now()-24*60*60*1000).toISOString():undefined);return result.code==='OK'||device&&result.code==='FORBIDDEN'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;}
+export async function getIntakeMessagesAction(filter:unknown='offen'){
+ const tagZeit=filter&&typeof filter==='object'&&Object.keys(filter).length===2&&'purpose'in filter&&filter.purpose==='tag'
+  &&'jetzt'in filter&&filter.jetzt instanceof Date&&Number.isFinite(filter.jetzt.getTime())?filter.jetzt:undefined;
+ const device=!!filter&&typeof filter==='object'&&!Array.isArray(filter)&&Object.keys(filter).length===1&&'purpose' in filter&&filter.purpose==='device';
+ const result=await readIntakeMessages(tagZeit?'offen':device?'alle':filter,undefined,
+  device?new Date(Date.now()-24*60*60*1000).toISOString():undefined,tagZeit&&{jetzt:tagZeit,leseEinstellungen:readTodayReadSettings});
+ return result.code==='OK'||device&&result.code==='FORBIDDEN'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
+}
 import {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
 export async function getIntakeAssignmentAction(input:unknown){return readIntakeAssignment(input,readCustomerProfile);}
 export async function assignIntakeCustomerAction(input:unknown){

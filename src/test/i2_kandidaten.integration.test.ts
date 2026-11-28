@@ -10,10 +10,8 @@ vi.mock('@/lib/tenant', () => ({ KREILE_TENANT_SLUG: tenant }));
 import { enableOutlookTestFixture, full, nativeFetch, sql, withSession } from '../../e2e/ablauf/replayHarness';
 import { createCustomerAction } from '@/app/actions/customers.actions';
 import { importOutlookMailAction } from '@/app/actions/communications.actions';
-import { getIntakeAssignmentAction, finishIntakeFileAction, getIncomingInvoiceAction, prepareIntakeFileAction, saveIncomingInvoiceAction } from '@/app/actions/eingang.actions';
+import { getIntakeAssignmentAction, finishIntakeFileAction, getIncomingInvoiceAction, getIntakeMessagesAction, prepareIntakeFileAction, saveIncomingInvoiceAction } from '@/app/actions/eingang.actions';
 import { createAdminClient } from '@/lib/supabase/admin';
-import {liesNachrichtenFuerTag} from '@/lib/server/todayProjection';
-import {resolveAuthorization} from '@/lib/server/authorization';
 
 async function createTestCustomer(name: string, email: string, phone: string) {
   const result = await createCustomerAction({
@@ -271,11 +269,9 @@ it('liest eine alte offene Quelle einmal je Kanal und lässt sie bei längerer L
  await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES (${tenant},'E01',true)
   ON CONFLICT (tenant,feature_id) DO UPDATE SET enabled=true`;
  const jetzt=new Date('2026-11-24T09:00:00+01:00');
- const session=await withSession(full,resolveAuthorization);
- if(!session.ok)throw Error('TEST_I2_TAG_AUTH');
  const read=async(liegefrist:number)=>{
   await sql`UPDATE public.company_settings SET eingang_liegefrist_arbeitsstunden=${liegefrist} WHERE tenant_id=${tenant}`;
-  const result=await liesNachrichtenFuerTag(session.data,jetzt);
+  const result=await withSession(full,()=>getIntakeMessagesAction({purpose:'tag',jetzt}));
   if(result.code!=='OK'||result.tagFakten?.code!=='OK'||!result.tagFakten.fakten)throw Error('TEST_I2_TAG_FAKTEN');
   expect(result.messages.some(nachricht=>nachricht.id===id)).toBe(true);
   return result.tagFakten.fakten.filter(fakt=>fakt.art==='offen');
