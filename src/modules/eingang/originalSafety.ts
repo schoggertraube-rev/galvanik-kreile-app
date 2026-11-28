@@ -6,7 +6,86 @@ export function allowedOriginalExtension(name:string):boolean{return /\.(?:jpe?g
 export function mimeHeaderLines(bytes:Uint8Array):string[]|null{
  const prefix=Buffer.from(bytes.subarray(0,65536)).toString('latin1'),end=prefix.search(/\r?\n\r?\n/);
  if(end<0)return null;
- return prefix.slice(0,end).replace(/\r?\n[ \t]+/g,' ').split(/\r?\n/);
+ return unfoldedMimeHeaders(prefix.slice(0,end));
+}
+
+function unfoldedMimeHeaders(value:string){
+ return value.replace(/\r?\n[ \t]+/g,' ').split(/\r?\n/);
+}
+
+function mimeParameter(value:string,key:string){
+ const match=new RegExp(`(?:^|;)\\s*${key}\\s*=\\s*(?:"([^"\\r\\n]*)"|([^;\\s]+))`,'i').exec(value);
+ return match?.[1]??match?.[2];
+}
+
+function decodeMailBody(body:string,encoding:string,charset:string):string|null{
+ let bytes:Buffer;
+ switch(encoding){
+  case '':case '7bit':case '8bit':case 'binary':
+   bytes=Buffer.from(body,'latin1');break;
+  case 'quoted-printable':
+   bytes=Buffer.from(body.replace(/=\r?\n/g,'').replace(/=([a-f\d]{2})/gi,(_,hex:string)=>String.fromCharCode(parseInt(hex,16))),'latin1');break;
+  case 'base64':{
+   const value=body.replace(/[\r\n \t]/g,'');
+   if(value.length%4!==0||!/^[a-z\d+/]*={0,2}$/i.test(value))return null;
+   bytes=Buffer.from(value,'base64');break;
+  }
+  default:return null;
+ }
+ try{return new TextDecoder(charset,{fatal:true}).decode(bytes).replaceAll('\0','');}
+ catch{return null;}
+}
+
+function htmlMailText(value:string){
+ const entities:Record<string,string>={amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",nbsp:' ',auml:'ä',ouml:'ö',uuml:'ü',szlig:'ß',Auml:'Ä',Ouml:'Ö',Uuml:'Ü'};
+ return value.replace(/<!--[\s\S]*?-->|<(head|script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,'')
+  .replace(/<(?:br\b|\/(?:p|div|tr|li|h[1-6])\b)[^<>]*>/gi,'\n').replace(/<[^<>]*>/g,'')
+  .replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi,(raw:string,key:string)=>{
+   if(!key.startsWith('#'))return Object.hasOwn(entities,key)?entities[key]:raw;
+   const code=key[1].toLowerCase()==='x'?parseInt(key.slice(2),16):Number(key.slice(1));
+   return code>0&&code<=0x10ffff&&(code<0xd800||code>0xdfff)?String.fromCodePoint(code):raw;
+  });
+}
+
+type MailBody={plain:boolean;text:string};
+function mailBodyFromEntity(entity:string,depth:number):MailBody|null{
+ const separator=/\r?\n\r?\n/.exec(entity);
+ if(!separator||separator.index>65536||depth>8)return null;
+ const headers=unfoldedMimeHeaders(entity.slice(0,separator.index));
+ const header=(name:string)=>headers.find(line=>line.toLowerCase().startsWith(name+':'))?.slice(name.length+1).trim()??'';
+ const type=header('content-type'),media=(type.split(';')[0].trim()||'text/plain').toLowerCase();
+ const disposition=header('content-disposition');
+ if(/^attachment(?:\s*;|$)/i.test(disposition)||mimeParameter(type,'name\\*?')!==undefined||mimeParameter(disposition,'filename\\*?')!==undefined)return null;
+ const body=entity.slice(separator.index+separator[0].length);
+ if(media.startsWith('multipart/')){
+  const boundary=mimeParameter(type,'boundary');
+  if(!boundary||boundary.length>70)return null;
+  const escaped=boundary.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const delimiters=body.matchAll(new RegExp(`^--${escaped}(--)?[ \\t]*(?:\\r?\\n|$)`,'gm'));
+  const parts:MailBody[]=[];
+  let start:number|null=null,partsSeen=0;
+  for(const line of delimiters){
+   if(start!==null){
+    if(++partsSeen>1000)return null;
+    const part=mailBodyFromEntity(body.slice(start,line.index).replace(/\r?\n$/,''),depth+1);
+    if(part)parts.push(part);
+   }
+   if(line[1]){
+    if(media==='multipart/alternative')return parts.find(part=>part.plain&&part.text.trim())??parts.at(-1)??null;
+    return parts.length?{plain:parts.every(part=>part.plain),text:parts.map(part=>part.text).join('\n')}:null;
+   }
+   start=line.index+line[0].length;
+  }
+  return null;
+ }
+ if(media!=='text/plain'&&media!=='text/html')return null;
+ const decoded=decodeMailBody(body,header('content-transfer-encoding').toLowerCase(),mimeParameter(type,'charset')??'utf-8');
+ return decoded===null?null:{plain:media==='text/plain',text:media==='text/plain'?decoded:htmlMailText(decoded)};
+}
+
+/** Returns the visible text of the original MIME body, excluding attachments and forwarded entities. */
+export function readMimeOriginalText(bytes:Uint8Array):string|null{
+ return mailBodyFromEntity(Buffer.from(bytes).toString('latin1'),0)?.text??null;
 }
 
 /** RFC 3834 §5. A single explicit marking can rule out a party's confirmation. */

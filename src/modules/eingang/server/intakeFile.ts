@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
+import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
 import {isIntakeOriginalTakeover} from '../captureContract';
@@ -18,7 +18,8 @@ const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string; reihenfolge:number };
 type IntakeFileCompletion = { retryKey?: string; readSettings: ReadRecognitionSettings;
-  scheduleRecognition?: (work: () => Promise<void>) => void; importingMail?: true };
+  scheduleRecognition?: (work: () => Promise<void>) => void; importingMail?: true;
+  secureOnly?: true; authorization?: AuthorizationSnapshot };
 async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'buchhaltung')))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};return result.data;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -85,7 +86,7 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
 export async function finishIntakeFile(fileId: string, options: IntakeFileCompletion): Promise<IntakeCaptureResult> {
   const { retryKey } = options;
   if (!UUID.test(fileId)) return { code: "VALIDATION_ERROR", message: "Ungültige Dateikennung." };
-  const auth = await fileAuthorization();
+  const auth = options.authorization ?? await fileAuthorization();
   if ("code" in auth) return auth;
   let recognitionStarted=false;
   try {
@@ -103,7 +104,7 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
         const prior=await tx.execute(sql`SELECT id FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey}::uuid`);
         if(prior.length)return false;
         const rows=await tx.execute(sql`UPDATE public.intake_file file SET erkennung_status='wartet' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND
-          (erkennung_status IN ('fehler','fertig') OR erkennung_status='laeuft' AND
+          (erkennung_status IN ('wartet','fehler','fertig') OR erkennung_status='laeuft' AND
             coalesce((SELECT max(event.zeit) FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.nachher->>'fileId'=file.id::text
               AND (event.art='original_gespeichert' OR event.art='einsatz' AND event.nachher->>'action'='erkennung_gestartet')),file.aufgenommen_am)<statement_timestamp()-interval '2 minutes') RETURNING id`);
         return rows.length===1;
@@ -135,6 +136,7 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
     });
     const readSettings=options.readSettings;
     const recognize=()=>erkenneOriginal({ tenantId: auth.tenantId, akteur: auth.userId, file, bytes, onlyInvoiceAccess, retryKey }, fileId, readSettings);
+    if(options.secureOnly)return snapshot();
     if(options.scheduleRecognition){
       const secured=await snapshot();
       if(secured.code==='OK'&&secured.capture.files.some(entry=>entry.id===fileId&&entry.secured&&entry.status==='wartet')){

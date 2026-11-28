@@ -18,7 +18,6 @@ import {deliveryReportFromOriginal,type DeliveryReport} from '../deliveryReport'
 type ReplyChain={source:'original_mime';originalSha256:string;status:'present'|'missing'|'invalid';inReplyTo:string[];references:string[]};
 type Mail={id:string;internetMessageId:string|null;subject:string;senderName:string;senderAddress:string;receivedAt:string;body:string;replyChain?:ReplyChain;deliveryReport?:DeliveryReport};
 type Original={key:string;name:string;mime:string;bytes:Uint8Array};
-type MailRecognition={readSettings:ReadRecognitionSettings;scheduleRecognition:(work:()=>Promise<void>)=>void};
 export function intakeMailIdentity(value:string){const b=createHash('sha256').update(value).digest().subarray(0,16);b[6]=(b[6]&15)|80;b[8]=(b[8]&63)|128;const h=b.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 
 /** A reply header is evidence from the secured original, never a guessed quote edition. */
@@ -39,17 +38,21 @@ function replyChainFromOriginal(bytes:Uint8Array):ReplyChain{
 export async function readIntakeMailImportReceipt(auth:AuthorizationSnapshot,identity:{graphMessageId:string}|{itemId:string}){
  if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const,message:'Mail-Original benötigt Eingang und Mails.'};
  try{
-  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<Mail&{itemId:string;receipt:{fileIds:string[];originalCount:number;filteredAttachments:number}}>(sql`
-   SELECT source.id::text AS "itemId",source.graph_message_id AS id,source.internet_message_id AS "internetMessageId",source.betreff AS subject,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.empfangen_am::text AS "receivedAt",source.text AS body,complete.nachher AS receipt,(SELECT original.nachher->'replyChain' FROM public.intake_event original WHERE original.tenant_id=source.tenant_id AND original.item_id=source.id AND original.art='angelegt' ORDER BY original.zeit,original.id LIMIT 1) AS "replyChain",
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<Mail&{itemId:string;waitingFileIds:string[];receipt:{fileIds:string[];originalCount:number;filteredAttachments:number}}>(sql`
+   SELECT source.id::text AS "itemId",source.graph_message_id AS id,source.internet_message_id AS "internetMessageId",source.betreff AS subject,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.empfangen_am::text AS "receivedAt",source.text AS body,complete.nachher AS receipt,secured.waiting AS "waitingFileIds",(SELECT original.nachher->'replyChain' FROM public.intake_event original WHERE original.tenant_id=source.tenant_id AND original.item_id=source.id AND original.art='angelegt' ORDER BY original.zeit,original.id LIMIT 1) AS "replyChain",
     (SELECT original.nachher->'deliveryReport' FROM public.intake_event original WHERE original.tenant_id=source.tenant_id AND original.item_id=source.id AND original.art='angelegt' ORDER BY original.zeit,original.id LIMIT 1) AS "deliveryReport"
    FROM public.intake_item source JOIN LATERAL (SELECT nachher FROM public.intake_event event WHERE event.tenant_id=source.tenant_id AND event.item_id=source.id AND event.art='einsatz' AND event.nachher->>'action'='mail_import_complete' ORDER BY event.zeit,event.id LIMIT 1) complete ON true
-   WHERE source.tenant_id=${auth.tenantId} AND source.kanal='mail' AND ${'itemId'in identity?sql`source.id::text=${identity.itemId}`:sql`source.graph_message_id=${identity.graphMessageId}`}
-    AND (SELECT count(*) FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND file.item_id=source.id AND complete.nachher->'fileIds' ? file.id::text
-      AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text))=jsonb_array_length(complete.nachher->'fileIds')`));
+   JOIN LATERAL (
+    SELECT count(*) AS total,coalesce(array_agg(file.id::text ORDER BY file.reihenfolge) FILTER (WHERE file.erkennung_status='wartet'),ARRAY[]::text[]) AS waiting
+    FROM public.intake_file file WHERE file.tenant_id=source.tenant_id AND file.item_id=source.id AND complete.nachher->'fileIds' ? file.id::text
+     AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
+      AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text AND original.nachher->>'sha256'=file.sha256)
+   ) secured ON secured.total=jsonb_array_length(complete.nachher->'fileIds')
+   WHERE source.tenant_id=${auth.tenantId} AND source.kanal='mail' AND ${'itemId'in identity?sql`source.id::text=${identity.itemId}`:sql`source.graph_message_id=${identity.graphMessageId}`}`));
   const row=rows[0];if(!row)return {code:'NOT_FOUND' as const,message:'Mail-Original noch nicht vollständig gesichert.'};
   const receipt=row.receipt;
   if(rows.length!==1||!Array.isArray(receipt.fileIds)||receipt.fileIds.length!==receipt.originalCount+1||new Set(receipt.fileIds).size!==receipt.fileIds.length||!Number.isSafeInteger(receipt.originalCount)||receipt.originalCount<0||!Number.isSafeInteger(receipt.filteredAttachments)||receipt.filteredAttachments<0||!row.id||typeof row.subject!=='string'||typeof row.senderName!=='string'||typeof row.senderAddress!=='string'||typeof row.body!=='string'||!Number.isFinite(Date.parse(row.receivedAt)))throw Error('INTAKE_MAIL_RECEIPT_INVALID');
-  return {code:'OK' as const,itemId:row.itemId,originalCount:receipt.originalCount,filteredAttachments:receipt.filteredAttachments,replayed:true,message:{id:row.id,internetMessageId:row.internetMessageId,subject:row.subject,senderName:row.senderName,senderAddress:row.senderAddress,receivedAt:new Date(row.receivedAt).toISOString(),body:row.body,preview:row.body.slice(0,1000),hasAttachments:receipt.originalCount>0,...(row.replyChain?{replyChain:row.replyChain}:{}),...(row.deliveryReport?{deliveryReport:row.deliveryReport}:{})}};
+  return {code:'OK' as const,itemId:row.itemId,originalCount:receipt.originalCount,filteredAttachments:receipt.filteredAttachments,replayed:true,waitingFileIds:row.waitingFileIds,message:{id:row.id,internetMessageId:row.internetMessageId,subject:row.subject,senderName:row.senderName,senderAddress:row.senderAddress,receivedAt:new Date(row.receivedAt).toISOString(),body:row.body,preview:row.body.slice(0,1000),hasAttachments:receipt.originalCount>0,...(row.replyChain?{replyChain:row.replyChain}:{}),...(row.deliveryReport?{deliveryReport:row.deliveryReport}:{})}};
  }catch(error){console.error('[INTAKE_MAIL_RECEIPT_FAILED]',error instanceof Error?error.name:'UnknownError');return {code:'UNAVAILABLE' as const,message:'Gesichertes Mail-Original konnte nicht bestätigt werden.'};}
 }
 
@@ -87,7 +90,7 @@ async function captureGraphMailRow(tx:PrivilegedTenantTransaction,auth:Authoriza
 }
 
 /** One Graph identity, one existing intake, and the existing original-file writer. */
-export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail,originals:Original[],recognition:MailRecognition,readPrevious?:PreviousMailReader,filteredAttachments=0){
+export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail,originals:Original[],readSettings:ReadRecognitionSettings,readPrevious?:PreviousMailReader,filteredAttachments=0){
  if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
  const mailOriginals=originals.filter(file=>file.mime==='message/rfc822');
  if(!mail.id||mail.id.length>1024||!Number.isFinite(Date.parse(mail.receivedAt))||mailOriginals.length!==1||new Set(originals.map(file=>file.key)).size!==originals.length||!Number.isSafeInteger(filteredAttachments)||filteredAttachments<0)return {code:'VALIDATION_ERROR' as const,message:'Mail oder unverändertes Original fehlt.'};
@@ -97,9 +100,8 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
   const deliveryReport=deliveryReportFromOriginal(mailOriginal.bytes);
   const result=await withPrivilegedTenantTransaction(auth,tx=>captureGraphMailRow(tx,auth,mail,{replyChain,deliveryReport},readPrevious));
   const prior=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
-  if(prior.code==='OK')return {code:'OK' as const,itemId:result.itemId,replayed:true};
+  if(prior.code==='OK')return prior;
   if(prior.code!=='NOT_FOUND')return prior;
-  const background: Array<()=>Promise<void>>=[];
   for(const original of originals){
    const fileId=intakeMailIdentity(result.itemId+':original:'+original.key),sha256=createHash('sha256').update(original.bytes).digest('hex');
    const grant=await prepareIntakeFile({itemId:result.itemId,fileId,name:original.name,mime:original.mime,bytes:original.bytes.byteLength,sha256},true);
@@ -108,10 +110,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
     const saved=await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,grant.upload.token,original.bytes,{contentType:original.mime,upsert:false});
     if(saved.error)throw Error('INTAKE_MAIL_ORIGINAL_UPLOAD_FAILED');
    }
-   const secured=await finishIntakeFile(fileId,{
-    readSettings:recognition.readSettings,importingMail:true,
-    scheduleRecognition:work=>{background.push(work);},
-   });
+   const secured=await finishIntakeFile(fileId,{readSettings,authorization:auth,importingMail:true,secureOnly:true});
    if(secured.code!=='OK')return secured;
    if(!secured.capture.files.some(file=>file.id===fileId&&file.secured))throw Error('INTAKE_MAIL_ORIGINAL_NOT_CONFIRMED');
   }
@@ -125,8 +124,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
   const secured=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
   if(secured.code!=='OK')return secured;
   await withPrivilegedTenantTransaction(auth,tx=>clearMailFailureFlag(tx,auth,result.itemId));
-  for(const work of background)recognition.scheduleRecognition(work);
-  return {code:'OK' as const,...result};
+  return {...secured,replayed:result.replayed};
  }catch(error){const cause=error instanceof Error&&error.cause&&typeof error.cause==='object'?error.cause as Record<string,unknown>:null;console.error('[INTAKE_MAIL_IMPORT_FAILED]',{code:typeof cause?.code==='string'?cause.code:'INTAKE_MAIL_IMPORT_FAILED',constraint:typeof cause?.constraint_name==='string'?cause.constraint_name:undefined});return {code:'UNAVAILABLE' as const,message:'Mail-Original noch nicht vollständig gesichert · beim erneuten Abruf wird derselbe Eingang fortgesetzt.'};}
 }
 

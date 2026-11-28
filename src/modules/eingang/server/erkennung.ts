@@ -8,7 +8,7 @@ import { analyzeWithAzureDocumentIntelligence, azureOfficeFormat, readAzureRecog
 import type { DocumentSuggestion } from "@/lib/server/azureDocumentIntelligence";
 import { concernForCaptureKind, PARCEL_CARRIER, recognizeCaptureDocument } from "../captureRecognition";
 import { recognizeNoteConcerns } from "../captureContract";
-import { safeOfficeRecognitionBytes } from "../originalSafety";
+import { readMimeOriginalText, safeOfficeRecognitionBytes } from "../originalSafety";
 import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
@@ -48,17 +48,14 @@ type RecognitionContext = {
   retryKey?: string;
 };
 
-async function readSecuredMailText(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string, fileId: string, sha256: string) {
-  const rows = await tx.execute<{ subject: string; body: string; receivedAt: string; truncated: boolean }>(sql`
-    SELECT item.betreff AS subject, source.nachher->>'text' AS body, item.empfangen_am::text AS "receivedAt",
-      length(source.nachher->>'text')>20000 AS truncated
+async function readSecuredMailMetadata(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string, fileId: string, sha256: string) {
+  const rows = await tx.execute<{ subject: string | null; receivedAt: string }>(sql`
+    SELECT item.betreff AS subject, coalesce(item.empfangen_am,file.aufgenommen_am)::text AS "receivedAt"
     FROM public.intake_item item
-    JOIN public.intake_event source ON source.tenant_id=item.tenant_id AND source.item_id=item.id AND source.art='angelegt'
+    JOIN public.intake_file file ON file.tenant_id=item.tenant_id AND file.item_id=item.id AND file.id=${fileId}::uuid AND file.sha256=${sha256}
     JOIN public.intake_event receipt ON receipt.tenant_id=item.tenant_id AND receipt.item_id=item.id
       AND receipt.art='original_gespeichert' AND receipt.nachher->>'fileId'=${fileId} AND receipt.nachher->>'sha256'=${sha256}
-    WHERE item.tenant_id=${tenantId} AND item.id=${itemId}::uuid AND item.kanal='mail'
-      AND item.empfangen_am IS NOT NULL AND source.nachher->>'graphMessageId'=item.graph_message_id
-      AND source.nachher->'replyChain'->>'originalSha256'=${sha256} AND jsonb_typeof(source.nachher->'text')='string'`);
+    WHERE item.tenant_id=${tenantId} AND item.id=${itemId}::uuid AND file.mime='message/rfc822'`);
   if (rows.length > 1) throw Error("INTAKE_MAIL_RECOGNITION_SOURCE_AMBIGUOUS");
   return rows[0] ?? null;
 }
@@ -112,8 +109,11 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     if (!claimed) return;
     claimOwned=true;
     const isMail = file.mime === "message/rfc822";
-    const mail = isMail ? await withPrivilegedTenantTransaction(auth,
-      tx => readSecuredMailText(tx, auth.tenantId, file.item_id, fileId, file.sha256)) : null;
+    const metadata = isMail ? await withPrivilegedTenantTransaction(auth,
+      tx => readSecuredMailMetadata(tx, auth.tenantId, file.item_id, fileId, file.sha256)) : null;
+    const body = metadata ? readMimeOriginalText(bytes) : null;
+    const mail = metadata && body !== null ? { ...metadata, body,
+      truncated: body.length > 20000 && Array.from(body.slice(0,40002)).length > 20000 } : null;
     const mailReading = mail ? recognizeIntakeText(mail.body, new Date(mail.receivedAt), true) : null;
     const mailHasValues = mailReading && (mailReading.fields.length || mailReading.positions.length
       || mailReading.quoteChanges || mailReading.deliveryWeeks || mailReading.instructions?.length);

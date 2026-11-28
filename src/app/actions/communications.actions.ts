@@ -341,7 +341,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
  },readLoggingSettings);
 }
 
-import {importIntakeGraphMail} from '@/modules/eingang/server-public';
+import {finishIntakeFile,importIntakeGraphMail} from '@/modules/eingang/server-public';
 import {recordDispatchReply} from '@/lib/server/dispatchReplyPort';
 import {finishDispatchCallsForReply} from '@/lib/server/dispatchCallPort';
 import {finishPostalTasksForReply} from '@/lib/server/storagePostalPort';
@@ -379,15 +379,23 @@ async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:Au
  }
 }
 import {readMicrosoftGraphAttachments,readMicrosoftGraphMime,readMicrosoftGraphMessage,type GraphInboxMessage} from '@/lib/server/microsoftGraph';
+function returnSavedMail(auth:AuthorizationSnapshot,saved:Extract<Awaited<ReturnType<typeof readIntakeMailImportReceipt>>,{code:'OK'}>,recognitionEnabled:boolean){
+ const {waitingFileIds,...result}=saved;
+ if(recognitionEnabled&&waitingFileIds.length)after(async()=>{
+  await Promise.all(waitingFileIds.map(fileId=>finishIntakeFile(fileId,{
+   authorization:auth,readSettings:readErkennungsEinstellungenInTransaction,importingMail:true,
+  })));
+ });
+ return result;
+}
+
 async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>[0],mail:GraphInboxMessage){
  const [mime,files]=await Promise.all([readMicrosoftGraphMime(mail.id),readMicrosoftGraphAttachments(mail.id)]);
  if(mime.code!=='OK')return mime;
  if(files.code!=='OK')return files;
  const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],
-  {readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after},readCommunicationImportContext,files.data.skipped);
- if(result.code!=='OK')return result;
- const saved=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
- return saved.code==='OK'?{...saved,replayed:result.replayed}:saved;
+  readErkennungsEinstellungenInTransaction,readCommunicationImportContext,files.data.skipped);
+ return result.code==='OK'?returnSavedMail(auth,result,true):result;
 }
 export async function importOutlookMailAction(graphMessageId:string,options?:{deferDispatchReply?:boolean}){
  return observeAction('importOutlookMailAction',subjectForAction('importOutlookMailAction',graphMessageId),async()=>{
@@ -398,8 +406,8 @@ export async function importOutlookMailAction(graphMessageId:string,options?:{de
  const saved=await readIntakeMailImportReceipt(authorization.data,{graphMessageId});
  if(saved.code!=='NOT_FOUND'&&saved.code!=='OK')return saved;
  const outlook=await isFeatureEnabled(authorization.data,'E05');
- if(outlook.code!=='OK'||!outlook.enabled)return saved.code==='OK'?saved:{code:'UNAVAILABLE' as const,message:MAILBOX_SYNC_COPY.unavailable};
- if(saved.code==='OK')return withDeliveryFailure(authorization.data,saved,options?.deferDispatchReply===true);
+ if(outlook.code!=='OK'||!outlook.enabled)return saved.code==='OK'?returnSavedMail(authorization.data,saved,false):{code:'UNAVAILABLE' as const,message:MAILBOX_SYNC_COPY.unavailable};
+ if(saved.code==='OK')return withDeliveryFailure(authorization.data,returnSavedMail(authorization.data,saved,true),options?.deferDispatchReply===true);
  const mail=await readMicrosoftGraphMessage(graphMessageId);
  if(mail.code!=='OK')return mail;
  return withDeliveryFailure(authorization.data,await importIntakeMessage(authorization.data,mail.data),options?.deferDispatchReply===true);
