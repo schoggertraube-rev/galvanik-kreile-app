@@ -14,7 +14,9 @@ import { getIncomingInvoiceAction, openIntakeOriginalAction, saveIncomingInvoice
 import { resolveAuthorization } from '@/lib/server/authorization';
 import { withPrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import type { InvoiceSaveInput } from '@/modules/eingang/public';
-import { sperreLieferantenrechnungFuerGeldInTransaction } from '@/modules/eingang/server-public';
+import {
+  leseBelegoriginalFuerHandbuchungInTransaction, sperreLieferantenrechnungFuerGeldInTransaction,
+} from '@/modules/eingang/server-public';
 
 beforeAll(enableOutlookTestFixture);
 
@@ -113,7 +115,8 @@ async function save(input: InvoiceSaveInput) {
 
 it('M03–M05 saves 95 and 55 on separate original files of a twice delivered mail', async () => {
   const [supplierA, supplierB] = await Promise.all([supplier('A'), supplier('B')]);
-  const { itemId, fileIds, mailOriginal, mime } = await deliverTwice([await document('TEST-L-A.pdf'), await document('TEST-L-B.pdf')]);
+  const firstOriginal = await document('TEST-L-A.pdf');
+  const { itemId, fileIds, mailOriginal, mime } = await deliverTwice([firstOriginal, await document('TEST-L-B.pdf')]);
   const initial = await invoice(itemId);
   const first = await save(command(itemId, fileIds[0], initial.item.version, supplierA, 'TEST-L-A', '95,00'));
   const cashier = await createFixture(['zahlungen']);
@@ -133,6 +136,15 @@ it('M03–M05 saves 95 and 55 on separate original files of a twice delivered ma
   // Synthetic second TEST tenant; the lookup uses a real tenant-scoped transaction.
   expect(await lockInvoice({ ...cashierAuth.data, tenantId: 'TEST-ablauf-' + randomUUID() }))
     .toEqual({ code: 'NOT_FOUND' });
+
+  const readProof = (auth: typeof cashierAuth.data, fileId: string) => withPrivilegedTenantTransaction(auth,
+    tx => leseBelegoriginalFuerHandbuchungInTransaction(tx, auth, fileId));
+  expect(await readProof(cashierAuth.data, fileIds[0])).toEqual({
+    id: fileIds[0], itemId, sha256: createHash('sha256').update(firstOriginal.bytes).digest('hex'),
+  });
+  expect(await readProof(cashierAuth.data, mailOriginal.id)).toBeNull();
+  expect(await readProof(workshopAuth.data, fileIds[0])).toBeNull();
+  expect(await readProof({ ...cashierAuth.data, tenantId: 'TEST-ablauf-' + randomUUID() }, fileIds[0])).toBeNull();
 
   const firstRead = await invoice(itemId);
   expect(firstRead.invoice).toMatchObject({ id: first.id, file_id: fileIds[0], seite_von: null, seite_bis: null });

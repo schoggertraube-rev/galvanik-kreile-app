@@ -25,18 +25,35 @@ type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:str
 
 type IncomingMime={itemId:string;version:number};
 
-async function readOriginalFileInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,fileId:string,mime?:IncomingMime){
+async function readOriginalFileInTransaction(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  fileId: string,
+  mime?: IncomingMime,
+  nurGespeicherterBeleg = false,
+) {
  const rows=await tx.execute<OriginalRow>(sql`
   SELECT file.id::text,file.item_id::text,file.art,source.kanal,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.geoeffnet,source.kunde_id,source.vorgang_id,source.vorgang_art,source.zuordnung_regel,
    (source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context,
    coalesce(${intakeFileContextEvidence} ? 'uebergabeVersion',false) AS handoff_context,${intakeFileHandoffEvidence} AS handoff_proven
   FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
   WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid
+   ${nurGespeicherterBeleg?sql`AND ${gespeichertesBelegoriginal}`:sql``}
    ${mime?sql`AND source.id=${mime.itemId}::uuid AND source.version=${mime.version} AND source.kanal='mail' AND source.richtung='rein'
     AND file.mime='message/rfc822' AND file.art='mime'
     AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
      AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text AND original.nachher->>'sha256'=file.sha256)`:sql``}`);
  return rows.length===1?rows[0]:null;
+}
+
+export async function leseBelegoriginalFuerHandbuchungInTransaction(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  fileId: string,
+) {
+  if (!auth.active || !hasAuthorizationArea(auth, 'zahlungen') || !UUID.test(fileId)) return null;
+  const file = await readOriginalFileInTransaction(tx, auth, fileId, undefined, true);
+  return file ? { id: file.id, itemId: file.item_id, sha256: file.sha256 } : null;
 }
 
 export async function readSecuredIntakeMailOriginal(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string){
