@@ -167,17 +167,22 @@ export function setzeLagerInventurGrund(input: Readonly<{
   sessionId: string;
   artikelId: string;
   ortId: string;
+  zaehlVersion: number;
   grund: InventurGrund;
 }>) {
   type Quittung = { id: string; zaehlVersion: number };
   return imInventurPort<Quittung>(async (tx, akteur, auth) => {
     if (!istUuid(input?.befehlId) || !istUuid(input?.sessionId) || typeof input?.artikelId !== "string"
-      || !/^[A-Za-z0-9_-]{1,128}$/u.test(input.artikelId) || !istUuid(input?.ortId) || !istGrund(input?.grund)) {
+      || !/^[A-Za-z0-9_-]{1,128}$/u.test(input.artikelId) || !istUuid(input?.ortId)
+      || !Number.isSafeInteger(input.zaehlVersion) || input.zaehlVersion < 0 || !istGrund(input.grund)) {
       return ungueltig();
     }
 
     const art = "inventur.grundSetzen";
-    const daten = { sessionId: input.sessionId, artikelId: input.artikelId, ortId: input.ortId, grund: input.grund };
+    const daten = {
+      sessionId: input.sessionId, artikelId: input.artikelId, ortId: input.ortId,
+      zaehlVersion: input.zaehlVersion, grund: input.grund,
+    };
     const absicht = createHash("sha256").update(JSON.stringify({ art, daten })).digest("hex");
 
     const [sitzung] = await tx.execute<{ status: string }>(sql`
@@ -207,6 +212,9 @@ export function setzeLagerInventurGrund(input: Readonly<{
       FOR UPDATE
     `);
     if (!zaehlung || zaehlung.menge === null) return ungueltig();
+    if (zaehlung.version !== input.zaehlVersion) {
+      return { ok: false, error: "CONFLICT", message: LAGER_INVENTUR_COPY.version };
+    }
 
     const [gespeichert] = await tx.execute<Quittung>(sql`
       INSERT INTO public.inventory_count_reasons (

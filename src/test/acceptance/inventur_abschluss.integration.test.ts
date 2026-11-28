@@ -87,7 +87,7 @@ test("Eine fremde Inventursitzung bleibt verborgen und kann über keinen Inventu
     einheit: "kg", menge: "3", mengenqualitaet: "exakt",
   }))).toMatchObject({ ok: false, error: "VALIDATION_ERROR" });
   expect(await withSession(admin, () => setzeLagerInventurGrundAction({
-    sessionId, artikelId, ortId, befehlId: grundBefehl, grund: "loss",
+    sessionId, artikelId, ortId, befehlId: grundBefehl, zaehlVersion: 1, grund: "loss",
   }))).toMatchObject({ ok: false, error: "NOT_FOUND" });
   expect(await withSession(admin, () => schliesseLagerInventurAbAction({ sessionId, befehlId: abschlussBefehl })))
     .toMatchObject({ ok: false, error: "NOT_FOUND" });
@@ -155,12 +155,26 @@ test("Zählung ohne Soll, Grund, idempotenter Abschluss, Original und Startwiede
     version: liste.data[0].version, countedAt: new Date().toISOString(), einheit: "kg",
     menge: "10", mengenqualitaet: "exakt", bewegungRevision: liste.data[0].bewegungRevision,
   };
-  expect(await withSession(werkstatt, () => speichereLagerInventurZaehlungAction(zaehlung)))
-    .toMatchObject({ ok: true, data: { code: "OK" } });
+  const ersteZaehlung = await withSession(werkstatt, () => speichereLagerInventurZaehlungAction(zaehlung));
+  if (!ersteZaehlung.ok || ersteZaehlung.data.code !== "OK") throw Error("TEST_ZAEHLQUITTUNG_FEHLT");
   expect(await withSession(werkstatt, () => speichereLagerInventurZaehlungAction({ ...zaehlung, befehlId: randomUUID() })))
     .toMatchObject({ ok: true, data: { code: "VERSION_KONFLIKT" } });
 
-  const grund = { befehlId: randomUUID(), sessionId, ortId: ort.id, artikelId, grund: "loss" } as const;
+  const gepruefterGrund = {
+    befehlId: randomUUID(), sessionId, ortId: ort.id, artikelId, zaehlVersion: ersteZaehlung.data.version, grund: "loss",
+  } as const;
+  const neueZaehlung = await withSession(admin, () => speichereLagerInventurZaehlungAction({
+    ...zaehlung, befehlId: randomUUID(), version: gepruefterGrund.zaehlVersion,
+  }));
+  if (!neueZaehlung.ok || neueZaehlung.data.code !== "OK") throw Error("TEST_NEUE_ZAEHLQUITTUNG_FEHLT");
+  expect(await withSession(werkstatt, () => setzeLagerInventurGrundAction(gepruefterGrund)))
+    .toEqual({ ok: false, error: "CONFLICT", message: LAGER_INVENTUR_COPY.version });
+  expect(await sql`
+    SELECT zaehl_version FROM public.inventory_count_reasons
+    WHERE tenant_id = ${mandant} AND session_id = ${sessionId}::uuid
+  `).toHaveLength(0);
+
+  const grund = { ...gepruefterGrund, zaehlVersion: neueZaehlung.data.version };
   const [begruendet, parallel] = await withSession(werkstatt, () => Promise.all([
     setzeLagerInventurGrundAction(grund),
     setzeLagerInventurGrundAction(grund),
