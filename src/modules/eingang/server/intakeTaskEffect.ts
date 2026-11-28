@@ -6,7 +6,7 @@ import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
 
-type Effect={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:{type:string;id:string|null;customerId:string|null;customerType:string|null;orderId:string|null};itemId?:string;itemVersion?:number;priceTaskReceipt?:true};
+type Effect={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:{type:string;id:string|null;customerId:string|null;customerType:string|null;orderId:string|null};itemId?:string;itemVersion?:number;priceTaskReceipt?:true;goodsOutNoticeMailEventId?:string};
 type CustomerReader=(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<CustomerStoredProfile|null>;
 
 export function canRecordIntakeTaskEffect(auth:AuthorizationSnapshot,source:{kanal:string;erstellt_von:string}){
@@ -48,6 +48,6 @@ export async function recordIntakeTaskEffect(tx:PrivilegedTenantTransaction,auth
  if(input.reference.type==='eingang')await tx.execute(sql`UPDATE public.intake_item SET verweis_item=${input.reference.id}::uuid WHERE tenant_id=${auth.tenantId} AND id=${input.key}::uuid`);
  targetItem=input.key;
  const history=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-  VALUES(${auth.tenantId},${targetItem}::uuid,'einsatz',${input.key}::uuid,${auth.userId},${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,bezugTyp:input.reference.type,bezugId:input.reference.id,...(input.priceTaskReceipt?{fuerBereich:'preise',text}:{})})}::jsonb) RETURNING id`);
+  VALUES(${auth.tenantId},${targetItem}::uuid,'einsatz',${input.key}::uuid,${auth.userId},${JSON.stringify({action:'aufgabe.'+input.action,taskId:input.taskId,bezugTyp:input.reference.type,bezugId:input.reference.id,...(input.priceTaskReceipt?{fuerBereich:'preise',text}:{}),...(input.goodsOutNoticeMailEventId?{mailEventId:input.goodsOutNoticeMailEventId}:{})})}::jsonb) RETURNING id`);
  if(history.length!==1)throw Error('TASK_HISTORY_MISSING');
 }
