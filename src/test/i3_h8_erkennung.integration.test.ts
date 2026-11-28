@@ -84,6 +84,7 @@ it('ordnet die erkannten Positionen nur ihrer gespeicherten Rechnungsseite zu',a
  const lieferant=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',
   companyName:'TEST H8 Sammelrechnung',country:'DE'}));
  if(lieferant.code!=='OK')throw Error('TEST_I3_H8_LIEFERANT:'+lieferant.code);
+ const rechnungen:string[]=[];
  for(const seite of [1,2]){
   const stand=await withSession(full,()=>getIntakeCaptureAction(itemId));
   if(stand.code!=='OK')throw Error('TEST_I3_H8_QUELLE:'+stand.code);
@@ -92,8 +93,18 @@ it('ordnet die erkannten Positionen nur ihrer gespeicherten Rechnungsseite zu',a
     datum:'2026-11-27',netto:'10,00',ust:'0,00',brutto:'10,00',faelligAm:'2026-12-15',iban:'',ibanGeprueft:false},
    status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null}));
   if(erfasst.code!=='OK')throw Error('TEST_I3_H8_RECHNUNG:'+erfasst.code);
+  rechnungen.push(erfasst.invoice.id);
   const gelesen=await lese(erfasst.invoice.id);
   expect(gelesen).toMatchObject({rechnungId:erfasst.invoice.id,
    positionen:[{positionKey:'p'+seite,lieferantenArtikelNr:'TEST-ZEILE-'+seite}]});
  }
+ // Earlier OCR outputs had only the table and row. A stored correction must outlive the page lookup.
+ await sql`UPDATE public.intake_suggestion SET fundstelle=fundstelle-'page',
+  wert=CASE WHEN wert->>'positionKey'='p2' THEN jsonb_set(wert,'{bezeichnung}','"TEST gespeicherte Korrektur"') ELSE wert END
+  WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position'`;
+ expect(await lese(rechnungen[0])).toMatchObject({positionen:[{positionKey:'p1',lieferantenArtikelNr:'TEST-ZEILE-1'}]});
+ expect(await lese(rechnungen[1])).toMatchObject({positionen:[{positionKey:'p2',lieferantenArtikelNr:'TEST-ZEILE-2',
+  bezeichnung:'TEST gespeicherte Korrektur'}]});
+ expect(await sql`SELECT id FROM public.intake_suggestion
+  WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position' AND fundstelle ? 'page'`).toHaveLength(0);
 });

@@ -9,6 +9,7 @@ import type {LagerBeleg,LagerBelegPosition} from '@/modules/lager/public';
 import {invoiceDate} from '../invoiceContract';
 import {gespeichertesBelegoriginal,invoicePageFilter} from './intakeOriginal';
 import {readIntakePositionValues} from './intakeRecognitionPositions';
+import {readStoredIntakePositionPages} from './intakeRecognitionStorage';
 import {assignInTransaction,readLockedAssignmentSource,recordInvoiceSupplierAssignment} from './intakeAssignment';
 import {readInvoiceForSupplierChange,writeInvoiceSupplierInTransaction} from './incomingInvoice';
 
@@ -76,18 +77,33 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
   ?{from:rechnung.seiteVon,to:rechnung.seiteBis}:null;
  const lieferantId=rechnung?rechnung.lieferantId:eingang.kundeId;
 
- const hinweise = await tx.execute<Hinweis>(sql`
-  SELECT s.feld,s.wert,s.sicherheit_wert::text AS sicherheit
+ const gespeicherteHinweise = await tx.execute<Hinweis&{altesModell:string|null;tabelle:number|null;zeile:number|null}>(sql`
+  SELECT s.feld,s.wert,s.sicherheit_wert::text AS sicherheit,
+    CASE WHEN ${seiten!==null} AND s.feld='position' AND NOT (s.fundstelle ? 'page') THEN s.modell END AS "altesModell",
+    s.fundstelle->'tableIndex' AS tabelle,s.fundstelle->'rowIndex' AS zeile
   FROM public.intake_suggestion s LEFT JOIN public.intake_file file
     ON file.tenant_id=s.tenant_id AND file.id=s.file_id AND file.item_id=s.item_id
   WHERE s.tenant_id=${tenantId} AND s.item_id=${itemId}::uuid AND s.status IN ('offen','uebernommen')
     AND s.feld IN ('beleg.nummer','beleg.datum','rechnung.nummer','rechnung.datum','waehrung','bestellnummer','lieferscheinnummer','position')
     AND (s.file_id IS NULL AND s.feld<>'position' OR ${gespeichertesBelegoriginal})
     ${belegart==='lieferantenrechnung'?sql`AND s.file_id=${original.id}::uuid`:sql``}
-    ${seiten?sql`AND ${invoicePageFilter(seiten)}`:sql``}
+    ${seiten?sql`AND (${invoicePageFilter(seiten)} OR s.feld='position' AND NOT (s.fundstelle ? 'page')
+      AND s.modell ~ '^[A-Za-z0-9_-]{1,128}$' AND jsonb_typeof(s.fundstelle->'tableIndex')='number'
+      AND jsonb_typeof(s.fundstelle->'rowIndex')='number' AND EXISTS(SELECT 1 FROM public.intake_event erkannt
+        WHERE erkannt.tenant_id=s.tenant_id AND erkannt.item_id=s.item_id AND erkannt.art='erkannt'
+         AND erkannt.nachher->>'fileId'=file.id::text AND erkannt.nachher->'modelle' ? s.modell))`:sql``}
   ORDER BY CASE WHEN s.feld='position' THEN file.reihenfolge ELSE 0 END,
     CASE WHEN s.feld='position' AND s.wert->>'positionKey' ~ '^p[1-9][0-9]{0,9}$' THEN substring(s.wert->>'positionKey' FROM 2)::bigint END NULLS LAST,
     (s.status='uebernommen') DESC,s.geprueft_am DESC NULLS LAST,s.sicherheit_wert DESC NULLS LAST,file.reihenfolge,s.id`);
+
+ const alteModelle = new Set(gespeicherteHinweise.flatMap(hinweis=>hinweis.altesModell?[hinweis.altesModell]:[]));
+ const alteSeiten = new Map(await Promise.all([...alteModelle].map(async modell=>
+  [modell,await readStoredIntakePositionPages(tenantId,original.sha256,modell)] as const)));
+ const hinweise = gespeicherteHinweise.filter(hinweis=>{
+  if(!hinweis.altesModell||!seiten)return true;
+  const seite=alteSeiten.get(hinweis.altesModell)?.get(`${hinweis.tabelle}:${hinweis.zeile}`);
+  return seite!=null&&seite>=seiten.from&&seite<=seiten.to;
+ });
 
  const lieferanten = await tx.execute<{ id:string; name:string; zugeordnet:boolean; sicherheit:string|null; grund:string|null }>(sql`
   WITH hinweise AS (
