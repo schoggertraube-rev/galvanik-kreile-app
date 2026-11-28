@@ -280,6 +280,21 @@ const GOODS_OUT_EVENT_COLUMNS=sql`id AS event_id, tenant_id, order_id, client_ev
  correlation_id::text, event_schema_version, aggregate_version, user_id::text AS actor_id,
  to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
  status, station, from_station, event_type, payload`;
+
+export async function readGoodsOutReceiptById(
+  tx:PrivilegedTenantTransaction,tenantId:string,orderId:string,eventId:string,
+):Promise<GoodsOutReceipt|null>{
+  if(!isCanonicalTextId(orderId)||!isCanonicalTextId(eventId))return null;
+  const rows=await tx.execute<GoodsOutEventRow>(sql`
+    SELECT ${GOODS_OUT_EVENT_COLUMNS}
+    FROM public.events
+    WHERE tenant_id=${tenantId} AND order_id=${orderId} AND id=${eventId}
+      AND event_type IN (${EVENT_TYPE_V1},${EVENT_TYPE_V2},${EVENT_TYPE_V3},${EVENT_TYPE_V4})
+    LIMIT 2
+  `);
+  return rows.length===1?parseEvent(rows[0],tenantId):null;
+}
+
 async function readEventsByClientId(
   tx: PrivilegedTenantTransaction,
   tenantId: string,
