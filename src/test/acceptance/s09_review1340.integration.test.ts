@@ -4,12 +4,14 @@ import {randomUUID} from 'node:crypto';
 import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder,readyOrderForInvoice,customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {saveManualTrackingAction,getLiveOrderCardAction,changeOrderPickupNoticeAction} from '@/app/actions/orders.actions';
 import {issueInvoiceAction,cancelInvoiceAction} from '@/app/actions/invoices.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {SHIPPING_FEE_COPY} from '@/ui/situationCatalog';
+
+beforeAll(enableOutlookTestFixture);
 beforeAll(()=>{const u=process.env.DATABASE_URL;if(!u||u!==process.env.H18_EXPECTED_DATABASE_URL||new URL(u).hostname!=='127.0.0.1')throw Error('TEST_S09_LOOPBACK_REQUIRED');});
 const group=(a:string,b:string)=>({orderId:a,shipmentId:randomUUID(),expectedUpdatedAt:null,trackingNumber:'91345678901234',allowFormatMismatch:false,reason:null,clientEventId:randomUUID(),withOrder:{orderId:b,shipmentId:null,expectedUpdatedAt:null}});
 

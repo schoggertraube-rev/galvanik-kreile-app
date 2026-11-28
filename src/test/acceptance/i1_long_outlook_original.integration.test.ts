@@ -1,13 +1,15 @@
 // @vitest-environment node
 // Explicit TEST Graph edge; actual intake, authentication, database and storage.
-import {it,expect,vi} from 'vitest';
+import {beforeAll,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession,nativeFetch} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {createAdminClient} from '@/lib/supabase/admin';
 import {getIntakeCaptureAction} from '@/app/actions/eingang.actions';
 import {importOutlookMailAction} from '@/app/actions/communications.actions';
+
+beforeAll(enableOutlookTestFixture);
 
 it('I1-a preserves the complete text and bytes of a long Outlook original on retry',async()=>{
  const id='TEST-I1-long-'+randomUUID();
@@ -53,6 +55,7 @@ it('I1-a preserves the complete text and bytes of a long Outlook original on ret
 });
 
 it('secures a mail attachment before recognition and reads it only once on delivery retry', async () => {
+ await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E04',true)`;
  const {PDFDocument}=await import('pdf-lib');
  const document=await PDFDocument.create();
  document.addPage().drawText('TEST Mail-Anhang');

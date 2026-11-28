@@ -1,11 +1,11 @@
 // @vitest-environment node
 import {randomUUID} from 'node:crypto';
-import {expect,it,vi} from 'vitest';
+import {beforeAll,expect,it,vi} from 'vitest';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
-import {createFixture,full,nativeFetch,sql,withSession} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,createFixture,full,nativeFetch,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture,invoiceCompanySettingsFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -14,6 +14,8 @@ import {pruefeZusage,type ZusageLeser} from '@/modules/eingang/server-public';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
 import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
+
+beforeAll(enableOutlookTestFixture);
 
 it('reads the carrier handoff, booked label and cutoff for a confirmed mail and leaves unrelated mail without a proposal',async()=>{
   const customerId=await customerFixture('TEST S-1 Versandgrenze');

@@ -107,6 +107,11 @@ async function createFixture(rights: string[],role:AppSession['role']='meister')
 }
 
 
+export async function enableOutlookTestFixture() {
+  await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled)
+    VALUES (${KREILE_TENANT_SLUG},'E05',true) ON CONFLICT (tenant,feature_id) DO NOTHING`;
+}
+
 export {sql,full,withSession,withRequest,nativeFetch,storageApi,createFixture};
 
 afterEach(()=>{vi.restoreAllMocks();});

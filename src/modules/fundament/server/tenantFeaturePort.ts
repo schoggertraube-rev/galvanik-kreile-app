@@ -71,8 +71,14 @@ export async function setTenantFeature(context: TenantFeatureContext, input: unk
   }
 }
 
-export async function isFeatureEnabled(context: TenantFeatureContext, id: SalesStageFeatureId) {
-  const result = await readTenantFeatures(context);
-  if (result.code !== "OK") return result;
-  return { code: "OK" as const, enabled: result.features.find((feature) => feature.id === id)?.enabled === true };
+export async function isFeatureEnabled(context: Pick<TenantFeatureContext, "tenantId">, id: SalesStageFeatureId) {
+  try {
+    const rows = await withPrivilegedTenantTransaction(context, tx => readTenantFeatureRows(tx, context.tenantId));
+    const feature = rows.find(row => row.feature_id === id);
+    if (typeof feature?.enabled !== "boolean") throw Error("TENANT_FEATURE_MISSING");
+    return { code: "OK" as const, enabled: feature.enabled };
+  } catch (error) {
+    logTenantFeatureFailure("TENANT_FEATURE_READ_FAILED", error);
+    return { code: "UNAVAILABLE" as const, message: "Stufen-Schalter konnten nicht sicher gelesen werden." };
+  }
 }

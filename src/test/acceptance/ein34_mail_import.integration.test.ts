@@ -30,6 +30,7 @@ beforeAll(async()=>{
  process.env.APP_SESSION_SECRET='TEST-ein34-local-only';
  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,mailbox_fetch_state) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST MIME mailbox',NULL)`;
+ await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E05',true)`;
  full=await createFixture(['eingang','mails','kunden','auftraege','preise','zahlungen','buchhaltung']);restricted=await createFixture(['eingang','kunden']);
 });
 afterAll(async()=>{vi.restoreAllMocks();for(const key of Object.keys(process.env))if(!(key in originalEnv))delete process.env[key];Object.assign(process.env,originalEnv);await sql.end({timeout:5});});

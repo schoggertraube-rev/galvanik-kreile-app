@@ -5,13 +5,15 @@ import {randomUUID} from 'node:crypto';
 import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,createFixture,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization,authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorization';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
 import {readIntakeMessagesForAuthorization} from '@/modules/eingang/server-public';
 import {importOutlookMailAction} from '@/app/actions/communications.actions';
 import {getIntakeMessagesAction,getIntakeAssignmentAction,assignIntakeCustomerAction,selectIntakeConcernAction,saveIntakeNoteAction,createIntakeContinuationAction,getIntakeCaptureAction} from '@/app/actions/eingang.actions';
+
+beforeAll(enableOutlookTestFixture);
 let photoItemId:string,mimeOnlyItemId:string,customerId:string;
 const since=new Date(Date.now()-60_000).toISOString();
 beforeAll(async()=>{

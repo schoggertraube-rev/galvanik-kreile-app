@@ -232,13 +232,16 @@ export async function getOpenIntakeMailsAction(){
 }
 import {listMicrosoftGraphInbox,readMicrosoftGraphMailbox} from '@/lib/server/microsoftGraph';
 import {parkIntakeMailImportFailure,readFailedIntakeMailImports,observeIntakeMailboxImport,readIntakeMailboxWatermark} from '@/modules/eingang/server-public';
-import {readMailboxFetchState,writeMailboxFetchState} from '@/modules/fundament/server-public';
+import {isFeatureEnabled,readMailboxFetchState,writeMailboxFetchState} from '@/modules/fundament/server-public';
 import {MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
 import {importOutlookMailAction} from '@/app/actions/communications.actions';
 async function syncIntakeMailbox():Promise<string|null>{
  const authorization=await resolveAuthorization();
  if(!authorization.ok||!canSynchronizeIntakeMailbox(authorization.data))return null;
  try{
+  const outlook=await isFeatureEnabled(authorization.data,'E05');
+  if(outlook.code!=='OK')return MAILBOX_SYNC_COPY.unavailable;
+  if(!outlook.enabled)return null;
   const mailbox=readMicrosoftGraphMailbox();
   if(!mailbox){const missing=await listMicrosoftGraphInbox();return missing.code==='OK'?MAILBOX_SYNC_COPY.unavailable:missing.message;}
   const source=await readIntakeMailboxWatermark(authorization.data,mailbox);

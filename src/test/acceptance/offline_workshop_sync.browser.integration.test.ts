@@ -1,6 +1,6 @@
 // @vitest-environment node
 // Native queue + real actions/Auth/DB. This bridge is not a Next/PIN/UI proof.
-import {it,expect,vi} from 'vitest';
+import {beforeAll,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {execFile} from 'node:child_process';
@@ -9,7 +9,7 @@ import {build} from 'esbuild';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture} from '../../../e2e/ablauf/orderFixture';
 import {transitionWareneingangToGalvanikAction,getLiveOrderCardAction,getOrdersDb} from '@/app/actions/orders.actions';
 import {replayOfflineWorkshopAction} from '@/app/actions/offlineWorkshop.actions';
@@ -20,6 +20,8 @@ import {getTodayDeviceAction} from '@/app/actions/today.actions';
 import {getCustomerSummaryAction,getCustomersDb} from '@/app/actions/customers.actions';
 import {createQuoteAction,readQuoteAction,listOpenQuotesAction,changeQuoteLifecycleAction,convertQuoteToOrderAction} from '@/app/actions/quotes.actions';
 import {offlinePartition} from '@/lib/server/offlinePartition';
+
+beforeAll(enableOutlookTestFixture);
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||!['127.0.0.1','localhost'].includes(new URL(process.env.DATABASE_URL).hostname)||new URL(process.env.DATABASE_URL).pathname!=='/postgres'||!tenant.startsWith('TEST-'))throw Error('TEST_OWN_LOOPBACK_REQUIRED');
 
 it('S06 U3 thin reader preserves the canonical no-area denial',async()=>{const actor=await createFixture([],'werkstatt');expect(await withSession(actor,()=>getTodayDeviceAction())).toMatchObject({code:'FORBIDDEN'});});

@@ -1,13 +1,15 @@
 // @vitest-environment node
 import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
-import {it,expect,vi} from 'vitest';
+import {beforeAll,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {saveIntakeNoteAction,getIntakeMessagesAction} from '@/app/actions/eingang.actions';
+
+beforeAll(enableOutlookTestFixture);
 
 it('reads the stored send state and actor for U2 without inferring an unclear dispatch from message text',async()=>{
  const customerId=await customerFixture('V45 Nachrichten'),itemId=randomUUID();

@@ -2,16 +2,18 @@
 import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 // Ausgangsfakt synthetisch, Writer-Nachweis in collection_reminder.integration.test.ts
 // und dispatch_call.integration.test.ts; Outlook-Ablage und Versand danach echt.
-import {vi,it,expect} from 'vitest';
+import {beforeAll,vi,it,expect} from 'vitest';
 import {randomUUID,createHash} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {sendCustomerMailAction} from '@/app/actions/communications.actions';
 import {getLiveOrderCardAction} from '@/app/actions/orders.actions';
 import {readHistoricalDispatchClock,dispatchFollowupBoundary} from '../../../e2e/ablauf/historicalDispatchFixture';
+
+beforeAll(enableOutlookTestFixture);
 const DATABASE_URL=process.env.DATABASE_URL,EXPECTED_DATABASE_URL=process.env.H18_EXPECTED_DATABASE_URL;
 if(!DATABASE_URL||DATABASE_URL!==EXPECTED_DATABASE_URL||new URL(DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_COLLECTIVE_LOOPBACK_REQUIRED');
 

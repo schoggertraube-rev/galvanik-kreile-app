@@ -7,7 +7,8 @@ const tenant = vi.hoisted(() => "TEST-ablauf-" + globalThis.crypto.randomUUID())
 vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: tenant }));
 
 import { full, nativeFetch, sql, withSession } from "../../e2e/ablauf/replayHarness";
-import { finishIntakeFileAction, getIntakeCaptureAction, prepareIntakeFileAction } from "@/app/actions/eingang.actions";
+import { finishIntakeFileAction, getIntakeCaptureAction, getOpenIntakeMailsAction, prepareIntakeFileAction } from "@/app/actions/eingang.actions";
+import { importOutlookMailAction, listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 it("stores scans with document reading off and still reads the original XML", async () => {
@@ -50,5 +51,44 @@ it("stores scans with document reading off and still reads the original XML", as
   } finally {
     fetched.mockRestore();
     vi.unstubAllEnvs();
+  }
+});
+
+it("disables Outlook requests and still reads a previously secured mail", async () => {
+  await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E05',true)`;
+  const id = `TEST-I1-switch-${randomUUID()}`;
+  const internetMessageId = `<${id}@example.invalid>`;
+  const body = "TEST unveränderte Mail";
+  const message = { id, internetMessageId, subject: "TEST Outlook-Schalter",
+    from: { emailAddress: { address: "TEST-i1@example.invalid" } },
+    receivedDateTime: new Date().toISOString(), body: { contentType: "text", content: body }, hasAttachments: false };
+  const original = new TextEncoder().encode(`Message-ID: ${internetMessageId}\r\nSubject: ${message.subject}\r\n\r\n${body}`);
+  let graphCalls = 0;
+  const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname !== "login.microsoftonline.com" && url.hostname !== "graph.microsoft.com") return nativeFetch(input, init);
+    graphCalls++;
+    if (url.hostname === "login.microsoftonline.com") return Response.json({ access_token: "TEST-OCR-module-switch".repeat(3) });
+    if (url.pathname.endsWith("/$value")) return new Response(original);
+    if (url.pathname.endsWith("/attachments")) return Response.json({ value: [] });
+    return Response.json(message);
+  });
+  try {
+    const imported = await withSession(full, () => importOutlookMailAction(id, { deferDispatchReply: true }));
+    if (imported.code !== "OK") throw Error("TEST_I1_SWITCH_MAIL_IMPORT");
+    expect(graphCalls).toBeGreaterThan(0);
+    await sql`UPDATE public.tenant_features SET enabled=false WHERE tenant=${tenant} AND feature_id='E05'`;
+    graphCalls = 0;
+    await withSession(full, async () => {
+      expect(await listOutlookInboxAction()).toEqual({ code: "OK", data: [] });
+      expect(await getOpenIntakeMailsAction()).toMatchObject({ code: "OK" });
+      expect(await importOutlookMailAction("TEST-neue-Mail")).toMatchObject({ code: "UNAVAILABLE" });
+      expect(await importOutlookMailAction(id)).toMatchObject({ code: "OK", itemId: imported.itemId, replayed: true });
+      expect(await getIntakeCaptureAction(imported.itemId)).toMatchObject({ code: "OK", capture: { text: body,
+        files: [expect.objectContaining({ mime: "message/rfc822", secured: true })] } });
+    });
+    expect(graphCalls).toBe(0);
+  } finally {
+    fetched.mockRestore();
   }
 });
