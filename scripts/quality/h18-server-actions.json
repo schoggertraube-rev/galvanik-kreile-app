@@ -289,6 +289,9 @@
     "src/app/actions/eingang.actions.ts#saveIntakeDraftAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
+    "src/app/actions/eingang.actions.ts#loeseEntwurfskonfliktAction": [
+      "src/test/acceptance/s23a_entwurf.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#discardIntakeDraftAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],

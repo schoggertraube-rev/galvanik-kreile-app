@@ -120,6 +120,7 @@
     "@/modules/eingang/server-public#createIntakeContinuation",
     "@/modules/eingang/server-public#writeIntakeDraft",
     "@/modules/eingang/server-public#discardIntakeDraft",
+    "@/modules/eingang/server-public#loeseEntwurfskonflikt",
     "@/modules/eingang/server-public#retryIntakeRecognition",
     "@/modules/eingang/server-public#saveIntakeProspect",
     "@/modules/eingang/public#IntakeProspectInput",

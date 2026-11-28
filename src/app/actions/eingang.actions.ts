@@ -312,7 +312,7 @@ export async function chooseIntakeCaptureKindAction(input: unknown) {
  return observeAction('chooseIntakeCaptureKindAction',subjectForAction('chooseIntakeCaptureKindAction',input),async()=>{ return chooseIntakeCaptureKind(input);
  },readLoggingSettings);
 }
-import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";
+import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation, loeseEntwurfskonflikt } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
 import {transitionWareneingangToGalvanik} from "@/lib/server/commands/orderStationCommand";
@@ -344,6 +344,10 @@ export async function getIntakeDraftsAction() { return readIntakeDrafts(); }
 export async function saveIntakeDraftAction(input:unknown) {
  return observeAction('saveIntakeDraftAction',subjectForAction('saveIntakeDraftAction',input),async()=>{ return writeIntakeDraft(input);
  },readLoggingSettings);
+}
+export async function loeseEntwurfskonfliktAction(input:unknown) {
+ return observeAction('loeseEntwurfskonfliktAction',subjectForAction('loeseEntwurfskonfliktAction',input),
+  async()=>loeseEntwurfskonflikt(input),readLoggingSettings);
 }
 export async function createIntakeContinuationAction(input:unknown) {
  return observeAction('createIntakeContinuationAction',subjectForAction('createIntakeContinuationAction',input),async()=>{ return createIntakeContinuation(input);

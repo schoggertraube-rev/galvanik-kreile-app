@@ -15,7 +15,7 @@ export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from
 export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals,readDomainIntakeOriginals} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction } from "./server/goodsReceipt";
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
-export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation } from "./server/intakeDraft";
+export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation, loeseEntwurfskonflikt } from "./server/intakeDraft";
 
 export { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendingScope, discardIntakeCapture, chooseIntakeCaptureKind } from "./server/intakeCapture";
 export { prepareIntakeFile, finishIntakeFile, retryIntakeRecognition } from "./server/intakeFile";
