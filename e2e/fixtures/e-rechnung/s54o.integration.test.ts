@@ -7,7 +7,7 @@ import {expect,it,vi} from 'vitest';
 import {PDFDict,PDFDocument,PDFName,PDFRawStream} from 'pdf-lib';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession,createFixture} from '../../ablauf/replayHarness';
+import {sql,full,withSession,createFixture,enableOutlookTestFixture} from '../../ablauf/replayHarness';
 import {readSettingsAction,saveCompanySettingsAction} from '@/app/actions/settings.actions';
 import {SALES_STAGE_FEATURES} from '@/modules/fundament/public';
 import {readyOrderForInvoice,readyInvoiceOrder,customerFixture} from '../../ablauf/orderFixture';
@@ -109,6 +109,7 @@ it('S54o C15: agreement goods-out preserves the invoice correction source and wr
 });
 
 it('S54o A7: the existing mail sender transports the real frozen hybrid bytes and a deserialized retry sends no second mail',async()=>{
+ await enableOutlookTestFixture();
  const order=await readyInvoiceOrder('TEST S54o hybrid mail original');
  const {requestMailStep}=await import('../../ablauf/requestMailStep');
  await requestMailStep('S54o-hybrid-original');

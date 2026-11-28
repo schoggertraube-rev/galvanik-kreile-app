@@ -1,11 +1,11 @@
 import { sql } from 'drizzle-orm';
 import { foldSearchText } from '@/lib/domain/searchText';
-import { withTenantSavepoint, type PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
+import type { PrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import { normaliseCustomerPhone } from '@/modules/customers/public';
 import { eingangCopy } from '@/ui/eingangCopy';
 import { findRecognizedCustomers } from '../customerRecognition';
 import { falteBelegUstId } from './eingangsRegeln';
-import { saveIntakeCandidatesInTransaction, type IntakeCandidate } from './intakeAssignment';
+import type { IntakeCandidate } from './intakeAssignment';
 
 export type KundenTrefferregel = 'ustid' | 'adresse' | 'domain' | 'name' | 'telefon';
 type VorgangsTrefferregel = 'mailfaden' | 'teil' | 'ware_erwartet';
@@ -272,6 +272,7 @@ type VorgangsSuche = NonNullable<Awaited<ReturnType<typeof leseKandidatenQuellen
 
 async function leseVorgangsTreffer(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string,
   quelle: VorgangsSuche, kandidaten: readonly string[]) {
+  const { withTenantSavepoint } = await import('@/lib/server/privilegedDb');
   const kunden = sql.join(kandidaten.map(id => sql`${id}`), sql`,`);
   const treffer: VorgangsTreffer[] = [];
   let gelesen = false;
@@ -331,6 +332,8 @@ export type KandidatenPorts = {
 export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransaction,
   kontext: { tenantId: string; akteur: string }, itemId: string, befehlId: string,
   einstellungen: EingangKandidatenEinstellungen, ports: KandidatenPorts, warenOriginal=false) {
+  const { withTenantSavepoint } = await import('@/lib/server/privilegedDb');
+  const { saveIntakeCandidatesInTransaction } = await import('./intakeAssignment');
   await tx.execute(sql`SET LOCAL statement_timeout='2000ms'`);
   const quelle = await leseKandidatenQuellenInTransaction(tx, kontext.tenantId, itemId);
   if (!quelle) return 'keine';

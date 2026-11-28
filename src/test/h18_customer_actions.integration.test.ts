@@ -33,6 +33,23 @@ if (parsed.protocol !== "postgresql:" || parsed.hostname !== "127.0.0.1" || pars
 if (process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("H18_CUSTOMER_LOCAL_REPLAY_REQUIRED: service role must be unset");
 
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
+
+function withDocumentReading<T>(enabled: boolean, work: () => Promise<T>): Promise<T> {
+  return withLocalReplayStorage(async () => {
+    const [previous] = await sql<{enabled:boolean}[]>`
+      SELECT enabled FROM public.tenant_features WHERE tenant=${KREILE_TENANT_SLUG} AND feature_id='E04'`;
+    await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled)
+      VALUES (${KREILE_TENANT_SLUG},'E04',${enabled})
+      ON CONFLICT (tenant,feature_id) DO UPDATE SET enabled=excluded.enabled`;
+    try {
+      return await work();
+    } finally {
+      if (previous) await sql`UPDATE public.tenant_features SET enabled=${previous.enabled}
+        WHERE tenant=${KREILE_TENANT_SLUG} AND feature_id='E04'`;
+      else await sql`DELETE FROM public.tenant_features WHERE tenant=${KREILE_TENANT_SLUG} AND feature_id='E04'`;
+    }
+  });
+}
 const ownedAddressFixtureIds: string[] = [];
 let ownedConfirmationCompanyId:string|null=null;
 let restoredConfirmationCompany:{id:string;name:string|null}|null=null;
@@ -315,7 +332,7 @@ describe("AP-EIN 3.0 note command: unchanged owner case through real Action -> D
 // Owner-authored F05: spreadsheet original is preserved; no OCR success claimed.
 describe("AP-EIN F05: real Actions, local Storage, DB and fresh read",()=>{
  it("F05: unreadable original is secured and repeat-safe",async()=>{
-  return withLocalReplayStorage(async()=>{
+  return withDocumentReading(true,async()=>{
   const fixture=await createFixture();
   const {prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction}=await import("@/app/actions/eingang.actions");
   const bytes=Buffer.from("Isolated generated-flow fixture: unsupported spreadsheet upload\n","utf8");
@@ -489,7 +506,7 @@ describe("E28: a handover change keeps the one existing customer condition",()=>
 });
 
 describe("P55 E40: phone and photograph provenance",()=>{
- it("S23a: an unclassified original remains readable without a manual kind or fake action",async()=>withLocalReplayStorage(async()=>{
+ it("S23a: an unclassified original remains readable without a manual kind or fake action",async()=>withDocumentReading(true,async()=>{
   const actor=await createFixture('werkstatt',['eingang']);
   const {prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction,leseEingangVorschlagAction}=await import('@/app/actions/eingang.actions');
   const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
@@ -507,7 +524,7 @@ describe("P55 E40: phone and photograph provenance",()=>{
    AND item_id=${file.itemId}::uuid AND feld='art' AND status='uebernommen'`).toEqual([]);
   expect(await sql`SELECT sha256 FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${file.fileId}::uuid`).toEqual([{sha256:file.sha256}]);
  }));
- it("P63: an unreadable label rereads the two actual expected orders through the tenant-bound view",async()=>withLocalReplayStorage(async()=>{
+ it("P63: an unreadable label rereads the two actual expected orders through the tenant-bound view",async()=>withDocumentReading(true,async()=>{
   const actor=await createFixture();
   const {createCustomerAction}=await import('@/app/actions/customers.actions');
   const created=await withSession(actor,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'SYNTHETISCH P63 '+randomUUID(),salutation:'ohne',firstName:'Ada',lastName:'Prüfung',phone:'+49 711 5550190',email:'p63@example.invalid',street:'Kundenweg',houseNumber:'1',zipCode:'70176',city:'Stuttgart',country:'DE',paymentPreference:'vorkasse'}));
@@ -531,7 +548,7 @@ describe("P55 E40: phone and photograph provenance",()=>{
   const read=await withSession(actor,()=>getIntakeCaptureAction(input.itemId));if(read.code!=='OK')throw Error('P63_EXPECTED_READ:'+read.message);
   expect(read.capture.expectedOrders?.slice(0,2).map(order=>order.id).sort()).toEqual(orderIds.sort());
  }));
- it("P63: secures one original, persists the recognized text and rereads its actual kind without duplicating events",async()=>withLocalReplayStorage(async()=>{
+ it("P63: secures one original, persists the recognized text and rereads its actual kind without duplicating events",async()=>withDocumentReading(true,async()=>{
   const actor=await createFixture();
   const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
   const content='SYNTHETISCH · Rechnung · Rechnungsnummer TEST-P63';
@@ -589,7 +606,7 @@ describe("P55 E40: phone and photograph provenance",()=>{
   expect(await sql`SELECT kanal,text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${nonPhone.intakeItemId}::uuid`)
    .toEqual([{kanal:'notiz',text:null}]);
  });
- it("persists explicit goods-photo provenance through the real upload and fresh read",async()=>withLocalReplayStorage(async()=>{
+ it.each([false,true])("persists explicit goods-photo provenance through the real upload and fresh read (E04=%s)",async(dokumentLesen)=>withDocumentReading(dokumentLesen,async()=>{
   const actor=await createFixture();
   const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
   vi.mocked(analyzeWithAzureDocumentIntelligence).mockClear();
@@ -599,10 +616,15 @@ describe("P55 E40: phone and photograph provenance",()=>{
   const input={itemId:randomUUID(),fileId:randomUUID(),name:'synthetisch.png',mime:'image/png',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),captureOrigin:'warenfoto' as const};
   const grant=await withSession(actor,()=>prepareIntakeFileAction(input));if(grant.code!=='OK')throw Error('E40_PHOTO_GRANT:'+grant.message);
   if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).ok).toBe(true);
-  expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK'});
-  expect(analyzeWithAzureDocumentIntelligence).not.toHaveBeenCalled();
-  expect(await sql`SELECT aufnahme_herkunft FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`).toEqual([{aufnahme_herkunft:'warenfoto'}]);
-  expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,captureOrigin:'warenfoto',readable:false,status:'fertig'}]}});
+  await withSession(actor,()=>finishIntakeFileAction(input.fileId),async original=>{
+   expect(original).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true,status:'wartet'}]}});
+   expect(analyzeWithAzureDocumentIntelligence).not.toHaveBeenCalled();
+  });
+  expect(analyzeWithAzureDocumentIntelligence).toHaveBeenCalledTimes(dokumentLesen?1:0);
+  expect(await sql`SELECT aufnahme_herkunft,foto_art FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`)
+   .toEqual([{aufnahme_herkunft:'warenfoto',foto_art:null}]);
+  expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',
+   capture:{files:[{id:input.fileId,captureOrigin:'warenfoto',readable:dokumentLesen,status:'fertig'}]}});
  }));
 });
 
@@ -647,7 +669,7 @@ describe("P44 Aus Mail: the actual read action keeps the canonical intake unchan
 });
 
 describe("AP-EIN device handover: real Actions, Storage, DB and refresh",()=>{
- it("rein.abnahme[12]: two phone photos stay at the same intake and finish exactly once",async()=>withLocalReplayStorage(async()=>{
+ it("rein.abnahme[12]: two phone photos stay at the same intake and finish exactly once",async()=>withDocumentReading(true,async()=>{
   const fixture=await createFixture(),deviceId=randomUUID(),itemId=randomUUID();
   const {saveIntakeDeviceRequestAction,prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction}=await import("@/app/actions/eingang.actions");
   const requested=await withSession(fixture,()=>saveIntakeDeviceRequestAction({command:"request",itemId}));
@@ -947,7 +969,7 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
 
 // Owner model RT02: retry reads the same secured original; no second original.
 describe("Owner model RT02: recognition retry against Replay DB",()=>{
- it("RT02 preserves the original and records one retry result",async()=>withLocalReplayStorage(async()=>{
+ it("RT02 preserves the original and records one retry result",async()=>withDocumentReading(true,async()=>{
   const fixture=await createFixture();
   const {prepareIntakeFileAction,finishIntakeFileAction,retryIntakeRecognitionAction,getIntakeCaptureAction}=await import("@/app/actions/eingang.actions");
   const {uploadIntakeOriginal}=await import("@/modules/eingang/public");

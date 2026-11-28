@@ -28,7 +28,7 @@ export async function requestMailStep(chain:string) {
   });
   const { importOutlookMailAction } = await import('@/app/actions/communications.actions');
   const { getIntakeCaptureAction } = await import('@/app/actions/eingang.actions');
-  const imported = await withSession(full, () => importOutlookMailAction(graphId));
+  const imported = await withSession(full, () => importOutlookMailAction(graphId), true);
   expect(imported.code).toBe('OK');
   if (imported.code !== 'OK') throw Error('H1_MAIL_IMPORT:' + imported.code);
   const rows = await sql`SELECT id::text, text, anliegen_offen, erstellt_von::text FROM public.intake_item
