@@ -11,6 +11,7 @@ import {createAdminClient} from '@/lib/supabase/admin';
 import {recognizeNoteConcerns} from '../captureContract';
 import {mimeHeaderLines} from '../originalSafety';
 import {prepareIntakeFile,finishIntakeFile} from './intakeFile';
+import type {ReadRecognitionSettings} from './erkennung';
 import {bindIntakeOriginalToOrder} from './intakeOrderBinding';
 import {assignInTransaction,assignIntakeCustomer} from './intakeAssignment';
 import {deliveryReportFromOriginal,type DeliveryReport} from '../deliveryReport';
@@ -18,6 +19,7 @@ import {deliveryReportFromOriginal,type DeliveryReport} from '../deliveryReport'
 type ReplyChain={source:'original_mime';originalSha256:string;status:'present'|'missing'|'invalid';inReplyTo:string[];references:string[]};
 type Mail={id:string;internetMessageId:string|null;subject:string;senderName:string;senderAddress:string;receivedAt:string;body:string;replyChain?:ReplyChain;deliveryReport?:DeliveryReport};
 type Original={key:string;name:string;mime:string;bytes:Uint8Array};
+type MailRecognition={readSettings:ReadRecognitionSettings;scheduleRecognition:(work:()=>Promise<void>)=>void};
 export function intakeMailIdentity(value:string){const b=createHash('sha256').update(value).digest().subarray(0,16);b[6]=(b[6]&15)|80;b[8]=(b[8]&63)|128;const h=b.toString('hex');return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;}
 
 /** A reply header is evidence from the secured original, never a guessed quote edition. */
@@ -87,7 +89,7 @@ async function captureGraphMailRow(tx:PrivilegedTenantTransaction,auth:Authoriza
 }
 
 /** One Graph identity, one existing intake, and the existing original-file writer. */
-export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail,originals:Original[],readPrevious?:PreviousMailReader,filteredAttachments=0){
+export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail,originals:Original[],recognition:MailRecognition,readPrevious?:PreviousMailReader,filteredAttachments=0){
  if(!canSynchronizeIntakeMailbox(auth))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
  const mailOriginals=originals.filter(file=>file.mime==='message/rfc822');
  if(!mail.id||mail.id.length>1024||!Number.isFinite(Date.parse(mail.receivedAt))||mailOriginals.length!==1||new Set(originals.map(file=>file.key)).size!==originals.length||!Number.isSafeInteger(filteredAttachments)||filteredAttachments<0)return {code:'VALIDATION_ERROR' as const,message:'Mail oder unverändertes Original fehlt.'};
@@ -99,6 +101,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
   const prior=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
   if(prior.code==='OK')return {code:'OK' as const,itemId:result.itemId,replayed:true};
   if(prior.code!=='NOT_FOUND')return prior;
+  const background: Array<()=>Promise<void>>=[];
   for(const original of originals){
    const fileId=intakeMailIdentity(result.itemId+':original:'+original.key),sha256=createHash('sha256').update(original.bytes).digest('hex');
    const grant=await prepareIntakeFile({itemId:result.itemId,fileId,name:original.name,mime:original.mime,bytes:original.bytes.byteLength,sha256},true);
@@ -107,7 +110,9 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
     const saved=await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,grant.upload.token,original.bytes,{contentType:original.mime,upsert:false});
     if(saved.error)throw Error('INTAKE_MAIL_ORIGINAL_UPLOAD_FAILED');
    }
-   const secured=await finishIntakeFile(fileId,{originalOnly:true});
+   const secured=await finishIntakeFile(fileId,original===mailOriginal?{originalOnly:true}:{
+    readSettings:recognition.readSettings,importingMail:true,scheduleRecognition:work=>{background.push(work);},
+   });
    if(secured.code!=='OK')return secured;
    if(!secured.capture.files.some(file=>file.id===fileId&&file.secured))throw Error('INTAKE_MAIL_ORIGINAL_NOT_CONFIRMED');
   }
@@ -138,6 +143,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
   const secured=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
   if(secured.code!=='OK')return secured;
   await withPrivilegedTenantTransaction(auth,tx=>clearMailFailureFlag(tx,auth,result.itemId));
+  for(const work of background)recognition.scheduleRecognition(work);
   return {code:'OK' as const,...result};
  }catch(error){const cause=error instanceof Error&&error.cause&&typeof error.cause==='object'?error.cause as Record<string,unknown>:null;console.error('[INTAKE_MAIL_IMPORT_FAILED]',{code:typeof cause?.code==='string'?cause.code:'INTAKE_MAIL_IMPORT_FAILED',constraint:typeof cause?.constraint_name==='string'?cause.constraint_name:undefined});return {code:'UNAVAILABLE' as const,message:'Mail-Original noch nicht vollständig gesichert · beim erneuten Abruf wird derselbe Eingang fortgesetzt.'};}
 }

@@ -19,7 +19,7 @@ type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string };
 type IntakeFileCompletion =
   | { originalOnly: true; retryKey?: never }
-  | { originalOnly?: false; retryKey?: string; readSettings: ReadRecognitionSettings; scheduleRecognition?: (work: () => Promise<void>) => void };
+  | { originalOnly?: false; retryKey?: string; readSettings: ReadRecognitionSettings; scheduleRecognition?: (work: () => Promise<void>) => void; importingMail?: true };
 async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'buchhaltung')))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};return result.data;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -97,7 +97,8 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
     if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN',message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
     if((file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
     const onlyInvoiceAccess=invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails'));
-    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,onlyInvoiceAccess,originalOnly);
+    const importingMail=!options.originalOnly&&options.importingMail===true;
+    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,onlyInvoiceAccess,originalOnly||importingMail);
     if(retryKey){
       const retry=await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);

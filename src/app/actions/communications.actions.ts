@@ -1,7 +1,8 @@
 "use server";
 
+import {after} from 'next/server';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
@@ -374,7 +375,8 @@ async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>
  const [mime,files]=await Promise.all([readMicrosoftGraphMime(mail.id),readMicrosoftGraphAttachments(mail.id)]);
  if(mime.code!=='OK')return mime;
  if(files.code!=='OK')return files;
- const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],readCommunicationImportContext,files.data.skipped);
+ const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],
+  {readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after},readCommunicationImportContext,files.data.skipped);
  if(result.code!=='OK')return result;
  const saved=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
  return saved.code==='OK'?{...saved,replayed:result.replayed}:saved;
