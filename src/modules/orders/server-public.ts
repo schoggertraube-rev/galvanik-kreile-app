@@ -4,7 +4,7 @@ export { nacharbeitAnlegen } from "./server/reworkOrderCommand";
 
 export {readOrderActors} from "./server/actorRead";
 export { hatArbeitszeitAuftragInTransaction } from "./server/arbeitszeitAuftrag";
-export { beendeLauf, leseBuendelLaufTeile, leseOffeneLaeufe, starteLauf } from "./server/buendelLauf";
+export { beendeLauf, leseBuendelLaufTeile, leseOffeneLaeufe, schlageLaeufeVor, starteLauf } from "./server/buendelLauf";
 export { leseAusschuss, meldeAusschuss } from "./server/ausschuss";
 export { leseMehrarbeitBuchungenInTransaction, mehrarbeitStand } from "./server/mehrarbeitBuchungen";
 

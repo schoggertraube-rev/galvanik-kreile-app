@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import { PackageCheck, Mail, CheckCircle2, AlertCircle, FileText, Loader2 } from "lucide-react";
 
-import { getUrgency } from "@/modules/orders/public";
+import { getRiskConfig } from "@/constants/status";
 import { generateDeliveryNote } from "@/app/actions/pdf.actions";
 
 interface WarenausgangQueueProps {
@@ -140,15 +140,14 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
 
               <div className="flex flex-col gap-3">
                 {custOrders.map(o => {
-                  const u = getUrgency(o.dueDate);
-                  const isCrit = u === "kritisch";
+                  const isCrit = o.risk === "red";
                   const bgClass = isCrit ? "bg-danger-red/10 border-danger-red/30" : "bg-bg-app-soft border-neutral-gray-100";
-                  const dotColor = u === "kritisch" ? "bg-danger-red" : u === "gefaehrdet" ? "bg-accent-orange" : u === "unknown" ? "bg-slate-500" : "bg-success-green";
+                  const terminfarbe = getRiskConfig(o.risk).accentColor;
 
                   return (
                     <div key={o.id} className={`flex items-center justify-between rounded-2xl p-4 border ${bgClass}`}>
                       <div className="flex items-center gap-4">
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+                        <div aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: terminfarbe }} />
                         <div className="w-10 h-10 rounded-full bg-success-green-soft flex items-center justify-center shrink-0">
                           <PackageCheck className="w-5 h-5 text-success-green" />
                         </div>

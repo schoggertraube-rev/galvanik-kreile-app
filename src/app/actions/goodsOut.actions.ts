@@ -83,3 +83,8 @@ export async function recordGoodsOutAction(input:RecordGoodsOutInput|ShipmentGro
 
  },readLoggingSettings);
 }
+
+export async function prepareGoodsOutSignatureUploadAction(input: Pick<RecordGoodsOutInput, 'orderId' | 'expectedVersion' | 'clientEventId'>) {
+  const { prepareGoodsOutSignatureUpload } = await import('@/lib/server/commands/recordGoodsOutCommand');
+  return prepareGoodsOutSignatureUpload(input);
+}

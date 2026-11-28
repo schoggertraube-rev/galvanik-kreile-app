@@ -23,9 +23,11 @@ vi.mock("@/lib/server/privilegedDb", () => ({
 import {
   readTenantOperationalOrderCount,
   readTenantOperationalOrders,
+  readTenantStationOrders,
 } from "@/lib/server/orderStationRead";
 
 const authorization = { tenantId: "tenant-a" };
+const liesStandardkalender = async () => ({ betriebsruhe: [], versandpufferArbeitstage: 0, knappAbArbeitstagen: 2 });
 const baseOrder = (overrides: Record<string, unknown> = {}) => ({
   id: "order-1",
   tenant_id: "tenant-a",
@@ -39,7 +41,7 @@ const baseOrder = (overrides: Record<string, unknown> = {}) => ({
   current_station: "wareneingang",
   current_station_id: "wareneingang",
   status: "ready",
-  risk: null,
+  handover_mode: "pickup",
   intake_date: null,
   due_date: null,
   due_date_text: null,
@@ -83,12 +85,12 @@ describe("W2C-B2M5U operational mapper contract", () => {
       }),
     ];
 
-    const result = await readTenantOperationalOrders(authorization);
+    const result = await readTenantOperationalOrders(authorization, liesStandardkalender);
 
     expect(queryState.executeCalls).toBe(1);
     expect(queryState.tenantIds).toEqual(["tenant-a"]);
     for (const order of result) {
-      expect(order).toMatchObject({ intakeDate: "", dueDate: "", risk: "unknown", statusText: "TERMIN NICHT ERFASST", dueLabel: "Termin", dueValue: "Nicht erfasst" });
+      expect(order).toMatchObject({ intakeDate: "", dueDate: "", risk: "unknown", statusText: "Termin nicht erfasst", dueLabel: "Termin", dueValue: "Nicht erfasst" });
       expect(order.intakeDate).not.toContain("2026-08-01");
       expect(order.dueDate).not.toContain("2026-08-11");
     }
@@ -98,25 +100,25 @@ describe("W2C-B2M5U operational mapper contract", () => {
   it("normalizes persisted ISO dates and retains their real priority", async () => {
     queryState.rows = [baseOrder({ intake_date: "2026-08-06", due_date: "2026-08-11T12:00:00+02:00", due_date_text: "2026-08-11" })];
 
-    const [order] = await readTenantOperationalOrders(authorization);
+    const [order] = await readTenantOperationalOrders(authorization, liesStandardkalender);
 
     expect(order.intakeDate).toBe("2026-08-06T00:00:00.000Z");
     expect(order.dueDate).toBe("2026-08-11T00:00:00.000Z");
     expect(order.risk).toBe("orange");
-    expect(order.statusText).toBe("GEFÄHRDET");
+    expect(order.statusText).toBe("Gefährdet");
     expect(order.dueValue).not.toBe("Nicht erfasst");
   });
 
   it("keeps a valid intake date while a missing due date remains unknown", async () => {
     queryState.rows = [baseOrder({ intake_date: "2026-08-06", due_date: null, due_date_text: null })];
 
-    const [order] = await readTenantOperationalOrders(authorization);
+    const [order] = await readTenantOperationalOrders(authorization, liesStandardkalender);
 
     expect(order).toMatchObject({
       intakeDate: "2026-08-06T00:00:00.000Z",
       dueDate: "",
       risk: "unknown",
-      statusText: "TERMIN NICHT ERFASST",
+      statusText: "Termin nicht erfasst",
       dueLabel: "Termin",
       dueValue: "Nicht erfasst",
     });
@@ -126,20 +128,20 @@ describe("W2C-B2M5U operational mapper contract", () => {
   it("keeps blocked authoritative even when the persisted due date is unusable", async () => {
     queryState.rows = [baseOrder({ status: "blocked", due_date: "invalid", due_date_text: null, intake_date: "invalid" })];
 
-    await expect(readTenantOperationalOrders(authorization)).resolves.toMatchObject([{ risk: "blocked" }]);
+    await expect(readTenantOperationalOrders(authorization, liesStandardkalender)).resolves.toMatchObject([{ risk: "blocked" }]);
   });
 
   it("runs every full read uncached and fails closed on tenant or ownership corruption", async () => {
     queryState.rows = [baseOrder()];
-    await readTenantOperationalOrders(authorization);
-    await readTenantOperationalOrders(authorization);
+    await readTenantOperationalOrders(authorization, liesStandardkalender);
+    await readTenantOperationalOrders(authorization, liesStandardkalender);
     expect(queryState.executeCalls).toBe(2);
 
     queryState.rows = [baseOrder({ tenant_id: "tenant-b" })];
-    await expect(readTenantOperationalOrders(authorization)).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+    await expect(readTenantOperationalOrders(authorization, liesStandardkalender)).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
 
     queryState.rows = [baseOrder({ tenant_integrity_ok: false })];
-    await expect(readTenantOperationalOrders(authorization)).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+    await expect(readTenantOperationalOrders(authorization, liesStandardkalender)).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
   });
 
   it.each([
@@ -149,7 +151,7 @@ describe("W2C-B2M5U operational mapper contract", () => {
     { current_station_id: "   " },
   ])("rejects a blank station alias instead of masking it with station: %o", async (override) => {
     queryState.rows = [baseOrder(override)];
-    await expect(readTenantOperationalOrders(authorization)).rejects.toThrow(
+    await expect(readTenantOperationalOrders(authorization, liesStandardkalender)).rejects.toThrow(
       "ORDER_READMODEL_INVALID",
     );
   });
@@ -171,8 +173,51 @@ describe("W2C-B2M5U operational mapper contract", () => {
       due_date_text: "2026-08-20",
     })];
 
-    const [order] = await readTenantOperationalOrders(authorization);
+    const [order] = await readTenantOperationalOrders(authorization, liesStandardkalender);
 
     expect(order.dueDate).toBe("2026-08-20T00:00:00.000Z");
+  });
+});
+
+describe("Fertigtermine in der Stationsliste", () => {
+  it.each(["Station", "Heute", "Auftragsliste"] as const)("liest in %s den Betriebskalender genau einmal und unterscheidet Versand und Abholung", async liste => {
+    queryState.rows = [
+      baseOrder({ id: "versand", due_date_text: "2026-08-14", handover_mode: "shipping" }),
+      baseOrder({ id: "abholung", due_date_text: "2026-08-14", handover_mode: "pickup" }),
+      baseOrder({ id: "freigabe", status: "blocked", due_date_text: "2026-08-14", handover_mode: "pickup" }),
+    ];
+    const liesEinstellungen = vi.fn(async () => ({
+      betriebsruhe: [{ von: "2026-08-13", bis: "2026-08-13" }],
+      versandpufferArbeitstage: 2,
+      knappAbArbeitstagen: 1,
+    }));
+
+    const auftraege = liste === "Station"
+      ? await readTenantStationOrders(authorization, "galvanik", liesEinstellungen)
+      : await readTenantOperationalOrders(authorization, liesEinstellungen, liste === "Heute" ? { purpose: "today" } : undefined);
+
+    expect(liesEinstellungen).toHaveBeenCalledExactlyOnceWith(expect.anything(), "tenant-a");
+    expect(auftraege).toMatchObject([
+      { id: "versand", risk: "orange", dueValue: "Heute fällig" },
+      { id: "abholung", risk: "green", dueValue: "Fällig in 2 Arbeitstagen" },
+      { id: "freigabe", risk: "blocked", statusText: "Wartet auf Freigabe" },
+    ]);
+  });
+
+  it("benötigt den Kalender nur bei einem belegten Liefertermin und einer Übergabeart", async () => {
+    const liesEinstellungen = vi.fn(async () => ({
+      betriebsruhe: null, versandpufferArbeitstage: 2, knappAbArbeitstagen: null,
+    }));
+    queryState.rows = [baseOrder({ due_date_text: "2026-08-14", handover_mode: null })];
+    await expect(readTenantStationOrders(authorization, "galvanik", liesEinstellungen))
+      .resolves.toMatchObject([{ risk: "unknown" }]);
+    expect(liesEinstellungen).not.toHaveBeenCalled();
+
+    queryState.rows = [baseOrder({ due_date_text: "2026-08-14", handover_mode: "shipping" })];
+    await expect(readTenantStationOrders(authorization, "galvanik", liesEinstellungen))
+      .resolves.toMatchObject([{
+        risk: "unknown",
+        dueValue: "Die Terminbewertung fehlt. Hinterlege die Betriebsruhe und die Terminschwelle in den Firmeneinstellungen.",
+      }]);
   });
 });

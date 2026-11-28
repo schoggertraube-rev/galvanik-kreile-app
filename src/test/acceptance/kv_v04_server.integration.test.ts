@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
 
 import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
@@ -529,7 +530,7 @@ it('KV-09 uses one canonical follow-up task and a protected quote projection, wi
  expect((await sql`SELECT quote.nachfass_am::text,task.faellig_am::text FROM private.quotes quote JOIN public.tasks task ON task.tenant_id=quote.tenant_id AND task.bezug_id=quote.id::text WHERE quote.tenant_id=${KREILE_TENANT_SLUG} AND quote.id=${quoteId}::uuid`)[0]).toMatchObject({nachfass_am:past,faellig_am:past});
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{followupAt:past}}});
  expect(await ownFollowups()).toMatchObject({code:'OK',tasks:[{id:task.id,dueDate:past,quoteId}]});
- const dashboard=()=>withSession(fixture,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_FOLLOWUP_AUTH');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const dashboard=()=>withSession(fixture,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_FOLLOWUP_AUTH');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  expect((await dashboard()).items).toContainEqual(expect.objectContaining({key:'task:'+task.id,kind:'task',target:{screen:'kv',arg:quoteId}}));
  await expect(sql`UPDATE private.quotes SET nachfass_am='2040-01-01'::date WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`).rejects.toThrow('QUOTE_FOLLOWUP_REQUIRES_CANONICAL_TASK');
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST Kunde hat zugesagt'}))).toMatchObject({code:'OK',quote:{lifecycle:{stage:'zugesagt',followupAt:null}}});
@@ -1272,14 +1273,14 @@ it('AK order: two actual logins retain creator and last actor, take through exis
  expect(responsibility.get(orderId)).toBe(second.actorId);
  await sql`UPDATE private.order_task_assignment_state SET assigned_to=${first.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;
  try{
-  const dashboard=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST home auth');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');const first=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);const again=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);expect(again.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));return first;});expect(dashboard.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));expect(await sql`SELECT payload->>'orderId' AS order_id,payload->>'actorId' AS actor_id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='today_assignment_read_failed' AND payload->>'orderId'=${orderId}`).toEqual([]);expect(dashboard.datenluecken).toContain('ORDER_ASSIGNMENT_SOURCE');
+  const dashboard=await withSession(second,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST home auth');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');const first=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);const again=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);expect(again.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));return first;});expect(dashboard.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));expect(await sql`SELECT payload->>'orderId' AS order_id,payload->>'actorId' AS actor_id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='today_assignment_read_failed' AND payload->>'orderId'=${orderId}`).toEqual([]);expect(dashboard.datenluecken).toContain('ORDER_ASSIGNMENT_SOURCE');
   await withSession(second,async()=>{
    const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_PARTIAL_AUTH');
    const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
    const broken=async()=>{await sql`SELECT 1/0`;throw Error('TEST_UNREACHABLE');};
-   const partial=await readTodayDashboard(auth.data,broken,getQuoteFollowupsForTodayAction);
+   const partial=await readTodayDashboard(auth.data,broken,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);
    expect(partial.items).toEqual(expect.arrayContaining([expect.objectContaining({orderId})]));expect(partial.datenluecken).toContain('COMPLAINT_SOURCE');
-   const reread=await readTodayDashboard(auth.data,broken,getQuoteFollowupsForTodayAction);expect(reread.items).toEqual(partial.items);expect(reread.datenluecken).toEqual(partial.datenluecken);
+   const reread=await readTodayDashboard(auth.data,broken,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);expect(reread.items).toEqual(partial.items);expect(reread.datenluecken).toEqual(partial.datenluecken);
   });
  }finally{await sql`UPDATE private.order_task_assignment_state SET assigned_to=${second.actorId}::uuid WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${orderId}`;}
 
@@ -1350,7 +1351,7 @@ it('AK-02: quote followups prioritize their actual recipient rather than the quo
  if(quoteRead.code!=='OK')throw Error('TEST S05 followup quote target');expect(quoteRead.quote.totalNetCents).toBeNull();
  expect(mineA[0]).toMatchObject({quoteId:ids[1],isMine:true});expect(mineB[0]).toMatchObject({quoteId:ids[0],isMine:true});expect(new Set(mineA.map(row=>row.id))).toEqual(new Set(mineB.map(row=>row.id)));
  const {readTodayDashboard}=await import('@/lib/server/todayDashboard'),{getComplaints}=await import('@/app/actions/complaints.actions');
- const day=(actor=mailOnly)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 followup auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const day=(actor=mailOnly)=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 followup auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const ownTasks=(value:Awaited<ReturnType<typeof day>>)=>value.items.filter(row=>row.kind==='task'&&row.target?.screen==='kv'&&ids.includes(row.target.arg));
  const first=await day();expect(ownTasks(first).map(row=>row.target?.screen)).toEqual(['kv','kv']);expect(JSON.stringify(first)).not.toContain('991,00');expect(first).not.toHaveProperty('invoiceMoney');
  expect(first.quoteActions).toMatchObject({code:'OK',missingQuoteIds:[]});expect(first.quoteActions?.rows.filter(row=>ids.includes(row.quoteId))).toHaveLength(2);

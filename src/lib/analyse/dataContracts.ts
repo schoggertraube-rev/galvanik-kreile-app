@@ -172,7 +172,7 @@ export type WerkstattPulsData = {
     customerId: string;
     customerName: string;
     stationName: string;
-    promisedDueDate: string | null;
+    dueDate: string | null;
     completedDate: string | null;
     delayDays: number | null;
     status: "critical" | "watch" | "ok" | "missing_due_date";

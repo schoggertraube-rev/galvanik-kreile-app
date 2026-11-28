@@ -1,10 +1,17 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+import { PngEmbedder } from "pdf-lib";
+import { getPngDataUrlDimensions } from "@/lib/images/pngDimensions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasCompletePngRaster } from "./completePng";
 
 const BUCKET_ID = "scans";
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const PATH = /^domain-attachments\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp|pdf|json)$/;
+const SIGNATURE_PATH = /^unterschrift\/[a-zA-Z0-9_-]{1,128}\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.png$/;
+const MAX_SIGNATURE_BYTES = 200 * 1024;
+const MAX_SIGNATURE_PIXELS = 4_000_000;
 
 type ObjectInfo = { id: string; version: string; path: string; createdAt: string; size: number; contentType: string };
 
@@ -15,7 +22,13 @@ export class DomainAttachmentStorageError extends Error {
 }
 
 function assertPath(path: string) {
-  if (!PATH.test(path)) throw new DomainAttachmentStorageError("INVALID");
+  if (!PATH.test(path) && !SIGNATURE_PATH.test(path)) throw new DomainAttachmentStorageError("INVALID");
+}
+
+export function goodsOutSignaturePath(tenantId: string, clientEventId: string): string {
+  const path = `unterschrift/${tenantId}/${clientEventId}.png`;
+  if (!SIGNATURE_PATH.test(path)) throw new DomainAttachmentStorageError("INVALID");
+  return path;
 }
 
 function status(error: unknown): number | null {
@@ -70,6 +83,29 @@ export async function readStableDomainAttachment(path: string, expected: { fileB
 export async function readExistingDomainAttachment(path:string){
  const existing=await info(path);
  return readStableDomainAttachment(path,{fileBytes:existing.size,mimeType:existing.contentType});
+}
+
+export async function readGoodsOutSignature(path: string, expectedSha256: string) {
+  if (!SIGNATURE_PATH.test(path)) throw new DomainAttachmentStorageError("INVALID");
+  const existing = await info(path);
+  if (existing.size > MAX_SIGNATURE_BYTES || existing.contentType !== "image/png") {
+    throw new DomainAttachmentStorageError("MISMATCH");
+  }
+  const { bytes } = await readStableDomainAttachment(path, { fileBytes: existing.size, mimeType: "image/png" });
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const header = Buffer.from(bytes.subarray(0, 24)).toString("base64");
+  const { width, height } = getPngDataUrlDimensions(`data:image/png;base64,${header}`);
+  if (sha256 !== expectedSha256 || width < 300 || height < 120 || width * height > MAX_SIGNATURE_PIXELS
+    || !hasCompletePngRaster(bytes, width, height)) {
+    throw new DomainAttachmentStorageError("MISMATCH");
+  }
+  try {
+    const decoded = await PngEmbedder.for(bytes);
+    if (decoded.width !== width || decoded.height !== height) throw new DomainAttachmentStorageError("MISMATCH");
+  } catch {
+    throw new DomainAttachmentStorageError("MISMATCH");
+  }
+  return { bytes, width, height };
 }
 
 export async function createDomainAttachmentDownloadUrl(path: string, downloadName: string) {

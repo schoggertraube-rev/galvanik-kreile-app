@@ -3,7 +3,7 @@ import {XMLParser,XMLValidator} from 'fast-xml-parser';
 import type {DocumentSuggestion} from '@/lib/server/azureDocumentIntelligence';
 import {invoiceCents,invoiceDate,invoiceDecimal} from '../invoiceContract';
 
-type InvoiceSuggestion={field:string;value:unknown;confidence:number;source:DocumentSuggestion['source']};
+type InvoiceSuggestion={field:string;value:unknown;confidence:DocumentSuggestion['confidence'];source:DocumentSuggestion['source']};
 function recognizedDate(raw:string){
  const text=raw.trim();if(invoiceDate(text))return text;
  const match=/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(text);
@@ -28,7 +28,10 @@ export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[]
   }
   if(field&&value!==null&&value!==''&&!seen.has(field)){result.push({field,value,confidence:suggestion.confidence,source:suggestion.source});seen.add(field);}
  }
- if(Object.keys(amounts).length)result.push({field:'rechnung.betrag',value:amounts,confidence:Math.min(...sources.map(value=>value.confidence)),source:sources[0].source});
+ if(sources.length){
+  const confidence=sources.reduce<number|null>((minimum,value)=>minimum===null||value.confidence===null?null:Math.min(minimum,value.confidence),1);
+  result.push({field:'rechnung.betrag',value:amounts,confidence,source:sources[0].source});
+ }
  return result;
 }
 

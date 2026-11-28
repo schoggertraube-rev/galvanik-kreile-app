@@ -1,11 +1,12 @@
 import {act,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {cleanup} from '@testing-library/react';
+import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
 import {ComplaintDialog} from '../ui/ComplaintDialog';
 import {ComplaintDialogs} from '../ui/ComplaintDialogs';
 import type {ComplaintDialogData,ComplaintPorts} from '../dialogContract';
 
-const base:ComplaintDialogData={complaint:null,source:{id:'test-order',number:'A-TEST-4C',customerName:'TEST Kunde',items:[{id:'test-part',name:'TEST Gehäuse',quantity:3,unit:'Stück'}]},initial:{description:'',defect:'',photoIds:[],intakeItemId:null,intakeVersion:null},suggestedDate:'2027-05-18',rework:null};
+const base:ComplaintDialogData={complaint:null,source:{id:'test-order',number:'A-TEST-4C',customerName:'TEST Kunde',items:[{id:'test-part',name:'TEST Gehäuse',quantity:3,unit:'Stück'}]},initial:{description:'',defect:'',photoIds:[],intakeItemId:null,intakeVersion:null},suggestedDate:'2027-05-18',betriebsruhetage:[],rework:null};
 function setup(data=base,areas:ComplaintPorts['areas']=['auftraege','entscheiden','preise','zahlungen','buchhaltung','kunden']) {
   const ports:ComplaintPorts={areas,read:vi.fn<ComplaintPorts['read']>(async()=>({code:'OK',data})),write:vi.fn<ComplaintPorts['write']>(async()=>({code:'OK',receipt:{complaintId:'test-complaint',number:'RK-TEST-4C',state:'aufgenommen',version:1,eventId:'test-event'},replayed:false})),rework:vi.fn<ComplaintPorts['rework']>(async()=>({code:'OK',receipt:{orderId:'test-rework'}})),openOrder:vi.fn(),createQuote:vi.fn(),openPhoto:vi.fn(async()=>undefined),addPhoto:vi.fn<ComplaintPorts['addPhoto']>(async()=>({code:'OK',id:'test-photo'})),sendResult:vi.fn<ComplaintPorts['sendResult']>(async()=>({code:'UNAVAILABLE',message:'TEST Offline'}))};
   const onClose=vi.fn(),onMessage=vi.fn();
@@ -41,6 +42,24 @@ it('L05 keeps the reason with the disabled rework action',async()=>{
  expect(within(choice).getByRole('button',{name:'Nacharbeit'})).toBeDisabled();
  expect(within(choice).getByText('Nacharbeit braucht die Teile')).toBeVisible();
  expect(ports.rework).not.toHaveBeenCalled();
+});
+
+it('zeigt am Nacharbeitstermin die Betriebsruhe und speichert erst mit einem Arbeitstag',async()=>{
+ const ruhetag=plusWorkingDays(berlinCalendarDay(),1);
+ const arbeitstag=plusWorkingDays(berlinCalendarDay(),2);
+ if(!ruhetag||!arbeitstag)throw Error('TEST_REKLAMATION_TERMINE_FEHLEN');
+ const data=recorded();
+ const {ports}=setup({...data,complaint:{...data.complaint!,wareZurueck:'ja'},suggestedDate:ruhetag,betriebsruhetage:[ruhetag]});
+ fireEvent.click(await screen.findByRole('button',{name:'berechtigt'}));
+ fireEvent.click(screen.getByRole('button',{name:'Nacharbeit'}));
+ fireEvent.click(screen.getByRole('button',{name:'Ergebnis speichern'}));
+ expect(screen.getByText('Liefertermin fehlt oder ist kein Arbeitstag ab heute.')).toBeVisible();
+ expect(ports.rework).not.toHaveBeenCalled();
+ const feld=document.querySelector('input[data-spec-id="reklamation.liefertermin"]');
+ expect(feld).not.toBeNull();
+ fireEvent.change(feld!,{target:{value:arbeitstag}});
+ fireEvent.click(screen.getByRole('button',{name:'Ergebnis speichern'}));
+ await waitFor(()=>expect(ports.rework).toHaveBeenCalledWith(expect.objectContaining({liefertermin:arbeitstag})));
 });
 
 it('L08 credit success closes only after the returned receipt and shows the bound message',async()=>{

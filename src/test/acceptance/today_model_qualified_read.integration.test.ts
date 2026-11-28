@@ -5,7 +5,7 @@ import {maskOrderPaymentCredit} from '@/lib/server/paymentSummaryRead';
 import {maskTodayOrderCard} from '@/lib/server/orderCardRead';
 import {readTodayOrderSources,type TodayOrderReadPorts} from '@/lib/server/todayOrderRead';
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
-import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction, readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readTodayReadSettings} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
@@ -174,7 +174,7 @@ it('E-G1 first full real profile composes the same dashboard from qualified mode
  expect((await rebuildTodayModel(tenant)).code).toBe('OK');
  const modeled=await withSession(full,()=>readModelForCurrentSession());
  expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_MODEL_COMPOSITION_REQUIRED');
- const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt),undefined,liveTagQuellen));
+ const live=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,readBetriebsruheInTransaction,new Date(modeled.dashboard.calendar!.readStartedAt),undefined,liveTagQuellen));
  expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  expect(modeled.pending).toBe(false);expect(modeled.incomplete).toBe(false);
 });
@@ -223,7 +223,7 @@ it.each([...APP_ROLES.map(role=>'role-'+role),...APP_ROLES.map(role=>'role-grant
   }
   const modeled=await readModelForCurrentSession();
   expect(modeled.code).toBe('OK');if(modeled.code!=='OK')throw Error('TEST_G1_MODEL_REQUIRED');
-  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(modeled.dashboard.calendar!.readStartedAt),undefined,liveTagQuellen);
+  const live=await readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction,readBetriebsruheInTransaction,new Date(modeled.dashboard.calendar!.readStartedAt),undefined,liveTagQuellen);
   expect({...modeled.dashboard,datenluecken:[...(modeled.dashboard.datenluecken??[])].sort()}).toEqual({...live,datenluecken:[...(live.datenluecken??[])].sort()});
  });
 });
@@ -234,7 +234,7 @@ it('composes one captured real source snapshot without SQL, preserves it after a
  const now=new Date();
  const {auth,sources}=await withSession(full,async()=>{
   const resolved=await resolveAuthorization();if(!resolved.ok)throw Error('TEST_ACTUAL_COMPOSITION_AUTH');
-  return {auth:resolved.data,sources:await collectTodaySources(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,now)};
+  return {auth:resolved.data,sources:await collectTodaySources(resolved.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,now)};
  });
  const responsibilities=sources.responsibilitySource.code==='OK'?[...sources.responsibilitySource.data]:null;
  const compose=()=>withPageReadBudget(async()=>{
@@ -246,14 +246,14 @@ it('composes one captured real source snapshot without SQL, preserves it after a
  const before=await compose();
  const oldVersion=before.orderActions?.rows.find(row=>row.orderId===order.orderId)?.version;
  expect(oldVersion).toBe(order.version);
- const current=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction,now));
+ const current=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,now));
  expect(current).toEqual(before);
  const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-07-21',reason:'TEST captured source remains unchanged',clientEventId:randomUUID()};
  const changed=await withSession(full,()=>changeOrderPromisedDueDateAction(command));
  expect(changed.code).toBe('OK');
  expect(await withSession(full,()=>changeOrderPromisedDueDateAction(JSON.parse(JSON.stringify(command))))).toEqual({...changed,replayed:true});
  expect(await compose()).toEqual(before);
- const after=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction,now));
+ const after=await withSession(full,()=>readTodayDashboard(auth,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction,now));
  expect(after.orderActions?.rows.find(row=>row.orderId===order.orderId)?.version).toBeGreaterThan(order.version);
  if(sources.responsibilitySource.code==='OK')expect([...sources.responsibilitySource.data]).toEqual(responsibilities);
  // Explicit missing-DTO boundary, not a claimed SQL/provider failure.
@@ -308,7 +308,7 @@ it('actual GET keeps the explicit live escape independent of model reads and pro
    expect(result.model.modelRead).toMatchObject({source:'live',pending:false});
    expect(result.model.dashboard.orderActions.rows.length).toBeGreaterThan(0);
    const resolved=await withSession(full,()=>resolveAuthorization());if(!resolved.ok)throw Error('TEST_LIVE_EQUALITY_AUTH');
-   const original=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,new Date(result.model.dashboard.calendar.readStartedAt),undefined,liveTagQuellen));
+   const original=await withSession(full,()=>readTodayDashboard(resolved.data,getComplaints,getQuoteFollowupsForTodayAction,readBetriebsruheInTransaction,new Date(result.model.dashboard.calendar.readStartedAt),undefined,liveTagQuellen));
    expect(JSON.stringify(result.model.dashboard)).toBe(JSON.stringify(original));
    const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
    expect(phases).toContain('today.orders');expect(phases).not.toContain('today.model.read');expect(phases).not.toContain('today.refresh');
@@ -365,7 +365,7 @@ it('conditional real GET skips unchanged composition and reloads after an actual
    const phases=output.mock.calls.filter(call=>call[0]==='[PAGE_READ_PHASE]').map(call=>JSON.parse(String(call[1])).phase);
    expect(phases).toContain('today.model.read');expect(phases).not.toContain('today.model.compose');expect(phases).not.toContain('today.source');
   }finally{output.mockRestore();}
-  const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-09-05',reason:'TEST conditional model actual source sequence',clientEventId:randomUUID()};
+  const command={orderId:order.orderId,expectedVersion:order.version,dueDate:'2027-09-06',reason:'TEST conditional model actual source sequence',clientEventId:randomUUID()};
   expect((await changeOrderPromisedDueDateAction(command)).code).toBe('OK');
   const changed=await getModelRoute(request());expect(changed.status).toBe(200);expect(changed.headers.get('etag')).not.toBe(etag);
   const current=await changed.json();expect(current.model.modelRead.pending).toBe(true);
@@ -526,9 +526,10 @@ it('meldet den echten Takt ohne Sitzung bei Teilausfall als fehlgeschlagen und f
 
 it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende Automatik', async () => {
   const bediener = await createFixture(['wartung'],'developer');
-  // Der vorherige Cron-Aufruf kann den aktuellen Tag für diesen Betrieb bereits abgeschlossen haben.
-  const zeit = new Date(readTodayCalendar(new Date()).today+'T12:00:00Z');
-  zeit.setUTCDate(zeit.getUTCDate()+1);
+  // Um 02:30 Uhr Berliner Zeit ist der Neuaufbau fällig. Die Protokollaufbewahrung
+  // ab 03:00 Uhr würde bei ihrem Abschluss dieselbe im Test gehaltene Zeile sperren.
+  const zeit = new Date('2027-02-01T01:30:00Z');
+  const naechsterTag = new Date('2027-02-02T01:30:00Z');
   const tag = readTodayCalendar(zeit).today;
   const vorhandene = await sql<{id:string}[]>`SELECT id::text FROM public.takt_job_runs
     WHERE tenant_id=${tenant} AND job_schluessel='heute_neuaufbau'`;
@@ -560,8 +561,8 @@ it('baut nach dem Tageslauf erneut auf und sperrt Doppelklick und konkurrierende
       }
       expect(await laeufe()).toEqual([{faellig_fuer:tag,status:'ok'}, {faellig_fuer:expect.stringMatching(/^hand:/),status:'läuft'}]);
       expect((await manuell()).status).toBe(409);
-      const naechsterTag = new Date(zeit.getTime()+86_400_000);
-      await fuehreTaktAus({tenantId:tenant,jetzt:naechsterTag});
+      expect(await fuehreTaktAus({tenantId:tenant,jetzt:naechsterTag}))
+        .toEqual({mandanten:1,laeufe:0,restOffen:false});
       expect(await laeufe()).toHaveLength(2);
     });
     expect((await erster)?.status).toBe(204);

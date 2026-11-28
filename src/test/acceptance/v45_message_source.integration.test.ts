@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -53,7 +54,7 @@ it('R13 imports a real original and reads the assignment main action with the ac
   const message=read.messages.find(row=>row.id===imported.itemId);expect(message).toBeDefined();
   const dashboard=()=>withSession(full,async()=>{
    const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_U3_AUTH');
-   const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);
+   const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);
   });
   const beforeAssignment=await dashboard();expect(beforeAssignment.messageActions?.rows.find(row=>row.messageId===imported.itemId)).toEqual({messageId:imported.itemId,version:message!.version,read:message!.nextActionRule});expect(beforeAssignment.assignmentMetric).toMatchObject({code:'OK',count:1,sources:[{id:imported.itemId,version:message?.version}]});
   expect(beforeAssignment.items).toEqual(expect.arrayContaining([expect.objectContaining({kind:'mail',graphMessageId:graphId})]));
@@ -71,7 +72,7 @@ it('R13 imports a real original and reads the assignment main action with the ac
   const after=await withSession(full,()=>getIntakeMessagesAction('alle'));if(after.code!=='OK')throw Error('TEST_U2_REREAD');
   expect(after.messages.find(row=>row.id===imported.itemId)).toMatchObject({customerId,nextActionRule:{code:'OK',hauptaktion:null,prioritaet:8}});
   const rereadDay=await dashboard(),updatedMessage=after.messages.find(row=>row.id===imported.itemId)!;expect(rereadDay.messageActions?.rows.find(row=>row.messageId===imported.itemId)).toEqual({messageId:imported.itemId,version:updatedMessage.version,read:updatedMessage.nextActionRule});expect(rereadDay.assignmentMetric).toEqual({code:'OK',count:0,sources:[]});
-  const noMails=await createFixture(['auftraege']);expect(await withSession(noMails,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization'),{readTodayDashboard}=await import('@/lib/server/todayDashboard'),{getComplaints}=await import('@/app/actions/complaints.actions'),{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_NO_MAIL_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);})).not.toHaveProperty('messageActions');
+  const noMails=await createFixture(['auftraege']);expect(await withSession(noMails,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization'),{readTodayDashboard}=await import('@/lib/server/todayDashboard'),{getComplaints}=await import('@/app/actions/complaints.actions'),{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_NO_MAIL_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);})).not.toHaveProperty('messageActions');
   expect((await dashboard()).items.some(row=>row.graphMessageId===graphId)).toBe(false);
   expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${imported.itemId}::uuid AND mime='message/rfc822'`).toHaveLength(1);
  }finally{vi.restoreAllMocks();}

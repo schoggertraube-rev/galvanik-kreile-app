@@ -37,6 +37,7 @@ export type OperationalOrder = {
   parts: OperationalOrderItem[];
   intakeDate: string;
   dueDate: string;
+  terminStand?: ReturnType<typeof import('@/modules/orders/public').fertigtermin>;
   dueLabel: string;
   dueValue: string;
   createdAt: string | undefined;

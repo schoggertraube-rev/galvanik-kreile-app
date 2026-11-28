@@ -11,6 +11,8 @@ import {readComplaintResultMail,readComplaintGoodsMail} from '@/lib/server/comma
 import {COMPLAINT_DEFECTS,type ComplaintWriteResult,type ComplaintRequest,type ComplaintDialogData} from '@/modules/complaints/public';
 import {readIntakeCapture} from '@/modules/eingang/server-public';
 import {readIntakeSuggestions} from '@/lib/server/intakeSuggestions';
+import {leseBetriebsruhetage} from '@/lib/domain/workingDays';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {nacharbeitAnlegen} from "@/modules/orders/server-public";
 import type {ComplaintFilter} from "@/modules/complaints/public";
 
@@ -25,7 +27,7 @@ export async function getComplaintOrderChoicesAction(customerId:string){
 }
 export async function nacharbeitAnlegenAction(input: Parameters<typeof nacharbeitAnlegen>[0]) {
  return observeAction('nacharbeitAnlegenAction',subjectForAction('nacharbeitAnlegenAction',input),async()=>{
- return nacharbeitAnlegen(input);
+ return nacharbeitAnlegen(input,readBetriebsruheInTransaction);
 
  },readLoggingSettings);
 }
@@ -84,9 +86,12 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
    const defect=defects.find(([pattern])=>pattern.test(signal))?.[1]??'';
    initial={description:text,defect:COMPLAINT_DEFECTS.includes(defect as typeof COMPLAINT_DEFECTS[number])?defect:'',photoIds:capture.capture.files.filter(file=>file.mime.startsWith('image/')&&file.secured).map(file=>file.id),intakeItemId:capture.capture.id,intakeVersion:capture.capture.version};
   }
+  const terminEinstellungen=await withPrivilegedTenantTransaction(authorization.data,tx=>
+   readBetriebsruheInTransaction(tx,authorization.data.tenantId));
+  const betriebsruhetage=leseBetriebsruhetage(terminEinstellungen.betriebsruhe);
   let suggestedDate:string|null=null;
-  if(source.items.length&&source.handoverMode){
-   try{const suggestions=await readIntakeSuggestions(authorization.data,{customerId:source.customerId,kind:'ORDER',wishDate:null,handoverMode:source.handoverMode,positions:source.items.map(item=>({key:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,surfaceRequested:item.surfaceRequested,unit:item.unit,unitPriceCents:null}))},readBetriebsruheInTransaction);suggestedDate=suggestions.term?.achievableDate??null;}
+  if(betriebsruhetage&&source.items.length&&source.handoverMode){
+   try{const suggestions=await readIntakeSuggestions(authorization.data,{customerId:source.customerId,kind:'ORDER',wishDate:null,handoverMode:source.handoverMode,positions:source.items.map(item=>({key:item.id,catalogServiceId:item.catalogServiceId,name:item.name,quantity:item.quantity,surfaceRequested:item.surfaceRequested,unit:item.unit,unitPriceCents:null}))},async()=>terminEinstellungen);suggestedDate=suggestions.term?.achievableDate??null;}
    catch(error){console.error('[COMPLAINT_TERM_SUGGESTION_FAILED]',error instanceof Error?error.message:error);}
   }
   let resultMail:ComplaintDialogData['resultMail']=null;
@@ -95,7 +100,7 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
    try{resultMail=await readComplaintResultMail(authorization.data,{'Kunde':source.customerName,'RK-Nummer':complaint.nummer,Ergebnis:resultLabel,'Begründung':complaint.begruendung??''});}
    catch(error){console.error('[COMPLAINT_RESULT_TEMPLATE_FAILED]',error);}
   }
-  return {code:'OK',data:{complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
+  return {code:'OK',data:{complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,betriebsruhetage:betriebsruhetage?[...betriebsruhetage]:null,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
  }catch(error){console.error('[COMPLAINT_DIALOG_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Reklamation konnte nicht geladen werden. Code: COMPLAINT_DIALOG_READ_FAILED.'};}
 
  },readLoggingSettings);

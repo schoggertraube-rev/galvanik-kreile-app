@@ -2,6 +2,7 @@
 import {leseLagerMaterialpositionenInTransaction} from '@/modules/lager/server-public';
 import {repairCancelledCollectionRouting} from '@/lib/server/commands/immutableInvoiceCommand';
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
+import { KALENDER_COPY } from "@/ui/kalenderCopy";
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
@@ -65,6 +66,9 @@ export async function getOrderIntakeSuggestionsAction(
     const { readIntakeSuggestions } = await import("@/lib/server/intakeSuggestions");
     return { ok: true, data: await readIntakeSuggestions(authorization.data, input, readBetriebsruheInTransaction) };
   } catch (error) {
+    if (error instanceof Error && error.message === "BETRIEBSRUHE_FORMAT_UNGUELTIG") {
+      return { ok: false, error: "QUERY_ERROR", message: KALENDER_COPY.format };
+    }
     console.error("getOrderIntakeSuggestionsAction failed", error);
     return { ok: false, error: "QUERY_ERROR", message: "Vorschläge sind derzeit nicht verfügbar." };
   }

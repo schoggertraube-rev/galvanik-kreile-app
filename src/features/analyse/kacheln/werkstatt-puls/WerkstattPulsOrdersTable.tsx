@@ -69,7 +69,7 @@ export function WerkstattPulsOrdersTable({ data }: Props) {
                       </td>
                       <td>{o.customerName}</td>
                       <td>{o.stationName}</td>
-                      <td>{o.promisedDueDate ? new Date(o.promisedDueDate).toLocaleDateString('de-DE') : '—'}</td>
+                      <td>{o.dueDate ? new Date(o.dueDate).toLocaleDateString('de-DE') : '—'}</td>
                       <td className={`verzug-cell ${verzugClass}`}>{verzugText}</td>
                       <td>{o.priority}</td>
                     </tr>
