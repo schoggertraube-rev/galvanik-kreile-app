@@ -14,6 +14,11 @@ import type {IntakeCapture} from '../captureContract';
 import type {InvoicePageRange} from '../invoiceContract';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const gespeichertesBelegoriginal = sql`file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'
+ AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
+  AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text
+  AND (event.nachher->>'sha256' IS NULL OR event.nachher->>'sha256'=file.sha256))`;
 type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:string;mime:string;bytes:string;sha256:string;speicherpfad:string;geoeffnet:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;invoice_context:boolean};
 
 type IncomingMime={itemId:string;version:number};

@@ -10,7 +10,7 @@ import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} fr
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {normaliseIban,type CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
-import {invoicePageFilter,readIntakeInvoicePageSource,readSecuredIntakeMailOriginal} from './intakeOriginal';
+import {gespeichertesBelegoriginal as invoiceOriginal,invoicePageFilter,readIntakeInvoicePageSource,readSecuredIntakeMailOriginal} from './intakeOriginal';
 import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFieldErrors,invoiceFieldShape,invoiceTaxBreakdown,
  type IncomingInvoice,type InvoiceChangeInput,type InvoiceDuplicate,type InvoiceFailure,type InvoiceFields,
  type InvoicePageRange,type InvoiceReadResult,type InvoiceResult,type InvoiceSaveInput,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
@@ -30,10 +30,6 @@ const optionalText=(v:unknown,max:number)=>v===null||typeof v==='string'&&v.leng
 const keys=(v:object,names:string[])=>Object.keys(v).sort().join(',')===[...names].sort().join(',');
 const columns=sql`id::text,nummer_intern,item_id::text,file_id::text,seite_von,seite_bis,lieferant_id,nummer,datum::text,netto::text,ust::text,brutto::text,faellig_am::text,
  iban,iban_geprueft,ust_saetze,zahlstatus,bezahlt_am::text,nachweis_file_id::text,verweis_id::text,dublette_grund,unklar_grund,aufgabe_id::text,ungueltig_grund,erfasst_von::text,erfasst_am::text,version`;
-const invoiceOriginal=sql`file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml'
- AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
-  AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text
-  AND (event.nachher->>'sha256' IS NULL OR event.nachher->>'sha256'=file.sha256))`;
 const invalidInvoiceRequest='Rechnungsaufruf ist ungültig.';
 class Rejected extends Error{constructor(readonly result:InvoiceFailure|Extract<InvoiceResult,{code:'DUPLICATE'}>){super(result.code);}}
 function reject(code:InvoiceFailure['code'],message:string,fields?:Record<string,string>):never{throw new Rejected({code,message,...(fields?{fields}:{})});}

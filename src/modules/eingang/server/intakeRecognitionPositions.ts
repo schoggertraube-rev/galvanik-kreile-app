@@ -28,6 +28,23 @@ function numericText(value: string | undefined, places: number) {
   return (normalized.split(".")[1]?.length ?? 0) <= places ? normalized : null;
 }
 
+export function readIntakePositionValues(values: Partial<Record<keyof PositionValues, unknown>>): PositionValues {
+  const text = (field: keyof PositionValues) => typeof values[field] === 'string' ? values[field].trim() || undefined : undefined;
+  const ean = text('ean');
+
+  return {
+    bezeichnung: text('bezeichnung')?.slice(0, 500) ?? null,
+    lieferantenArtikelNr: text('lieferantenArtikelNr') ?? null,
+    ean: ean && /^(?:\d{8}|\d{12,14})$/u.test(ean) ? ean : null,
+    menge: numericText(text('menge'), 3),
+    einheitText: text('einheitText') ?? null,
+    einzelpreis: numericText(text('einzelpreis'), 4),
+    preisBezugMenge: numericText(text('preisBezugMenge'), 3),
+    rabattProzent: numericText(text('rabattProzent'), 4),
+    positionsNetto: numericText(text('positionsNetto'), 4),
+  };
+}
+
 export function readAzurePositionRows(tables: readonly unknown[]) {
   return tables.flatMap((table, tableIndex) => {
     if (!table || typeof table !== "object" || !("cells" in table) || !Array.isArray(table.cells)) return [];
@@ -59,17 +76,7 @@ export function readAzurePositionRows(tables: readonly unknown[]) {
         confidence = confidence !== null && typeof score === "number" && score >= 0 && score <= 1
           ? Math.min(confidence, score) : null;
       }
-      const position: PositionValues = {
-        bezeichnung: values.bezeichnung?.slice(0, 500) ?? null,
-        lieferantenArtikelNr: values.lieferantenArtikelNr ?? null,
-        ean: values.ean && /^(?:\d{8}|\d{12,14})$/u.test(values.ean) ? values.ean : null,
-        menge: numericText(values.menge, 3),
-        einheitText: values.einheitText ?? null,
-        einzelpreis: numericText(values.einzelpreis, 4),
-        preisBezugMenge: numericText(values.preisBezugMenge, 3),
-        rabattProzent: numericText(values.rabattProzent, 4),
-        positionsNetto: numericText(values.positionsNetto, 4),
-      };
+      const position = readIntakePositionValues(values);
       if (!Object.values(position).some(value => value !== null)) return [];
       return [{ position, confidence, source: { tableIndex, rowIndex } }];
     });
