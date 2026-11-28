@@ -108,8 +108,9 @@ type Eingangsquelle = Pick<Eingangsadresse, 'absenderAdresse' | 'absenderName' |
   kundeId: string | null;
   kanal: string;
   ware: boolean;
-  feld: LieferantenFeld | 'position' | null;
-  wert: string | null;
+  originaleVollstaendig: boolean;
+  feld: LieferantenFeld | 'rechnung.absender' | 'position' | null;
+  wert: unknown;
 };
 
 export async function leseKandidatenQuellenInTransaction(
@@ -121,36 +122,54 @@ export async function leseKandidatenQuellenInTransaction(
     SELECT eingang.version, eingang.zuordnung, eingang.kunde_id AS "kundeId", eingang.kanal,
       ('ware'=ANY(eingang.anliegen) OR EXISTS(SELECT 1 FROM public.intake_file etikett
         WHERE etikett.tenant_id=eingang.tenant_id AND etikett.item_id=eingang.id AND etikett.foto_art='etikett')) AS ware,
+      NOT EXISTS(SELECT 1 FROM public.intake_file original WHERE original.tenant_id=eingang.tenant_id
+        AND original.item_id=eingang.id AND original.erkennung_status<>'fertig') AS "originaleVollstaendig",
       eingang.absender_adresse AS "absenderAdresse",
       eingang.absender_name AS "absenderName", eingang.absender_telefon AS "absenderTelefon",
-      vorschlag.feld, CASE WHEN vorschlag.feld='position' THEN vorschlag.wert->>'bezeichnung'
-        WHEN jsonb_typeof(vorschlag.wert)='string' THEN vorschlag.wert #>> '{}' END AS wert
+      vorschlag.feld, CASE WHEN vorschlag.feld='position' THEN vorschlag.wert->'bezeichnung' ELSE vorschlag.wert END AS wert
     FROM public.intake_item eingang
     LEFT JOIN public.intake_suggestion vorschlag
       ON vorschlag.tenant_id=eingang.tenant_id AND vorschlag.item_id=eingang.id
-      AND vorschlag.feld IN ('lieferant.ustid','lieferant.name','position') AND vorschlag.status IN ('offen','uebernommen')
+      AND vorschlag.feld IN ('lieferant.ustid','lieferant.name','rechnung.absender','position') AND vorschlag.status IN ('offen','uebernommen')
     WHERE eingang.tenant_id=${tenantId} AND eingang.id=${itemId}::uuid
   `);
   const erste = zeilen[0];
   if (!erste) return null;
   if (!Number.isSafeInteger(erste.version) || erste.version < 1) throw Error('I2_EINGANG_VERSION_UNGUELTIG');
 
-  function lieferantenHinweis(feld: LieferantenFeld) {
-    const werte = new Set(zeilen.filter(zeile => zeile.feld === feld).map(zeile => zeile.wert?.trim() || null));
-    const wert = werte.size === 1 ? [...werte][0] ?? null : null;
-    return { wert, lesbar: werte.size === 0 || wert !== null };
+  const textWert = (wert: unknown) => typeof wert === 'string' ? wert.trim() || null : null;
+  function lieferantenHinweis(feld: LieferantenFeld, eigenschaft: 'ustId' | 'name', falte: (wert: string) => string) {
+    const werte = new Map<string, string>();
+    let lesbar = true;
+    for (const zeile of zeilen) {
+      let rohwert: unknown;
+      if (zeile.feld === feld) rohwert = zeile.wert;
+      else if (zeile.feld === 'rechnung.absender') {
+        if (!zeile.wert || typeof zeile.wert !== 'object' || Array.isArray(zeile.wert)) {
+          lesbar = false;
+          continue;
+        }
+        rohwert = (zeile.wert as Record<string, unknown>)[eigenschaft];
+        if (rohwert == null) continue;
+      } else continue;
+      const wert = textWert(rohwert);
+      if (wert === null) lesbar = false;
+      else werte.set(falte(wert), wert);
+    }
+    lesbar &&= werte.size <= 1;
+    return { wert: lesbar ? werte.values().next().value ?? null : null, lesbar };
   }
 
-  const ustId = lieferantenHinweis('lieferant.ustid');
-  const name = lieferantenHinweis('lieferant.name');
+  const ustId = lieferantenHinweis('lieferant.ustid', 'ustId', falteBelegUstId);
+  const name = lieferantenHinweis('lieferant.name', 'name', foldSearchText);
   return {
     version: erste.version,
     zuordnung: erste.zuordnung,
-    hinweiseVollstaendig: ustId.lesbar && name.lesbar,
+    hinweiseVollstaendig: erste.originaleVollstaendig && ustId.lesbar && name.lesbar,
     kundeId: erste.kundeId,
     kanal: erste.kanal,
     ware: erste.ware,
-    teile: [...new Set(zeilen.flatMap(zeile => zeile.feld === 'position' && zeile.wert?.trim() ? [zeile.wert.trim()] : []))],
+    teile: [...new Set(zeilen.filter(zeile => zeile.feld === 'position').map(zeile => textWert(zeile.wert)).filter(wert => wert !== null))],
     eingang: {
       absenderAdresse: erste.absenderAdresse,
       absenderName: erste.absenderName,

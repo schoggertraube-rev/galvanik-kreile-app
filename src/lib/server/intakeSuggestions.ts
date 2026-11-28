@@ -62,7 +62,10 @@ function integer(value: number | string, code: string): number {
   return parsed;
 }
 
-const normalized = foldSearchText;
+function normalized(value: string) {
+  return foldSearchText(value.normalize('NFC')).normalize('NFKD').replace(/\p{M}+/gu, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
 
 type Firmenleser = (input: { tenantId: string; canRead: true; includeDeliveryNoteIdentity: true; fresh: true }) =>
   Promise<{ code: 'OK'; company: { companyName: string; taxId?: string | null } }

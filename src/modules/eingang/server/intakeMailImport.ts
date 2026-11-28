@@ -73,8 +73,8 @@ async function captureGraphMailRow(tx:PrivilegedTenantTransaction,auth:Authoriza
  if(created.n>1)throw Error('INTAKE_MAIL_SOURCE_AMBIGUOUS');
  if(!existing.length){
   const received=typeof mail.receivedAt==='string'&&Number.isFinite(Date.parse(mail.receivedAt))?mail.receivedAt:null;
-  await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,empfangen_am,absender_name,absender_adresse,betreff,text,gruppe_adresse,graph_message_id,internet_message_id)
-   VALUES(${id}::uuid,${auth.tenantId},${'graph:'+mail.id},'mail','rein','mailabruf',${auth.userId}::uuid,${received}::timestamptz,${mail.senderName??null},${mail.senderAddress??null},${mail.subject??null},left(${mail.body??null}::text,20000),${mail.senderAddress?.trim().toLowerCase()??null},${mail.id},${mail.internetMessageId??null})`);
+  await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,empfangen_am,absender_name,absender_adresse,betreff,text,gruppe_adresse,graph_message_id,internet_message_id,wartet_seit)
+   VALUES(${id}::uuid,${auth.tenantId},${'graph:'+mail.id},'mail','rein','mailabruf',${auth.userId}::uuid,${received}::timestamptz,${mail.senderName??null},${mail.senderAddress??null},${mail.subject??null},left(${mail.body??null}::text,20000),${mail.senderAddress?.trim().toLowerCase()??null},${mail.id},${mail.internetMessageId??null},statement_timestamp())`);
  }
  if(proof&&created.n===0){
   const current=existing[0],legacyEligible=!current||current.kunde_id===null&&current.vorgang_id===null&&current.vorgang_art===null&&current.zuordnung==='offen';

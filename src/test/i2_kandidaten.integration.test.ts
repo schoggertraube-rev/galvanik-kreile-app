@@ -52,9 +52,14 @@ it('ordnet anhand des Absenders zu und speichert fremde Mailtexte nur als gekenn
     const abruf = () => importOutlookMailAction(id,{deferDispatchReply:true});
     const result = await withSession(full,abruf,true);
     if (result.code!=='OK') throw Error('TEST_I2_IMPORT_REQUIRED:'+result.code);
+    const [zeit] = await sql`SELECT wartet_seit::text AS wartet_seit FROM public.intake_item
+      WHERE tenant_id=${tenant} AND id=${result.itemId}::uuid`;
+    expect(zeit.wartet_seit).toEqual(expect.any(String));
     expect(await withSession(full,()=>getIntakeAssignmentAction({itemId:result.itemId,mode:'normal'})))
       .toMatchObject({code:'OK',view:{assignment:'automatisch',customer:{id:kundeId}}});
     expect(await withSession(full,abruf,true)).toMatchObject({code:'OK',itemId:result.itemId,replayed:true});
+    expect(await sql`SELECT wartet_seit::text AS wartet_seit FROM public.intake_item
+      WHERE tenant_id=${tenant} AND id=${result.itemId}::uuid`).toEqual([zeit]);
     expect(await sql`SELECT art,von,nachher->>'kandidaten' AS kandidaten FROM public.intake_event
       WHERE tenant_id=${tenant} AND item_id=${result.itemId} AND art IN('zugeordnet','erkannt') ORDER BY art`)
       .toEqual([{art:'erkannt',von:full.actorId,kandidaten:'ok'},{art:'zugeordnet',von:'system',kandidaten:null}]);
@@ -78,6 +83,38 @@ it('behält ein strukturiertes Original und verwirft die eigene Firma als Liefer
  expect(await sql`SELECT feld,status,regel FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${itemId}
   AND feld IN ('rechnung.absender','kunde')`)
   .toEqual([{feld:'rechnung.absender',status:'verworfen',regel:'HC3'}]);
+});
+
+it('wartet mit der Zuordnung auf bereits erfasste Originale und liest den Lieferanten der XRechnung', async () => {
+  const email = `test-${randomUUID()}@beleg.example.invalid`, vat = 'DE900000076';
+  const senderId = await withSession(full, () => createTestCustomer('Absender', email, '+49 711 5550976'));
+  const supplier = await withSession(full, () => createCustomerAction({ clientEventId: randomUUID(), customerType: 'lieferant',
+    companyName: 'TEST Abweichender Lieferant', vatId: vat, country: 'DE' }));
+  if (supplier.code !== 'OK') throw Error('TEST_I2_SUPPLIER:' + supplier.code);
+  const itemId = randomUUID(), erstes = randomUUID(), zweites = randomUUID();
+  const template = readFileSync('e2e/fixtures/e-rechnung/TEST_xrechnung_ubl.xml','utf8');
+  for (const [fileId, ustId] of [[erstes, ''], [zweites, vat]]) {
+    const bytes = Buffer.from(template.replace('<cbc:CompanyID>DE 123456789</cbc:CompanyID>',
+      ustId ? `<cbc:CompanyID>${ustId}</cbc:CompanyID>` : '').replace('123456XX', 'TEST-' + fileId));
+    const grant = await withSession(full, () => prepareIntakeFileAction({ itemId, fileId, name: 'TEST_xrechnung.xml',
+      mime: 'application/xml', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }));
+    if (grant.code !== 'OK' || !grant.upload) throw Error('TEST_I2_UPLOAD_GRANT');
+    expect((await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,
+      grant.upload.token, bytes, { contentType: 'application/xml', upsert: false })).error).toBeNull();
+  }
+  // Synthetische Ausgangslage: Der Übermittler ist bereits aus dem Kuvert bekannt.
+  await sql`UPDATE public.intake_item SET absender_adresse=${email} WHERE tenant_id=${tenant} AND id=${itemId}::uuid`;
+  expect(await withSession(full, () => finishIntakeFileAction(erstes), true)).toMatchObject({ code: 'OK' });
+  const zuordnung = () => sql`SELECT kunde_id,zuordnung FROM public.intake_item WHERE tenant_id=${tenant} AND id=${itemId}::uuid`;
+  expect(await zuordnung()).toEqual([{ kunde_id: null, zuordnung: 'offen' }]);
+  expect(await sql`SELECT wert,regel FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid
+    AND feld='kunde' AND status='offen'`).toEqual([{ wert: senderId, regel: 'adresse' }]);
+  expect(await withSession(full, () => finishIntakeFileAction(zweites), true)).toMatchObject({ code: 'OK' });
+  expect(await zuordnung()).toEqual([{ kunde_id: null, zuordnung: 'offen' }]);
+  expect(await sql`SELECT wert,regel FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid
+    AND feld='kunde' AND status='offen'`).toEqual(expect.arrayContaining([
+      { wert: senderId, regel: 'adresse' }, { wert: supplier.customer.id, regel: 'ustid' },
+    ]));
 });
 
 it('I2 E10 hält eine Rechnung mit unterschiedlicher gedruckter und eingebetteter Nummer offen zur Klärung',async()=>{
@@ -171,6 +208,8 @@ it.each([
   });
   try{
    await sichereOriginal(xmlId,'TEST_i2_getrennt.xml','application/xml',xml);
+   expect(await sql`SELECT kunde_id,zuordnung FROM public.intake_item WHERE tenant_id=${tenant} AND id=${itemId}::uuid`)
+    .toEqual([{kunde_id:supplier.customer.id,zuordnung:'automatisch'}]);
    await sichereOriginal(pdfId,'TEST_i2_getrennt.pdf','application/pdf',await pdf.save());
   }finally{
    upstream.mockRestore();

@@ -49,8 +49,8 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
       if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
       if(items[0]?.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')&&!invoiceAccess)return {code:'FORBIDDEN' as const,message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
       if (!items.length) {
-        await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von) VALUES
-          (${input.itemId}::uuid,${auth.tenantId},${input.itemId},${input.mime.startsWith("image/") ? "foto" : "datei"},'rein','geraet',${auth.userId}::uuid)`);
+        await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,wartet_seit) VALUES
+          (${input.itemId}::uuid,${auth.tenantId},${input.itemId},${input.mime.startsWith("image/") ? "foto" : "datei"},'rein','geraet',${auth.userId}::uuid,statement_timestamp())`);
         await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES
           (${auth.tenantId},${input.itemId}::uuid,'angelegt',${input.itemId}::uuid,${auth.userId},${JSON.stringify({ kanal: input.mime.startsWith("image/") ? "foto" : "datei" })}::jsonb)`);
       }

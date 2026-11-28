@@ -51,7 +51,7 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
     :sql`candidate.einsatz='offen' OR candidate.erstellt_am>=statement_timestamp()-interval '90 days'`;
    const tagSpalten=tag?sql`CASE WHEN source.richtung='rein' AND ${openIntakePredicate('source')} THEN
     jsonb_build_object('seit',source.wartet_seit::text,'unsicher',EXISTS(SELECT 1 FROM public.intake_suggestion s
-      WHERE s.tenant_id=source.tenant_id AND s.item_id=source.id AND s.status='offen'
+      WHERE s.tenant_id=source.tenant_id AND s.item_id=source.id AND s.status='offen' AND s.geprueft_am IS NULL
        AND (s.sicherheit='unsicher' OR s.sicherheit_wert<${tag.schwelle}::numeric))) END`:sql`NULL::jsonb`;
    const messages=await tx.execute<IntakeMessage&{priceTaskReceipt:boolean; tagEingang:{seit:string|null;unsicher:boolean}|null}>(sql`SELECT ${tagSpalten} AS "tagEingang",preisbeleg.id IS NOT NULL AS "priceTaskReceipt",${mailImportFailureProjection()} AS "importFailure",source.id::text,source.graph_message_id AS "graphMessageId",source.version,(SELECT max(changed.zeit)::text FROM public.intake_event changed WHERE changed.tenant_id=source.tenant_id AND changed.item_id=source.id) AS "serverChangedAt",source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
     source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,

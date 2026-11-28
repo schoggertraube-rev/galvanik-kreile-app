@@ -250,8 +250,9 @@ export async function writeIntakeNoteInTransaction(
   if(note.expectedVersion!==undefined&&(existing[0]?.version??0)!==note.expectedVersion){if(existing[0]&&note.deviceCapturedAt&&onConflict)await onConflict(tx,auth,note,existing[0].version,orderCustomerId);return failure("CONFLICT",OFFLINE_RECONCILIATION_COPY.noteChanged);}
   const usage = customerId ? selected.length ? "offen" : "info" : note.concerns?.length === 0 ? "info" : "offen";
   if (!existing.length) {
-    await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,text,kunde_id,vorgang_art,vorgang_id,zuordnung,einsatz,anliegen,anliegen_offen,anliegen_abgewaehlt)
-      VALUES(${note.itemId}::uuid,${auth.tenantId},${note.itemId},'notiz','intern','geraet',${auth.userId}::uuid,${note.text},${customerId},${note.context?.orderId ? "auftrag" : null},${note.context?.orderId ?? null},${customerId ? "hand" : "offen"},${usage},${selectedSql},${selectedSql},${declinedSql})`);
+    await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,text,kunde_id,vorgang_art,vorgang_id,zuordnung,einsatz,anliegen,anliegen_offen,anliegen_abgewaehlt,wartet_seit)
+      VALUES(${note.itemId}::uuid,${auth.tenantId},${note.itemId},'notiz','intern','geraet',${auth.userId}::uuid,${note.text},${customerId},${note.context?.orderId ? "auftrag" : null},${note.context?.orderId ?? null},${customerId ? "hand" : "offen"},${usage},${selectedSql},${selectedSql},${declinedSql},
+        CASE WHEN ${usage}='offen' THEN statement_timestamp() END)`);
     await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES
       (${auth.tenantId},${note.itemId}::uuid,'angelegt',${note.itemId}::uuid,${auth.userId},${JSON.stringify({ kanal: "notiz", richtung: "intern" })}::jsonb)`);
   } else {

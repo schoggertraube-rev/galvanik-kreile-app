@@ -198,7 +198,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     await withPrivilegedTenantTransaction(auth, async tx => {
       if (belegart) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(
         'intake-belegidentitaet:'||${tenantId}||':'||${belegart},0))`);
-      if (positionRows.length > 0||getrennterAbgleich) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
+      if (positionRows.length > 0||getrennterAbgleich||kontext.kandidaten) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
         AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);

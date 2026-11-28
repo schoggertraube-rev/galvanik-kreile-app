@@ -163,8 +163,8 @@ export async function createIntakeContinuation(input: unknown) {
       if (existing.length) return { code:"CONFLICT" as const, message:"Die Eingangskennung wird bereits verwendet." };
       const draftResult = await writeIntakeDraftInTransaction(tx,auth,{id:value.draftId,clientEventId:value.clientEventId,art:"eingang",payload:value.payload,lastField:null,expectedVersion:null});
       if (draftResult) return draftResult;
-      await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,fortsetzung_von,file_id)
-        VALUES(${value.childId}::uuid,${auth.tenantId},${value.childId},${parent.kanal === "mail" || textSource.kanal === "mail" ? "mail" : parent.kanal},'intern','app',${auth.userId}::uuid,${value.parentId}::uuid,${value.fileId}::uuid)`);
+      await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,fortsetzung_von,file_id,wartet_seit)
+        VALUES(${value.childId}::uuid,${auth.tenantId},${value.childId},${parent.kanal === "mail" || textSource.kanal === "mail" ? "mail" : parent.kanal},'intern','app',${auth.userId}::uuid,${value.parentId}::uuid,${value.fileId}::uuid,statement_timestamp())`);
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         VALUES(${auth.tenantId},${value.childId}::uuid,'angelegt',${value.clientEventId}::uuid,${auth.userId},${JSON.stringify({fortsetzungVon:value.parentId,fileId:value.fileId,draftId:value.draftId,textSourceId:value.textSourceId,originalTextEventId:event[0]!.id,originalFileIds:files.map(file=>file.id),intent})}::jsonb)`);
       return { code:"OK" as const, childId:value.childId, draftId:value.draftId, replayed:false };
