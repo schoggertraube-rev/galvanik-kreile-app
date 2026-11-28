@@ -6,13 +6,13 @@ import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
-import {full,sql,withSession} from '../../e2e/ablauf/replayHarness';
+import {createFixture,full,sql,withSession} from '../../e2e/ablauf/replayHarness';
 import {createCustomerAction} from '@/app/actions/customers.actions';
-import {finishIntakeFileAction,prepareIntakeFileAction} from '@/app/actions/eingang.actions';
+import {finishIntakeFileAction,getIncomingInvoiceAction,getIntakeTaskAction,prepareIntakeFileAction,saveIncomingInvoiceAction} from '@/app/actions/eingang.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {createAdminClient} from '@/lib/supabase/admin';
-import {leseLieferantenbelegFuerLagerInTransaction} from '@/modules/eingang/server-public';
+import {leseLieferantenbelegFuerLagerInTransaction,setzeLieferantAmEingangInTransaction} from '@/modules/eingang/server-public';
 
 let lieferantId:string;
 
@@ -66,4 +66,69 @@ it.each([0,1,200])('liest %i gespeicherte Lieferpositionen und den berichtigten 
   await sql`UPDATE public.intake_item SET anliegen=ARRAY['kontakt'] WHERE tenant_id=${tenant} AND id=${itemId}`;
   expect(await read()).toBeNull();
  }
+});
+
+it('ändert nur die ausgewählte Rechnung und lässt ihre Klärungsaufgabe offen',async()=>{
+ await sql`UPDATE public.tenant_features SET enabled=false WHERE tenant=${tenant} AND feature_id='E04'`;
+ const lieferanten=await Promise.all(['B','C'].map(kennung=>withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),
+  customerType:'lieferant',companyName:'TEST I3 Rechnung '+kennung,country:'DE'}))));
+ const [b,c]=lieferanten;
+ if(b.code!=='OK'||c.code!=='OK')throw Error('TEST_I3_LIEFERANT_ANLAGE');
+ const itemId=randomUUID(),nummer='TEST-I3-'+randomUUID().slice(0,8);
+ const dateien:string[]=[];
+ for(const bezeichnung of ['Hauptrechnung','Nebenrechnung']){
+  const fileId=randomUUID(),pdf=await PDFDocument.create();
+  pdf.addPage().drawText('TEST '+bezeichnung);
+  const bytes=await pdf.save();
+  const grant=await withSession(full,()=>prepareIntakeFileAction({itemId,fileId,name:bezeichnung+'.pdf',mime:'application/pdf',
+   bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}));
+  if(grant.code!=='OK'||!grant.upload)throw Error('TEST_I3_RECHNUNG_UPLOAD');
+  expect((await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,grant.upload.token,bytes,
+   {contentType:'application/pdf',upsert:false})).error).toBeNull();
+  expect(await withSession(full,()=>finishIntakeFileAction(fileId),true)).toMatchObject({code:'OK'});
+  dateien.push(fileId);
+ }
+ async function rechnungSpeichern(fileId:string,supplierId:string,unklar:boolean){
+  const read=await withSession(full,()=>getIncomingInvoiceAction({id:itemId,fileId}));
+  if(read.code!=='OK')throw Error('TEST_I3_RECHNUNG_LESEN:'+read.code);
+  const saved=await withSession(full,()=>saveIncomingInvoiceAction({itemId,fileId,version:read.view.item.version,clientKey:randomUUID(),
+   fields:{lieferantId:supplierId,nummer,datum:'2026-11-27',netto:'10,00',ust:'0,00',brutto:'10,00',faelligAm:'2026-12-15',iban:'',ibanGeprueft:false},
+   status:unklar?'unklar':'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:unklar?'TEST Beleg unklar':null}));
+  if(saved.code!=='OK')throw Error('TEST_I3_RECHNUNG_SPEICHERN:'+saved.code);
+  return saved.invoice;
+ }
+ const haupt=await rechnungSpeichern(dateien[0],lieferantId,false);
+ const neben=await rechnungSpeichern(dateien[1],b.customer.id,true);
+ const taskId=neben.aufgabe_id;
+ if(!taskId)throw Error('TEST_I3_KLAERAUFGABE_FEHLT');
+ const session=await withSession(full,resolveAuthorization);
+ if(!session.ok)throw Error('TEST_I3_RECHNUNG_AUTH');
+ const auth=session.data;
+ const setze=(supplierId:string,rechnungId?:string)=>withPrivilegedTenantTransaction(auth,
+  tx=>setzeLieferantAmEingangInTransaction(tx,auth,itemId,supplierId,rechnungId));
+ await expect(setze(c.customer.id)).rejects.toThrow('CONFLICT');
+ await expect(setze(c.customer.id,randomUUID())).rejects.toThrow('CONFLICT');
+ await expect(setze(b.customer.id,haupt.id)).rejects.toThrow('CONFLICT');
+ await setze(c.customer.id,neben.id);
+ await setze(c.customer.id,neben.id);
+ expect(await withSession(full,()=>getIncomingInvoiceAction({id:neben.id}))).toMatchObject({code:'OK',view:{invoice:{
+  lieferant_id:c.customer.id,version:neben.version+1,zahlstatus:'unklar',unklar_grund:'TEST Beleg unklar',aufgabe_id:neben.aufgabe_id}}});
+ expect(await withSession(full,()=>getIntakeTaskAction({taskId}))).toMatchObject({code:'OK',task:{status:'offen'}});
+ expect(await withSession(full,()=>getIncomingInvoiceAction({id:haupt.id}))).toMatchObject({code:'OK',view:{invoice:{
+  lieferant_id:lieferantId,version:haupt.version,zahlstatus:'offen'}}});
+ expect(await sql`SELECT kunde_id,vorgang_id FROM public.intake_item WHERE tenant_id=${tenant} AND id=${itemId}::uuid`)
+  .toEqual([{kunde_id:lieferantId,vorgang_id:haupt.id}]);
+ expect(await sql`SELECT von,nachher->>'lieferantId' AS lieferant FROM public.intake_event WHERE tenant_id=${tenant}
+  AND item_id=${itemId}::uuid AND art='zugeordnet' AND nachher->>'rechnungId'=${neben.id}`)
+  .toEqual([{von:full.actorId,lieferant:c.customer.id}]);
+ const leser=await withSession(await createFixture([],'readonly'),resolveAuthorization);
+ if(!leser.ok)throw Error('TEST_I3_NUR_LESER');
+ const leserRechte=leser.data;
+ await expect(withPrivilegedTenantTransaction(leserRechte,tx=>setzeLieferantAmEingangInTransaction(tx,leserRechte,itemId,
+  b.customer.id,neben.id))).rejects.toThrow('FORBIDDEN');
+ await setze(b.customer.id,haupt.id);
+ expect(await withSession(full,()=>getIncomingInvoiceAction({id:haupt.id}))).toMatchObject({code:'OK',view:{invoice:{
+  lieferant_id:b.customer.id,version:haupt.version+1,zahlstatus:'offen'}}});
+ expect(await sql`SELECT kunde_id,vorgang_id FROM public.intake_item WHERE tenant_id=${tenant} AND id=${itemId}::uuid`)
+  .toEqual([{kunde_id:b.customer.id,vorgang_id:haupt.id}]);
 });

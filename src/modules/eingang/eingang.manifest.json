@@ -5,6 +5,7 @@
   "publicExports": [
     "@/modules/eingang/server-public#tagQuellen",
     "@/modules/eingang/server-public#leseLieferantenbelegFuerLagerInTransaction",
+    "@/modules/eingang/server-public#setzeLieferantAmEingangInTransaction",
     "@/modules/eingang/server-public#pruefeZusage",
     "@/modules/eingang/server-public#erlaubteWirkung",
     "@/modules/eingang/server-public#MailAnliegen",

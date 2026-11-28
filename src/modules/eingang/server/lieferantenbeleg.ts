@@ -1,12 +1,16 @@
 import 'server-only';
 
+import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
+import {hasLagerCapability} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {LagerBeleg,LagerBelegPosition} from '@/modules/lager/public';
 import {invoiceDate} from '../invoiceContract';
 import {gespeichertesBelegoriginal,invoicePageFilter} from './intakeOriginal';
 import {readIntakePositionValues} from './intakeRecognitionPositions';
+import {assignInTransaction,readLockedAssignmentSource,recordInvoiceSupplierAssignment} from './intakeAssignment';
+import {readInvoiceForSupplierChange,writeInvoiceSupplierInTransaction} from './incomingInvoice';
 
 type Belegdatei = { id: string; sha256: string; status: string };
 type Eingang = {
@@ -130,6 +134,36 @@ export async function leseLieferantenbelegFuerLagerInTransaction(tx: PrivilegedT
   const ursache = error instanceof Error && error.cause ? error.cause : error;
   if (typeof ursache === 'object' && ursache !== null && 'code' in ursache && ursache.code === '57014')
    throw Error('EINGANG_BELEG_LESEN_FRIST',{cause:error});
+  throw error;
+ }
+}
+
+export async function setzeLieferantAmEingangInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
+ itemId:string,lieferantId:string,rechnungId?:string):Promise<void>{
+ if(!hasLagerCapability(auth,'lager.buchen'))throw Error('FORBIDDEN');
+ try{
+  await withTenantSavepoint(tx,async nested=>{
+   const eingang=await readLockedAssignmentSource(nested,auth,itemId);
+   const rechnung=await readInvoiceForSupplierChange(nested,auth,itemId,rechnungId);
+   const [lieferant]=await nested.execute<{id:string;name:string}>(sql`SELECT id,name FROM public.v_eingang_lieferanten_v1
+    WHERE tenant_id=${auth.tenantId} AND id=${lieferantId}`);
+   if(!lieferant)throw Error('EINGANG_LIEFERANT_UNGUELTIG');
+   const nebenrechnung=rechnung&&eingang.vorgang_art==='rechnung'&&eingang.vorgang_id!==rechnung.id;
+   const befehlId=randomUUID();
+   const wechseltRechnung=rechnung!==null&&rechnung.lieferant_id!==lieferant.id;
+   if(wechseltRechnung)await writeInvoiceSupplierInTransaction(nested,auth,rechnung,lieferant.id);
+   if(nebenrechnung||eingang.kunde_id===lieferant.id){
+    if(wechseltRechnung)await recordInvoiceSupplierAssignment(nested,auth,eingang,befehlId,rechnung.id,lieferant.id);
+    return;
+   }
+   const ergebnis=await assignInTransaction(nested,auth,{itemId,version:eingang.version,clientEventId:befehlId,
+    customerId:lieferant.id,mode:eingang.zuordnung==='offen'?'manual':'move'},
+    async()=>({...lieferant,customerType:'lieferant'}),false,{row:eingang,rechnungId:rechnung?.id??null});
+   if(ergebnis.code!=='OK')throw Error('CONFLICT');
+  });
+ }catch(error){
+  const ursache=error instanceof Error&&error.cause?error.cause:error;
+  if(typeof ursache==='object'&&ursache!==null&&'code'in ursache&&ursache.code==='23505')throw Error('CONFLICT',{cause:error});
   throw error;
  }
 }

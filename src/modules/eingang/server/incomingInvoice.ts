@@ -5,7 +5,7 @@ import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
 import {randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
-import {sql} from 'drizzle-orm';
+import {sql,type SQL} from 'drizzle-orm';
 import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {normaliseIban,type CustomerStoredProfile} from '@/modules/customers/public';
@@ -46,12 +46,35 @@ function requireBookkeeping(auth:AuthorizationSnapshot){
  if(!auth.active||!hasAuthorizationArea(auth,'buchhaltung'))reject('FORBIDDEN',FINANCIAL_ACCESS_COPY.bookkeepingMissing);
  return auth;
 }
-async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,byItem=false,lock=false,fileId?:string){
+async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,byItem=false,lock=false,fileId?:string,itemId?:string){
  const rows=await tx.execute<IncomingInvoice>(sql`SELECT ${columns} FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId}
   AND ${byItem?sql`item_id=${id}::uuid`:sql`id=${id}::uuid`}
+  ${itemId?sql`AND item_id=${itemId}::uuid`:sql``}
   ${fileId?sql`AND file_id=${fileId}::uuid`:sql``} LIMIT 2 ${lock?sql`FOR UPDATE`:sql``}`);
  if(rows.length>1)reject('CONFLICT',invalidInvoiceRequest);
  return rows[0]??null;
+}
+/** The caller holds the intake lock before choosing and locking the exact invoice. */
+export async function readInvoiceForSupplierChange(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,rechnungId?:string){
+ const invoice=await findInvoice(tx,auth,rechnungId??itemId,rechnungId===undefined,true,undefined,rechnungId?itemId:undefined);
+ if(rechnungId&&!invoice)throw Error('CONFLICT');
+ return invoice;
+}
+async function writeInvoiceChange(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,before:IncomingInvoice,changes:SQL){
+ const updated=await tx.execute(sql`UPDATE public.supplier_invoice SET ${changes},version=version+1
+  WHERE tenant_id=${auth.tenantId} AND item_id=${before.item_id}::uuid AND id=${before.id}::uuid AND version=${before.version}
+  RETURNING id`);
+ if(updated.length!==1)reject('CONFLICT','Rechnung wurde inzwischen geändert · Eingaben bleiben erhalten.');
+}
+export async function writeInvoiceSupplierInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,before:IncomingInvoice,lieferantId:string){
+ if(before.lieferant_id===lieferantId)return;
+ try{
+  await verifyDuplicate(tx,auth,{...fieldsFrom(before),lieferantId},before.zahlstatus,before.verweis_id,before.dublette_grund,before.id);
+ }catch(error){
+  if(error instanceof Rejected&&error.result.code==='DUPLICATE')throw Error('CONFLICT',{cause:error});
+  throw error;
+ }
+ await writeInvoiceChange(tx,auth,before,sql`lieferant_id=${lieferantId}`);
 }
 /** Task service reads invoice facts through this injected port, never through a second table owner. */
 export async function readInvoiceTaskContext(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string,readCustomer:InvoiceDependencies['readCustomer']){
@@ -287,10 +310,10 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   await verifyDuplicate(tx,auth,fields,input.result,input.duplicateId,before.dublette_grund,before.id);
   const money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
   const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,before.file_id,storedPages(before),row.vorgang_id===before.id),fields.ust,before);
-  await tx.execute(sql`UPDATE public.supplier_invoice SET lieferant_id=${fields.lieferantId||null},nummer=${fields.nummer.trim()||null},datum=${fields.datum||null}::date,
+  await writeInvoiceChange(tx,auth,before,sql`lieferant_id=${fields.lieferantId||null},nummer=${fields.nummer.trim()||null},datum=${fields.datum||null}::date,
    netto=${money(fields.netto)}::numeric,ust=${money(fields.ust)}::numeric,brutto=${money(fields.brutto)}::numeric,ust_saetze=${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,faellig_am=${fields.faelligAm||null}::date,iban=${normaliseIban(fields.iban)||null},iban_geprueft=${fields.ibanGeprueft},
    zahlstatus=${input.result},bezahlt_am=${input.result==='bezahlt'?input.paidDate:null}::date,nachweis_file_id=${input.proofFileId}::uuid,verweis_id=${input.result==='doppelt'?input.duplicateId:null}::uuid,
-   ungueltig_grund=${input.result==='ungueltig'?input.reason!.trim():null},version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${before.id}::uuid AND version=${before.version}`);
+   ungueltig_grund=${input.result==='ungueltig'?input.reason!.trim():null}`);
   if(addingSupplier&&row.vorgang_id===before.id)await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${fields.lieferantId},zuordnung='hand',version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid`);
   if(clarify){if(!before.aufgabe_id)reject('CONFLICT','Rechnungsaufgabe fehlt.');await deps.resolveTask(tx,auth,{invoiceId:before.id,taskId:before.aufgabe_id,note:'Rechnung geklärt · '+input.result+(input.reason?' · '+input.reason.trim():'')});}
   const after=await findInvoice(tx,auth,before.id);if(!after||after.version!==before.version+1)throw Error('INVOICE_STATUS_READBACK_FAILED');
