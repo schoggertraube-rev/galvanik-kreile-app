@@ -12,6 +12,7 @@ import { readMimeOriginalText, safeOfficeRecognitionBytes } from "../originalSaf
 import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
+import { leseGeldAnker } from './geldAnker';
 
 const BUCKET = "scans";
 
@@ -197,9 +198,12 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
           erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
-      const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions), ...primaryHeads]:[];
+      const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions), ...primaryHeads,
+        ...(rawPath?leseGeldAnker(ocr.data.suggestions):[])]:[];
       const primaryKeys=new Set(primarySuggestions.map(suggestionKey));
-      const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions), ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto)].filter(suggestion=>{
+      const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions),
+        ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto),
+        ...(specialist?.rawPath?leseGeldAnker(specialistOcr.data.suggestions):[])].filter(suggestion=>{
         const key=suggestionKey(suggestion);
         if(primaryKeys.has(key))return false;
         primaryKeys.add(key);

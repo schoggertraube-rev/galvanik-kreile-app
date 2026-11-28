@@ -1,4 +1,5 @@
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
+import {ohneGeldAnker} from './geldAnker';
 import "server-only";
 import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
@@ -249,7 +250,7 @@ export async function confirmIntakeOriginal(input:unknown){
    if(!opened.length)return {code:'CONFLICT' as const,message:'Original zuerst öffnen und prüfen.'};
   }
   const changed=await tx.execute<{id:string}>(sql`UPDATE public.intake_suggestion SET geprueft_von=${auth.data.userId}::uuid,geprueft_am=statement_timestamp()
-    WHERE tenant_id=${auth.data.tenantId} AND file_id=${value.fileId}::uuid AND status='offen' AND sicherheit='unsicher' AND geprueft_am IS NULL
+    WHERE tenant_id=${auth.data.tenantId} AND file_id=${value.fileId}::uuid AND status='offen' AND sicherheit='unsicher' AND geprueft_am IS NULL AND ${ohneGeldAnker}
     AND (${!requestedInvoice&&(hasAuthorizationArea(auth.data,'eingang')&&hasAuthorizationArea(auth.data,'mails')||file.kanal!=='mail'&&hasAuthorizationArea(auth.data,'eingang'))} OR feld LIKE 'rechnung.%')
     AND ${invoicePageFilter(invoice?.pages??null)} RETURNING id::text`);
   if(!changed.length)return {code:'OK' as const,count:0,replayed:true};
