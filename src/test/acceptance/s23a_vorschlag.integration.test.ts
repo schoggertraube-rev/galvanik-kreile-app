@@ -55,8 +55,8 @@ it('liest die Vorgabe und den ausgeschalteten Wert aus den vorhandenen Firmenein
  expect(await settings()).toMatchObject({eingang_selbst_handeln:false});
 });
 
-it('öffnet die vorhandene KV-Vorbereitung und liest nach dem Speichern das nächste echte Anliegen',async()=>{
- const {selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+it('öffnet nach dem fertigen KV die vorhandene Aufgabe am selben Original',async()=>{
+ const {getIntakeTaskAction,saveIntakeTaskAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
  const {createQuoteAction,prepareQuoteFromIntakeAction}=await import('@/app/actions/quotes.actions');
  const kundeId=await customerFixture('TEST S23a KV-Folge');
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
@@ -81,5 +81,24 @@ it('öffnet die vorhandene KV-Vorbereitung und liest nach dem Speichern das näc
   positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]};
  expect(await withSession(full,()=>createQuoteAction(input))).toMatchObject({code:'OK',quote:{lifecycle:{sourceItemId:itemId}}});
  expect(await withSession(full,()=>createQuoteAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
- expect(await withSession(full,()=>leseEingangVorschlagAction(itemId))).toMatchObject({code:'OK',vorschlag:{haupt:null,anliegenRest:['aufgabe'],satz:'Weiter mit Aufgabe anlegen'}});
+ expect(await withSession(ohnePreise,()=>leseEingangVorschlagAction(itemId))).toMatchObject({code:'OK',vorschlag:{haupt:null}});
+ const mitAufgabenrecht=await createFixture(['eingang','mails','auftraege']);
+ const next=await withSession(mitAufgabenrecht,()=>leseEingangVorschlagAction(itemId));
+ expect(next).toMatchObject({code:'OK',vorschlag:{haupt:{befehl:'saveIntakeTaskAction',knopf:'Aufgabe anlegen',eingabe:{itemId}},anliegenRest:['aufgabe']}});
+ if(next.code!=='OK'||!next.vorschlag.haupt)throw Error('TEST_S23A_AUFGABE_VORSCHLAG');
+ const noIntake=await createFixture(['auftraege']);
+ expect(await withSession(noIntake,()=>leseEingangVorschlagAction(itemId))).toMatchObject({code:'FORBIDDEN'});
+ const taskProposal={itemId,vorschlagId:next.vorschlag.haupt.vorschlagId,clientEventId:randomUUID()};
+ expect(await withSession(mitAufgabenrecht,()=>fuehreEingangVorschlagAusAction(taskProposal))).toMatchObject({code:'OK',oeffne:'aufgabe'});
+ const reference={type:'eingang',id:itemId} as const;
+ const task=await withSession(mitAufgabenrecht,()=>getIntakeTaskAction({reference,kind:'aufgabe',itemId}));
+ if(task.code!=='OK'||task.reference.sourceVersion===null)throw Error('TEST_S23A_AUFGABE_OEFFNEN:'+task.code);
+ expect(task).toMatchObject({canEdit:true,reference:{id:itemId},task:null});
+ const save={clientKey:randomUUID(),version:0,kind:'aufgabe',title:'TEST Alte Halter behalten',dueDate:'2027-04-20',
+  time:null,forLogin:mitAufgabenrecht.actorId,forArea:null,reference,note:null,itemId,itemVersion:task.reference.sourceVersion};
+ const saved=await withSession(mitAufgabenrecht,()=>saveIntakeTaskAction(save));
+ if(saved.code!=='OK')throw Error('TEST_S23A_AUFGABE_SPEICHERN:'+saved.code);
+ expect(saved.task).toMatchObject({bezug_typ:'eingang',bezug_id:itemId,item_id:itemId});
+ expect(await withSession(mitAufgabenrecht,()=>saveIntakeTaskAction(structuredClone(save)))).toMatchObject({code:'OK',replayed:true,task:{id:saved.task.id}});
+ expect(await withSession(mitAufgabenrecht,()=>leseEingangVorschlagAction(itemId))).toMatchObject({code:'OK',vorschlag:{haupt:null,anliegenRest:[]}});
 });

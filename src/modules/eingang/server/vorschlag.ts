@@ -8,14 +8,17 @@ import type {CustomerStoredProfile} from '@/modules/customers/public';
 import {EINGANG_VORSCHLAG_COPY as copy} from '@/ui/eingangCopy';
 import {EINGANG_FOLGEN} from '../folgen';
 import {CONCERN_OPTIONS} from '../concernMenuContract';
+import {canRecordIntakeTaskEffect} from './intakeTaskEffect';
 import {assignInTransaction,canAssignIntakeCustomer,intakeAssignmentFailure,lockIntakeAssignment,
   readIntakeAssignmentSource,readIntakeCustomerSuggestions} from './intakeAssignment';
 
 type KundeLesen=(tx:PrivilegedTenantTransaction,tenant:string,id:string)=>Promise<CustomerStoredProfile|null>;
+type AufgabeLesen=(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,version:number)=>Promise<boolean>;
 type Eingang=Awaited<ReturnType<typeof readIntakeAssignmentSource>>;
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const folge=EINGANG_FOLGEN.kundenZuordnung;
 const kv=EINGANG_FOLGEN.kvVorbereiten;
+const aufgabe=EINGANG_FOLGEN.aufgabeAnlegen;
 
 function zuordnung(eingang:Eingang,kunde:CustomerStoredProfile,grund:string,mode:'confirm'|'manual') {
   const eingabe={itemId:eingang.id,version:eingang.version,customerId:kunde.id,mode};
@@ -31,9 +34,16 @@ function kvVorbereitung(eingang:Eingang,kunde:CustomerStoredProfile) {
     grund:kv.knopf,kunde:kunde.name,eingabe};
 }
 
-type Vorschlag=ReturnType<typeof zuordnung>|ReturnType<typeof kvVorbereitung>;
+function aufgabenVorschlag(eingang:Eingang) {
+  const eingabe={itemId:eingang.id,version:eingang.version};
+  const vorschlagId=createHash('sha256').update(JSON.stringify([eingang.id,aufgabe.schluessel,eingabe])).digest('hex');
+  return {vorschlagId,schluessel:aufgabe.schluessel,befehl:aufgabe.befehl,knopf:aufgabe.knopf,satz:aufgabe.satz,
+    grund:aufgabe.knopf,eingabe};
+}
 
-async function bildeVorschlag(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eingang:Eingang,leseKunde:KundeLesen) {
+type Vorschlag=ReturnType<typeof zuordnung>|ReturnType<typeof kvVorbereitung>|ReturnType<typeof aufgabenVorschlag>;
+
+async function bildeVorschlag(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eingang:Eingang,leseKunde:KundeLesen,leseAufgabe:AufgabeLesen) {
   const basis={satz:null as string|null,haupt:null as Vorschlag|null,oder:[],anliegenRest:eingang.anliegen_offen,frage:null as
     {satz:string;kandidaten:ReturnType<typeof zuordnung>[]} | null};
   if(eingang.einsatz==='erledigt'&&eingang.anliegen_offen.length===0)return {...basis,satz:copy.fertig};
@@ -44,6 +54,11 @@ async function bildeVorschlag(tx:PrivilegedTenantTransaction,auth:AuthorizationS
     if(kunde){const haupt=kvVorbereitung(eingang,kunde);return {...basis,satz:haupt.satz,haupt};}
   }
   if(eingang.vorgang_art==='kv'){
+    if(eingang.anliegen_offen[0]==='aufgabe'&&canRecordIntakeTaskEffect(auth,eingang)&&
+      await leseAufgabe(tx,auth,eingang.id,eingang.version)){
+      const haupt=aufgabenVorschlag(eingang);
+      return {...basis,satz:haupt.satz,haupt};
+    }
     const weiter=CONCERN_OPTIONS.find(option=>option.concern===eingang.anliegen_offen[0]);
     if(weiter)return {...basis,satz:copy.weiterMit(weiter.text)};
   }
@@ -64,7 +79,7 @@ function darfLesen(auth:AuthorizationSnapshot,eingang:Eingang) {
   return eingang.kanal!=='mail'||hasAuthorizationArea(auth,'mails');
 }
 
-export async function leseEingangVorschlag(itemId:unknown,leseKunde:KundeLesen) {
+export async function leseEingangVorschlag(itemId:unknown,leseKunde:KundeLesen,leseAufgabe:AufgabeLesen) {
   if(!uuid(itemId))return {code:'VALIDATION_ERROR' as const,message:copy.ungueltig};
   const auth=await resolveAuthorization();
   if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
@@ -73,12 +88,12 @@ export async function leseEingangVorschlag(itemId:unknown,leseKunde:KundeLesen) 
     return await withPrivilegedTenantTransaction(auth.data,async tx=>{
       const eingang=await readIntakeAssignmentSource(tx,auth.data,itemId);
       if(!darfLesen(auth.data,eingang))return {code:'FORBIDDEN' as const,message:copy.recht};
-      return {code:'OK' as const,vorschlag:await bildeVorschlag(tx,auth.data,eingang,leseKunde)};
+      return {code:'OK' as const,vorschlag:await bildeVorschlag(tx,auth.data,eingang,leseKunde,leseAufgabe)};
     });
   }catch(error){return intakeAssignmentFailure(error);}
 }
 
-export async function fuehreEingangVorschlagAus(input:unknown,leseKunde:KundeLesen) {
+export async function fuehreEingangVorschlagAus(input:unknown,leseKunde:KundeLesen,leseAufgabe:AufgabeLesen) {
   if(!input||typeof input!=='object'||Object.keys(input).sort().join(',')!=='clientEventId,itemId,vorschlagId'
     ||!('itemId' in input)||!uuid(input.itemId)||!('clientEventId'in input)||!uuid(input.clientEventId)
     ||!('vorschlagId'in input)||typeof input.vorschlagId!=='string'||!/^[a-f0-9]{64}$/.test(input.vorschlagId)) {
@@ -88,14 +103,16 @@ export async function fuehreEingangVorschlagAus(input:unknown,leseKunde:KundeLes
   const session=await resolveAuthorization();
   if(!session.ok)return {code:'UNAUTHENTICATED' as const,message:session.message};
   const auth=session.data;
-  if(!hasAuthorizationArea(auth,'eingang')||(!(canAssignIntakeCustomer(auth)&&hasAuthorizationArea(auth,folge.recht))&&
-    !quoteCommandContext(auth).capabilities.canCreateQuote))return {code:'FORBIDDEN' as const,message:copy.recht};
+  if(!hasAuthorizationArea(auth,'eingang'))return {code:'FORBIDDEN' as const,message:copy.recht};
   try{
     return await withPrivilegedTenantTransaction(auth,async tx=>{
       await lockIntakeAssignment(tx,auth.tenantId);
       const eingang=await readIntakeAssignmentSource(tx,auth,itemId,true);
       if(!darfLesen(auth,eingang))return {code:'FORBIDDEN' as const,message:copy.recht};
-      const vorschlag=await bildeVorschlag(tx,auth,eingang,leseKunde);
+      const vorschlag=await bildeVorschlag(tx,auth,eingang,leseKunde,leseAufgabe);
+      if(vorschlag.haupt?.schluessel!==aufgabe.schluessel&&
+        !(canAssignIntakeCustomer(auth)&&hasAuthorizationArea(auth,folge.recht))&&
+        !quoteCommandContext(auth).capabilities.canCreateQuote)return {code:'FORBIDDEN' as const,message:copy.recht};
       const konflikt={code:'CONFLICT' as const,message:copy.veraltet,vorschlag};
       const vorher=await tx.execute<{von:string;vorschlagId:string|null;ergebnisId:string|null}>(sql`
         SELECT einsatz.von,einsatz.nachher->>'vorschlagId' AS "vorschlagId",wirkung.id::text AS "ergebnisId"
@@ -113,6 +130,7 @@ export async function fuehreEingangVorschlagAus(input:unknown,leseKunde:KundeLes
         vorschlag.frage?.kandidaten.find(kandidat=>kandidat.vorschlagId===vorschlagId);
       if(!auswahl)return konflikt;
       if(auswahl.schluessel===kv.schluessel)return {code:'OK' as const,vorschlag,oeffne:'kv-vorbereiten' as const};
+      if(auswahl.schluessel===aufgabe.schluessel)return {code:'OK' as const,vorschlag,oeffne:'aufgabe' as const};
       const ergebnis=await assignInTransaction(tx,auth,{...auswahl.eingabe,clientEventId},leseKunde);
       if(ergebnis.code!=='OK')return konflikt;
       const quittung=await tx.execute<{nachher:{ergebnisId:string}}>(sql`
@@ -124,7 +142,7 @@ export async function fuehreEingangVorschlagAus(input:unknown,leseKunde:KundeLes
         RETURNING nachher`);
       if(quittung.length!==1)throw Error('INTAKE_VORSCHLAG_QUITTUNG_FEHLT');
       const nachher=await readIntakeAssignmentSource(tx,auth,itemId);
-      return {code:'OK' as const,vorschlag:await bildeVorschlag(tx,auth,nachher,leseKunde),ergebnisId:quittung[0].nachher.ergebnisId,wiederholt:false};
+      return {code:'OK' as const,vorschlag:await bildeVorschlag(tx,auth,nachher,leseKunde,leseAufgabe),ergebnisId:quittung[0].nachher.ergebnisId,wiederholt:false};
     });
   }catch(error){return intakeAssignmentFailure(error);}
 }

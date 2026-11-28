@@ -110,7 +110,7 @@ export async function reopenIntakeAction(input:unknown){
  return observeAction('reopenIntakeAction',subjectForAction('reopenIntakeAction',input),async()=>{return reopenIntake(input);
  },readLoggingSettings);
 }
-import {createIntakeMailFailureTask,createMailboxFetchRetryTask,saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
+import {createIntakeMailFailureTask,createMailboxFetchRetryTask,saveTask,completeTask,readTask,readTaskForAuthorization,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
 import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,protectDispatchCallTask,readCompletedDispatchCallReceipt} from '@/lib/server/dispatchCallPort';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {createStorageFinalTask,readStorageFinalTaskReceipt,protectStorageFinalTask} from '@/lib/server/storageFinalStagePort';
@@ -355,10 +355,14 @@ export async function loeseEntwurfskonfliktAction(input:unknown) {
   async()=>loeseEntwurfskonflikt(input),readLoggingSettings);
 }
 import {leseEingangVorschlag,fuehreEingangVorschlagAus} from '@/modules/eingang/server-public';
-export async function leseEingangVorschlagAction(itemId:string){return leseEingangVorschlag(itemId,readCustomerProfile);}
+async function leseEingangAufgabenbezug(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,version:number){
+ const task=await readTaskForAuthorization(auth,{reference:{type:'eingang',id:itemId},kind:'aufgabe',itemId},tx);
+ return task.code==='OK'&&task.canEdit&&task.reference.sourceVersion===version;
+}
+export async function leseEingangVorschlagAction(itemId:string){return leseEingangVorschlag(itemId,readCustomerProfile,leseEingangAufgabenbezug);}
 export async function fuehreEingangVorschlagAusAction(input:unknown){
  return observeAction('fuehreEingangVorschlagAusAction',subjectForAction('fuehreEingangVorschlagAusAction',input),
-  async()=>fuehreEingangVorschlagAus(input,readCustomerProfile),readLoggingSettings);
+  async()=>fuehreEingangVorschlagAus(input,readCustomerProfile,leseEingangAufgabenbezug),readLoggingSettings);
 }
 export async function createIntakeContinuationAction(input:unknown) {
  return observeAction('createIntakeContinuationAction',subjectForAction('createIntakeContinuationAction',input),async()=>{ return createIntakeContinuation(input);

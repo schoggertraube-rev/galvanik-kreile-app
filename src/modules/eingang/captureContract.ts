@@ -47,12 +47,12 @@ export type IntakeCapture = {
 };
 export type IntakeCaptureResult = { code: "OK"; capture: IntakeCapture }
   | { code: "UNAUTHENTICATED" | "FORBIDDEN" | "VALIDATION_ERROR" | "NOT_FOUND" | "CONFLICT" | "UNAVAILABLE"; message: string };
-export type EingangVorschlagOption={vorschlagId:string;knopf:string;satz:string;grund:string;kunde:string};
+export type EingangVorschlagOption={vorschlagId:string;knopf:string;satz:string;grund:string};
 export type EingangVorschlag={
   satz:string|null;haupt:EingangVorschlagOption|null;oder:readonly EingangVorschlagOption[];
-  frage:{satz:string;kandidaten:EingangVorschlagOption[]}|null;anliegenRest:readonly string[];
+  frage:{satz:string;kandidaten:Array<EingangVorschlagOption&{kunde:string}>}|null;anliegenRest:readonly string[];
 };
-export type EingangVorschlagResult={code:'OK';vorschlag:EingangVorschlag;oeffne?:'kv-vorbereiten'}|{code:'CONFLICT';message:string;vorschlag?:EingangVorschlag}|
+export type EingangVorschlagResult={code:'OK';vorschlag:EingangVorschlag;oeffne?:'kv-vorbereiten'|'aufgabe'}|{code:'CONFLICT';message:string;vorschlag?:EingangVorschlag}|
   {code:'UNAUTHENTICATED'|'FORBIDDEN'|'VALIDATION_ERROR'|'NOT_FOUND'|'UNAVAILABLE'|'INVOICE_REVIEW_REQUIRED';message:string};
 export type IntakeNoteInput = {
   itemId: string; textstand: string; text: string; context?: IntakeContext; concerns?: string[]; expectedVersion?:number; deviceCapturedAt?:string;takeover?:IntakeOriginalTakeover;

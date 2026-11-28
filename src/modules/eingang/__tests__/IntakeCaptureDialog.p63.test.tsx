@@ -80,8 +80,12 @@ describe("S23a: follow-up on a saved original",()=>{
       files:[{id:crypto.randomUUID(),name:"SYNTHETISCH-s23.png",mime:"image/png",bytes:1,readable:false,secured:true,status:"fertig"}]};
     const option={vorschlagId:"a".repeat(64),knopf:"Ja, zuordnen",satz:"Soll ich den Eingang TEST Kunde zuordnen?",grund:"TEST Originalhinweis",kunde:"TEST Kunde"};
     const vorschlag={satz:option.satz,haupt:option,oder:[],frage:null,anliegenRest:[]};
-    const readCaptureProposal=vi.fn(async()=>({code:"OK",vorschlag}));
-    const runCaptureProposal=vi.fn(async()=>({code:"OK",vorschlag:{...vorschlag,satz:null,haupt:null}}));
+    const taskOption={...option,vorschlagId:"b".repeat(64),knopf:"Aufgabe anlegen",satz:"Weiter mit Aufgabe anlegen"};
+    const taskProposal={...vorschlag,satz:taskOption.satz,haupt:taskOption,anliegenRest:["aufgabe"]};
+    const readCaptureProposal=vi.fn(async()=>({code:"OK",vorschlag:taskProposal})).mockResolvedValueOnce({code:"OK",vorschlag});
+    const runCaptureProposal=vi.fn(async(input:{vorschlagId:string})=>input.vorschlagId===taskOption.vorschlagId
+      ?{code:"OK",vorschlag:taskProposal,oeffne:"aufgabe"}
+      :{code:"OK",vorschlag:{...vorschlag,satz:null,haupt:null}});
     const getCapture=vi.fn(async()=>({code:"OK",capture:{...capture,version:2,customerId:"TEST-kunde",assignment:"bestaetigt"}}));
     const ports={getCaptureScope:vi.fn(async()=>({code:"OK",scope:"synthetic-s23a-only"})),getCapture,
       prepareCaptureFile:vi.fn(async()=>({code:"OK",upload:null})),finishCaptureFile:vi.fn(async()=>({code:"OK",capture})),
@@ -99,5 +103,18 @@ describe("S23a: follow-up on a saved original",()=>{
     fireEvent.click(follow);
     await waitFor(()=>expect(runCaptureProposal).toHaveBeenCalledWith({itemId:capture.id,vorschlagId:option.vorschlagId,clientEventId:expect.any(String)}));
     expect(getCapture).toHaveBeenCalledWith(capture.id,undefined,{packageExpectation:false});
+    const opened=vi.fn();
+    const consume=(event:Event)=>{
+      opened((event as CustomEvent).detail);
+      event.preventDefault();
+    };
+    window.addEventListener("kreile:oeffne",consume);
+    try{
+      fireEvent.click(await screen.findByRole("button",{name:taskOption.knopf}));
+      await waitFor(()=>expect(opened).toHaveBeenCalledExactlyOnceWith({ziel:"aufgabe",
+        taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}));
+    }finally{
+      window.removeEventListener("kreile:oeffne",consume);
+    }
   });
 });

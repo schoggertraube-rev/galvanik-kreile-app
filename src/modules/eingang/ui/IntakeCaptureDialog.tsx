@@ -500,6 +500,14 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId,startOnsite
       const refreshed=await getCapture(capture.id);if(refreshed.code!=='OK'){setError(refreshed.message);return;}setCapture(refreshed.capture);
     }catch(cause){console.error('[PACKAGE_CUSTOMER_ASSIGN_FAILED]',cause);setError(PACKAGE_ASSIGN_COPY.failed);}finally{inFlight.current=false;setBusy(false);}
   };
+  const openIntakeTask=(itemId:string)=>{
+    const taskRequest={reference:{type:"eingang",id:itemId},kind:"aufgabe",itemId};
+    const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest}}));
+    if(!opened){
+      console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");
+      setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");
+    }
+  };
   const runProposal=async(option:EingangVorschlagOption)=>{
     if(inFlight.current||!capture||!proposalKey||!runCaptureProposal||!getCapture)return;
     inFlight.current=true;setBusy(true);setError(null);
@@ -508,6 +516,7 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId,startOnsite
     try{
       const result=await runCaptureProposal({itemId:capture.id,vorschlagId:option.vorschlagId,clientEventId});
       if(result.code==='OK'&&result.oeffne==='kv-vorbereiten'){openObject(result.oeffne,capture.id);return;}
+      if(result.code==='OK'&&result.oeffne==='aufgabe'){openIntakeTask(capture.id);return;}
       if(result.code!=='OK'){setError(result.message);if(result.code!=='CONFLICT')return;}
       const fresh=await getCapture(capture.id);
       if(fresh.code!=='OK'){setError(fresh.message);return;}
@@ -523,7 +532,9 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId,startOnsite
     :choice?.frage&&runCaptureProposal&&getCapture?<div><p>{choice.frage.satz}</p>{choice.frage.kandidaten.map(option=><div key={option.vorschlagId}>
        <Button text={option.kunde} disabled={busy} onClick={()=>void runProposal(option)}/><p>{option.grund}</p></div>)}</div>
     :null;
-  const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&(capture.files.some(file=>file.secured===true)||situationRequested&&Boolean(capture.recognition?.text.trim())&&!["notiz","unklar"].includes(capture.recognition?.kind??"unklar")));
+  const showSituation=Boolean(!mode&&!receiving&&capture&&hasCapturedContent&&!showCamera&&!hidePreviousResult&&
+    (choice?.haupt||capture.files.some(file=>file.secured===true)||
+      situationRequested&&Boolean(capture.recognition?.text.trim())&&!["notiz","unklar"].includes(capture.recognition?.kind??"unklar")));
   const readSituation=async()=>{if(inFlight.current)return;inFlight.current=true;setBusy(true);try{const saved=await saveNote();if(saved){setSituationRequested(true);setHidePreviousResult(false);}}catch(cause){console.error("[INTAKE_NOTE_SAVE_FAILED]",cause);setError("Speichern fehlgeschlagen · Text bleibt erhalten. Code: INTAKE_NOTE_SAVE_FAILED.");}finally{inFlight.current=false;setBusy(false);}};
   const resultMain = capture && hasCapturedContent && !mode && !receiving && !busy && !showCamera && !hidePreviousResult ? recognizedKind === "anfrage" ?
     <Button data-spec-id="rein.erfassen-aus-eingang" art="primaer" text={CAPTURE_COPY.order} onClick={() => onOrder(capture.customerId ?? undefined, capture)} />
@@ -568,7 +579,7 @@ export function IntakeCaptureDialog({ resumePendingId,resumeSourceId,startOnsite
       onPaste={event => { if (event.clipboardData.files.length) { event.preventDefault(); chooseFiles(event.clipboardData.files); } }}>
       {choice?.satz&&!choice.haupt&&!choice.frage?<p>{choice.satz}</p>:null}
       {showSituation&&capture&&recognizedKind==='ware'&&!capture.customerId&&ports.receiveOnsiteQuote&&ports.canCreateQuote&&ports.canCreateCustomer&&capture.packageContext?.status==='OK'&&capture.packageContext.candidates.length===0?<Button text={PACKAGE_ONSITE_COPY.open} onClick={()=>setOnsite(true)} disabled={busy}/>:null}
-      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy} quotes={quoteCandidates} onCustomerCandidate={id=>void choosePackageCustomer(id)} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} proposal={proposalAction} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onTask={()=>{const opened=!window.dispatchEvent(new CustomEvent("kreile:oeffne",{cancelable:true,detail:{ziel:"aufgabe",taskRequest:{reference:{type:"eingang",id:capture.id},kind:"aufgabe",itemId:capture.id}}}));if(!opened){console.error("[INTAKE_TASK_TARGET_UNAVAILABLE]");setError("Aufgabe konnte nicht geöffnet werden · Code: INTAKE_TASK_TARGET_UNAVAILABLE.");}}}/>:null}
+      {showSituation&&capture?<IntakeSituation readOriginal={ports.readCaptureOriginal} capture={capture} kind={recognizedKind} busy={busy} quotes={quoteCandidates} onCustomerCandidate={id=>void choosePackageCustomer(id)} onQuote={id=>openObject("kvware",id+"#"+capture.id)} primary={resultMain} proposal={proposalAction} onAssign={()=>void assign()} onOriginal={file=>openObject("original",capture.id+"#"+file)} onOrder={order=>openObject("ware",order+"#"+capture.id)} onMore={()=>cameraAvailable?anotherPage():input.current?.click()} onEdit={()=>{setSituationRequested(false);setHidePreviousResult(true);}} onTask={()=>openIntakeTask(capture.id)}/>:null}
       <div className="ev-rein-feld" hidden={showSituation} style={showSituation?{display:"none"}:undefined}>
         {!mode&&ports.actorDisplayName?.trim()?<h2>{intakeStartTitle(ports.actorDisplayName)}</h2>:null}
         {contextLoading ? <p role="status">Kontext wird gelesen …</p> : null}
