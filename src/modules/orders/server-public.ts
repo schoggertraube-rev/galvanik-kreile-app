@@ -10,6 +10,6 @@ export { leseMehrarbeitBuchungenInTransaction, mehrarbeitStand } from "./server/
 
 export {readPackageOrderCustomers} from './server/packageHistory';
 export {readManualShipping,readManualShippingBatch,readManualShipmentGroup,saveManualTracking} from './server/manualShipping';
-export {readFinishedDispatchQueue} from './server/finishedDispatchRead';
+export {readFinishedDispatchQueue,readRecentDispatchHandovers} from './server/finishedDispatchRead';
 export {createInitialOrderPrintJobs,retireOrderPrintJobsAfterGoodsOut,readOrderPrintQueue} from './server/orderPrintJobs';
 export {tagQuellen} from './server/tagQuellen';

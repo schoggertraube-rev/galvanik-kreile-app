@@ -14,6 +14,14 @@ export const GOODS_OUT_DEBT_COPY = {
     ? `Du kannst die Ware noch nicht herausgeben: Rechnung ${invoiceNumber} ist überfällig. Buche zuerst die Zahlung.`
     : 'Ausgabe gesperrt – Rechnung offen',
 } as const;
+export const DISPATCH_BOARD_COPY = {
+  complaint: { status: 'Reklamation offen', action: 'Reklamation bearbeiten' },
+  handoverMissing: { status: 'Übergabeart fehlt', action: 'Abholung oder Versand festlegen' },
+  overdue: 'Gesperrt',
+  notify: { status: 'Nicht informiert', action: (customer: string | null) => `${customer ?? 'Kunden'} Bescheid geben` },
+  payment: { status: 'Geld fehlt', action: 'Zahlung am Auftrag öffnen' },
+  ready: { status: 'Darf raus', pickup: 'Übergeben', shipping: 'Einpacken' },
+} as const;
 export const MANUAL_SHIPPING_FIELDS={name:'Name / Firma',street:'Straße',houseNumber:'Hausnummer',zipCode:'PLZ',city:'Ort',country:'Land',phone:'Telefon',email:'E-Mail',reference:'Referenz'} as const;
 export const MANUAL_SHIPPING_HANDOVER_LABEL='Paket mit manuell übernommener Sendungsnummer übergeben';
 export const MANUAL_SHIPPING_COPY={
