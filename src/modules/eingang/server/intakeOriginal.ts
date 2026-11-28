@@ -13,7 +13,7 @@ import {readLiveOrderCard} from "@/lib/server/orderCardRead";
 import {allowedOriginalExtension,automaticMimeReply,safeOriginalBytes} from "../originalSafety";
 import type {IntakeCapture} from '../captureContract';
 import type {InvoicePageRange} from '../invoiceContract';
-import {intakeFileContextEvidence,intakeFileHandoffEvidence} from './intakeFileContext';
+import {intakeFileContextEvidence,intakeFileHandoffEvidence} from '@/lib/server/orderStationAttachment';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -133,36 +133,6 @@ const validCustomerId=(id:unknown):id is string=>typeof id==='string'&&id.trim()
 
 export async function readOrderIntakeOriginals(orderId:unknown){
  return readDomainIntakeOriginals('ORDER',orderId);
-}
-
-export async function readHandoffIntakeOriginalsInTransaction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,
- input:{orderId:string;itemId?:string}|{orderIds:readonly string[]}){
-  const orderIds='orderId' in input?[input.orderId]:input.orderIds;
-  const itemId='itemId' in input?input.itemId:undefined;
-  if(!orderIds.length)return [];
-  const rows=await tx.execute<{id:string;name:string;mime:string;bytes:string;at:string;itemId:string;orderId:string}>(sql`
-   SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,source.erstellt_am::text AS at,
-    ${intakeFileContextEvidence}->>'teilId' AS "itemId",source.vorgang_id AS "orderId"
-   FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
-   WHERE file.tenant_id=${auth.tenantId} AND source.vorgang_art='auftrag'
-    AND source.vorgang_id IN (${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)})
-    AND source.zuordnung_regel='kontext' AND file.foto_art='teile' AND file.phase='arbeit'
-    AND ${intakeFileContextEvidence}->>'teilId' IS NOT NULL AND ${intakeFileHandoffEvidence}
-    ${itemId===undefined?sql``:sql`AND ${intakeFileContextEvidence}->>'teilId'=${itemId}`}
-    AND EXISTS(SELECT 1 FROM public.intake_event stored WHERE stored.tenant_id=file.tenant_id AND stored.item_id=file.item_id
-      AND stored.art='original_gespeichert' AND stored.nachher->>'fileId'=file.id::text AND stored.nachher->>'sha256'=file.sha256)
-   ORDER BY source.erstellt_am DESC,file.id`);
-  return rows.map(row=>({...row,bytes:Number(row.bytes)}));
-}
-
-export async function readHandoffIntakeOriginals(auth:AuthorizationSnapshot,input:{orderId:string;itemId?:string}){
- try{
-  const data=await withPrivilegedTenantTransaction(auth,tx=>readHandoffIntakeOriginalsInTransaction(tx,auth,input));
-  return {code:'OK' as const,data};
- }catch(error){
-  console.error('[INTAKE_HANDOFF_ORIGINALS_READ_FAILED]',error);
-  return {code:'UNAVAILABLE' as const,message:'Neue Werkstattfotos konnten nicht geladen werden. Code: INTAKE_HANDOFF_ORIGINALS_READ_FAILED.'};
- }
 }
 
 export async function readDomainIntakeOriginals(target:'ORDER'|'CUSTOMER',id:unknown){

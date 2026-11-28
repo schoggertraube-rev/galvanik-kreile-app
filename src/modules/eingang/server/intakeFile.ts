@@ -1,7 +1,7 @@
 import "server-only";
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {INTAKE_FILE_CONTEXT_COPY} from '@/ui/eingangCopy';
-import {isOrderStationPhoto,readHandoffIntakePhotoTarget} from '@/lib/server/orderStationAttachment';
+import {intakeFileContextEvidence,intakeFileHandoffEvidence,isOrderStationPhoto,readHandoffIntakePhotoTarget} from '@/lib/server/orderStationAttachment';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import { createHash } from "node:crypto";
@@ -13,7 +13,7 @@ import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} fr
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
 import {isIntakeFileContext,isIntakeOriginalTakeover} from '../captureContract';
-import {intakeFileContextEvidence,intakeFileHandoffEvidence,mayCaptureContextFile,qualifyIntakeFileContext,
+import {mayCaptureContextFile,qualifyIntakeFileContext,
   type IntakeFileCustomerReader,type StoredIntakeFileContext} from './intakeFileContext';
 
 import { erkenneOriginal, recordIntakeRecognitionFailure, type ReadRecognitionSettings } from "./erkennung";

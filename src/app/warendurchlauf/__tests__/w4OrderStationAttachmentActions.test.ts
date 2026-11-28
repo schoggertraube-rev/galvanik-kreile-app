@@ -35,6 +35,7 @@ vi.mock("@/lib/server/orderStationAttachment", () => {
   ports.domainLoaded();
   return {
     readOrderStationAttachments: ports.read,
+    readHandoffIntakeOriginals: ports.readIntakeFiles,
     readOrderIntakeAttachments: ports.readIntake,
     reserveOrderStationAttachment: ports.reserve,
     finalizeOrderStationAttachment: ports.finalize,
@@ -49,7 +50,6 @@ vi.mock("@/lib/server/evidenceRead", () => {
     readEvidenceRecordsByTarget: ports.readEvidenceByTarget,
   };
 });
-vi.mock('@/modules/eingang/server-public',()=>({readHandoffIntakeOriginals:ports.readIntakeFiles}));
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const snapshot = {

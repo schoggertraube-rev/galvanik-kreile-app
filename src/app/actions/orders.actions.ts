@@ -304,10 +304,8 @@ export async function recordPhoneExtraWorkApprovalAction(
 
 export async function freezeOrderAction(input: FreezeOrderInput): Promise<FreezeOrderResult> {
  return observeAction('freezeOrderAction',subjectForAction('freezeOrderAction',input),async()=>{
-  const [{freezeOrder},{readHandoffIntakeOriginalsInTransaction}]=await Promise.all([
-   import('@/lib/server/commands/orderFreezeCommand'),import('@/modules/eingang/server-public'),
-  ]);
-  return freezeOrder(input,readHandoffIntakeOriginalsInTransaction);
+  const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
+  return freezeOrder(input);
 
  },readLoggingSettings);
 }
@@ -554,10 +552,9 @@ async function readLiveOrderCardForPage(
   try {
     const authorization = await resolveOrderCardAuthorization();
     if (!authorization.ok) return authorization.result;
-    const [{ readLiveOrderCard }, { readOrderEvidenceBatch },{readHandoffIntakeOriginalsInTransaction}] = await Promise.all([
+    const [{ readLiveOrderCard }, { readOrderEvidenceBatch }] = await Promise.all([
       import("@/lib/server/orderCardRead"),
       import("@/lib/server/evidenceRead"),
-      import('@/modules/eingang/server-public'),
     ]);
     const card = await readLiveOrderCard(authorization.data, input);
     if (card.code !== "OK") return card;
@@ -594,7 +591,7 @@ async function readLiveOrderCardForPage(
       card.data.handoverNotice?.taskId?(async()=>{const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');return withPrivilegedTenantTransaction(authorization.data,tx=>tasks.readOrderHandoverTaskState(tx,authorization.data,{orderId:card.data.id,taskId:card.data.handoverNotice!.taskId!}));})():Promise.resolve(undefined),
       card.data.handoverMode==='shipping'?fundament.readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true}):Promise.resolve(undefined),
       readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId},readInvoiceVat,fundament.readShippingSettingsInTransaction),
-      readOrderEvidenceBatch(authorization.data,[input.orderId],readHandoffIntakeOriginalsInTransaction).then(results=>results.get(input.orderId)),
+      readOrderEvidenceBatch(authorization.data,[input.orderId]).then(results=>results.get(input.orderId)),
       orders.readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version}),
       card.data.handoverMode==='shipping'?readManualShippingForOrder(authorization.data,input.orderId):Promise.resolve(undefined),
       readOrderInformed(authorization.data,input.orderId),orders.readOrderPrintQueue(authorization.data,input.orderId),
@@ -628,10 +625,8 @@ async function manualShippingPorts(){
  return {readCustomer:readCustomerProfile,readCustomers:readCustomerProfiles,readSettings:readShippingSettingsInTransaction,readAllocation:(tx:import('@/lib/server/privilegedDb').PrivilegedTenantTransaction,tenantId:string,customerId:string,input:Parameters<typeof readShippingMergeAllocation>[3])=>readShippingMergeAllocation(tx,tenantId,customerId,input,readInvoiceVat)};
 }
 async function todayOrderSourcePorts():Promise<import('@/lib/server/todayOrderRead').TodayOrderReadPorts>{
- const [{readInvoiceVat},{readShippingSettingsInTransaction},{readHandoffIntakeOriginalsInTransaction}]=await Promise.all([
-  import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public'),import('@/modules/eingang/server-public'),
- ]);
- return {readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,readIntakePhotos:readHandoffIntakeOriginalsInTransaction,
+ const [{readInvoiceVat},{readShippingSettingsInTransaction}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/fundament/server-public')]);
+ return {readVat:readInvoiceVat,readSettings:readShippingSettingsInTransaction,
   readCredit:async(tx,tenantId,customerId)=>{
    const [{readCustomerCreditInTransaction},{readCustomerProfile}]=await Promise.all([import('@/modules/accounting/server-public'),import('@/modules/customers/server-public')]);
    return readCustomerCreditInTransaction(tx,tenantId,customerId,readCustomerProfile);

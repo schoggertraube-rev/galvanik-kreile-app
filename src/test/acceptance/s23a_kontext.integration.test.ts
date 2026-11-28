@@ -140,8 +140,7 @@ it('speichert das Werkstattfoto einmal im Eingang und liest es am tatsÃ¤chlich Ã
  const auth=await withSession(full,resolveAuthorization);
  if(!auth.ok)throw Error('TEST_S23A_WERKSTATT_AUTH');
  const {readOrderEvidenceBatch}=await import('@/lib/server/evidenceRead');
- const {readHandoffIntakeOriginalsInTransaction}=await import('@/modules/eingang/server-public');
- expect((await readOrderEvidenceBatch(auth.data,[orderId],readHandoffIntakeOriginalsInTransaction)).get(orderId))
+ expect((await readOrderEvidenceBatch(auth.data,[orderId])).get(orderId))
   .toMatchObject({code:'OK',intakePhotoParts:[teilId]});
  expect(await withSession(full,()=>freezeOrderAction(freeze))).toMatchObject({code:'OK'});
  expect(await sql`SELECT count(*)::int AS count FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid

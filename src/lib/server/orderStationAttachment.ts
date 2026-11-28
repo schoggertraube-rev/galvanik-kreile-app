@@ -887,6 +887,50 @@ export function isOrderStationPhoto(mime:string,bytes:number) {
   return Object.hasOwn(MIME_EXTENSION,mime)&&Number.isSafeInteger(bytes)&&bytes>0&&bytes<=MAX_FILE_BYTES;
 }
 
+export const intakeFileContextReceipt=sql`(SELECT event.nachher
+  FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
+    AND event.art='zugeordnet' AND event.befehl_id=file.id
+    AND event.von=file.aufgenommen_von::text AND event.nachher->>'action'='original_kontext'
+    AND event.nachher->>'fileId'=file.id::text AND event.nachher->>'sha256'=file.sha256)`;
+
+export const intakeFileContextEvidence=sql`(${intakeFileContextReceipt}->'kontext')`;
+
+/** The original and the station transition retain their own independent receipts. */
+export const intakeFileHandoffEvidence=sql`EXISTS(SELECT 1 FROM public.events transition
+  WHERE transition.tenant_id=file.tenant_id AND source.vorgang_art='auftrag' AND transition.order_id=source.vorgang_id
+    AND transition.id=(${intakeFileContextReceipt}->>'uebergabeEreignisId') AND transition.event_type='ORDER_STATION_MOVED_V1'
+    AND transition.station='galvanik' AND transition.status='success')`;
+
+export async function readHandoffIntakeOriginalsInTransaction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,
+ input:{orderId:string;itemId?:string}|{orderIds:readonly string[]}){
+  const orderIds='orderId' in input?[input.orderId]:input.orderIds;
+  const itemId='itemId' in input?input.itemId:undefined;
+  if(!orderIds.length)return [];
+  const rows=await tx.execute<{id:string;name:string;mime:string;bytes:string;at:string;itemId:string;orderId:string}>(sql`
+   SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,source.erstellt_am::text AS at,
+    ${intakeFileContextEvidence}->>'teilId' AS "itemId",source.vorgang_id AS "orderId"
+   FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
+   WHERE file.tenant_id=${auth.tenantId} AND source.vorgang_art='auftrag'
+    AND source.vorgang_id IN (${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)})
+    AND source.zuordnung_regel='kontext' AND file.foto_art='teile' AND file.phase='arbeit'
+    AND ${intakeFileContextEvidence}->>'teilId' IS NOT NULL AND ${intakeFileHandoffEvidence}
+    ${itemId===undefined?sql``:sql`AND ${intakeFileContextEvidence}->>'teilId'=${itemId}`}
+    AND EXISTS(SELECT 1 FROM public.intake_event stored WHERE stored.tenant_id=file.tenant_id AND stored.item_id=file.item_id
+      AND stored.art='original_gespeichert' AND stored.nachher->>'fileId'=file.id::text AND stored.nachher->>'sha256'=file.sha256)
+   ORDER BY source.erstellt_am DESC,file.id`);
+  return rows.map(row=>({...row,bytes:Number(row.bytes)}));
+}
+
+export async function readHandoffIntakeOriginals(auth:AuthorizationSnapshot,input:{orderId:string;itemId?:string}){
+ try{
+  const data=await withPrivilegedTenantTransaction(auth,tx=>readHandoffIntakeOriginalsInTransaction(tx,auth,input));
+  return {code:'OK' as const,data};
+ }catch(error){
+  console.error('[INTAKE_HANDOFF_ORIGINALS_READ_FAILED]',error);
+  return {code:'UNAVAILABLE' as const,message:'Neue Werkstattfotos konnten nicht geladen werden. Code: INTAKE_HANDOFF_ORIGINALS_READ_FAILED.'};
+ }
+}
+
 async function reserveAttachmentForWorkflow(
   workflow: AttachmentWorkflow,
   authorization: AuthorizationSnapshot,

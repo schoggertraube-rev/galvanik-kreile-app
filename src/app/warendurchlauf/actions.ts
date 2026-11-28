@@ -260,8 +260,7 @@ export async function getGalvanikHandoffAttachmentsAction(
   const evidenceDomain = await import("@/lib/server/evidenceRead");
   const evidence = await evidenceDomain.readOrderEvidenceRecords(authorization.data, input);
   if (evidence.code !== "OK") return evidence;
-  const {readHandoffIntakeOriginals}=await import("@/modules/eingang/server-public");
-  const originals=await readHandoffIntakeOriginals(authorization.data,input);
+  const originals=await domain.readHandoffIntakeOriginals(authorization.data,input);
   return {
     code: "OK" as const,
     data: {

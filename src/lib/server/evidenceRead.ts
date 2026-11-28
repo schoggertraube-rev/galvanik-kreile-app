@@ -267,10 +267,8 @@ function mapRecord(
 
 /** Batch only the existing qualified order evidence projection; no originals
  * are fetched from Storage and a corrupt order cannot erase another order. */
-export type HandoffIntakePhotoReader=(tx:PrivilegedTenantTransaction,auth:{tenantId:string},input:{orderIds:readonly string[]})=>
- Promise<readonly {orderId:string;itemId:string}[]>;
 export async function readOrderEvidenceBatch(authorization:Pick<AuthorizationSnapshot,'tenantId'|'permissions'>,
- orderIds:readonly string[],readIntakePhotos?:HandoffIntakePhotoReader):Promise<Map<string,EvidenceReadResult<EvidenceReadRecord[]>>>{
+ orderIds:readonly string[]):Promise<Map<string,EvidenceReadResult<EvidenceReadRecord[]>>>{
  const result=new Map<string,EvidenceReadResult<EvidenceReadRecord[]>>();
  if(!authorization.permissions.includes('perm_view_leitstand')||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
   for(const id of orderIds)result.set(id,{code:'FORBIDDEN',message:'Nachweise sind nicht erlaubt.'});return result;
@@ -283,9 +281,9 @@ export async function readOrderEvidenceBatch(authorization:Pick<AuthorizationSna
    JOIN private.v_evidence_records_v3 evidence ON evidence.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',wanted.id))
    WHERE evidence.tenant_id=${authorization.tenantId} AND evidence.source_kind<>'INTAKE_FILE'
    ORDER BY wanted.id,evidence.recorded_at DESC,evidence.evidence_key`);
-   if(!readIntakePhotos)return {rows,intake:[]};
    try{
-    return {rows,intake:await withTenantSavepoint(tx,child=>readIntakePhotos(child,authorization,{orderIds}))};
+    const {readHandoffIntakeOriginalsInTransaction}=await import('./orderStationAttachment');
+    return {rows,intake:await withTenantSavepoint(tx,child=>readHandoffIntakeOriginalsInTransaction(child,authorization,{orderIds}))};
    }catch(error){console.error('[INTAKE_HANDOFF_EVIDENCE_UNAVAILABLE]',error);return {rows,intake:null};}
   });
   for(const id of orderIds){

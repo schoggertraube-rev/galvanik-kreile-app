@@ -12,12 +12,10 @@ import {canTransportInvoiceDocument} from '@/lib/auth/authorizationContract';
 import {maskTodayOrderCard} from './orderCardRead';
 import {maskOrderPaymentCredit} from './paymentSummaryRead';
 import {readV45OrderRule} from './v45OrderRead';
-import type {HandoffIntakePhotoReader} from './evidenceRead';
 
 type ShippingRead=(tx:PrivilegedTenantTransaction,tenantId:string)=>Promise<ShippingSettings|null>;
 /** Only the authorized App/approved projector composition binds module readers. */
 export type TodayOrderReadPorts={
- readIntakePhotos?:HandoffIntakePhotoReader;
  readVat:InvoiceVatReader;
  readSettings:ShippingRead;
  readCredit:(tx:PrivilegedTenantTransaction,tenantId:string,customerId:string)=>Promise<CustomerCreditResult>;
@@ -43,7 +41,7 @@ export function projectTodayOrderSources(auth:AuthorizationSnapshot,sources:Awai
 }
 export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrderReadAuthorization,orderIds:string[],ports:TodayOrderReadPorts){
   const [{readTodayOrderCards},{readOrderEvidenceBatch}]=await Promise.all([import('@/lib/server/orderCardRead'),import('@/lib/server/evidenceRead')]);
-  const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,orderIds,ports.readIntakePhotos))]);
+  const [cards,evidence]=await Promise.all([withPageReadPhase('action.cards',()=>readTodayOrderCards(auth,orderIds)),withPageReadPhase('action.evidence',()=>readOrderEvidenceBatch(auth,orderIds))]);
   const [{readInvoiceShippingConsequencesBatch},{readOrdersInformed},{readOrderPickupAppointment},{getPaymentStatesBatch,maskOrderPaymentCredit}]=await Promise.all([
    import('@/lib/server/commands/immutableInvoiceCommand'),import('@/lib/server/orderReleaseRead'),import('@/lib/server/pickupAppointmentPort'),import('@/lib/server/paymentSummaryRead')]);
   const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);

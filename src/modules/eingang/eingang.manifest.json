@@ -17,8 +17,6 @@
     "@/modules/eingang/server-public#recognizeInvoicePdf",
     "@/modules/eingang/server-public#openIntakePredicate",
     "@/modules/eingang/server-public#readOrderIntakeOriginals",
-    "@/modules/eingang/server-public#readHandoffIntakeOriginals",
-    "@/modules/eingang/server-public#readHandoffIntakeOriginalsInTransaction",
     "@/modules/eingang/server-public#readDomainIntakeOriginals",
     "@/modules/eingang/server-public#readInvoiceTaskContext",
     "@/modules/eingang/public#IncomingInvoiceDialogs",
