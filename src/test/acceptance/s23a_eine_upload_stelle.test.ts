@@ -16,5 +16,8 @@ it('routes new card and workshop files through the same intake queue while retai
  expect(historical).not.toMatch(/export async function (?:reserve|finalize|analyze)DomainAttachmentAction/);
  expect(existsSync('src/components/layout/F1SourceDialogs.tsx')).toBe(false);
  expect(existsSync('src/components/intake/SuggestedItemsPanel.tsx')).toBe(false);
- expect(existsSync('src/lib/server/documentIntelligencePort.ts')).toBe(false);
+ const legacySource=source('src/lib/server/documentIntelligencePort.ts');
+ expect(legacySource).toContain('FROM public.scan_uploads');
+ expect(legacySource).not.toMatch(/analyzeDomainAttachment|createSignedUploadUrl|\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\b/i);
+ expect(source('src/lib/server/domainAttachment.ts')).toContain('readSecuredDomainAttachmentSource(tx,');
 });

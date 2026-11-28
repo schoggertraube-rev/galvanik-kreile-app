@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { readSecuredDomainAttachmentSource } from "./documentIntelligencePort";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -219,11 +220,8 @@ export async function getDomainAttachmentOriginal(authorization: AuthorizationSn
   if (!input || Object.keys(input).join(",") !== "attachmentId" || !UUID.test(input.attachmentId)) return { code: "VALIDATION_ERROR" as const, message: "Dateikennung ist ungültig." };
   if (!authorization.permissions.includes("perm_view_leitstand")) return { code: "FORBIDDEN" as const, message: "Dokumente und Fotos sind nicht erlaubt." };
   try {
-    const row = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<ScanRow>(sql`SELECT * FROM public.scan_uploads WHERE tenant_id=${authorization.tenantId} AND id=${input.attachmentId} AND status='secured' LIMIT 2`);
-      if (rows.length > 1) throw new Error("DOMAIN_ATTACHMENT_AMBIGUOUS");
-      return rows[0] ?? null;
-    });
+    const row = await withPrivilegedTenantTransaction(authorization, (tx) =>
+      readSecuredDomainAttachmentSource(tx, authorization.tenantId, input.attachmentId));
     if (!row || !row.original_storage_path || !validMime(row.file_type)) return { code: "NOT_FOUND" as const, message: "Datei nicht verfügbar." };
     const storage = await import("@/lib/server/domainAttachmentStorage");
     const download = await storage.createDomainAttachmentDownloadUrl(row.original_storage_path, `Kreile-Dokument-${row.id}.${MIME_EXTENSION[row.file_type]}`);
