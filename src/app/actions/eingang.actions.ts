@@ -6,7 +6,8 @@ import { KALENDER_COPY } from "@/ui/kalenderCopy";
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
-import {readBetriebsruheInTransaction,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readCompanyLetterSettings,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {bindIntakeCandidatePorts} from '@/lib/server/intakeSuggestions';
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
@@ -345,8 +346,10 @@ export async function discardIntakeDraftAction(input:unknown) {
  return observeAction('discardIntakeDraftAction',subjectForAction('discardIntakeDraftAction',input),async()=>{ return discardIntakeDraft(input);
  },readLoggingSettings);
 }
+const intakeCandidatePorts = bindIntakeCandidatePorts(readCompanyLetterSettings);
+
 export async function retryIntakeRecognitionAction(input:unknown) {
- return observeAction('retryIntakeRecognitionAction',subjectForAction('retryIntakeRecognitionAction',input),async()=>{ return retryIntakeRecognition(input,readErkennungsEinstellungenInTransaction);
+ return observeAction('retryIntakeRecognitionAction',subjectForAction('retryIntakeRecognitionAction',input),async()=>{ return retryIntakeRecognition(input,readErkennungsEinstellungenInTransaction,intakeCandidatePorts);
  },readLoggingSettings);
 }
 
@@ -408,7 +411,7 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  return observeAction('finishIntakeFileAction',subjectForAction('finishIntakeFileAction',{fileId}),async()=>{
  if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after}),fileId);if(result.code!=='OK')return result;
+ const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after,kandidaten:intakeCandidatePorts}),fileId);if(result.code!=='OK')return result;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
  const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
  const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,

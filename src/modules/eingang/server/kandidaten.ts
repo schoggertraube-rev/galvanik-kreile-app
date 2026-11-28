@@ -90,7 +90,8 @@ type Kundenquelle = {
   vollstaendig: boolean;
 };
 
-type Kundenleser = (query: string, options?: { exactSupplier: 'vat' }) => Promise<Kundenquelle>;
+type KundenSuchoptionen = { exactSupplier?: 'vat'; mailIdentity?: { address: string; domain: string } };
+type Kundenleser = (query: string, options?: KundenSuchoptionen) => Promise<Kundenquelle>;
 type Eingangsadresse = {
   absenderAdresse: string | null;
   absenderName: string | null;
@@ -206,7 +207,9 @@ export async function leseBelegteKundenTreffer(
   let geleseneQuellen = 0;
   let vollstaendig = !(lieferantenUstId && !eigeneUstId) && !(lieferant && !sender && !eigeneFirma);
   for (const { regel, query } of auftraege) {
-    const quelle = await leseKundenquelle(() => leseKunden(query, regel === 'ustid' ? { exactSupplier: 'vat' } : undefined));
+    const option = regel === 'ustid' ? { exactSupplier: 'vat' as const }
+      : regel === 'adresse' && domain ? { mailIdentity: { address: adresse.toLowerCase(), domain } } : undefined;
+    const quelle = await leseKundenquelle(() => leseKunden(query, option));
     if (!quelle) {
       vollstaendig = false;
       continue;
@@ -300,8 +303,8 @@ async function leseVorgangsTreffer(tx: PrivilegedTenantTransaction, tenantId: st
 
 type Firmenhinweis = { name: string | null; ustId: string | null };
 export type KandidatenPorts = {
-  firma: () => Promise<Firmenhinweis | null>;
-  leseKunden: (tx: PrivilegedTenantTransaction, query: string, absender: string | null, option?: { exactSupplier: 'vat' }) => Promise<Kundenquelle>;
+  firma: (tenantId: string) => Promise<Firmenhinweis | null>;
+  leseKunden: (tx: PrivilegedTenantTransaction, tenantId: string, query: string, option?: KundenSuchoptionen) => Promise<Kundenquelle>;
 };
 
 export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransaction,
@@ -323,9 +326,9 @@ export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransacti
 
   if (quelle.zuordnung === 'offen') {
     let firma: Firmenhinweis | null = null;
-    try { firma = await ports.firma(); } catch { kundenVollstaendig = false; }
+    try { firma = await ports.firma(kontext.tenantId); } catch { kundenVollstaendig = false; }
     const erkannt = await leseBelegteKundenTreffer(quelle.eingang, firma ?? { name: null, ustId: null },
-      (query, option) => withTenantSavepoint(tx, nested => ports.leseKunden(nested, query, quelle.eingang.absenderAdresse, option)));
+      (query, option) => withTenantSavepoint(tx, nested => ports.leseKunden(nested, kontext.tenantId, query, option)));
     kundenVollstaendig &&= erkannt.quellenVollstaendig && quelle.hinweiseVollstaendig && firma !== null;
     if (erkannt.kandidaten !== 'keine') {
       arten.push('kunde');

@@ -94,7 +94,8 @@ const TODAY_PROJECTOR_FILE = 'src/lib/server/todayProjection.ts';
 const TODAY_TAG_COMPOSITION_FILE = 'src/lib/server/todayProjectionSchedule.ts';
 const TODAY_TAG_SOURCE_MODULES = new Set(['orders', 'eingang', 'accounting', 'complaints', 'quotes', 'tasks', 'fundament', 'takt']);
 const TODAY_PROJECTOR_READ_FACADES = new Map([
-  ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction','readBetriebsruheInTransaction'])],
+  ['fundament',new Set(['readTodayReadSettings','readPageReadSettings','readCompanyLetterSettings','readShippingSettingsInTransaction','readBetriebsruheInTransaction',
+    'isFeatureEnabled','readErkennungsEinstellungenInTransaction','readKanalFristenInTransaction'])],
   ['orders',new Set(['readManualShipping','readManualShippingBatch'])],
   ['accounting',new Set(['readInvoiceVat','readCustomerCreditInTransaction'])],
   ['customers',new Set([
@@ -103,7 +104,7 @@ const TODAY_PROJECTOR_READ_FACADES = new Map([
   ])],
   ['quotes',new Set(['listOpenQuotesCommand','readQuoteCommand','readQuoteActors'])],
   ['complaints',new Set(['readComplaintsForAuthorization'])],
-  ['eingang',new Set(['readIntakeMessagesForAuthorization'])],
+  ['eingang',new Set(['readIntakeMessagesForAuthorization','liesEingangTagZeilenInTransaction'])],
   ['tasks',new Set(['readTaskForAuthorization','readQuoteFollowupTasksForToday','liesAufgabenFuerTag'])],
   ['takt',new Set(['liesTaktAusfallZeilen'])],
 ]);

@@ -130,7 +130,7 @@ it('liest jede vorhandene Herkunft einmal und verwendet nur passende Treffer', a
   });
   expect(lesen.mock.calls).toEqual([
     ['DE000000002', { exactSupplier: 'vat' }],
-    ['ablauf.example', undefined],
+    ['ablauf.example', { mailIdentity: { address: eingang.absenderAdresse, domain: 'ablauf.example' } }],
     [eingang.absenderName, undefined],
     [eingang.absenderTelefon, undefined],
   ]);

@@ -1,5 +1,6 @@
 import 'server-only';
 import {sql} from 'drizzle-orm';
+import {speichereErkennungskorrekturen} from './eingangsRegeln';
 import {isDeepStrictEqual} from 'node:util';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
@@ -73,6 +74,12 @@ export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:Au
    if(row.version!==value.version)reject('CONFLICT','Eingang wurde inzwischen geändert. Bitte neu lesen.');
    const proposals=await suggestions(tx,auth,row.id);
    if(value.mode==='confirm'&&(new Set(proposals.filter(proposal=>typeof proposal.wert==='string').map(proposal=>proposal.wert)).size!==1||!proposals.some(proposal=>proposal.wert===target.id)))reject('CONFLICT','Kundenvorschlag ist nicht mehr eindeutig.');
+   const alteVorschlaege=[...new Set(proposals.flatMap(proposal=>typeof proposal.wert==='string'?[proposal.wert]:[]))];
+   if(value.mode!=='confirm'&&alteVorschlaege.length&&!alteVorschlaege.includes(target.id)){
+    await speichereErkennungskorrekturen(tx,auth,{itemId:row.id,befehlId:value.clientEventId,
+     absender:row.absender_adresse??row.absender_name,
+     korrekturen:[{feld:'kunde',alt:alteVorschlaege.length===1?alteVorschlaege[0]:alteVorschlaege,neu:target.id}]});
+   }
    const additional:Source[]=[];
    if(propagate&&value.mode!=='move'&&row.gruppe_adresse){
     const siblings=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND gruppe_adresse=${row.gruppe_adresse} AND zuordnung='offen' AND id<>${row.id}::uuid ORDER BY id`);

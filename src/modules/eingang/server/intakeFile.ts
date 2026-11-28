@@ -4,7 +4,7 @@ import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, withTenantSavepoint } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
@@ -12,6 +12,7 @@ import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCaptu
 import {isIntakeOriginalTakeover} from '../captureContract';
 
 import { erkenneOriginal, recordIntakeRecognitionFailure, type ReadRecognitionSettings } from "./erkennung";
+import type { KandidatenPorts } from "./kandidaten";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUCKET = "scans";
@@ -19,7 +20,7 @@ type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string; reihenfolge:number };
 type IntakeFileCompletion = { retryKey?: string; readSettings: ReadRecognitionSettings;
   scheduleRecognition?: (work: () => Promise<void>) => void; importingMail?: true;
-  secureOnly?: true; authorization?: AuthorizationSnapshot };
+  secureOnly?: true; authorization?: AuthorizationSnapshot; kandidaten?: KandidatenPorts };
 async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'buchhaltung')))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};return result.data;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -130,12 +131,21 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
         RETURNING id`);
       if (terminalStatus && saved.length === 1) await tx.execute(sql`UPDATE public.intake_file SET erkennung_status='wartet'
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status IN ('fertig','fehler')`);
+      if (saved.length === 1 && file.mime.startsWith('image/')) {
+        try {
+          await withTenantSavepoint(tx, nested => nested.execute(sql`UPDATE public.intake_file SET phase='eingang'
+            WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND phase IS NULL`));
+        } catch {
+          recordObservedFailure('INTAKE_PHOTO_PHASE_FAILED');
+        }
+      }
       if (file.aufgenommen_auf) await tx.execute(sql`UPDATE public.device_request SET status='fotos_da'
         WHERE tenant_id=${auth.tenantId} AND login_id=${auth.userId}::uuid AND item_id=${file.item_id}::uuid
           AND status='angenommen' AND angenommen_auf @> ARRAY[${file.aufgenommen_auf}]::text[]`);
     });
     const readSettings=options.readSettings;
-    const recognize=()=>erkenneOriginal({ tenantId: auth.tenantId, akteur: auth.userId, file, bytes, onlyInvoiceAccess, retryKey }, fileId, readSettings);
+    const recognize=()=>erkenneOriginal({ tenantId: auth.tenantId, akteur: auth.userId, file, bytes, onlyInvoiceAccess,
+      retryKey, kandidaten: onlyInvoiceAccess ? undefined : options.kandidaten }, fileId, readSettings);
     if(options.secureOnly)return snapshot();
     if(options.scheduleRecognition){
       const secured=await snapshot();
@@ -153,10 +163,10 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
   }
 }
 
-export async function retryIntakeRecognition(input:unknown, readSettings: ReadRecognitionSettings):Promise<IntakeCaptureResult>{
+export async function retryIntakeRecognition(input:unknown, readSettings: ReadRecognitionSettings, kandidaten?: KandidatenPorts):Promise<IntakeCaptureResult>{
   if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR",message:"Ungültiger Erkennungsversuch."};
   const value=input as Record<string,unknown>;
   if(Object.keys(value).sort().join(",")!=="clientEventId,fileId"||typeof value.fileId!=="string"||!UUID.test(value.fileId)
     ||typeof value.clientEventId!=="string"||!UUID.test(value.clientEventId))return {code:"VALIDATION_ERROR",message:"Ungültiger Erkennungsversuch."};
-  return finishIntakeFile(value.fileId,{retryKey:value.clientEventId,readSettings});
+  return finishIntakeFile(value.fileId,{retryKey:value.clientEventId,readSettings,kandidaten});
 }

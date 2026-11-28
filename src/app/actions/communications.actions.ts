@@ -2,7 +2,8 @@
 
 import {after} from 'next/server';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {isFeatureEnabled,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {isFeatureEnabled,readCompanyLetterSettings,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {bindIntakeCandidatePorts} from '@/lib/server/intakeSuggestions';
 import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
@@ -379,11 +380,12 @@ async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:Au
  }
 }
 import {readMicrosoftGraphAttachments,readMicrosoftGraphMime,readMicrosoftGraphMessage,type GraphInboxMessage} from '@/lib/server/microsoftGraph';
+const intakeCandidatePorts = bindIntakeCandidatePorts(readCompanyLetterSettings);
 function returnSavedMail(auth:AuthorizationSnapshot,saved:Extract<Awaited<ReturnType<typeof readIntakeMailImportReceipt>>,{code:'OK'}>,recognitionEnabled:boolean){
  const {waitingFileIds,...result}=saved;
  if(recognitionEnabled&&waitingFileIds.length)after(async()=>{
   await Promise.all(waitingFileIds.map(fileId=>finishIntakeFile(fileId,{
-   authorization:auth,readSettings:readErkennungsEinstellungenInTransaction,importingMail:true,
+   authorization:auth,readSettings:readErkennungsEinstellungenInTransaction,importingMail:true,kandidaten:intakeCandidatePorts,
   })));
  });
  return result;

@@ -1,5 +1,6 @@
 import {FINANCIAL_ACCESS_COPY} from '@/ui/financialAccessCopy';
 import {INCOMING_INVOICE_COPY} from '@/ui/situationCatalog';
+import {eingangCopy} from '@/ui/eingangCopy';
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {readIntakeActorTraces} from './actorRead';
 import 'server-only';
@@ -11,6 +12,7 @@ import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenan
 import {normaliseIban,type CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
 import {invoicePageFilter,readIntakeInvoicePageSource,readSecuredIntakeMailOriginal} from './intakeOriginal';
+import {speichereErkennungskorrekturen,type Erkennungskorrektur} from './eingangsRegeln';
 import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFieldErrors,invoiceFieldShape,invoiceTaxBreakdown,
  type IncomingInvoice,type InvoiceChangeInput,type InvoiceDuplicate,type InvoiceFailure,type InvoiceFields,
  type InvoicePageRange,type InvoiceReadResult,type InvoiceResult,type InvoiceSaveInput,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
@@ -94,7 +96,7 @@ async function invoiceSuggestions(tx:PrivilegedTenantTransaction,auth:Authorizat
   :sql`(file_id=${fileId}::uuid OR ${includeItemHints} AND file_id IS NULL)`;
  return tx.execute<{feld:string;wert:unknown;sicherheit:string;verified:boolean}>(sql`SELECT feld,wert,sicherheit,geprueft_am IS NOT NULL AS verified FROM public.intake_suggestion
   WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND ${original}
-  AND feld IN ('rechnung.nummer','rechnung.datum','rechnung.betrag','rechnung.faellig','rechnung.iban','rechnung.absender','rechnung.steuersaetze')
+  AND feld IN ('rechnung.nummer','rechnung.datum','rechnung.betrag','rechnung.faellig','rechnung.iban','rechnung.absender','rechnung.steuersaetze','rechnung.abgleich')
   AND status<>'verworfen' ORDER BY id`);
 }
 function storedPages(invoice:IncomingInvoice|null):InvoicePageRange|null{
@@ -212,6 +214,22 @@ async function replay(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,
  if(!invoice||invoice.version!==events[0].nachher.invoiceVersion)reject('CONFLICT','Rechnung wurde inzwischen geändert. Bitte neu lesen.');
  return {code:'OK' as const,invoice,replayed:true};
 }
+function rechnungKorrekturen(vorschlaege:Awaited<ReturnType<typeof invoiceSuggestions>>,before:InvoiceFields,after:InvoiceFields) {
+ const korrekturen:Erkennungskorrektur[]=[];
+ for(const [feld,key] of [['rechnung.nummer','nummer'],['rechnung.datum','datum'],['rechnung.faellig','faelligAm']] as const){
+  const alt=vorschlaege.find(vorschlag=>vorschlag.feld===feld)?.wert;
+  if(typeof alt==='string'&&before[key]!==after[key]&&alt.trim()!==after[key].trim())korrekturen.push({feld,alt,neu:after[key]});
+ }
+ const betrag=vorschlaege.find(vorschlag=>vorschlag.feld==='rechnung.betrag')?.wert;
+ if(object(betrag))for(const key of ['netto','ust','brutto'] as const){
+  const alt=betrag[key];
+  if(typeof alt!=='string'&&typeof alt!=='number')continue;
+  const vorher=invoiceCents(before[key]),neu=invoiceCents(after[key]),erkannt=invoiceCents(String(alt));
+  if(erkannt!==null&&vorher!==neu&&erkannt!==neu)korrekturen.push({feld:'rechnung.'+key,alt,neu:after[key]});
+ }
+ return korrekturen;
+}
+
 /** All four commands compose existing customer/task/history writers in this transaction. */
 export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies):Promise<InvoiceResult>{
  if(!validSave(input))return {code:'VALIDATION_ERROR',message:'Rechnungsangaben oder Eingangsstand sind ungültig.'};
@@ -235,22 +253,25 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
   const savedOriginal=await tx.execute(sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND file_id=${input.fileId}::uuid
    AND seite_von IS NOT DISTINCT FROM ${pages?.from??null}::integer AND seite_bis IS NOT DISTINCT FROM ${pages?.to??null}::integer`);
   if(savedOriginal.length)reject('CONFLICT','Dieser Eingang hat bereits eine Rechnung.');
+  const vorschlaege=await invoiceSuggestions(tx,auth,row.id,input.fileId,pages,existingInvoice===null);
+  const widerspruch=vorschlaege.some(vorschlag=>vorschlag.feld==='rechnung.abgleich'&&vorschlag.sicherheit==='unsicher');
   const missingSupplier=input.status==='offen'&&!input.fields.lieferantId;
-  const savedStatus=missingSupplier?'unklar':input.status,unclearReason=missingSupplier?'Lieferant fehlt':input.unclearReason;
-  const selected=await validate(tx,auth,input.fields,input.status,input.paidDate,input.proofFileId,row.id,deps);
+  const savedStatus=widerspruch||missingSupplier?'unklar':input.status;
+  const unclearReason=widerspruch?eingangCopy.rechnungswiderspruch:missingSupplier?'Lieferant fehlt':input.unclearReason;
+  const selected=await validate(tx,auth,input.fields,widerspruch?savedStatus:input.status,input.paidDate,widerspruch?null:input.proofFileId,row.id,deps);
   if(!existingInvoice&&row.kunde_id&&row.kunde_id!==selected?.id)reject('CONFLICT','Rechnung gehört zu einem anderen zugeordneten Lieferanten.');
-  if(input.status==='unklar'&&(!input.unclearReason||input.unclearReason.trim().length<3))reject('VALIDATION_ERROR','Grund fehlt',{unclearReason:'Grund fehlt · 3 bis 200 Zeichen'});
-  await verifyDuplicate(tx,auth,input.fields,input.status,input.duplicateId,input.duplicateReason);
+  if(savedStatus==='unklar'&&(!unclearReason||unclearReason.trim().length<3))reject('VALIDATION_ERROR','Grund fehlt',{unclearReason:'Grund fehlt · 3 bis 200 Zeichen'});
+  await verifyDuplicate(tx,auth,input.fields,widerspruch?savedStatus:input.status,input.duplicateId,input.duplicateReason);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('invoice-number:'||${auth.tenantId},0))`);
   const [number]=await tx.execute<{value:string}>(sql`SELECT 'ER-'||to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY')||'-'||lpad(next_value,greatest(4,length(next_value)),'0') AS value FROM (
    SELECT (coalesce(max(substring(nummer_intern from '[0-9]+$')::bigint),0)+1)::text AS next_value FROM public.supplier_invoice
    WHERE tenant_id=${auth.tenantId} AND nummer_intern LIKE 'ER-'||to_char(statement_timestamp() AT TIME ZONE 'Europe/Berlin','YYYY')||'-%') next_number`);
   const id=randomUUID(),f=input.fields,money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
-  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,input.fileId,pages,existingInvoice===null),f.ust,null);
+  const breakdown=taxRates(vorschlaege,f.ust,null);
   await tx.execute(sql`INSERT INTO public.supplier_invoice(id,tenant_id,nummer_intern,item_id,file_id,seite_von,seite_bis,lieferant_id,nummer,datum,netto,ust,brutto,faellig_am,iban,iban_geprueft,ust_saetze,zahlstatus,bezahlt_am,nachweis_file_id,verweis_id,dublette_grund,unklar_grund,erfasst_von)
    VALUES(${id}::uuid,${auth.tenantId},${number.value},${row.id}::uuid,${input.fileId}::uuid,${pages?.from??null},${pages?.to??null},${selected?.id??null},${f.nummer.trim()||null},${f.datum||null}::date,${money(f.netto)}::numeric,${money(f.ust)}::numeric,${money(f.brutto)}::numeric,
-    ${f.faelligAm||null}::date,${normaliseIban(f.iban)||null},${f.ibanGeprueft},${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,${savedStatus},${input.status==='bezahlt'?input.paidDate:null}::date,${input.proofFileId}::uuid,${input.status==='doppelt'?input.duplicateId:null}::uuid,${input.duplicateReason?.trim()||null},${savedStatus==='unklar'?unclearReason!.trim():null},${auth.userId}::uuid)`);
-  if(selected&&!selected.iban&&f.iban.trim()){
+    ${f.faelligAm||null}::date,${normaliseIban(f.iban)||null},${f.ibanGeprueft},${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,${savedStatus},${savedStatus==='bezahlt'?input.paidDate:null}::date,${widerspruch?null:input.proofFileId}::uuid,${savedStatus==='doppelt'?input.duplicateId:null}::uuid,${input.duplicateReason?.trim()||null},${savedStatus==='unklar'?unclearReason!.trim():null},${auth.userId}::uuid)`);
+  if(!widerspruch&&selected&&!selected.iban&&f.iban.trim()){
    const updated=await deps.updateCustomer(tx,{tenantId:auth.tenantId,userId:auth.userId,capabilities:{canCreateCustomer:false,canEditCustomer:true,canManageMoney:true,canDecide:hasAuthorizationArea(auth,'entscheiden')}},
     {customerId:selected.id,clientEventId:input.clientKey,iban:normaliseIban(f.iban)});
    if(updated.code!=='OK')throw new Rejected(updated);
@@ -280,6 +301,8 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   const repeated=await replay(tx,auth,row,input.clientKey,command,input);if(repeated)return repeated;
   const before=await findInvoice(tx,auth,input.invoiceId,false,true);if(!before)reject('NOT_FOUND','Rechnung nicht verfügbar.');
   if(before.version!==input.version)reject('CONFLICT','Rechnung wurde inzwischen geändert · Eingaben bleiben erhalten.');
+  if(before.unklar_grund===eingangCopy.rechnungswiderspruch&&['offen','bezahlt'].includes(input.result))
+   reject('CONFLICT',eingangCopy.rechnungswiderspruch);
   if(clarify?before.zahlstatus!=='unklar':!['offen','bezahlt'].includes(before.zahlstatus))reject('VALIDATION_ERROR',clarify?'Rechnung ist nicht unklar':'Dieser Status wird ausschließlich in Rechnung klären geändert.');
   if(!clarify&&input.fields!==null)reject('VALIDATION_ERROR','Status ändern verändert keine Rechnungsfelder.');
   if(input.result==='ungueltig'&&(!input.reason||input.reason.trim().length<3))reject('VALIDATION_ERROR','Grund fehlt',{reason:'Grund fehlt · 3 bis 200 Zeichen'});
@@ -290,7 +313,8 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   await validate(tx,auth,fields,input.result,input.paidDate,input.proofFileId,row.id,deps);
   await verifyDuplicate(tx,auth,fields,input.result,input.duplicateId,before.dublette_grund,before.id);
   const money=(raw:string)=>raw.trim()?invoiceDecimal(invoiceCents(raw)!):null;
-  const breakdown=taxRates(await invoiceSuggestions(tx,auth,row.id,before.file_id,storedPages(before),row.vorgang_id===before.id),fields.ust,before);
+  const vorschlaege=await invoiceSuggestions(tx,auth,row.id,before.file_id,storedPages(before),row.vorgang_id===before.id);
+  const breakdown=taxRates(vorschlaege,fields.ust,before);
   await tx.execute(sql`UPDATE public.supplier_invoice SET lieferant_id=${fields.lieferantId||null},nummer=${fields.nummer.trim()||null},datum=${fields.datum||null}::date,
    netto=${money(fields.netto)}::numeric,ust=${money(fields.ust)}::numeric,brutto=${money(fields.brutto)}::numeric,ust_saetze=${breakdown.rates===null?null:JSON.stringify(breakdown.rates)}::jsonb,faellig_am=${fields.faelligAm||null}::date,iban=${normaliseIban(fields.iban)||null},iban_geprueft=${fields.ibanGeprueft},
    zahlstatus=${input.result},bezahlt_am=${input.result==='bezahlt'?input.paidDate:null}::date,nachweis_file_id=${input.proofFileId}::uuid,verweis_id=${input.result==='doppelt'?input.duplicateId:null}::uuid,
@@ -299,6 +323,8 @@ export async function changeIncomingInvoice(input:unknown,deps:InvoiceDependenci
   if(clarify){if(!before.aufgabe_id)reject('CONFLICT','Rechnungsaufgabe fehlt.');await deps.resolveTask(tx,auth,{invoiceId:before.id,taskId:before.aufgabe_id,note:'Rechnung geklärt · '+input.result+(input.reason?' · '+input.reason.trim():'')});}
   const after=await findInvoice(tx,auth,before.id);if(!after||after.version!==before.version+1)throw Error('INVOICE_STATUS_READBACK_FAILED');
   await record(tx,auth,row,input.clientKey,command,input,before,after,deps);
+  if(input.fields)await speichereErkennungskorrekturen(tx,auth,{itemId:row.id,befehlId:input.clientKey,absender:row.sender,
+   korrekturen:rechnungKorrekturen(vorschlaege,fieldsFrom(before),fieldsFrom(after))});
   if(breakdown.warning)recordObservedFailure('INCOMING_INVOICE_TAX_BREAKDOWN_MISMATCH');
   return {code:'OK' as const,invoice:after,replayed:false};
  });}catch(error){return failure(error);}

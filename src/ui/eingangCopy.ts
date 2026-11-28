@@ -2,6 +2,19 @@
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
 
 export const eingangCopy = {
+  rechnungswiderspruch: 'PDF und XML widersprechen',
+  verdaechtigerText: 'Verdächtiger Text',
+  eigeneFirma: 'Eigene Firma',
+  tag: {
+    eingang: 'Eingang',
+    offen: 'Eingang öffnen',
+    wartet: 'Wartet auf Zuordnung',
+    seit: (tage:number) => 'seit '+tage+' Tagen',
+    unklar: 'Vorschlag öffnen',
+    unsicher: 'Zuordnung noch unklar',
+    nachfassen: 'Gegenvorschlag nachfassen',
+    gegenvorschlag: 'Kunde hat noch nicht geantwortet',
+  },
   kandidatGrund: {
     ustid: 'USt-ID stimmt',
     adresse: 'E-Mail-Adresse stimmt',
