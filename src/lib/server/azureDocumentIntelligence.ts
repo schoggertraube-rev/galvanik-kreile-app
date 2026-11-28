@@ -30,7 +30,7 @@ export type DocumentSuggestion = {
   label: string;
   value: string;
   confidence: number | null;
-  source: { page: number; polygon: number[] };
+  source: { page: number | null; polygon: number[] };
 };
 
 type AzureResult = {
@@ -122,6 +122,8 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
   if (!result || typeof result !== "object" || Array.isArray(result)) return [];
   const analysis = result as Record<string, unknown>;
   const pairs = Array.isArray(analysis.keyValuePairs) ? analysis.keyValuePairs : [];
+  const singlePage = Array.isArray(analysis.pages) && analysis.pages.length === 1
+    && analysis.pages[0]?.pageNumber === 1 ? 1 : null;
   const output: DocumentSuggestion[] = modelSuggestions(analysis.documents);
   for (const pairValue of pairs) {
     if (!pairValue || typeof pairValue !== "object" || Array.isArray(pairValue)) continue;
@@ -133,7 +135,10 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
     const confidence = typeof pair.confidence === "number" ? pair.confidence : typeof value.confidence === "number" ? value.confidence : null;
     const regions = Array.isArray(value.boundingRegions) ? value.boundingRegions : Array.isArray(key.boundingRegions) ? key.boundingRegions : [];
     const region = regions[0] && typeof regions[0] === "object" && !Array.isArray(regions[0]) ? regions[0] as Record<string, unknown> : {};
-    const page = typeof region.pageNumber === "number" && Number.isInteger(region.pageNumber) ? region.pageNumber : 1;
+    const reportedPage = region.pageNumber;
+    const page = typeof reportedPage === "number" && Number.isSafeInteger(reportedPage) && reportedPage > 0
+      && regions.every(value => value?.pageNumber === reportedPage) ? reportedPage
+      : regions.length === 0 ? singlePage : null;
     const polygon = Array.isArray(region.polygon) ? region.polygon.filter((point): point is number => typeof point === "number" && Number.isFinite(point)).slice(0, 16) : [];
     if (!label || !content || (confidence !== null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1))) continue;
     output.push({ field: classify(label), label, value: content, confidence, source: { page, polygon } });

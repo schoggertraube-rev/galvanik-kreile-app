@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { analyzeWithAzureDocumentIntelligence, readAzureDocumentIntelligenceStatus } from "../azureDocumentIntelligence";
+import { analyzeWithAzureDocumentIntelligence, readAzureDocumentIntelligenceStatus, readAzureRecognitionOriginal } from "../azureDocumentIntelligence";
 
 const env = { AZURE_DOCINTEL_ENDPOINT: "https://docs.example.invalid/", AZURE_DOCINTEL_KEY: "secret" };
 
@@ -41,6 +41,18 @@ describe("Azure Document Intelligence port", () => {
     await expect(analyzeWithAzureDocumentIntelligence(new Uint8Array([1]), "image/png", env, fetchPort, async () => undefined))
       .resolves.toEqual({ code: "UNAVAILABLE", message: "Das Dokument konnte mit Azure nicht sicher analysiert werden." });
     expect(fetchPort).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains a field without assigning it to an unproven PDF page", () => {
+    const value = { content: "TEST-RE-18" };
+    const payload = new TextEncoder().encode(JSON.stringify({ status: "succeeded", analyzeResult: {
+      pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
+      keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value }],
+    } }));
+    const original = readAzureRecognitionOriginal(payload, "prebuilt-layout");
+    expect(original.data.suggestions).toEqual([expect.objectContaining({
+      value: "TEST-RE-18", source: { page: null, polygon: [] },
+    })]);
   });
 
   it("retains every recognized field and complete document text", async () => {
