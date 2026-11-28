@@ -606,7 +606,7 @@ describe("P55 E40: phone and photograph provenance",()=>{
   expect(await sql`SELECT kanal,text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${nonPhone.intakeItemId}::uuid`)
    .toEqual([{kanal:'notiz',text:null}]);
  });
- it("persists explicit goods-photo provenance through the real upload and fresh read",async()=>withDocumentReading(false,async()=>{
+ it.each([false,true])("persists explicit goods-photo provenance through the real upload and fresh read (E04=%s)",async(dokumentLesen)=>withDocumentReading(dokumentLesen,async()=>{
   const actor=await createFixture();
   const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
   vi.mocked(analyzeWithAzureDocumentIntelligence).mockClear();
@@ -616,10 +616,15 @@ describe("P55 E40: phone and photograph provenance",()=>{
   const input={itemId:randomUUID(),fileId:randomUUID(),name:'synthetisch.png',mime:'image/png',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),captureOrigin:'warenfoto' as const};
   const grant=await withSession(actor,()=>prepareIntakeFileAction(input));if(grant.code!=='OK')throw Error('E40_PHOTO_GRANT:'+grant.message);
   if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).ok).toBe(true);
-  expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK'});
-  expect(analyzeWithAzureDocumentIntelligence).not.toHaveBeenCalled();
-  expect(await sql`SELECT aufnahme_herkunft FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`).toEqual([{aufnahme_herkunft:'warenfoto'}]);
-  expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,captureOrigin:'warenfoto',readable:false,status:'fertig'}]}});
+  await withSession(actor,()=>finishIntakeFileAction(input.fileId),async original=>{
+   expect(original).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true,status:'wartet'}]}});
+   expect(analyzeWithAzureDocumentIntelligence).not.toHaveBeenCalled();
+  });
+  expect(analyzeWithAzureDocumentIntelligence).toHaveBeenCalledTimes(dokumentLesen?1:0);
+  expect(await sql`SELECT aufnahme_herkunft,foto_art FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`)
+   .toEqual([{aufnahme_herkunft:'warenfoto',foto_art:null}]);
+  expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',
+   capture:{files:[{id:input.fileId,captureOrigin:'warenfoto',readable:dokumentLesen,status:'fertig'}]}});
  }));
 });
 
