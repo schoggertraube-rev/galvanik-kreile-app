@@ -106,10 +106,12 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
  const datum = rechnung?.datum ?? vorschlag(belegart==='lieferantenrechnung'?'rechnung.datum':'beleg.datum');
  const waehrung = vorschlag('waehrung');
  const lieferscheinNummern = new Set(hinweise.flatMap(zeile=>zeile.feld==='lieferscheinnummer' ? [text(zeile.wert)].filter(v=>v!==null) : []));
+ const belegnummer=rechnung?.nummer??vorschlag(belegart==='lieferantenrechnung'?'rechnung.nummer':'beleg.nummer')
+  ??(belegart==='lieferschein'&&lieferscheinNummern.size===1?[...lieferscheinNummern][0]:null);
 
  return {
   itemId:eingang.id,fileId:original.id,dokumentSha256:original.sha256,belegart,
-  belegnummer:rechnung?.nummer ?? vorschlag(belegart==='lieferantenrechnung'?'rechnung.nummer':'beleg.nummer'),
+  belegnummer,
   belegdatum:datum&&invoiceDate(datum)?datum:null,
   lieferantId:lieferant?.id??null,
   lieferantSicherheit:lieferant ? rechnung||['bestaetigt','hand'].includes(eingang.zuordnung)?1:sicherheit(lieferant.sicherheit) : null,
