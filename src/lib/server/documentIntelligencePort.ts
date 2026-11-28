@@ -34,22 +34,25 @@ export async function analyzeDomainAttachment(auth: AuthorizationSnapshot, input
     const stable = await storage.readStableDomainAttachment(row.original_storage_path, { fileBytes, mimeType: row.file_type });
     const analyzed = await analyzeWithAzureDocumentIntelligence(stable.bytes, row.file_type,undefined,undefined,undefined,{subject:{type:'attachment',id:row.id},originalRef:row.id});
     if (analyzed.code !== "OK") return analyzed;
-    const confidence = Object.fromEntries(analyzed.data.suggestions.map((item, index) => [`${index}:${item.field}`, item.confidence]));
-    const payload = { version: 1, provider: "azure_document_intelligence", suggestions: analyzed.data.suggestions };
+    // The existing attachment preview uses zero for an unavailable confidence value.
+    const suggestions = analyzed.data.suggestions.map(item => ({ ...item, confidence: item.confidence ?? 0 }));
+    const confidence = Object.fromEntries(suggestions.map((item, index) => [`${index}:${item.field}`, item.confidence]));
+    const maximumConfidence = suggestions.reduce((highest, item) => Math.max(highest, item.confidence), 0);
+    const payload = { version: 1, provider: "azure_document_intelligence", suggestions };
     const updated = await withPrivilegedTenantTransaction(auth, (tx) => tx.execute<{ id: string }>(sql`
-      UPDATE public.scan_uploads SET detected_type='document', detection_confidence=${analyzed.data.suggestions.length ? Math.max(...analyzed.data.suggestions.map((item) => item.confidence)) : 0},
+      UPDATE public.scan_uploads SET detected_type='document', detection_confidence=${maximumConfidence},
         extracted_data=${JSON.stringify(payload)}::jsonb, field_confidence=${JSON.stringify(confidence)}::jsonb,
         ocr_provider='azure_document_intelligence', review_required=true, status='ocr_review'
       WHERE tenant_id=${auth.tenantId} AND id=${row.id} AND status='secured' AND original_hash=${row.original_hash}
       RETURNING id
     `));
     if (updated.length !== 1) return { code: "CONFLICT" as const, message: "Das Dokument hat sich während der Analyse geändert. Bitte neu laden." };
-    if (input.targetType === "INTAKE_DRAFT") return { code: "OK" as const, data: { ...analyzed.data, customerId: null, customerName: null } };
+    if (input.targetType === "INTAKE_DRAFT") return { code: "OK" as const, data: { suggestions, customerId: null, customerName: null } };
     const customer = await withPrivilegedTenantTransaction(auth, (tx) => tx.execute<{ id: string; name: string }>(sql`
       SELECT id, name FROM public.customers WHERE tenant_id=${auth.tenantId} AND id=${row.linked_customer_id} LIMIT 2
     `));
     if (customer.length !== 1 || !customer[0]) return { code: "UNAVAILABLE" as const, message: "Der zugehörige Kunde ist nicht sicher lesbar." };
-    return { code: "OK" as const, data: { ...analyzed.data, customerId: customer[0].id, customerName: customer[0].name } };
+    return { code: "OK" as const, data: { suggestions, customerId: customer[0].id, customerName: customer[0].name } };
   } catch (error) {
     logDocumentIntelligenceFailure("DOCUMENT_INTELLIGENCE_ANALYSIS_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Das Dokument konnte nicht sicher analysiert und gespeichert werden." };

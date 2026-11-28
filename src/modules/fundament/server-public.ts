@@ -22,6 +22,7 @@ export {readLoggingSettings} from './server/loggingSettingsPort';
 
 // Einstellungs-Leser eingang
 export {readMailboxFetchState,writeMailboxFetchState} from "./server/systemSettingsPort";
+export {readErkennungsEinstellungenInTransaction} from "./server/s16dSpurDSettingsPort";
 
 // Einstellungs-Leser werkstatt
 export {
