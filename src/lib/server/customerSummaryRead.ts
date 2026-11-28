@@ -7,7 +7,9 @@ import type {AuthorizationSnapshot} from "@/lib/server/authorization";
 import { classifyOverdue } from "@/lib/server/paymentContract";
 import {CUSTOMER_METRICS_COPY} from '@/ui/situationCatalog';
 import {readUnsentInvoiceOriginals,readInvoiceMailCohort} from './communicationDocumentPort';
-import {evaluateOrderPriority} from '@/lib/priority';
+import {berlinCalendarDay, leseBetriebsruhetage} from '@/lib/domain/workingDays';
+import {fertigtermin, zeigeFertigtermin} from '@/modules/orders/public';
+import {ORDER_TERM_COPY} from '@/ui/ordersCopy';
 import type {CustomerHint,CustomerListSignals} from '@/modules/customers/public';
 import { withPrivilegedTenantTransaction,withTenantSavepoint } from "@/lib/server/privilegedDb";
 
@@ -23,13 +25,16 @@ import type {PrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 const MAX_ID_LENGTH = 128;
 const AGREEMENT_TYPES = new Set<string>(CUSTOMER_AGREEMENT_TYPES);
 
+import type {TerminEinstellungenLeser} from "./orderStationRead";
+
 /** One batched projection for the list and card; hidden money/mail reasons never leave this port. */
-export async function readCustomerListSignals(auth:AuthorizationSnapshot,customerIds:readonly string[],openCondition:SQL):Promise<Map<string,CustomerListSignals>> {
+export async function readCustomerListSignals(auth:AuthorizationSnapshot,customerIds:readonly string[],openCondition:SQL,readTerminEinstellungen:TerminEinstellungenLeser):Promise<Map<string,CustomerListSignals>> {
   if(!hasAuthorizationArea(auth,'kunden'))throw Error('CUSTOMER_SIGNALS_FORBIDDEN');
   if(!customerIds.length)return new Map();
   if(customerIds.some(id=>typeof id!=='string'||!id||id.length>128))throw Error('CUSTOMER_SIGNALS_IDS_INVALID');
   const money=hasAuthorizationArea(auth,'zahlungen'),mails=hasAuthorizationArea(auth,'mails'),intake=hasAuthorizationArea(auth,'eingang');
-  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{id:string;as_of:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<{number:string|null;dueDate:string|null;risk:string|null;status:string|null}>}>(sql`
+  const {rows,kalender}=await withPrivilegedTenantTransaction(auth,async tx=>{
+  const rows=await tx.execute<{id:string;as_of:string;active_orders:number;active_quotes:number;overdue:number;unassigned:number;open_messages:number;agreements:Array<{text:string}>;complaints:Array<{text:string}>;tasks:Array<{text:string}>;deadlines:Array<Parameters<typeof fertigtermin>[0]&{number:string|null;status:string|null}>}>(sql`
     SELECT customer.id,statement_timestamp()::text AS as_of,
       (SELECT count(*)::integer FROM private.v_operational_station_queue_v1 queue JOIN public.orders order_source ON order_source.tenant_id=queue.tenant_id AND order_source.id=queue.id WHERE queue.tenant_id=customer.tenant_id AND queue.customer_id=customer.id
         AND queue.station NOT IN ('abgeholt','versendet','raus','storniert') AND order_source.ware<>'storniert') AS active_orders,
@@ -50,14 +55,27 @@ export async function readCustomerListSignals(auth:AuthorizationSnapshot,custome
       (SELECT coalesce(jsonb_agg(jsonb_build_object('text',task.titel||' · fällig '||to_char(task.faellig_am,'DD.MM.YYYY')) ORDER BY task.faellig_am,task.id),'[]'::jsonb)
         FROM public.tasks task WHERE task.tenant_id=customer.tenant_id AND task.bezug_typ='kunde' AND task.bezug_id=customer.id AND task.status='offen'
           AND (task.erstellt_von=${auth.userId}::uuid OR task.fuer_login=${auth.userId}::uuid OR task.fuer_bereich=ANY(ARRAY[${sql.join((auth.areas??[]).map(area=>sql`${area}`),sql`, `)}]::text[]))) AS tasks,
-      (SELECT coalesce(jsonb_agg(jsonb_build_object('number',queue.order_number,'dueDate',queue.due_date::date::text,'risk',queue.risk,'status',queue.status) ORDER BY queue.due_date,queue.id),'[]'::jsonb)
+      (SELECT coalesce(jsonb_agg(jsonb_build_object('number',queue.order_number,'dueDate',queue.due_date::date::text,'handoverMode',queue.handover_mode,'status',queue.status) ORDER BY queue.due_date,queue.id),'[]'::jsonb)
         FROM private.v_operational_station_queue_v1 queue WHERE queue.tenant_id=customer.tenant_id AND queue.customer_id=customer.id AND queue.station IN ('angenommen','galvanik','fertig')) AS deadlines
     FROM public.customers customer WHERE customer.tenant_id=${auth.tenantId} AND customer.id IN (${sql.join(customerIds.map(id=>sql`${id}`),sql`, `)})
-  `));
+  `);
+  if (!rows.some(row=>row.deadlines.some(order=>order.dueDate&&order.handoverMode&&order.status!=='blocked'))) return {rows,kalender:null};
+  const einstellungen=await readTerminEinstellungen(tx,auth.tenantId);
+  const betriebsruhe=leseBetriebsruhetage(einstellungen.betriebsruhe);
+  return {rows,kalender:{...einstellungen,betriebsruhe}};
+  });
   return new Map(rows.map(row=>{
     const hints:CustomerHint[]=[];
     if(row.overdue)hints.push({kind:'payment',text:`${row.overdue} ${row.overdue===1?'Rechnung':'Rechnungen'} überfällig`,urgent:true});
-    for(const order of row.deadlines){const priority=evaluateOrderPriority({dueDate:order.dueDate,risk:order.risk??undefined,isBlocked:order.status==='blocked'});if(priority.risk==='red'||priority.risk==='blocked')hints.push({kind:'deadline',text:`Termin ${order.number??'Auftragsnummer fehlt'} in Gefahr`,urgent:true});}
+    const heute=berlinCalendarDay(new Date(row.as_of));
+    for(const order of row.deadlines){
+      const stand = zeigeFertigtermin(order, kalender, heute, order.status === 'blocked');
+      if (stand.risk === 'blocked' || stand.risk === 'red') {
+        hints.push({ kind: 'deadline', text: ORDER_TERM_COPY.danger(order.number), urgent: true });
+      } else if (order.dueDate && order.handoverMode && stand.risk === 'unknown') {
+        hints.push({ kind: 'deadline', text: stand.dueValue, urgent: false });
+      }
+    }
     if(row.unassigned)hints.push({kind:'message',text:`${row.unassigned} ${row.unassigned===1?'Nachricht':'Nachrichten'} zuordnen`,urgent:false});
     if(row.open_messages)hints.push({kind:'message',text:`${row.open_messages} ${row.open_messages===1?'Nachricht':'Nachrichten'} offen`,urgent:false});
     hints.push(...row.agreements.map(value=>({kind:'agreement' as const,text:value.text,urgent:false})),...row.complaints.map(value=>({kind:'complaint' as const,text:value.text,urgent:true})),...row.tasks.map(value=>({kind:'task' as const,text:value.text,urgent:false})));
@@ -475,6 +493,7 @@ export async function readCustomerSummary(
   authorization: AuthorizationSnapshot,
   input: { customerId: string },
   openCondition: SQL,
+  readTerminEinstellungen: TerminEinstellungenLeser,
   readSettings?:()=>Promise<import('@/modules/fundament/public').PageReadSettings|null|undefined>,
 ): Promise<CustomerSummaryReadResult> {
   if (!exactObject(input, ["customerId"]) || !validId(input.customerId)) {
@@ -541,7 +560,7 @@ export async function readCustomerSummary(
        }
        return summary;
     });
-    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId],openCondition);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;data.nextActionRule=readV45CustomerRule(authorization,data,signal);}
+    if(data){const signals=await readCustomerListSignals(authorization,[input.customerId],openCondition,readTerminEinstellungen);const signal=signals.get(input.customerId);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');data.hints=signal.hints;data.nextActionRule=readV45CustomerRule(authorization,data,signal);}
     return data
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Kunde nicht verfügbar." };

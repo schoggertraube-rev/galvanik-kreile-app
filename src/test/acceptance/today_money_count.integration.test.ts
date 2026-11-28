@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -32,7 +33,7 @@ it('W-TAG T05-3 counts all 25 historical invoice fixtures while limiting the lis
   await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
    VALUES(${id}::uuid,${tenant},${order.receipt.orderId},${customerId},${'TEST-S05-FUTURE-'+days},30.00,'issued',(statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+${days}::integer,3000,1,'rechnung','offen',3000,0,'EUR',0)`;
  }
- const read=async(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const read=async(fixture:typeof full)=>withSession(fixture,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const first=await read(full),again=await read(full);
  const [serverDay]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS today`;expect(first.calendar?.today).toBe(serverDay.today);expect(Number.isFinite(Date.parse(first.calendar?.readStartedAt??''))).toBe(true);
  // S38 E2: issued + open > 0 + due before Berlin today is the one predicate,
@@ -81,7 +82,7 @@ it('W-TAG T05-6 combines a real overdue order and an explicit historical invoice
  // Explicit synthetic historical invoice, never an invoice-writer proof.
  await sql`INSERT INTO public.invoices(id,tenant_id,order_id,customer_id,invoice_number,amount_total,status,due_date,gross_amount_cents,payment_contract_version,payment_mode,payment_status,payment_open_amount_cents,payment_paid_amount_cents,payment_currency,payment_version)
  VALUES(${invoiceId}::uuid,${tenant},${order.receipt.orderId},${customerId},${'TEST-S05-LATE-'+invoiceId},119,'issued',${clock.yesterday}::date,11900,1,'rechnung','offen',11900,0,'EUR',0)`;
- const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const first=await read(),groups=first.challenges?.groups.filter(row=>row.orderId===order.receipt.orderId);
  expect(groups).toHaveLength(1);expect(groups?.[0].reasons.map(reason=>reason.textKey)).toEqual(['day.challenge_late','day.challenge_debt']);
  expect(groups?.[0].action).toBeNull();expect(first.challenges?.missing).toContain('CHALLENGE_PAYMENT_ACTION:'+invoiceId);

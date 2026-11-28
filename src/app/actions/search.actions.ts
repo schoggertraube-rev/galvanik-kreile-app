@@ -5,6 +5,7 @@ import {canSearchTenant} from '@/lib/auth/authorizationContract';
 import {TENANT_SEARCH_COPY} from '@/ui/situationCatalog';
 import { searchOrderIntakeCustomers } from "@/lib/server/orderIntakeRead";
 import { readTenantOperationalOrders } from "@/lib/server/orderStationRead";
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {
   normalizeSearchQuery,
   customerMatchField,
@@ -60,7 +61,7 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
   return searchTenant(query, {
     readOrders: async () => {
       try {
-        return await readTenantOperationalOrders(authorization.data);
+        return await readTenantOperationalOrders(authorization.data, readBetriebsruheInTransaction);
       } catch (error) {
         logPortFailure("orders", error);
         throw error;

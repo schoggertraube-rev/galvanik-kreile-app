@@ -1,8 +1,12 @@
 import type {U2Read} from '@/lib/domain/u2ReadContract';
 import {projectIntakeTaskSchedule,projectQuoteSchedule,projectTodayInvoiceMoney,projectOrderSchedule,readTodayCalendar,projectTodayChallenges} from '@/lib/today/todayDashboardPolicy';
 import {sortTodayByResponsibility} from '@/lib/today/todayDashboardPolicy';
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { deriveOperationalOrderGuidance } from '@/lib/server/todayDashboard';
+import { fertigtermin } from '@/modules/orders/public';
 import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/today/todayDashboardPolicy";
+
+vi.mock('@/db', () => ({ db: {} }));
 
 const TODAY = "2026-10-28";
 
@@ -17,6 +21,21 @@ function order(overrides: Partial<Parameters<typeof classifyOrderForToday>[0]> =
 }
 
 describe("classifyOrderForToday", () => {
+  it('zeigt die Fertigmeldung am Versand-Fertigtermin', () => {
+    const heute = '2026-11-25';
+    const dueDate = '2026-11-27';
+    const kalender = { betriebsruhe: new Set<string>(), versandpufferArbeitstage: 2, knappAbArbeitstagen: 2 };
+    const auftrag = order({ dueDate, station: 'galvanik', status: 'galvanik', risk: 'orange' });
+    const versand = fertigtermin({ dueDate, handoverMode: 'shipping' }, kalender, heute);
+    const abholung = fertigtermin({ dueDate, handoverMode: 'pickup' }, kalender, heute);
+
+    expect(deriveOperationalOrderGuidance({ ...auftrag, terminStand: versand }, heute))
+      .toMatchObject({ primaryActionLabel: 'Fertig melden', reason: 'due_today', dueDate: heute });
+    expect(deriveOperationalOrderGuidance({ ...auftrag, terminStand: abholung }, heute)?.primaryActionLabel)
+      .not.toBe('Fertig melden');
+    expect(deriveOperationalOrderGuidance({ ...auftrag, risk: 'unknown', terminStand: null }, dueDate)).toBeNull();
+  });
+
   it("shows only a finished order due today in Heute fällig", () => {
     expect(classifyOrderForToday(order(), TODAY)).toBe("today");
     expect(classifyOrderForToday(order({ station: "galvanik", status: "galvanik" }), TODAY)).toBe("action");

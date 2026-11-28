@@ -1,6 +1,7 @@
 // @vitest-environment node
 // R24: deliberately damaged source belongs exclusively to this isolated TEST tenant.
 // Real quote/goods/order Actions, Auth, DB and Storage; no guard or trigger bypass.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -30,7 +31,7 @@ it('N7 rejects an actual position/grand-total mismatch without losing the order 
   expect(await withSession(actor,()=>getLiveOrderCardAction(JSON.parse(JSON.stringify({orderId}))))).toMatchObject({code:'OK',data:{card:{version:card.data.card.version}}});
   const today=await withSession(full,async()=>{
    const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_N7_AUTH');
-   return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);
+   return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);
   });
   expect(today.items.find(row=>row.key==='source-quote:'+orderId)).toMatchObject({orderId,orderVersion:card.data.card.version,title:'Preisbeleg zu Auftrag '+card.data.card.orderNumber+' ist nicht lesbar.',primaryActionLabel:'Auftrag öffnen'});
   const started=performance.now();

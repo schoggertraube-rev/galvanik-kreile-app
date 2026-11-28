@@ -3,7 +3,9 @@ import {INTAKE_PENDING_WORKFLOW_COPY} from '@/ui/situationCatalog';
 
 /** The concern identifiers and rights from eingang.anliegen in the bound R52 contract. */
 export const INTAKE_CONCERN_AREAS={reklamation:['auftraege'],kv_annahme:[],kv_ablehnung:['kunden','preise'],termin:['auftraege'],zahlung:['zahlungen'],abholung:['auftraege'],nachfrage:['kunden'],
- kv_anfrage:['eingang'],rechnung:['buchhaltung'],rueckruf:[],frist:[],aufgabe:[],aenderung:['auftraege'],hinweis:['auftraege'],ware:['eingang'],abholung_durch:['eingang'],preis_einwand:['preise'],kundendaten:['kunden']} as const;
+ kv_anfrage:['eingang'],rechnung:['buchhaltung'],rueckruf:[],frist:[],aufgabe:[],aenderung:['auftraege'],hinweis:['auftraege'],ware:['eingang'],abholung_durch:['eingang'],preis_einwand:['preise'],kundendaten:['kunden'],
+ quittung:['zahlungen'],kontakt:['kunden'],ware_ohne_bezug:['eingang'],kein_vorgang:[],badanalyse:[],nachweis:[],sicherheitsdatenblatt:[],zaehlerstand:[],werbung:[],sonstiges:[],
+ lieferschein:['eingang'],zahlungsavis:['zahlungen'],kontobeleg:['zahlungen']} as const;
 export type IntakeSelectableConcern=keyof typeof INTAKE_CONCERN_AREAS;
 
 /** A conservative shared directive; contradictory instructions never choose a mode. */

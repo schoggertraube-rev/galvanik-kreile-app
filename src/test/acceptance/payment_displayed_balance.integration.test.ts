@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=> 'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -12,7 +13,7 @@ it('N4 rejects a changed displayed balance without booking, binds retries to the
  const [initial]=await sql`SELECT payment_open_amount_cents AS amount,payment_version AS version FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.invoice.invoiceId}::uuid`;
  const {readTodayDashboard}=await import('@/lib/server/todayDashboard'),{resolveAuthorization}=await import('@/lib/server/authorization');
  const {getComplaints}=await import('@/app/actions/complaints.actions'),{getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
- const day=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 payment auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const day=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST S05 payment auth');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  expect((await day()).invoiceMoney).toMatchObject({code:'OK',openCount:1,openCents:initial.amount,sources:[{id:order.invoice.invoiceId,version:initial.version}]});
 
  const input={invoiceId:order.invoice.invoiceId,amount:4000,method:'ueberweisung' as const,expectedVersion:initial.version,expectedOpenAmountCents:initial.amount,clientEventId:randomUUID()};

@@ -78,14 +78,22 @@ it('shared P0 composition keeps invoice and customer denials unchanged and binds
 });
 
 it('L6 allowlisted technical source persists references/hash only; L9 actual protocol right is required',async()=>{
- const authorization=await auth(),reference=randomUUID();
+ const authorization=await auth(),reference='1234'+randomUUID().slice(4);
  const secrets={pin:'1234',password:'TEST-PASSWORD-NOT-FOR-LOG',token:'Bearer x',mail:'PRIVATE_MAIL_'.repeat(200),file:Buffer.from('PRIVATE_FILE_BYTES')};
  const event:TechnicalEvent&typeof secrets={type:'external',command:'sendCustomerMail',subject:{type:'mail',id:reference},dienst:'microsoft365',ergebnis:'ok',original:{ref:reference,sha256:createHash('sha256').update('TEST secured original').digest('hex')},...secrets};
  expect(await logTechnical(authorization,event)).toBe(true);
  const [stored]=await sql`SELECT * FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND subject_id=${reference}`;
- expect(stored.original_sha256).toBe(event.original?.sha256);
+ const {id,tenant_id,user_id,occurred_at,recorded_at,subject_id,original_ref,original_sha256,...contents}=stored;
+ // An object reference can legitimately include the same four digits as the PIN.
+ // Assert the identity and evidence fields separately and keep the PIN check on every other field.
+ expect({id,tenant_id,user_id,occurred_at,recorded_at,subject_id,original_ref,original_sha256}).toEqual({
+  id:expect.stringMatching(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/),
+  tenant_id:authorization.tenantId,user_id:authorization.userId,occurred_at:expect.any(Date),recorded_at:expect.any(Date),
+  subject_id:reference,original_ref:reference,original_sha256:event.original?.sha256,
+ });
+ expect(JSON.stringify(contents)).not.toContain(secrets.pin);
  const serialized=JSON.stringify(stored);
- for(const value of [secrets.pin,secrets.password,secrets.token,'PRIVATE_MAIL_','PRIVATE_FILE_BYTES'])expect(serialized).not.toContain(value);
+ for(const value of [secrets.password,secrets.token,'PRIVATE_MAIL_','PRIVATE_FILE_BYTES'])expect(serialized).not.toContain(value);
  expect(await withSession(full,()=>getProtocolLogAction({subjectId:reference}))).toEqual({code:'FORBIDDEN'});
  const allowed=await reader(),read=await withSession(allowed,()=>getProtocolLogAction({subjectId:reference}));
  expect(read).toMatchObject({code:'OK',technical:[{subjectId:reference,userId:full.actorId,dienst:'microsoft365',ergebnis:'ok'}]});

@@ -16,7 +16,8 @@ import { sql } from "drizzle-orm";
 import {canTransportInvoiceDocument,hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {hasAnyAuthorizationArea,type AuthorizationSnapshot} from "@/lib/server/authorization";
 import {authorizationReadContext,type AuthorizedReadContext} from "@/lib/server/authorizationReadContext";
-import { getOperationalOrders } from "@/lib/server/operationalOrders";
+import { getOperationalOrders, type OperationalOrder } from "@/lib/server/operationalOrders";
+import type { TerminEinstellungenLeser } from "@/lib/server/orderStationRead";
 import {TAG_QUELLEN,TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
 import type {HeuteZeile} from '@/lib/today/todaySourceRegistry';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
@@ -349,7 +350,7 @@ function readTodayTaskCalendar(){
  return withPageReadPhase('today.tasks',()=>getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]})));
 }
 
-export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
+export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readTerminEinstellungen:TerminEinstellungenLeser,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
   const diagnosticStarted=Date.now();
   const calendar=readTodayCalendar(readNow),today=calendar.today;
   const access=todaySourceAccess(authorizationReadContext(auth));
@@ -357,7 +358,7 @@ export async function collectTodaySources(auth: AuthorizationSnapshot,readCompla
   const quotesRead=readTodayQuoteSources(graphAllowed,readNow);
   const tasksRead=graphAllowed?readTodayTaskCalendar():null;
   const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
-    withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'})).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
+    withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'},readTerminEinstellungen)).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
     withPageReadPhase('today.graph',()=>graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
     withPageReadPhase('today.support',()=>readTodaySupport(auth,today,access)),
     withPageReadPhase('today.complaints',()=>access.complaints?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]})),
@@ -393,6 +394,17 @@ export type TodayDashboardSources=Omit<CollectedTodaySources,'companyLetter'|'qu
  companyLetter:{code:'OK';companyName?:string}|{code:'FORBIDDEN'|'SOURCE_INCOMPLETE'};
  quoteList:{code:'OK';quotes:readonly {quoteId:string;version:number}[]}|Exclude<CollectedTodaySources['quoteList'],{code:'OK'}>;
 };
+export function deriveOperationalOrderGuidance(
+  order: Pick<OperationalOrder, 'dueDate' | 'risk' | 'station' | 'status' | 'terminStand'>,
+  today: string,
+) {
+  // A finished order still uses the delivery date for the handover action.
+  const finished = [order.station, order.status].some(state => state.trim().toLowerCase() === 'fertig');
+  const dueDate = finished ? order.dueDate : order.terminStand?.fertigtermin ?? '';
+  const guidance = deriveOrderGuidance({ ...order, dueDate }, today);
+  return guidance ? { ...guidance, dueDate } : null;
+}
+
 /** One synchronous composition for the live and later qualified model sources. */
 export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDashboardSources,calendar=sources.calendar):TodayDashboard {
   const {access,orderSource,graph,support,complaints,quoteFollowups,companyLetter,batch,versions,quoteList,quoteReads,taskRead}=sources;
@@ -488,12 +500,12 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
   for(const attention of complaintCases)add({key:attention.key,field:'action',kind:'complaint',title:attention.title,meta:attention.meta,urgency:attention.urgency,orderId:attention.orderId,target:attention.target,primaryActionLabel:attention.actionLabel as TodayItem['primaryActionLabel']});
 
   for (const order of orders) {
-    const guidance = deriveOrderGuidance(order, today);
+    const guidance = deriveOperationalOrderGuidance(order, today);
     if (!guidance) continue;
     const caseTitle = guidance.caseId === "finished_waiting" ? "Fertig und wartet auf Warenausgang" : guidance.caseId === "due" ? "Liefertermin braucht Handlung" : guidance.caseId === "tight" ? "Zeitplan ist knapp" : guidance.caseId === "problem" ? "Gemeldetes Auftragsrisiko" : "Heute fertig zur Übergabe";
     const reason = guidance.reason === "due_today" ? `heute fällig · Station ${order.station}` : guidance.reason === "overdue" ? `überfällig · Station ${order.station}` : guidance.reason === "finished_overdue" ? `Liefertermin überschritten · fertig zur Übergabe` : guidance.reason === "tight_schedule" ? `${order.dueLabel} ${order.dueValue} · noch nicht begonnen` : guidance.reason === "reported_risk" ? `Risiko ${order.risk} · Station ${order.station}` : `${order.dueLabel} ${order.dueValue} · fertig`;
     const assignment = assignments.get(order.id);
-    add({ key: `order:${order.id}:${guidance.caseId}:${guidance.reason}`, field: guidance.field, kind: "order", title: `${order.orderNumber} · ${caseTitle}`, meta: `${order.customerName ?? "Kunde"} · ${reason}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate, assignedToName: assignment?.assigned_to_name, assignmentVersion: assignment?.current_order_version, primaryActionLabel: guidance.primaryActionLabel });
+    add({ key: `order:${order.id}:${guidance.caseId}:${guidance.reason}`, field: guidance.field, kind: "order", title: `${order.orderNumber} · ${caseTitle}`, meta: `${order.customerName ?? "Kunde"} · ${reason}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: guidance.dueDate, assignedToName: assignment?.assigned_to_name, assignmentVersion: assignment?.current_order_version, primaryActionLabel: guidance.primaryActionLabel });
   }
 
   const assignmentMessages=graph.code==='OK'?graph.messages.filter(row=>row.channel==='mail'&&row.direction==='rein'&&row.usage==='offen'&&row.assignment==='offen'):null;
@@ -670,10 +682,10 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
   };
 }
 
-export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>,tagQuellenPorts?:TodayTagQuellenPorts): Promise<TodayDashboard> {
+export async function readTodayDashboard(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readTerminEinstellungen:TerminEinstellungenLeser,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>,tagQuellenPorts?:TodayTagQuellenPorts): Promise<TodayDashboard> {
   const diagnosticStarted=Date.now();
   const [sources,tagQuellen]=await Promise.all([
-   collectTodaySources(auth,readComplaints,readQuoteFollowups,readNow,operationalSource),
+   collectTodaySources(auth,readComplaints,readQuoteFollowups,readTerminEinstellungen,readNow,operationalSource),
    tagQuellenPorts&&readLiveTodayTagQuellen(auth,readNow,tagQuellenPorts),
   ]);
   const dashboard=composeTodayDashboard(auth,{...sources,tagQuellen},sources.calendar);
@@ -821,6 +833,7 @@ export type TodayModelReadPorts={
  liveFollowups:()=>Promise<TodayDashboardSources['quoteFollowups']>;
  liveCompanyLetter:(auth:AuthorizationSnapshot)=>Promise<TodayDashboardSources['companyLetter']>;
  readSettings:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<{today:TodayReadSettings;page:PageReadSettings|null}>;
+ readTerminEinstellungen:TerminEinstellungenLeser;
  messages:(auth:AuthorizationSnapshot,value:unknown)=>TodayDashboardSources['graph'];
  tagQuellen:TodayTagQuellenPorts;
  taskCalendar:(auth:AuthorizationSnapshot,value:unknown)=>NonNullable<TodayDashboardSources['taskRead']>;
@@ -872,7 +885,8 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const taskCalendar=access.messages?live('tasks',project('tasks',unknownTasks,payload=>ports.taskCalendar(auth,payload)),()=>getIntakeTaskAction({calendar:true})):null;
   const storedOrders=value('orders');
   const cachedOperationalSource:TodayDashboardSources['orderSource']=Array.isArray(storedOrders)&&storedOrders.every(row=>modelRecord(row)&&typeof row.id==='string'&&Number.isSafeInteger(row.version))?{code:'OK',data:storedOrders as Extract<TodayDashboardSources['orderSource'],{code:'OK'}>['data']}:{code:'SOURCE_INCOMPLETE'};
-  const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'})})):cachedOperationalSource;
+  const needsOrderTerms = cachedOperationalSource.code !== 'OK' || cachedOperationalSource.data.some(order => !Object.hasOwn(order, 'terminStand'));
+  const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'},ports.readTerminEinstellungen)}),needsOrderTerms):cachedOperationalSource;
   const unknownGraph:TodayDashboardSources['graph']={code:'SOURCE_INCOMPLETE',message:PAGE_READ_COPY.sourceIncomplete};
   const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)),()=>getIntakeMessagesAction('offen')):{code:'FORBIDDEN' as const,message:''};
   const unknownMoney=unknownTodayMoneySupport();

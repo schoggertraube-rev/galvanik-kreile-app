@@ -25,7 +25,7 @@ import {readOrderPickupAppointment,readOrderPickupAppointmentInTransaction} from
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoiceShippingConsequences,readInvoiceShippingConsequencesBatch,readShippingMergeAllocation} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readInvoiceVat} from '@/modules/accounting/public';
-import {readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction, readShippingSettingsInTransaction} from '@/modules/fundament/server-public';
 import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/server-public';
 import {readManualShipping,readManualShippingBatch} from '@/modules/orders/server-public';
 import {readOrdersInformed,readOrderInformed} from '@/lib/server/orderReleaseRead';
@@ -252,7 +252,7 @@ it.each(profiles)('keeps session/projector callbacks equal for $name and cannot 
  const command=quoteCommandContext(auth),read=quoteReadContext(projection);
  expect(read).toEqual(quoteReadContext(session));expect(read.capabilities.canReadQuote).toBe(command.capabilities.canReadQuote);
  const before=await sql`SELECT id::text,payload FROM public.events WHERE tenant_id=${tenant} ORDER BY id`;
- expect(await getOperationalOrders(projection,{purpose:'today'})).toEqual(await getOperationalOrders(auth,{purpose:'today'}));
+ expect(await getOperationalOrders(projection,{purpose:'today'}, readBetriebsruheInTransaction)).toEqual(await getOperationalOrders(auth,{purpose:'today'}, readBetriebsruheInTransaction));
  const expectedCards=await readTodayOrderCards(auth,[prepared.orderId]),cards=await readTodayOrderCards(projection,[prepared.orderId]);
  expect(cards).toEqual(expectedCards);
  const expectedProof=await readOrderEvidenceBatch(auth,[prepared.orderId]),proof=await readOrderEvidenceBatch(projection,[prepared.orderId]);

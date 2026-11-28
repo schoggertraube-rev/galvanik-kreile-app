@@ -10,6 +10,7 @@ import {readTodayDashboard} from '@/lib/server/todayDashboard';
 import {rebuildTodayModel} from '@/lib/server/todayProjection';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
+import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 
 it('keeps live results while page reads leave the projector idle until a bounded scheduled rebuild',async()=>{
@@ -17,7 +18,7 @@ it('keeps live results while page reads leave the projector idle until a bounded
  const now=new Date();
  const live=async()=>{
   const resolved=await resolveAuthorization();if(!resolved.ok)throw Error('TEST_ACTUAL_SHADOW_AUTH_REQUIRED');
-  return readTodayDashboard(resolved.data,()=>readComplaintsForAuthorization(resolved.data),async()=>({code:'OK',tasks:await withPrivilegedTenantTransaction(resolved.data,tx=>readQuoteFollowupTasksForToday(tx,resolved.data))}),now);
+  return readTodayDashboard(resolved.data,()=>readComplaintsForAuthorization(resolved.data),async()=>({code:'OK',tasks:await withPrivilegedTenantTransaction(resolved.data,tx=>readQuoteFollowupTasksForToday(tx,resolved.data))}),readBetriebsruheInTransaction,now);
  };
  const output=vi.spyOn(console,'info');
  try{

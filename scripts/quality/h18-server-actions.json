@@ -1,7 +1,10 @@
 {
   "version": 1,
-  "inventorySha256": "9e7ed24794f87668bde2dad8760a35b66a5317833742ae3f825ee5ed80be7e1d",
+  "inventorySha256": "72ff46d2226d0bb0e56ebe0344769f34fc026c52cedb7122f7fd883abfc7f0d5",
   "testedWriteActions": {
+    "src/app/actions/orders.actions.ts#readDelayedWorkOrdersAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
     "src/app/actions/lager-material.actions.ts#leseAuftragsmaterial": [
       "src/test/acceptance/material_rechnung.integration.test.ts"
     ],
@@ -67,6 +70,9 @@
     "src/app/actions/today.actions.ts#getTodayDeviceAction": [
       "src/test/acceptance/offline_workshop_sync.browser.integration.test.ts"
     ],
+    "src/app/actions/orders.actions.ts#getFixedStationOrdersAction": [
+      "src/test/acceptance/werkstatt1_daten.integration.test.ts"
+    ],
     "src/app/actions/orders.actions.ts#getProductionWeekAction": [
       "src/test/acceptance/production_snapshot_storage.integration.test.ts",
       "src/test/acceptance/production_snapshot_history.integration.test.ts"
@@ -121,6 +127,7 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/goodsOut.actions.ts#recordGoodsOutAction": [
+      "src/test/acceptance/b7l6_goods_out_signature.integration.test.ts",
       "src/test/acceptance/s09_shipping_cost_invoice.integration.test.ts",
       "src/test/h18_workshop_actions.integration.test.ts",
       "src/test/acceptance/dispatch_call.integration.test.ts",
@@ -129,6 +136,9 @@
       "src/test/acceptance/s10_shipment_queue.browser.integration.test.ts",
       "src/test/acceptance/s10_release_credit.integration.test.ts",
       "src/test/acceptance/s10_partial_agreement.integration.test.ts"
+    ],
+    "src/app/actions/goodsOut.actions.ts#prepareGoodsOutSignatureUploadAction": [
+      "src/test/acceptance/b7l6_goods_out_signature.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
       "src/test/h18_quote_actions.integration.test.ts"

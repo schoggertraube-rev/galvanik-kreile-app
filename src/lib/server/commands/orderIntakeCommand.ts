@@ -637,13 +637,13 @@ export async function createOrderIntake(input: unknown,createCustomer?:CustomerW
       }>(sql`
         INSERT INTO public.orders (
           id, tenant_id, order_number, customer_id, title, task, station,
-          current_station, current_station_id, version, status, risk, priority_computed,
-          intake_date, due_date, promised_due_date, intake_term_status, intake_source, source, source_ref, freetext_original,
+          current_station, current_station_id, version, status,
+          intake_date, due_date, intake_term_status, intake_source, source, source_ref, freetext_original,
           handover_mode, payment_mode, payment_mode_version, geprueft, ware, wunschtermin,termin_herkunft,processing_weeks,terminstatus_seit,created_at
         ) VALUES (
           ${orderId}, ${expected.tenantId}, ${orderNumber}, ${customer.id}, ${title}, ${task}, ${STATION},
-          ${STATION}, ${STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
-          statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date, ${normalized.dueDate}::date,
+          ${STATION}, ${STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN},
+          statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date,
           ${normalized.termStatus}, ${normalized.intakeSource},
           'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note},
           ${normalized.handoverMode}, ${paymentMode}, 0, ${normalized.geprueft}, ${normalized.geprueft ? "da" : "erwartet"}, ${normalized.wishDate??null}::date,${normalized.termOrigin??null},${normalized.processingWeeks??null},CASE WHEN ${normalized.termOrigin??null}::text IS NOT NULL THEN statement_timestamp() END, statement_timestamp() AT TIME ZONE 'UTC'

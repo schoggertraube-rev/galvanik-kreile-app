@@ -1,7 +1,9 @@
+import { plusWorkingDays } from "@/lib/domain/workingDays";
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
 import {sql,full,withSession,createFixture} from './replayHarness';
-import {customerFixture,intakeOrderFixture} from './orderFixture';
+import {customerFixture,intakeOrderFixture,invoiceCompanySettingsFixture} from './orderFixture';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readTodayDashboard} from '@/lib/server/todayDashboard';
@@ -12,7 +14,7 @@ import {getLiveOrderCardAction,transitionWareneingangToGalvanikAction} from '@/a
 it('W-TAG T H14/H16 keeps zero, one and several actual order sources in U3 with the same versioned U2 action and no money without Geld',async()=>{
  const read=(actor:typeof full)=>withSession(actor,async()=>{
   const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_AUTH');
-  return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);
+  return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);
  });
  const empty=await read(full);
  expect(empty).toMatchObject({hauptaktion:null,hauptaktionsQuelle:null,orderActions:{code:'OK',rows:[]},invoiceMoney:{code:'OK',openCount:0,openCents:0},challenges:{groups:[]}});
@@ -61,20 +63,25 @@ it('W-TAG T H14/H16 keeps zero, one and several actual order sources in U3 with 
 });
 
 it('W-TAG ranks the first five actual values by existing U3 urgency and deadline, across different real risks',async()=>{
+ await invoiceCompanySettingsFixture();
+ await sql`UPDATE public.company_settings SET betriebsruhe='[]'::jsonb,termin_knapp_arbeitstage=2
+  WHERE tenant_id=${KREILE_TENANT_SLUG}`;
  const customerId=await customerFixture('S13 T concrete first-five rank');
- // Deliberately not inserted in deadline/urgency order. The two next-day orders
+ const [heute]=await sql`SELECT (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date::text AS day`;
+ // Deliberately not inserted in deadline/urgency order. The two next-workday orders
  // remain below the five overdue ones, independent of their earlier creation.
  const offsets=[1,-6,-8,1,-5,-9,-7],ids:string[]=[],dates:string[]=[];
  const {changeOrderPromisedDueDateAction}=await import('@/app/actions/orders.actions');
  for(const [index,offset]of offsets.entries()){
   const order=await intakeOrderFixture('S13 rank '+index,customerId);ids.push(order.receipt.orderId);
-  const [date]=await sql`SELECT ((statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date+${offset}::int)::text AS day`;
-  dates.push(date.day);
-  expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:order.receipt.orderId,expectedVersion:1,dueDate:date.day,reason:'TEST S13 eindeutige U3 Rangfolge',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+  const date=plusWorkingDays(heute.day,offset);
+  if(!date)throw Error("TEST_ARBEITSTAG_FEHLT");
+  dates.push(date);
+  expect(await withSession(full,()=>changeOrderPromisedDueDateAction({orderId:order.receipt.orderId,expectedVersion:1,dueDate:date,reason:'TEST S13 eindeutige U3 Rangfolge',clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  }
- const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RANK_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
- const operational=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RISK_AUTH');const {getOperationalOrders}=await import('@/lib/server/operationalOrders');return getOperationalOrders(auth.data);});
- expect([...new Set(operational.filter(row=>ids.includes(row.id)).map(row=>row.risk))].sort()).toEqual(['red','yellow']);
+ const read=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RANK_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
+ const operational=await withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('S13_T_RISK_AUTH');const {getOperationalOrders}=await import('@/lib/server/operationalOrders');return getOperationalOrders(auth.data, undefined, readBetriebsruheInTransaction);});
+ expect([...new Set(operational.filter(row=>ids.includes(row.id)).map(row=>row.risk))].sort()).toEqual(['orange','red']);
  const day=await read();
  expect(day.items.filter(row=>row.orderId&&ids.includes(row.orderId))).toHaveLength(7);
  const expected=[5,2,6,1,4];
