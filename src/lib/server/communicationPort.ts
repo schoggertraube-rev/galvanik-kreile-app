@@ -1,4 +1,4 @@
-import {readIntakeMailOriginal,type IntakeMailOriginal} from './communicationOriginalPort';
+import {readIntakeMailOriginal,storeGoodsOutNoticeOriginal,type IntakeMailOriginal} from './communicationOriginalPort';
 import {reportObservedTechnical} from './actionObservation';
 import {readCompletedComplaintMail} from './communicationComplaintPort';
 import {quoteCommandContext} from './quoteAuthorization';
@@ -41,6 +41,116 @@ export async function readQueuedMailSentEvent(auth:AuthorizationSnapshot,clientR
     AND (event.event_type='COMMUNICATION_DOCUMENT_SENT_V1' OR event.payload->>'messageId'=message.id::text)
   LIMIT 2`));
  return rows.length===1?rows[0].id:null;
+}
+
+export type GoodsOutNoticeSource={
+  orderId:string;
+  goodsOutEventId:string;
+  kind:'versandbescheid'|'abholbescheid';
+};
+type OutgoingMailIds={threadId:string;messageId:string};
+type GoodsOutNoticeMailProof=OutgoingMailIds&{eventId:string;customerId:string;recordedAt:Date|string};
+
+function goodsOutNoticeRequestId(tenantId:string,source:GoodsOutNoticeSource):string{
+  const bytes=createHash('sha256').update(JSON.stringify([
+    'goods-out-notice',tenantId,source.orderId,source.goodsOutEventId,source.kind,
+  ])).digest();
+  bytes[6]=(bytes[6]&15)|80;
+  bytes[8]=(bytes[8]&63)|128;
+  const hex=bytes.subarray(0,16).toString('hex');
+  return [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+}
+
+async function readGoodsOutNoticeMail(
+  auth:AuthorizationSnapshot,source:GoodsOutNoticeSource,transaction?:PrivilegedTenantTransaction,
+):Promise<{requestId:string;proof:GoodsOutNoticeMailProof|null}|null>{
+  const read=async (tx:PrivilegedTenantTransaction)=>{
+    const mode=source.kind==='versandbescheid'?'versand':source.kind==='abholbescheid'?'abholung':null;
+    if(!mode)return null;
+    const {readGoodsOutReceiptById}=await import('./commands/recordGoodsOutCommand');
+    const release=await readGoodsOutReceiptById(tx,auth.tenantId,source.orderId,source.goodsOutEventId);
+    if(release?.mode!==mode)return null;
+    const requestId=goodsOutNoticeRequestId(auth.tenantId,source);
+    const rows=await tx.execute<GoodsOutNoticeMailProof>(sql`
+      SELECT event.id::text AS "eventId",thread.id::text AS "threadId",message.id::text AS "messageId",
+        thread.customer_id::text AS "customerId",thread.created_at AS "recordedAt"
+      FROM public.events event
+      JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id
+        AND thread.id::text=event.payload->>'threadId' AND thread.order_id=event.order_id
+        AND thread.created_by=event.user_id AND thread.customer_id=event.payload->>'customerId'
+      JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id
+        AND message.id::text=event.payload->>'messageId' AND message.created_by=event.user_id
+      WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${source.orderId}
+        AND event.correlation_id=${requestId}::uuid AND event.event_type='COMMUNICATION_MAIL_SENT_V1'
+        AND event.status='success' AND event.event_schema_version=1
+        AND event.payload->'goodsOutNotice'->>'goodsOutEventId'=${source.goodsOutEventId}
+        AND event.payload->'goodsOutNotice'->>'kind'=${source.kind}
+        AND thread.status='sent' AND thread.source=${'MS_GRAPH_OUT:'+requestId}
+        AND message.direction='outgoing' AND message.channel='email'
+      LIMIT 2
+    `);
+    return {requestId,proof:rows.length===1?rows[0]:null};
+  };
+  return transaction?read(transaction):withPrivilegedTenantTransaction(auth,read);
+}
+
+/** Closing a notice needs the original outbound proof, regardless of who handles the retry. */
+export async function readGoodsOutNoticeMailEvent(
+  auth:AuthorizationSnapshot,source:GoodsOutNoticeSource,receipt?:OutgoingMailIds,transaction?:PrivilegedTenantTransaction,
+):Promise<string|null>{
+  if(!canWrite(auth))return null;
+  const result=await readGoodsOutNoticeMail(auth,source,transaction);
+  const proof=result?.proof;
+  if(!proof||receipt&&(proof.threadId!==receipt.threadId||proof.messageId!==receipt.messageId))return null;
+  return proof.eventId;
+}
+
+async function readPreparedGoodsOutNotice(auth:AuthorizationSnapshot,source:GoodsOutNoticeSource,requestId:string){
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{original:IntakeMailOriginal|null;contentSha256:string}>(sql`
+    SELECT event.payload->'goodsOutNoticeOriginal' AS original,event.payload->>'contentSha256' AS "contentSha256"
+    FROM public.events event JOIN public.communication_threads thread ON thread.tenant_id=event.tenant_id
+      AND thread.id::text=event.payload->>'threadId' AND thread.order_id=event.order_id AND thread.created_by=event.user_id
+    WHERE event.tenant_id=${auth.tenantId} AND event.order_id=${source.orderId} AND event.correlation_id=${requestId}::uuid
+      AND event.event_type='COMMUNICATION_MAIL_PREPARED_V1' AND event.status='success'
+      AND event.payload->'goodsOutNotice'=${JSON.stringify(source)}::jsonb AND thread.source=${'MS_GRAPH_OUT:'+requestId}
+    LIMIT 2`));
+  if(!rows.length)return null;
+  const {original,contentSha256}=rows[0];
+  if(rows.length!==1||!original||original.sha256!==contentSha256)throw Error('GOODS_OUT_NOTICE_ORIGINAL_UNAVAILABLE');
+  return readIntakeMailOriginal(original);
+}
+
+/** The first send and every retry share a key tied to an immutable goods-out receipt. */
+export async function sendGoodsOutNoticeMail(
+  auth:AuthorizationSnapshot,input:GoodsOutNoticeSource&{subject:string;body:string;confirmedResend?:true},
+  readGraphSettings?:import('./microsoftGraph').GraphReadSettingsSource,
+):Promise<Result<CommunicationReceipt&OutgoingMailIds&{mailEventId:string}>>{
+  if(!canWrite(auth))return {code:'FORBIDDEN',message:COLLECTION_REMINDER_COPY.forbidden};
+  try{
+    const source={orderId:input.orderId,goodsOutEventId:input.goodsOutEventId,kind:input.kind};
+    const notice=await readGoodsOutNoticeMail(auth,source);
+    if(!notice)return {code:'NOT_FOUND',message:COLLECTION_REMINDER_COPY.proofUnavailable};
+    if(notice.proof){
+      const {eventId,threadId,messageId,customerId,recordedAt}=notice.proof;
+      return {code:'OK',data:{mailEventId:eventId,threadId,messageId,customerId,orderId:input.orderId,recordedAt:iso(recordedAt),replayed:true}};
+    }
+    const original=await readPreparedGoodsOutNotice(auth,source,notice.requestId);
+    const message=original??{subject:input.subject,body:input.body};
+    const result=await sendCommunicationMail(auth,{
+      targetType:'ORDER',targetId:input.orderId,clientRequestId:notice.requestId,
+      ...message,confirmedResend:input.confirmedResend,goodsOutNotice:source,
+    },readGraphSettings);
+    if(result.code!=='OK')return result;
+    const {threadId,messageId}=result.data;
+    if(!messageId)return {code:'UNAVAILABLE',message:COLLECTION_REMINDER_COPY.proofUnavailable};
+    const eventId=await readGoodsOutNoticeMailEvent(auth,source,{threadId,messageId});
+    return eventId
+      ?{code:'OK',data:{...result.data,messageId,mailEventId:eventId}}
+      :{code:'UNAVAILABLE',message:COLLECTION_REMINDER_COPY.proofUnavailable};
+  }catch(error){
+    logCommunicationFailure('GOODS_OUT_NOTICE_MAIL_FAILED',error);
+    return {code:'UNAVAILABLE',message:COLLECTION_REMINDER_COPY.proofUnavailable};
+  }
 }
 
 export async function readComplaintGoodsReminderContext(auth:AuthorizationSnapshot,orderId:string) {
@@ -246,7 +356,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; allowResend?:boolean;legacyReplaces?:LegacyQuoteReplacement; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeConfirmation?:{outboxId:string;sourceClientEventId:string;original:IntakeMailOriginal} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; confirmedResend?:true; allowResend?:boolean;legacyReplaces?:LegacyQuoteReplacement; attachment?: GraphMailAttachment; additionalAttachments?:GraphMailAttachment[]; document?:CommunicationDocument; reconcileInvoice?:(tx:PrivilegedTenantTransaction,threadId:string)=>Promise<void>; collectionReminder?:CollectionReminderMeta; beforePrepare?:(tx:PrivilegedTenantTransaction,recipient:string)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number;kind?:'reminder'};intakeConfirmation?:{outboxId:string;sourceClientEventId:string;original:IntakeMailOriginal};goodsOutNotice?:GoodsOutNoticeSource },
   readGraphSettings?:import('./microsoftGraph').GraphReadSettingsSource,
 ): Promise<Result<CommunicationReceipt>> {
   if (input?.confirmedResend!==undefined&&input.confirmedResend!==true || !validTarget(input?.targetType, input?.targetId) || typeof input.clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.clientRequestId) || typeof input.subject !== 'string' || typeof input.body !== 'string' || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
@@ -332,7 +442,7 @@ export async function sendCommunicationMail(
   // The body remains outside the business log; its hash binds a same-key retry.
   const originals=input.document?[{id:input.document.id,sha256:input.document.sha256},...bundle.map(document=>({id:document.id,sha256:document.sha256}))]:[input.attachment,...input.additionalAttachments??[]].filter((attachment):attachment is GraphMailAttachment=>!!attachment).map(attachment=>({id:null,sha256:createHash('sha256').update(attachment.bytes).digest('hex')}));
   originals.sort((a,b)=>String(a.id??a.sha256).localeCompare(String(b.id??b.sha256)));
-  const intentHash=createHash('sha256').update(JSON.stringify([target.email.trim().toLowerCase(),input.subject.trim(),input.targetType,input.targetId,target.customerId,target.orderId,originals,...(input.complaintResult?[[input.complaintResult.complaintId,input.complaintResult.version,input.complaintResult.kind??'result']]:[]),...(input.intakeConfirmation?[[input.intakeConfirmation.outboxId,input.intakeConfirmation.sourceClientEventId]]:[])])).digest('hex');
+  const intentHash=createHash('sha256').update(JSON.stringify([target.email.trim().toLowerCase(),input.subject.trim(),input.targetType,input.targetId,target.customerId,target.orderId,originals,...(input.complaintResult?[[input.complaintResult.complaintId,input.complaintResult.version,input.complaintResult.kind??'result']]:[]),...(input.intakeConfirmation?[[input.intakeConfirmation.outboxId,input.intakeConfirmation.sourceClientEventId]]:[]),...(input.goodsOutNotice?[['goods-out-notice',input.clientRequestId]]:[])])).digest('hex');
   const contentSha256=createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex');
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
   let pending: { threadId: string; recordedAt: string; replay?: CommunicationReceipt; recovery?:true;prepareActorId?:string };
@@ -386,7 +496,7 @@ export async function sendCommunicationMail(
               AND sent.user_id=prepared.user_id AND sent.payload->>'threadId'=prepared.payload->>'threadId')) LIMIT 2`);
       if(unresolved.length){
         const prior=unresolved[0];
-        if(unresolved.length!==1||prior.content!==contentSha256||!prior.thread_id||input.document||input.collectionReminder)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
+        if(unresolved.length!==1||prior.content!==contentSha256||!prior.thread_id||input.document||input.collectionReminder||input.goodsOutNotice)throw Error('COMMUNICATION_OUTCOME_UNCLEAR');
         if(input.confirmedResend&&input.clientRequestId!==prior.request_id)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         input={...input,clientRequestId:prior.request_id};
         return {threadId:prior.thread_id,recordedAt:iso(prior.created_at),recovery:true as const,prepareActorId:prior.actor};
@@ -402,10 +512,13 @@ export async function sendCommunicationMail(
         RETURNING id, customer_id, order_id, status, created_at
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("COMMUNICATION_THREAD_INSERT_FAILED");
+      const goodsOutNoticeOriginal=input.goodsOutNotice
+        ?await storeGoodsOutNoticeOriginal(auth,input.clientRequestId,input)
+        :undefined;
       const prepBytes=createHash('sha256').update('communication-mail-prepared:'+auth.tenantId+':'+input.clientRequestId).digest();prepBytes[6]=(prepBytes[6]&15)|80;prepBytes[8]=(prepBytes[8]&63)|128;
       const hex=prepBytes.subarray(0,16).toString('hex'),prepareKey=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
       const proof=await tx.execute(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
-        VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_PREPARED_V1',${JSON.stringify({threadId,clientRequestId:input.clientRequestId.toLowerCase(),targetType:input.targetType,targetId:input.targetId,customerId:target.customerId,orderId:target.orderId,recipient:target.email,intentHash,contentSha256,documents:originals,...(input.complaintResult?{complaintResult:input.complaintResult}:{}),...(input.intakeConfirmation?{intakeConfirmation:input.intakeConfirmation}:{}),...(input.legacyReplaces?{legacyReplaces:input.legacyReplaces}:{})})}::jsonb,'success',${auth.userId}::uuid,${prepareKey}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+        VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_PREPARED_V1','COMMUNICATION_MAIL_PREPARED_V1',${JSON.stringify({threadId,clientRequestId:input.clientRequestId.toLowerCase(),targetType:input.targetType,targetId:input.targetId,customerId:target.customerId,orderId:target.orderId,recipient:target.email,intentHash,contentSha256,documents:originals,...(input.complaintResult?{complaintResult:input.complaintResult}:{}),...(input.intakeConfirmation?{intakeConfirmation:input.intakeConfirmation}:{}),...(input.legacyReplaces?{legacyReplaces:input.legacyReplaces}:{}),...(input.goodsOutNotice?{goodsOutNotice:input.goodsOutNotice,goodsOutNoticeOriginal}:{})})}::jsonb,'success',${auth.userId}::uuid,${prepareKey}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
       if(proof.length!==1)throw Error('COMMUNICATION_MAIL_PREPARE_PROOF_MISSING');
       if(input.document)await appendCommunicationDocument(tx,auth,input,input.document,threadId,'prepared');
       if(input.collectionReminder)await prepareCollectionReminder(tx,auth,input.collectionReminder,{threadId,clientRequestId:input.clientRequestId,body:input.body});
@@ -498,7 +611,7 @@ export async function sendCommunicationMail(
         bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;
         const h=bytes.subarray(0,16).toString('hex'),key=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
         const sentReceipt=await tx.execute<{id:string}>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,correlation_id,event_schema_version,created_at)
-          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,prepareActorId:pending.prepareActorId??auth.userId,clickedBy:auth.userId,customerId:target.customerId,orderId:target.orderId,...(sentItemsEvidence?{sentItemsEvidence}:{}),...(resendConfirmationId?{resendConfirmationId}:{}),...(recoveredInvoice?{documentReconciliation:{originalDocument:input.document},...(!sentItemsEvidence?{graphAcceptedRequestId:input.clientRequestId}:{})}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${originalActorId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
+          VALUES(${randomUUID()},${auth.tenantId},${target.orderId},'COMMUNICATION_MAIL_SENT_V1','E-Mail versendet',${JSON.stringify({threadId:pending.threadId,messageId,prepareActorId:pending.prepareActorId??auth.userId,clickedBy:auth.userId,customerId:target.customerId,orderId:target.orderId,...(input.goodsOutNotice?{goodsOutNotice:input.goodsOutNotice}:{}),...(sentItemsEvidence?{sentItemsEvidence}:{}),...(resendConfirmationId?{resendConfirmationId}:{}),...(recoveredInvoice?{documentReconciliation:{originalDocument:input.document},...(!sentItemsEvidence?{graphAcceptedRequestId:input.clientRequestId}:{})}:{}),contentSha256:createHash('sha256').update(JSON.stringify([input.subject.trim(),input.body.trim()])).digest('hex')})}::jsonb,'success',${originalActorId},${key}::uuid,${input.clientRequestId}::uuid,1,statement_timestamp() AT TIME ZONE 'UTC') RETURNING id`);
         if(sentReceipt.length!==1)throw Error('COMMUNICATION_SENT_RECEIPT_NOT_SAVED');
       }
       if(recoveredInvoice){if(!input.reconcileInvoice)throw Error('COMMUNICATION_RECONCILIATION_COMPOSER_MISSING');await input.reconcileInvoice(tx,pending.threadId);}
