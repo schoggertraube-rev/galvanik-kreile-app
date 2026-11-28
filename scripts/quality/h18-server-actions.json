@@ -529,6 +529,33 @@
     "src/app/actions/lager.actions.ts#bestaetigeLagerEtikettZuordnungAction": [
       "src/test/acceptance/lager_stammdaten.integration.test.ts"
     ],
+    "src/app/actions/lager-inventur.actions.ts#starteLagerInventurAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#leseLagerInventurZaehllisteAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#speichereLagerInventurZaehlungAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#leseLagerInventurwerteAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#schliesseLagerInventurAbAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#starteLagerInventurNachtragAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#leseLagerInventurOriginalAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#leseLagerInventurVergleichAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
+    "src/app/actions/lager-inventur.actions.ts#setzeLagerInventurGrundAction": [
+      "src/test/acceptance/inventur_abschluss.integration.test.ts"
+    ],
     "src/app/actions/takt.actions.ts#starteTaktJobNeu": [
       "src/test/acceptance/s38b_takt_outage.integration.test.ts"
     ]

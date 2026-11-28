@@ -224,7 +224,7 @@ function ausfuehren(tx: Tx, auth: AuthorizationSnapshot, daten: Stammbefehl): Pr
   }
 }
 
-async function erfasseStammereignis(
+export async function erfasseStammereignis(
   tx: Tx, auth: AuthorizationSnapshot, id: string, art: "LAGER_STAMMBEFEHL_V1" | "LAGER_ARTIKEL_AUFGABE_V1",
   version: number, payload: object,
 ) {
@@ -245,12 +245,7 @@ export async function schreibeLagerStammInTransaction(
 ): Promise<Stammantwort> {
   const { tenantId, userId } = auth;
   const absicht = createHash("sha256").update(stammAbsicht(auftrag.daten)).digest("hex");
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(
-    hashtextextended('lager-stammbefehl:' || ${tenantId} || ':' || ${auftrag.befehlId}, 0))`);
-  const [original] = await tx.execute<{ actor: string; hash: string; beleg: Stammbeleg | null }>(sql`
-    SELECT user_id::text AS actor, payload->>'absicht' AS hash, payload->'beleg' AS beleg FROM public.v_lager_stammereignisse_v1
-    WHERE tenant_id = ${tenantId} AND client_event_id = ${auftrag.befehlId}::uuid
-  `);
+  const original = await leseStammquittung<Stammbeleg>(tx, tenantId, auftrag.befehlId);
   if (original) {
     if (original.actor !== userId || original.hash !== absicht) throw new Stammabbruch("CONFLICT");
     return { ok: true, data: verlangen(original.beleg, "UNAVAILABLE"), wiederholt: true };
@@ -265,6 +260,17 @@ export async function schreibeLagerStammInTransaction(
     await ports.synchronize(tx, auth, ereignisId, aufgabenEreignis);
   }
   return { ok: true, data: wirkung.beleg, wiederholt: false };
+}
+
+export async function leseStammquittung<Beleg>(tx: Tx, mandant: string, befehlId: string) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(
+    hashtextextended('lager-stammbefehl:' || ${mandant} || ':' || ${befehlId}, 0))`);
+  const [original] = await tx.execute<{ actor: string; hash: string; beleg: Beleg | null }>(sql`
+    SELECT user_id::text AS actor, payload->>'absicht' AS hash, payload->'beleg' AS beleg
+    FROM public.v_lager_stammereignisse_v1
+    WHERE tenant_id = ${mandant} AND client_event_id = ${befehlId}::uuid
+  `);
+  return original;
 }
 
 export async function schreibeLagerZaehfundInTransaction(tx: Tx, auth: AuthorizationSnapshot, input: {

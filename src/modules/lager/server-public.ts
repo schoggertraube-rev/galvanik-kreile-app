@@ -120,3 +120,7 @@ export { bucheAuftragsverbrauch, leseLagerAuftragsmaterialInTransaction,
 export { speichereLagerBadanalyseInTransaction, leseLagerBadprozessbestandInTransaction } from "./server-badanalyse";
 export { leseAuftragsmaterial, leseLagerMaterialpositionenInTransaction } from "./server-material";
 export { hinterlegeLagerPreis, type LagerPreisAufgabe } from "./server-preis";
+export { starteLagerInventur, leseLagerInventurZaehlliste, speichereLagerInventurZaehlung, setzeLagerInventurGrund } from "./server-inventur";
+export { leseLagerInventurwerte } from "./server-inventurwerte";
+export { schliesseLagerInventurAb, starteLagerInventurNachtrag, leseLagerInventurOriginal } from "./server-inventurabschluss";
+export { leseLagerInventurVergleich } from "./server-inventurvergleich";
