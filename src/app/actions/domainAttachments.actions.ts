@@ -1,7 +1,7 @@
 "use server";
 
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings} from '@/modules/fundament/server-public';
+import {readErkennungsEinstellungenInTransaction,readLoggingSettings} from '@/modules/fundament/server-public';
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { attachIntakeDraftAttachment, finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
@@ -132,6 +132,7 @@ export async function getDocumentIntelligenceStatusAction() {
 export async function analyzeDomainAttachmentAction(input: Parameters<typeof analyzeDomainAttachment>[1]) {
  return observeAction('analyzeDomainAttachmentAction',subjectForAction('analyzeDomainAttachmentAction',input),async()=>{
   const auth = await authorization();
-  return auth.ok ? analyzeDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  return auth.ok ? analyzeDomainAttachment(auth.data, input, readErkennungsEinstellungenInTransaction)
+    : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
  },readLoggingSettings);
 }

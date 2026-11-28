@@ -22,7 +22,7 @@ describe("Azure Document Intelligence port", () => {
           confidence: 0.93,
         }] },
       }), { status: 200 }));
-    const result = await analyzeWithAzureDocumentIntelligence(new Uint8Array([37, 80, 68, 70]), "application/pdf", env, fetchPort, async () => undefined);
+    const result = await analyzeWithAzureDocumentIntelligence(new Uint8Array([37, 80, 68, 70]), "application/pdf", "prebuilt-layout", env, fetchPort, async () => undefined);
     expect(result.code).toBe("OK");
     if (result.code !== "OK") throw Error("TEST_RECOGNITION_FAILED");
     expect(result.data).toEqual({ suggestions: [{
@@ -38,7 +38,7 @@ describe("Azure Document Intelligence port", () => {
       status: 202,
       headers: { "operation-location": "https://untrusted.example.invalid/result" },
     }));
-    await expect(analyzeWithAzureDocumentIntelligence(new Uint8Array([1]), "image/png", env, fetchPort, async () => undefined))
+    await expect(analyzeWithAzureDocumentIntelligence(new Uint8Array([1]), "image/png", "prebuilt-layout", env, fetchPort, async () => undefined))
       .resolves.toEqual({ code: "UNAVAILABLE", message: "Das Dokument konnte mit Azure nicht sicher analysiert werden." });
     expect(fetchPort).toHaveBeenCalledTimes(1);
   });
@@ -71,7 +71,7 @@ describe("Azure Document Intelligence port", () => {
       analyzeResult: { content: text, keyValuePairs: pairs },
     }));
 
-    const result = await analyzeWithAzureDocumentIntelligence(new Uint8Array([1]), "application/pdf", env, fetchPort);
+    const result = await analyzeWithAzureDocumentIntelligence(new Uint8Array([1]), "application/pdf", "prebuilt-layout", env, fetchPort);
 
     expect(result.code).toBe("OK");
     if (result.code !== "OK") throw Error("TEST_RECOGNITION_FAILED");

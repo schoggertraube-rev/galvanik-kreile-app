@@ -167,10 +167,11 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
 export async function analyzeWithAzureDocumentIntelligence(
   bytes: Uint8Array,
   mimeType: string,
+  model: string,
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowOffice?:boolean;keyValuePairs?:boolean;languages?:boolean},
+  diagnostic?: {subject:LogSubject;originalRef:string;allowOffice?:boolean;keyValuePairs?:boolean;languages?:boolean},
 ): Promise<AzureResult> {
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
@@ -183,7 +184,6 @@ export async function analyzeWithAzureDocumentIntelligence(
   try {
     const endpoint = new URL(endpointValue);
     if (endpoint.protocol !== "https:") throw new Error("AZURE_ENDPOINT_INVALID");
-    const model = diagnostic?.model ?? "prebuilt-layout";
     if (!/^[a-z0-9-]{3,64}$/u.test(model)) throw new Error("AZURE_MODEL_INVALID");
     const analyzeUrl = new URL(`documentintelligence/documentModels/${model}:analyze`, endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");

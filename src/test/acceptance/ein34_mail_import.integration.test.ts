@@ -153,6 +153,10 @@ it('imports one MIME + inline/non-inline originals via the real UI action, rerea
  expect(first.mails).toContainEqual(expect.objectContaining({id:row.id,fileCount:2}));
  const events=await sql`SELECT art,nachher FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid`;
  expect(events.filter(event=>event.art==='angelegt')).toHaveLength(1);
+ const [mailFile]=await sql`SELECT id::text FROM public.intake_file
+   WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid AND mime='message/rfc822'`;
+ const mailReadings=events.filter(event=>event.art==='erkannt'&&event.nachher.fileId===mailFile.id);
+ expect(mailReadings.map(event=>event.nachher.code).sort()).toEqual(['INTAKE_FILE_FINISH_FAILED','OK']);
  expect(events.find(event=>event.art==='angelegt')?.nachher.replyChain).toEqual({source:'original_mime',originalSha256:createHash('sha256').update(mime).digest('hex'),status:'present',inReplyTo:['<TEST-KV-Edition1@example.invalid>'],references:['<TEST-Request@example.invalid>','<TEST-KV-Edition1@example.invalid>']});
  const {resolveAuthorization}=await import('@/lib/server/authorization');
  const {readIntakeMailImportReceipt}=await import('@/modules/eingang/server-public');
