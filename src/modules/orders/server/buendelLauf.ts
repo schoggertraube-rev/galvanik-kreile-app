@@ -8,11 +8,20 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { setOrderItemFinishedInTransaction } from "@/lib/server/commands/orderContentCommand";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { LaufAntwort, LaufEingabe, LaufZeitverteilung } from "@/modules/werkstatt/public";
-import { ORDER_BUENDEL_LAUF_COPY } from "@/ui/ordersCopy";
+import { ORDER_BUENDEL_LAUF_COPY, ORDER_TERM_COPY } from "@/ui/ordersCopy";
 import { WORK_TIME_COPY } from "@/ui/werkstattCopy";
+import { fertigtermin } from "../domain/termin";
 
 type LaufOberflaeche = Exclude<OrderPositionSurface, "offen">;
 type LaufTeil = { itemId: string; auftragId: string; version: number; auftragsmenge: string };
+type LaufVorschlagszeile = Parameters<typeof fertigtermin>[0] & {
+  oberflaeche: LaufOberflaeche;
+  auftragId: string;
+  itemIds: string[];
+  auftragsmenge: string;
+  laufmenge: string;
+};
+
 const offeneLaufteile = sql`
   teil.current_station_id IS DISTINCT FROM 'fertig'
   AND auftrag.station IN ('angenommen', 'galvanik') AND auftrag.status <> 'storniert'
@@ -50,6 +59,70 @@ export async function leseOffeneLaeufe(tx: PrivilegedTenantTransaction, tenantId
       ARRAY(SELECT jsonb_array_elements_text(daten->'itemIds')) AS "itemIds"
     FROM (${offeneLaeufe(tenantId)}) offen ORDER BY "laufId"
   `);
+}
+
+export async function schlageLaeufeVor(
+  tx: PrivilegedTenantTransaction,
+  tenantId: string,
+  kalender: Parameters<typeof fertigtermin>[1],
+  heute: string,
+) {
+  const zeilen = await tx.execute<LaufVorschlagszeile>(sql`
+    WITH teile AS (
+      SELECT teil.id, teil.quantity, auftrag.id AS auftrag_id,
+        auftrag.due_date::date::text AS "dueDate", auftrag.handover_mode AS "handoverMode",
+        private.order_position_surface_read_key(teil.surface_requested) AS oberflaeche
+      FROM public.items teil
+      JOIN public.orders auftrag ON auftrag.tenant_id = teil.tenant_id AND auftrag.id = teil.order_id
+      WHERE teil.tenant_id = ${tenantId} AND ${offeneLaufteile}
+        AND NOT EXISTS (SELECT 1 FROM (${offeneLaeufe(tenantId)}) lauf WHERE (lauf.daten->'itemIds') ? teil.id)
+    ), auftraege AS (
+      SELECT oberflaeche, auftrag_id AS "auftragId", "dueDate", "handoverMode",
+        array_agg(id ORDER BY id) AS "itemIds", sum(quantity) AS menge
+      FROM teile WHERE oberflaeche <> 'offen'
+      GROUP BY oberflaeche, auftrag_id, "dueDate", "handoverMode"
+    ), laeufe AS (
+      SELECT oberflaeche, sum(menge)::text AS laufmenge
+      FROM auftraege GROUP BY oberflaeche HAVING count(*) >= 2
+    )
+    SELECT oberflaeche, "auftragId", "dueDate", "handoverMode", "itemIds",
+      auftraege.menge::text AS auftragsmenge, laeufe.laufmenge
+    FROM auftraege JOIN laeufe USING (oberflaeche)
+    ORDER BY oberflaeche, "auftragId"
+  `);
+  const laeufe = new Map<LaufOberflaeche, {
+    oberflaeche: LaufOberflaeche;
+    teilezahl: string;
+    auftraege: {
+      auftragId: string;
+      itemIds: string[];
+      teilezahl: string;
+      termin: ReturnType<typeof fertigtermin>;
+      vorausgewaehlt: boolean;
+      terminHinweis?: string;
+    }[];
+  }>();
+  for (const zeile of zeilen) {
+    const termin = fertigtermin(zeile, kalender, heute);
+    const vorausgewaehlt = termin?.stufe === "knapp" || termin?.stufe === "ueberfaellig";
+    const fehlt = termin?.fehlendeEinstellungen;
+    const terminHinweis = fehlt?.length
+      ? ORDER_TERM_COPY.settingsMissing(fehlt.length === 2 ? ORDER_TERM_COPY.settings.both : ORDER_TERM_COPY.settings[fehlt[0]])
+      : vorausgewaehlt ? ORDER_TERM_COPY.status[termin.stufe] : undefined;
+    const lauf = laeufe.get(zeile.oberflaeche) ?? {
+      oberflaeche: zeile.oberflaeche, teilezahl: zeile.laufmenge, auftraege: [],
+    };
+    lauf.auftraege.push({
+      auftragId: zeile.auftragId,
+      itemIds: zeile.itemIds,
+      teilezahl: zeile.auftragsmenge,
+      termin,
+      vorausgewaehlt,
+      ...(terminHinweis ? { terminHinweis } : {}),
+    });
+    laeufe.set(zeile.oberflaeche, lauf);
+  }
+  return [...laeufe.values()];
 }
 
 /** Die gespeicherte Reihenfolge entscheidet bei gleich großen Zeitanteilen. */

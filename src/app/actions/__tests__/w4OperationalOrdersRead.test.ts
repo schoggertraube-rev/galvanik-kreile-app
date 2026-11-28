@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
@@ -173,8 +173,13 @@ function directExecutedSqlTemplates(sourceFile: ts.SourceFile, root: ts.Node) {
 }
 
 describe("W4 operational order read actions", () => {
+  beforeAll(async () => {
+    await import("../orders.actions");
+    await import("@/lib/server/orderCardRead");
+  }, 30_000);
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     ports.resolveAuthorization.mockResolvedValue({ ok: true, data: snapshot() });
     ports.getOperationalOrders.mockResolvedValue([]);
     ports.getOperationalOrderCount.mockResolvedValue(0);
@@ -242,7 +247,7 @@ describe("W4 operational order read actions", () => {
         expect.objectContaining({ kind: "ORDER", id: "order-1", reference: "A-2026-0001", title: "Auftrag A" }),
       ],
     });
-    expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization);
+    expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization, undefined, expect.any(Function));
     expect(ports.withTransaction).toHaveBeenCalledWith({
       tenantId: authorization.tenantId,
       userId: authorization.userId,
@@ -318,7 +323,7 @@ describe("W4 operational order read actions", () => {
       await expect(getOrdersDb()).resolves.toEqual({ ok: true, data: [],serverReadAt:expect.any(String),cacheLoginScope:undefined });
 
       expect(ports.resolveAuthorization).toHaveBeenCalledOnce();
-      expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization);
+      expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization, undefined, expect.any(Function));
       expect(ports.resolveAuthorization.mock.invocationCallOrder[0]).toBeLessThan(
         ports.getOperationalOrders.mock.invocationCallOrder[0],
       );
@@ -393,9 +398,11 @@ describe("W4 operational order read actions", () => {
       ok: true,
       data: [],serverReadAt:expect.any(String),cacheLoginScope:undefined,
     });
-    expect(ports.getOperationalOrders).toHaveBeenCalledWith(snapshot());
+    expect(ports.getOperationalOrders).toHaveBeenCalledWith(snapshot(), undefined, expect.any(Function));
     expect(ports.getOperationalOrders).not.toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-b" }),
+      undefined,
+      expect.any(Function),
     );
   });
 

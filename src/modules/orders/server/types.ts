@@ -207,6 +207,7 @@ export type OrderCardModel = {
   status: string;
   cancellation?:{reason:string;at:string;actor:string;quoteId:string|null;quoteNumber:string|null};
   dueAt: string | null;
+  terminAnzeige?: ReturnType<typeof import("../domain/termin").zeigeFertigtermin>;
   intakeAt: string;
   assignedTo: string | null;
   dueDateChanges?: Array<{

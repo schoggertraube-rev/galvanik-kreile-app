@@ -1,5 +1,15 @@
 [
   {
+    "datum": "2026-11-27",
+    "pr": 331,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Werkstatt, Auftragskarte und „Dein Tag“ zeigen den Fertigtermin nach demselben Betriebskalender.",
+      "Der Fertigtermin berücksichtigt die Betriebsruhe und bei Versand den eingestellten Puffer."
+    ]
+  },
+  {
     "datum": "2026-11-25",
     "pr": 294,
     "seite": "auftraege",

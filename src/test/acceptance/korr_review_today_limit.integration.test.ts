@@ -1,5 +1,6 @@
 // @vitest-environment node
 // K6: all 21 TEST orders use actual intake/production/payment writers; no synthetic aggregate.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {beforeAll,expect,it,vi} from 'vitest';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
@@ -23,7 +24,7 @@ beforeAll(async()=>{for(let i=10;i<20;i++)await prepayment('TEST K6 foreign '+i,
 it('K6 twenty excluded foreign prepayments cannot hide the next real domestic prepayment before or after reread',async()=>{
  const target=await prepayment('TEST K6 domestic last');
  const actor=await createFixture(['preise','zahlungen','buchhaltung'],'buero');
- const read=()=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_K6_AUTH_REQUIRED');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const read=()=>withSession(actor,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_K6_AUTH_REQUIRED');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const result=await read(),again=await read();
  expect(result.moneySources?.prepayments).toEqual({code:'OK',count:21});
  const entries=result.items.filter(row=>row.key.startsWith('prepayment:'));

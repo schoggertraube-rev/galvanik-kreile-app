@@ -1,5 +1,6 @@
 // @vitest-environment node
 // Synthetic stored mail states test read projections only, not physical mail import.
+import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -28,9 +29,9 @@ it('S05K A3 keeps one open predicate while the sorting selection additionally re
  // PL13.11.05:18: sorting is the unassigned subset; counts/messages stay open.
  expect(mails.mails.map(row=>row.id)).toEqual([active[0]]);
  const auth=await withSession(full,()=>resolveAuthorization());if(!auth.ok)throw Error('TEST_A3_AUTH');
- const signals=await readCustomerListSignals(auth.data,customers,(await import('@/modules/eingang/server-public')).openIntakePredicate());
+ const signals=await readCustomerListSignals(auth.data,customers,(await import('@/modules/eingang/server-public')).openIntakePredicate(),readBetriebsruheInTransaction);
  expect([...signals.values()].reduce((sum,row)=>sum+Number(row.openMessageCount),0)).toBe(2);
- const day=await withSession(full,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction));
+ const day=await withSession(full,()=>readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction));
  expect(day.messageActions?.rows.map(row=>row.messageId).sort()).toEqual([...active].sort());
  expect(day.messageActions?.code).toBe('OK');
  expect((await withSession(full,()=>getIntakeMessagesAction('offen')))).toEqual({...read,serverReadAt:expect.any(String),cacheLoginScope:expect.stringMatching(/^[a-f0-9]{64}$/)});

@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
@@ -1472,7 +1473,7 @@ describe('S05 existing intake task calendar source',()=>{
   const {readTodayDashboard}=s05Day;
   const {getComplaints}=s05Complaints;
   const {getQuoteFollowupsForTodayAction}=s05Quotes;
-  const day=(currentActor:Fixture=actor)=>withSession(currentActor,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_TASK_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+  const day=(currentActor:Fixture=actor)=>withSession(currentActor,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_S05_TASK_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
   const input:TaskSaveInput={clientKey:randomUUID(),version:0,kind:'rueckruf',title:'TEST S05 callback',dueDate:calendar.today,time:null,forLogin:actor.actorId,forArea:null,reference:{type:'eingang',id:itemId},note:null,itemId,itemVersion:captured.capture.version};
   const messages=await withSession(actor,async()=>{const {getIntakeMessagesAction}=await import('@/app/actions/eingang.actions');return getIntakeMessagesAction('alle');});if(messages.code!=='OK')throw Error('TEST_S05_MESSAGE_SOURCE');const original=messages.messages.find(row=>row.id===itemId)!;
   expect((await day()).messageActions?.rows.find(row=>row.messageId===itemId)).toEqual({messageId:itemId,version:original.version,read:original.nextActionRule});

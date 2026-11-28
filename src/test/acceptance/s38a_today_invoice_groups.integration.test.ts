@@ -1,5 +1,6 @@
 // @vitest-environment node
 // Real invoice actions/Auth/DB; the transaction proxy only counts actual SQL calls.
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {expect,it,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
@@ -73,7 +74,7 @@ it('H2 shows separate V45-bound rows and sends only the selected original throug
  const {readTodayDashboard}=await import('@/lib/server/todayDashboard');
  const {getComplaints}=await import('@/app/actions/complaints.actions');
  const {getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
- const day=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_H2_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ const day=()=>withSession(full,async()=>{const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_H2_AUTH');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction, readBetriebsruheInTransaction);});
  const before=await day();
  const rows=before.items.filter(row=>row.invoiceMail?.customerId===customerId);
  expect(rows).toHaveLength(2);

@@ -83,8 +83,6 @@ async function main() {
         station varchar(100) NOT NULL DEFAULT 'wareneingang',
         current_station_id varchar(100),
         status varchar(50) NOT NULL DEFAULT 'in_progress',
-        risk varchar(50) DEFAULT 'green',
-        priority_computed varchar(50) DEFAULT 'green',
         parts jsonb,
         status_text text,
         delay_reason text,

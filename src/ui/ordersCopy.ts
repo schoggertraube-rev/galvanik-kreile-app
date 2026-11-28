@@ -1,5 +1,28 @@
 import {LEGACY_ACTION_ACCESS_COPY} from './allgemeinCopy';
 export const ORDER_TERMINAL_COPY={dateLocked:'Der Auftrag wurde bereits herausgegeben. Du kannst den Liefertermin nicht mehr ändern.'} as const;
+export const ORDER_TERM_COPY = {
+  deliveryDate: "Liefertermin",
+  missingLeadTime: (leistung: string) => `Durchlaufzeit für ${leistung} fehlt`,
+  label: "Termin",
+  danger: (number: string | null) => `Termin ${number ?? "Auftragsnummer fehlt"} in Gefahr`,
+  settings: {
+    betriebsruhe: "die Betriebsruhe",
+    terminschwelle: "die Terminschwelle",
+    both: "die Betriebsruhe und die Terminschwelle",
+  },
+  settingsMissing: (einstellung: string) => `Die Terminbewertung fehlt. Hinterlege ${einstellung} in den Firmeneinstellungen.`,
+  notRecorded: "Nicht erfasst",
+  status: {
+    ueberfaellig: "Kritisch / Überfällig",
+    knapp: "Gefährdet",
+    im_plan: "Im Plan",
+    unbekannt: "Termin nicht erfasst",
+  },
+  blocked: {statusText:"Wartet auf Freigabe", dueLabel:"Wartet auf", dueValue:"Freigabe"},
+  dueToday: "Heute fällig",
+  dueIn: (tage: number) => `Fällig in ${tage} ${tage===1?'Arbeitstag':'Arbeitstagen'}`,
+  overdueSince: (tage: number) => `Überfällig seit ${tage} ${tage===1?'Arbeitstag':'Arbeitstagen'}`,
+} as const;
 export const QUOTE_CANCELLED_ORDER_COPY={title:'Auftrag zurückgenommen',explanation:'Dieser Auftrag ist storniert. Er bleibt mit seinem Rücknahmegrund im Verlauf erhalten.',customer:'Kundenkarte öffnen',quote:(number:string|null)=>number?number+' öffnen':'KV öffnen',reason:'Grund',actor:'Zurückgenommen von'};
 export const ORDER_HANDOVER_COPY={
  permission:LEGACY_ACTION_ACCESS_COPY.forbidden,invalid:'Diese Übergabeart passt nicht zum Auftrag. Wähle Abholen oder Versand.',missing:'Wähle Abholen oder Versand für diesen Auftrag.',

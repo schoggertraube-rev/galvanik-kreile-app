@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { readBetriebsruheInTransaction } from "@/modules/fundament/server-public";
 import {seedSyntheticItemPhotos} from '@/test/fixtures/complaintPhoto';
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
@@ -376,7 +377,7 @@ describe("AP-EIN Teil 6: DA01/DA02 real Actions and DB",()=>{
   expect(created.code).toBe("OK");if(created.code!=="OK")throw Error('DA01_ORDER_REQUIRED');
   const {readTenantOperationalOrders}=await import('@/lib/server/orderStationRead');
   const [release]=await sql`SELECT ausgabe_frei FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.orderId}`;
-  const queue=await readTenantOperationalOrders({tenantId:KREILE_TENANT_SLUG});
+  const queue=await readTenantOperationalOrders({tenantId:KREILE_TENANT_SLUG}, readBetriebsruheInTransaction);
   expect(queue.find(value=>value.id===created.receipt.orderId)?.ausgabeFrei).toBe(release.ausgabe_frei);
   const {changeOrderPickupNoticeAction,getOrderPickupNoticeAction}=await import("@/app/actions/orders.actions");
   const input={orderId:created.receipt.orderId,expectedVersion:1,clientEventId:randomUUID(),name:"Jens",note:"Mein Bruder holt ab",source:"notiz"};
