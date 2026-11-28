@@ -1,13 +1,21 @@
 import 'server-only';
-import {readBetriebswaechterEinstellungenInTransaction,readLoggingSettings,readPackageSwitchValuesForTakt} from '@/modules/fundament/server-public';
+import {readBetriebswaechterEinstellungenInTransaction,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPackageSwitchValuesForTakt} from '@/modules/fundament/server-public';
 import type {PackageSwitchId,PackageSwitchValues} from '@/modules/fundament/public';
 import {taktJobs as loggingTaktJobs} from '@/modules/logging/server-public';
+import {taktJobs as eingangTaktJobs} from '@/modules/eingang/server-public';
 import {HEUTE_TAKT_JOBS} from '@/lib/today/taktJobs';
 import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {TaktJob, TaktLeser} from './public';
+import {nachholMinuteBerlin} from './server/lauf';
+
+export type TaktErkennungsLeser = typeof readErkennungsEinstellungenInTransaction;
 
 /** One list for the runner; Fach modules own their individual jobs. */
-export const TAKT_JOBS = [...HEUTE_TAKT_JOBS, ...loggingTaktJobs] as const satisfies readonly TaktJob[];
+export const TAKT_JOBS = [
+  ...HEUTE_TAKT_JOBS,
+  ...loggingTaktJobs,
+  ...eingangTaktJobs.map(job => ({...job, faellig: (jetzt: Date) => nachholMinuteBerlin(jetzt)})),
+] as const satisfies readonly TaktJob[];
 
 export async function liesTaktAusfallToleranzInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
   const settings = await readBetriebswaechterEinstellungenInTransaction(tx, tenantId);
@@ -30,6 +38,7 @@ export function baueTaktLeser(
 ): TaktLeser {
   let aufbewahrung: Promise<number | null> | undefined;
   return {
+    erkennung: readErkennungsEinstellungenInTransaction,
     protokollAufbewahrungTage: () => aufbewahrung ??= readSettings({tenantId}).then(settings => {
       if (!settings) throw new Error('TAKT_LOG_SETTINGS_INCOMPLETE');
       return settings.retentionDays;

@@ -97,14 +97,18 @@ function originalStorage(){return createAdminClient().storage.from('scans');}
 
 type OriginalStorageReference=Pick<OriginalRow,'bytes'|'sha256'|'speicherpfad'>;
 
-async function verifiedOriginalBytes(storage:ReturnType<typeof originalStorage>,tenantId:string,file:OriginalStorageReference){
+async function verifiedOriginalBytes(storage:ReturnType<typeof originalStorage>,tenantId:string,file:OriginalStorageReference,signal?:AbortSignal){
  const size=Number(file.bytes);
  if(!/^[0-9a-f]{64}$/.test(file.sha256)||file.speicherpfad!==tenantId+'/'+file.sha256||!Number.isSafeInteger(size)||size<1||size>150*1024*1024)throw Error('INTAKE_ORIGINAL_METADATA_INVALID');
- const original=await storage.download(file.speicherpfad);
+ const original=await storage.download(file.speicherpfad,{}, {signal});
  if(original.error||!original.data)throw Error('INTAKE_ORIGINAL_NOT_SECURED');
  const bytes=new Uint8Array(await original.data.arrayBuffer());
  if(bytes.byteLength!==size||createHash('sha256').update(bytes).digest('hex')!==file.sha256)throw Error('INTAKE_ORIGINAL_HASH_MISMATCH');
  return bytes;
+}
+
+export function readVerifiedIntakeOriginalBytes(tenantId:string,file:OriginalStorageReference,signal:AbortSignal){
+ return verifiedOriginalBytes(originalStorage(),tenantId,file,signal);
 }
 
 export async function readIntakeInvoicePageSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,fileId:string){

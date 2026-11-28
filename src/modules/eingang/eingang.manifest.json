@@ -4,6 +4,7 @@
   "owner": "Verkaufsstufe 1 Eingang (Paket/persoenlich)",
   "publicExports": [
     "@/modules/eingang/server-public#tagQuellen",
+    "@/modules/eingang/server-public#taktJobs",
     "@/modules/eingang/server-public#leseLieferantenbelegFuerLagerInTransaction",
     "@/modules/eingang/server-public#setzeLieferantAmEingangInTransaction",
     "@/modules/eingang/public#EingangTagFakten",

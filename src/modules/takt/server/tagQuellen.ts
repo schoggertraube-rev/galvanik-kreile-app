@@ -67,6 +67,7 @@ export async function liesTaktAusfallFakten(
         const tageserfolg = laufstand.letzterTageserfolgMs === null ? null : new Date(laufstand.letzterTageserfolgMs);
         const faelligFuer = job.faellig(jetzt, tageserfolg);
         if (faelligFuer !== null && (laufstand.letzterErfolgMs === null || laufstand.letzterErfolgMs < schwelle)) {
+          if (job.bedarf && !await job.bedarf(tx, tenantId)) continue;
           ausfaelle.push({schluessel:job.schluessel,faelligFuer,laufstand});
         }
       }

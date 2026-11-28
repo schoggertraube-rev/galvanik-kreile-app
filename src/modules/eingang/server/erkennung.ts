@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { outsidePageReadBudget, withPageReadBudget } from "@/db/readBudget";
 import { recordObservedFailure } from "@/lib/server/actionObservation";
 import { recognizeIntakeText } from "@/lib/server/intakeTextRecognition";
 import { withPrivilegedTenantTransaction, withTenantSavepoint, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -53,11 +54,27 @@ type RecognitionContext = {
   tenantId: string;
   akteur: string;
   file: { item_id: string; dateiname: string; mime: string; sha256: string; aufnahme_herkunft: "warenfoto" | "dokument"; reihenfolge: number };
-  bytes: Uint8Array;
+  bytes: Uint8Array | (() => Promise<Uint8Array>);
   onlyInvoiceAccess: boolean;
   retryKey?: string;
   kandidaten?: KandidatenPorts;
+  signal?: AbortSignal;
 };
+
+export const erkennungNachholbar=sql`
+  EXISTS (
+    SELECT 1 FROM public.intake_event original
+    WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
+      AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text
+      AND original.nachher->>'sha256'=file.sha256
+  ) AND (
+    file.erkennung_status='wartet' AND file.aufgenommen_am < statement_timestamp()-interval '2 minutes'
+    OR file.erkennung_status='fehler' AND (
+      SELECT count(*) FROM public.intake_event attempt
+      WHERE attempt.tenant_id=file.tenant_id AND attempt.item_id=file.item_id
+        AND attempt.art='erkannt' AND attempt.nachher->>'fileId'=file.id::text
+    ) < 3
+  )`;
 
 async function readSecuredMailMetadata(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string, fileId: string, sha256: string) {
   const rows = await tx.execute<{ subject: string | null; receivedAt: string }>(sql`
@@ -105,20 +122,25 @@ function readHeadFields(suggestions: readonly DocumentSuggestion[], goodsPhoto: 
 }
 
 export async function erkenneOriginal(kontext: RecognitionContext, fileId: string, einstellungen: ReadRecognitionSettings) {
-  const { tenantId, akteur, file, bytes, onlyInvoiceAccess, retryKey } = kontext;
+  const { tenantId, akteur, file, onlyInvoiceAccess, retryKey, signal } = kontext;
   const auth = { tenantId };
   const claimKey=recognitionClaimKey(retryKey??fileId);
   let claimOwned=false;
   try {
+    signal?.throwIfAborted();
     const claimed = await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
-      const updated = await tx.execute<{ id: string }>(sql`UPDATE public.intake_file SET erkennung_status='laeuft' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='wartet' RETURNING id::text`);
+      const updated = await tx.execute<{ id: string }>(sql`UPDATE public.intake_file file SET erkennung_status='laeuft'
+        WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid
+          AND ${akteur==='system'?erkennungNachholbar:sql`file.erkennung_status='wartet'`} RETURNING id::text`);
       if(updated.length===1)await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         VALUES(${auth.tenantId},${file.item_id}::uuid,'einsatz',${claimKey}::uuid,${akteur},${JSON.stringify({action:'erkennung_gestartet',fileId,attemptKey:retryKey??fileId})}::jsonb) ON CONFLICT DO NOTHING`);
       return updated.length === 1;
     });
     if (!claimed) return;
     claimOwned=true;
+    const bytes = typeof kontext.bytes === 'function' ? await kontext.bytes() : kontext.bytes;
+    signal?.throwIfAborted();
     const isMail = file.mime === "message/rfc822";
     const metadata = isMail ? await withPrivilegedTenantTransaction(auth,
       tx => readSecuredMailMetadata(tx, auth.tenantId, file.item_id, fileId, file.sha256)) : null;
@@ -148,7 +170,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     })
       : usesDocumentReader || xmlResult?.code === "OK" ? await leseEinstellungen() : null;
     const threshold = settings?.ki_sicherheitsschwelle ?? null;
-    const deadline = AbortSignal.timeout(30_000);
+    const processingTimeout = AbortSignal.timeout(30_000);
+    const deadline = signal ? AbortSignal.any([signal, processingTimeout]) : processingTimeout;
     const readModel = async (model: string, keyValuePairs: boolean) => {
       let result = await analyzeWithAzureDocumentIntelligence(bytes, file.mime, model, process.env,
         (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
@@ -297,7 +320,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       for (const concern of concerns) if (!onlyInvoiceAccess || concern === "rechnung") await tx.execute(sql`UPDATE public.intake_item
         SET anliegen=array_append(anliegen,${concern}::text),
           anliegen_offen=CASE WHEN ${concern}::text=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,${concern}::text) END,
-          version=version+1, geaendert_von=${akteur}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
+          version=version+1, geaendert_von=${akteur==='system'?null:akteur}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
         WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT (${concern}::text=ANY(anliegen))`);
       const recognitionCode = mail || xmlResult?.code === 'OK' ? 'OK' : isXml ? 'UNSUPPORTED_XML'
         : ocrDisabled ? 'AUSGESCHALTET' : ocrSettingMissing ? 'IN_KLAERUNG'
@@ -343,7 +366,12 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       // H6b: Lagerbeleg vorbereiten
     });
   } catch (error) {
-    await recordIntakeRecognitionFailure(auth, akteur, fileId, retryKey, claimOwned);
+    const recordFailure=()=>recordIntakeRecognitionFailure(auth, akteur, fileId, retryKey, claimOwned);
+    if(akteur!=='system')await recordFailure();
+    else if(claimOwned){
+      // A cancelled Takt deadline cannot prevent the receipt for its own claim.
+      await outsidePageReadBudget(()=>withPageReadBudget(recordFailure,1000));
+    }
     throw error;
   }
 }

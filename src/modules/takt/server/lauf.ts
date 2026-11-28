@@ -1,6 +1,6 @@
 import 'server-only';
 import {berlinCalendarDay, berlinUhrzeit} from '@/lib/domain/workingDays';
-import {withTaktStatementTimeout} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,withTaktStatementTimeout} from '@/lib/server/privilegedDb';
 import {PageReadTimeout} from '@/db/readBudget';
 import {type TaktJob, type TaktLeser} from '../public';
 import type {PackageSwitchId} from '@/modules/fundament/public';
@@ -57,6 +57,8 @@ export async function fuehreFaelligenJobAus(
     const signal = abbruch ? AbortSignal.any([deadline, abbruch]) : deadline;
     const vorbereitung = await withTaktStatementTimeout(budget, async () => {
       if (faellig.vorReservierung && !await faellig.vorReservierung()) return null;
+      const bedarf = job.bedarf;
+      if (bedarf && !await withPrivilegedTenantTransaction({tenantId}, tx => bedarf(tx, tenantId))) return null;
       if (!handlauf && await beendeAbgelaufenenLauf(tenantId, job.schluessel, faelligFuer)) return 'abgebrochen' as const;
       return reserviereLauf(tenantId, job.schluessel, faelligFuer, budget);
     }, signal);

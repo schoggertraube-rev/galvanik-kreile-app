@@ -18,5 +18,6 @@ export const TAKT_AUSFALL_COPY = {
   jobs: {
     heute_neuaufbau: 'Aktualisierung von „Der Tag“',
     protokoll_aufbewahrung: 'Aufräumen des Protokolls',
+    eingang_erkennung_nachholen: 'Belege nachlesen',
   },
 } as const;

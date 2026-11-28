@@ -1,11 +1,17 @@
 /** One server-side job and its immutable due-time contract. */
 import type {PackageSwitchId} from '@/modules/fundament/public';
-export type TaktLeser = Readonly<{ protokollAufbewahrungTage: () => Promise<number | null> }>;
+import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import type {TaktErkennungsLeser} from './jobs';
+export type TaktLeser = Readonly<{
+  protokollAufbewahrungTage: () => Promise<number | null>;
+  erkennung?: TaktErkennungsLeser;
+}>;
 
 export type TaktJob = Readonly<{
   schluessel: string;
   paket: PackageSwitchId | null;
   faellig: (jetztBerlin: Date, letzterOk: Date | null) => string | null;
+  bedarf?: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<boolean>;
   fristMs: number;
   ausfuehren: (tenantId: string, signal: AbortSignal, leser: TaktLeser) => Promise<'ok' | 'ohne_arbeit'>;
 }>;
