@@ -28,7 +28,8 @@
     "20261113233449_customer_credit_amount_contract.sql",
     "20261114033058_customer_credit_payout_receipt.sql",
     "20261114040021_invoice_shipping_line.sql",
-    "20261123153000_einstellungen_crossmodule_reads.sql"
+    "20261123153000_einstellungen_crossmodule_reads.sql",
+    "20261128134735_g_m1_geld_bewegung.sql"
   ],
   "viewsFunctions": [
     "private.lock_customer_credit_v1",
@@ -40,7 +41,13 @@
     "public.v_accounting_kostenstelle_settings_v1"
   ],
   "ownsTables": [
-    "public.customer_credit_entries"
+    "public.customer_credit_entries",
+    "public.geld_auslage",
+    "public.geld_auszug",
+    "public.geld_bewegung",
+    "public.geld_bewegung_konflikt",
+    "public.geld_zuordnung",
+    "public.quellen_register"
   ],
   "storagePurposes": [],
   "events": {

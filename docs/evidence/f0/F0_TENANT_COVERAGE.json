@@ -48,6 +48,11 @@
     "events": { "category": "tenant_isolation_pre_existing", "policy_names": ["tenant_isolation"] },
     "feedback_notes": { "category": "service_role_only", "policy_names": ["service_role_all_feedback_notes"] },
     "forecast_version": { "category": "other_policy", "policy_names": [], "note": "rls_disabled" },
+    "geld_auslage": {"category": "rls_no_policy_deny_all", "policy_names": []},
+    "geld_auszug": {"category": "rls_no_policy_deny_all", "policy_names": []},
+    "geld_bewegung": {"category": "rls_no_policy_deny_all", "policy_names": []},
+    "geld_bewegung_konflikt": {"category": "rls_no_policy_deny_all", "policy_names": []},
+    "geld_zuordnung": {"category": "rls_no_policy_deny_all", "policy_names": []},
     "goods_receipt": {"category": "tenant_isolation_pre_existing", "policy_names": ["goods_receipt_tenant_isolation"]},
     "handling_units": {"category": "tenant_isolation_pre_existing", "policy_names": ["lager_mandant"]},
     "inquiries": { "category": "tenant_isolation_pre_existing", "policy_names": ["tenant_isolation_inquiries"] },
@@ -99,6 +104,7 @@
     "pin_rate_limits": { "category": "rls_no_policy_deny_all", "policy_names": [] },
     "price_lines": { "category": "rls_no_policy_deny_all", "policy_names": [] },
     "print_jobs": {"category": "tenant_isolation_pre_existing", "policy_names": ["print_jobs_tenant"]},
+    "quellen_register": {"category": "rls_no_policy_deny_all", "policy_names": []},
     "scan_uploads": { "category": "other_policy", "policy_names": ["scan_uploads_insert_authenticated", "scan_uploads_select_authenticated", "scan_uploads_service_role_all", "scan_uploads_update_authenticated"], "note": "gemischt: authenticated CRUD-Subset + service_role" },
     "shipments": { "category": "service_role_only", "policy_names": ["service_role_all_shipments"] },
     "stock_locations": {"category": "tenant_isolation_pre_existing", "policy_names": ["lager_mandant"]},
@@ -116,12 +122,12 @@
     "warning_event": { "category": "other_policy", "policy_names": [], "note": "rls_disabled" }
   },
   "summary": {
-    "total_tables": 93,
+    "total_tables": 106,
     "fixture_tested": 8,
-    "tenant_isolation_pre_existing": 36,
+    "tenant_isolation_pre_existing": 38,
     "policy_app_user": 0,
-    "rls_no_policy_deny_all": 14,
-    "service_role_only": 18,
-    "other_policy": 17
+    "rls_no_policy_deny_all": 20,
+    "service_role_only": 17,
+    "other_policy": 23
   }
 }
