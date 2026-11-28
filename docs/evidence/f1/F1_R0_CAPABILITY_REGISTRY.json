@@ -747,6 +747,7 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/goodsOut.actions.ts",
       "exported_functions": [
+        "prepareGoodsOutSignatureUploadAction",
         "recordGoodsOutAction"
       ],
       "classification": "PENDING_CONTRACT",
