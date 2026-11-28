@@ -10,7 +10,7 @@ import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} fr
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {normaliseIban,type CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
-import {countVerifiedIntakePdfPages,invoicePageFilter,readSecuredIntakeMailOriginal} from './intakeOriginal';
+import {invoicePageFilter,readIntakeInvoicePageSource,readSecuredIntakeMailOriginal} from './intakeOriginal';
 import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFieldErrors,invoiceFieldShape,invoiceTaxBreakdown,
  type IncomingInvoice,type InvoiceChangeInput,type InvoiceDuplicate,type InvoiceFailure,type InvoiceFields,
  type InvoicePageRange,type InvoiceReadResult,type InvoiceResult,type InvoiceSaveInput,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
@@ -217,17 +217,20 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
  if(!validSave(input))return {code:'VALIDATION_ERROR',message:'Rechnungsangaben oder Eingangsstand sind ungültig.'};
  try{const auth=await authorization();return await withPrivilegedTenantTransaction(auth,async tx=>{
   const row=await source(tx,auth,input.itemId,true),command=input.status==='unklar'?'rechnung.unklar':'rechnung.erfassen';
+  const pages=input.pages??null;
+  const pageSource=pages?await readIntakeInvoicePageSource(tx,auth,row.id,input.fileId):null;
+  if(pageSource?.code==='FORBIDDEN')reject('FORBIDDEN',pageSource.message);
+  if(pageSource?.code==='INVALID_FILE')reject('VALIDATION_ERROR','Gesichertes Original dieser Rechnung fehlt.');
   const repeated=await replay(tx,auth,row,input.clientKey,command,input);if(repeated)return repeated;
   if(row.version!==input.version)reject('CONFLICT','Eingang wurde inzwischen geändert · Eingaben bleiben erhalten.');
   const mailInvoice=row.vorgang_art==='rechnung'&&uuid(row.vorgang_id)?await findInvoice(tx,auth,row.vorgang_id):null;
   const existingInvoice=mailInvoice?.item_id===row.id?mailInvoice:null;
   if(row.aussortiert||(row.einsatz!=='offen'&&!(existingInvoice&&row.einsatz==='erledigt')))reject('CONFLICT','Eingang ist nicht mehr offen.');
   if(row.vorgang_id&&!existingInvoice)reject('CONFLICT','Eingang ist bereits einem anderen Vorgang zugeordnet.');
-  const pages=input.pages??null;
-  const [original]=await tx.execute<{mime:string;bytes:string;sha256:string;speicherpfad:string}>(sql`SELECT file.mime,file.bytes::text,file.sha256,file.speicherpfad
+  const [original]=await tx.execute(sql`SELECT file.id
    FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.id=${input.fileId}::uuid AND ${invoiceOriginal}`);
   if(!original)reject('VALIDATION_ERROR','Gesichertes Original dieser Rechnung fehlt.');
-  if(pages&&(original.mime!=='application/pdf'||pages.to>await countVerifiedIntakePdfPages(auth.tenantId,original)))
+  if(pages&&pageSource?.code==='OK'&&(pageSource.mime!=='application/pdf'||pages.to>await pageSource.countPages()))
    reject('VALIDATION_ERROR','Rechnungsangaben oder Eingangsstand sind ungültig.');
   const savedOriginal=await tx.execute(sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND file_id=${input.fileId}::uuid
    AND seite_von IS NOT DISTINCT FROM ${pages?.from??null}::integer AND seite_bis IS NOT DISTINCT FROM ${pages?.to??null}::integer`);

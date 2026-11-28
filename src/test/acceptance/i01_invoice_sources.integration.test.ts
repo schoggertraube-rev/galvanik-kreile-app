@@ -28,12 +28,12 @@ async function supplier(name: string) {
   return result.receipt.customerId;
 }
 
-async function deliverTwice(files: Awaited<ReturnType<typeof document>>[]) {
+async function deliverTwice(files: Awaited<ReturnType<typeof document>>[], subject = 'TEST Lieferantenrechnungen') {
   const id = `TEST-I01-${randomUUID()}`;
   const message = {
-    id, internetMessageId: `<${id}@example.invalid>`, subject: 'TEST Lieferantenrechnungen',
+    id, internetMessageId: `<${id}@example.invalid>`, subject,
     from: { emailAddress: { address: `${id}@example.invalid` } }, receivedDateTime: new Date().toISOString(),
-    body: { contentType: 'text', content: 'TEST Rechnungsoriginale im Anhang' }, hasAttachments: true,
+    body: { contentType: 'text', content: subject }, hasAttachments: true,
   };
   const attachments = files.map((file, index) => ({
     id: `TEST-${index}`, name: file.name, contentType: 'application/pdf', isInline: false,
@@ -174,4 +174,29 @@ it('holds one two-page invoice and two separate page invoices on their respectiv
   expect(await withSession(full, () => saveIncomingInvoiceAction(repeated))).toMatchObject({ code: 'CONFLICT' });
   expect(await sql`SELECT count(*)::int AS count FROM public.supplier_invoice WHERE tenant_id=${tenant}
     AND item_id=${split.itemId}::uuid AND file_id=${split.fileIds[0]}::uuid`).toEqual([{ count: 2 }]);
+});
+
+it('checks the same original access before counting invoice pages or downloading the PDF', async () => {
+  const bookkeeping = await createFixture(['buchhaltung']);
+  const supplierId = await supplier('Originalzugriff');
+  const { itemId, fileIds: [fileId] } = await deliverTwice([await document('TEST-Bestellung.pdf', 2)], 'TEST Bestellung');
+  const [{ version }] = await sql<{ version: number }[]>`SELECT version FROM public.intake_item
+    WHERE tenant_id=${tenant} AND id=${itemId}::uuid`;
+  const storageRequests: string[] = [];
+  const observedFetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.pathname.startsWith('/storage/v1/')) storageRequests.push(url.pathname);
+    return nativeFetch(input, init);
+  });
+  try {
+    const opened = await withSession(bookkeeping, () => openIntakeOriginalAction({ fileId, clientEventId: randomUUID() }));
+    expect(opened.code).toBe('FORBIDDEN');
+    expect(await withSession(bookkeeping, () => saveIncomingInvoiceAction(
+      command(itemId, fileId, version, supplierId, 'TEST-L-ACCESS', '95,00', { from: 1, to: 2 }),
+    ))).toEqual(opened);
+    expect(storageRequests).toEqual([]);
+    expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid`).toEqual([]);
+  } finally {
+    observedFetch.mockRestore();
+  }
 });

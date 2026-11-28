@@ -98,6 +98,8 @@ it('öffnet und bestätigt nur die gewählte Rechnung in einer gemeinsamen PDF',
 
   const open = { fileId, invoiceId: invoiceIds[1], clientEventId: randomUUID() };
   const confirm = { ...open, clientEventId: randomUUID() };
+  expect(await withSession(intake, () => openIntakeOriginalAction({ fileId, clientEventId: randomUUID() })))
+    .toMatchObject({ code: 'OK', original: { invoiceId: null, invoicePages: null } });
   expect(await withSession(intake, () => openIntakeOriginalAction(open))).toMatchObject({ code: 'FORBIDDEN' });
   expect(await withSession(bookkeeping, () => openIntakeOriginalAction({ ...open, invoiceId: randomUUID() })))
     .toMatchObject({ code: 'NOT_FOUND' });
