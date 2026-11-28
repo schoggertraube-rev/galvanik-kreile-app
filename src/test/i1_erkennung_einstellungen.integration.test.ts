@@ -10,6 +10,7 @@ import { full, nativeFetch, sql, withSession } from "../../e2e/ablauf/replayHarn
 import {
   confirmIntakeOriginalAction,
   finishIntakeFileAction,
+  getIntakeCaptureAction,
   openIntakeOriginalAction,
   prepareIntakeFileAction,
   retryIntakeRecognitionAction,
@@ -40,10 +41,11 @@ it("reads stored company models and threshold, with the existing default layout"
 
 it("reads a secured Excel workbook with the document model and preserves the original", async () => {
   const bytes = readFileSync(new URL("../../e2e/fixtures/TEST_i1_reading.xlsx", import.meta.url));
+  const itemId = randomUUID();
   const fileId = randomUUID();
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const grant = await withSession(full, () => prepareIntakeFileAction({
-    itemId: randomUUID(), fileId, name: "TEST_i1_reading.xlsx", mime: EXCEL_WORKBOOK_MIME,
+    itemId, fileId, name: "TEST_i1_reading.xlsx", mime: EXCEL_WORKBOOK_MIME,
     bytes: bytes.length, sha256,
   }));
   if (grant.code !== "OK" || !grant.upload) throw Error("TEST_I1_WORKBOOK_GRANT");
@@ -69,7 +71,15 @@ it("reads a secured Excel workbook with the document model and preserves the ori
     } });
   });
   try {
-    const result = await withSession(full, () => finishIntakeFileAction(fileId));
+    await withSession(full, async () => {
+      const pending = await finishIntakeFileAction(fileId);
+      expect(pending).toMatchObject({ code: "OK", capture: { files: [
+        expect.objectContaining({ id: fileId, status: "wartet", secured: true }),
+      ] } });
+      expect(await finishIntakeFileAction(fileId)).toEqual(pending);
+      expect(requests).toHaveLength(0);
+    }, true);
+    const result = await withSession(full, () => getIntakeCaptureAction(itemId));
     expect(result).toMatchObject({ code: "OK", capture: { files: [expect.objectContaining({
       id: fileId, status: "fertig", secured: true, recognizedText: "TEST Arbeitsmappe\n95",
     })] } });
@@ -135,10 +145,11 @@ it.each([
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3l8AAAAASUVORK5CYII=", "base64",
     );
     const fileId = randomUUID();
+    const itemId = randomUUID();
     const bytes = new Uint8Array(Buffer.concat([image, Buffer.from(fileId)]));
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     const grant = await withSession(full, () => prepareIntakeFileAction({
-      itemId: randomUUID(), fileId, name: "TEST-i1.png", mime: "image/png", bytes: bytes.length, sha256,
+      itemId, fileId, name: "TEST-i1.png", mime: "image/png", bytes: bytes.length, sha256,
     }));
     if (grant.code !== "OK" || !grant.upload) throw Error("TEST_I1_UPLOAD_GRANT");
     const storage = createAdminClient().storage;
@@ -157,7 +168,9 @@ it.each([
       await sql`UPDATE public.intake_file SET erkennung_roh_pfad=${archivePath}
         WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
       try {
-        const failed = await withSession(full, () => finishIntakeFileAction(fileId));
+        expect(await withSession(full, () => finishIntakeFileAction(fileId), true))
+          .toMatchObject({ code: "OK", capture: { files: [expect.objectContaining({ id: fileId, status: "wartet", secured: true })] } });
+        const failed = await withSession(full, () => getIntakeCaptureAction(itemId));
         if (failed.code !== "OK") throw Error("TEST_I1_CAPTURE_UNAVAILABLE");
         expect(failed.capture.files.find(file => file.id === fileId)).toMatchObject({
           secured: true, status: "fehler", errorCode: "INTAKE_RAW_NOT_SAVED", recognizedText: text ?? "TEST früherer Volltext",
@@ -173,9 +186,13 @@ it.each([
         expect((await archive.remove([archivePath])).error).toBeNull();
       }
     }
-    const result = await withSession(full, () => damagedArchive
-      ? retryIntakeRecognitionAction({ fileId, clientEventId: randomUUID() })
-      : finishIntakeFileAction(fileId));
+    if (damagedArchive) {
+      expect(await withSession(full, () => retryIntakeRecognitionAction({ fileId, clientEventId: randomUUID() })))
+        .toMatchObject({ code: "OK" });
+    } else {
+      expect(await withSession(full, () => finishIntakeFileAction(fileId), true)).toMatchObject({ code: "OK" });
+    }
+    const result = await withSession(full, () => getIntakeCaptureAction(itemId));
     if (result.code !== "OK") throw Error("TEST_I1_RECOGNITION_FAILED");
     expect(result.capture.files.find(file => file.id === fileId)).toMatchObject({
       status: "fertig", recognizedText: text,

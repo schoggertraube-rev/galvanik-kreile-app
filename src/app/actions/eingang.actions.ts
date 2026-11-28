@@ -405,7 +405,7 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  return observeAction('finishIntakeFileAction',subjectForAction('finishIntakeFileAction',{fileId}),async()=>{
  if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction}),fileId);if(result.code!=='OK')return result;
+ const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after}),fileId);if(result.code!=='OK')return result;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
  const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
  const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,

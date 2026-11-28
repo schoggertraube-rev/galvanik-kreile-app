@@ -40,7 +40,7 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>,flushAfter=
   const request = new NextRequest("http://127.0.0.1/TEST-ein34-mail", { headers: { ...requestHeaders,cookie } });
   const afterJobs:Promise<unknown>[]=[],closeCallbacks:Array<()=>void>=[],afterErrors:unknown[]=[];
   const {AfterContext}=await import('next/dist/server/after/after-context');
-  const nativeAfter=flushAfter?new AfterContext({waitUntil:promise=>{afterJobs.push(promise);},onClose:callback=>{closeCallbacks.push(callback);},onTaskError:error=>{afterErrors.push(error);}}):{};
+  const nativeAfter=new AfterContext({waitUntil:promise=>{afterJobs.push(promise);},onClose:callback=>{closeCallbacks.push(callback);},onTaskError:error=>{afterErrors.push(error);}});
   const workStore = {
     isStaticGeneration: false,
     page: "/TEST-ein34-mail",

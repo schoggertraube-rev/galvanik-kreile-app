@@ -41,7 +41,7 @@ it("I1-a binds a saved delivery note to a single open concern", async () => {
     );
     expect(saved.error).toBeNull();
 
-    expect(await withSession(full, () => finishIntakeFileAction(fileId))).toMatchObject({ code: "OK" });
+    expect(await withSession(full, () => finishIntakeFileAction(fileId), true)).toMatchObject({ code: "OK" });
     expect(await withSession(full, () => retryIntakeRecognitionAction({ fileId, clientEventId: randomUUID() })))
       .toMatchObject({ code: "OK" });
     expect(await sql`SELECT anliegen, anliegen_offen FROM public.intake_item

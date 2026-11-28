@@ -1,0 +1,174 @@
+import "server-only";
+import { createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { recordObservedFailure } from "@/lib/server/actionObservation";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { analyzeWithAzureDocumentIntelligence, EXCEL_WORKBOOK_MIME, readAzureRecognitionOriginal, supportsAzureDocument } from "@/lib/server/azureDocumentIntelligence";
+import { concernForCaptureKind, recognizeCaptureDocument } from "../captureRecognition";
+import { safeOriginalBytes } from "../originalSafety";
+import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
+import { readAzurePositionRows } from "./intakeRecognitionPositions";
+import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
+
+const BUCKET = "scans";
+
+export type ReadRecognitionSettings = (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
+  erkennung_modelle: { dokument: string };
+  ki_sicherheitsschwelle: number | null;
+}>;
+
+function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
+
+type RecognitionContext = {
+  tenantId: string;
+  akteur: string;
+  file: { item_id: string; dateiname: string; mime: string; sha256: string; aufnahme_herkunft: "warenfoto" | "dokument" };
+  bytes: Uint8Array;
+  onlyInvoiceAccess: boolean;
+  retryKey?: string;
+};
+
+export async function erkenneOriginal(kontext: RecognitionContext, fileId: string, einstellungen: ReadRecognitionSettings) {
+  const { tenantId, akteur, file, bytes, onlyInvoiceAccess, retryKey } = kontext;
+  const auth = { tenantId };
+  const claimKey=recognitionClaimKey(retryKey??fileId);
+  let claimOwned=false;
+  try {
+    const claimed = await withPrivilegedTenantTransaction(auth, async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
+      const updated = await tx.execute<{ id: string }>(sql`UPDATE public.intake_file SET erkennung_status='laeuft' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='wartet' RETURNING id::text`);
+      if(updated.length===1&&file.aufnahme_herkunft!=="warenfoto")await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+        VALUES(${auth.tenantId},${file.item_id}::uuid,'einsatz',${claimKey}::uuid,${akteur},${JSON.stringify({action:'erkennung_gestartet',fileId,attemptKey:retryKey??fileId})}::jsonb) ON CONFLICT DO NOTHING`);
+      return updated.length === 1;
+    });
+    if (!claimed) return;
+    if (file.aufnahme_herkunft === "warenfoto") {
+      await withPrivilegedTenantTransaction(auth, tx => tx.execute(sql`UPDATE public.intake_file SET lesbar=false,erkennung_status='fertig'
+        WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='laeuft'`));
+      return;
+    }
+    claimOwned=true;
+    // Structured originals use the same XML parser; unstructured documents retain the OCR path.
+    const prefix=Buffer.from(bytes.subarray(0,512)).toString('utf8').replace(/^\uFEFF/u,'').trimStart();
+    const isXml=/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<');
+    const xmlResult=isXml?recognizeInvoiceXml(bytes):file.mime==='application/pdf'?await recognizeInvoicePdf(bytes):null;
+    const workbook = file.mime === EXCEL_WORKBOOK_MIME;
+    const canRead = isXml ? xmlResult?.code==='OK'
+      : supportsAzureDocument(file.mime, bytes.byteLength, true)
+        && (!workbook || /\.xlsx$/iu.test(file.dateiname) && safeOriginalBytes(file.dateiname, bytes));
+    const needsOcr = !isXml && xmlResult?.code !== "OK" && canRead;
+    const settings = needsOcr || xmlResult?.code === "OK"
+      ? await withPrivilegedTenantTransaction(auth, tx => einstellungen(tx, auth.tenantId))
+      : null;
+    const threshold = settings?.ki_sicherheitsschwelle ?? null;
+    const deadline = AbortSignal.timeout(30_000);
+    let recognized = needsOcr && settings ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
+      (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
+      undefined, { subject: { type: "intake", id: file.item_id }, originalRef: fileId, model: settings.erkennung_modelle.dokument, allowWorkbook: workbook })
+      : null;
+    if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
+    let rawPath: string | null = null;
+    if (recognized?.code === "OK" && recognized.original) {
+      const original = recognized.original;
+      try {
+        const saved = await saveIntakeRecognitionOriginal({
+          bucket: BUCKET, tenantId: auth.tenantId, originalSha256: file.sha256,
+          model: original.model, bytes: original.bytes,
+        });
+        if (saved.bytes !== original.bytes) recognized = readAzureRecognitionOriginal(saved.bytes, original.model);
+        rawPath = saved.path;
+      } catch {
+        recordObservedFailure('INTAKE_RAW_NOT_SAVED');
+      }
+    }
+    const ocr = recognized?.code === "OK" ? recognized : null;
+    const rawStorageFailed = ocr !== null && rawPath === null;
+    const kind = xmlResult?.code === "OK" ? "rechnung" : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
+    const positionRows = ocr?.original ? readAzurePositionRows(ocr.original.tables) : [];
+    await withPrivilegedTenantTransaction(auth, async tx => {
+      if (positionRows.length > 0) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
+      const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
+        AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);
+      if(active[0]?.befehl_id!==claimKey){console.info('[INTAKE_RECOGNITION_SUPERSEDED]',{fileId});return;}
+      const hasValues=ocr!==null||xmlResult?.code==='OK';
+      const documentText = ocr?.data.suggestions.find(suggestion => suggestion.field === "DOCUMENT_TEXT")?.value ?? null;
+      const replaceDocumentText = ocr !== null && (documentText !== null || !rawStorageFailed);
+      const pages = ocr?.original?.pages ?? null;
+      const model = ocr?.original?.model ?? null;
+      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${hasValues && !rawStorageFailed ? "fertig" : "fehler"},
+          erkannter_text=CASE WHEN ${replaceDocumentText} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
+          erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
+        WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
+      if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
+      const suggestions=xmlResult?.code==='OK'?xmlResult.suggestions:ocr?[
+        ...ocr.data.suggestions.filter(suggestion => suggestion.field !== "DOCUMENT_TEXT"),
+        ...recognizeInvoiceFields(ocr.data.suggestions),
+      ]:[];
+      const existingPositions = positionRows.length === 0 ? [] : await tx.execute<{
+        fileId: string; positionKey: string; tableIndex: string | null; rowIndex: string | null;
+      }>(sql`SELECT file_id::text AS "fileId", wert->>'positionKey' AS "positionKey",
+          fundstelle->>'tableIndex' AS "tableIndex", fundstelle->>'rowIndex' AS "rowIndex"
+        FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
+          AND feld='position' AND wert->>'positionKey' ~ '^p[1-9][0-9]*$'`);
+      let lastPositionNumber = 0;
+      const storedPositionKeys = new Map<string, string>();
+      for (const entry of existingPositions) {
+        const number = Number(entry.positionKey.slice(1));
+        if (!Number.isSafeInteger(number)) throw Error('INTAKE_POSITION_NUMBER_INVALID');
+        lastPositionNumber = Math.max(lastPositionNumber, number);
+        if (entry.fileId === fileId && entry.tableIndex !== null && entry.rowIndex !== null) {
+          storedPositionKeys.set(`${entry.tableIndex}:${entry.rowIndex}`, entry.positionKey);
+        }
+      }
+      const positionSuggestions = positionRows.map(({ position, confidence, source }) => {
+        const row = `${source.tableIndex}:${source.rowIndex}`;
+        const positionKey = storedPositionKeys.get(row) ?? `p${++lastPositionNumber}`;
+        return { field: 'position', value: { ...position, positionKey }, confidence, source };
+      });
+      for (const suggestion of [...suggestions, ...positionSuggestions]) {
+        const confidence = suggestion.confidence;
+        const certainty = confidence === null || threshold === null
+          ? 'vorschlag' : confidence >= threshold ? 'sicher' : 'unsicher';
+        const jsonValue = JSON.stringify(suggestion.value);
+        await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,sicherheit_wert,modell,regel,grund,fundstelle,status)
+            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${model},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
+          WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid
+            AND feld=${suggestion.field} AND (feld<>'position' OR wert->>'positionKey'=(${jsonValue}::jsonb)->>'positionKey')
+            AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
+      }
+      const concern = kind === null ? null : concernForCaptureKind(kind);
+      if (concern !== null && (!onlyInvoiceAccess || concern === "rechnung")) await tx.execute(sql`UPDATE public.intake_item
+        SET anliegen=array_append(anliegen,${concern}::text),
+          anliegen_offen=CASE WHEN ${concern}::text=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,${concern}::text) END,
+          version=version+1, geaendert_von=${akteur}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
+        WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT (${concern}::text=ANY(anliegen))`);
+      const recognitionCode = xmlResult?.code === 'OK' ? 'OK' : isXml ? 'UNSUPPORTED_XML'
+        : rawStorageFailed ? 'INTAKE_RAW_NOT_SAVED'
+        : recognized?.code ?? (bytes.byteLength > 20 * 1024 * 1024 ? 'INTAKE_RECOGNITION_TOO_LARGE' : 'UNSUPPORTED_DOCUMENT_TYPE');
+      await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+        SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify({ fileId, kind, code: recognitionCode })}::jsonb
+        WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);
+    });
+  } catch (error) {
+    await recordIntakeRecognitionFailure(auth, akteur, fileId, retryKey, claimOwned);
+    throw error;
+  }
+}
+
+export async function recordIntakeRecognitionFailure(auth: { tenantId: string }, akteur: string, fileId: string, retryKey?: string, claimOwned=false) {
+  const claimKey=recognitionClaimKey(retryKey??fileId);
+    recordObservedFailure('INTAKE_FILE_FINISH_FAILED');
+    try {
+      await withPrivilegedTenantTransaction(auth,async tx=>{
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
+        const changed=await tx.execute(sql`UPDATE public.intake_file file SET erkennung_status='fehler' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid
+          AND (erkennung_status='wartet' OR erkennung_status='laeuft' AND ${claimOwned} AND (SELECT event.befehl_id FROM public.intake_event event
+            WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.art='einsatz' AND event.nachher->>'action'='erkennung_gestartet' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1)=${claimKey}::uuid) RETURNING id`);
+        if(changed.length)await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+          SELECT ${auth.tenantId},item_id,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify({fileId,code:"INTAKE_FILE_FINISH_FAILED"})}::jsonb
+          FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid
+          ON CONFLICT DO NOTHING`);
+      });
+    } catch{recordObservedFailure('INTAKE_FILE_FAILURE_RECORD_FAILED');}
+}
