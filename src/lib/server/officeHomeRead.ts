@@ -4,6 +4,7 @@ import {getQuoteFollowupsForTodayAction} from "@/app/actions/quotes.actions";
 import {getComplaints} from '@/app/actions/complaints.actions';
 import { hasAnyAuthorizationArea, hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
+import type { TerminEinstellungenLeser } from "@/lib/server/orderStationRead";
 import { readTodayDashboard } from "@/lib/server/todayDashboard";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import {
@@ -34,11 +35,13 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   };
 }
 
-export async function loadOfficeHome(authorization: AuthorizationSnapshot,deferLive=false,readModel?:TodayModelReader): Promise<OfficeHomeModel> {
-  if(!readModel)return readOfficeHomeModelAction({deferLive});
-  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization,deferLive,readModel)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
+type OfficeHomePorts = { readModel: TodayModelReader; readTerminEinstellungen: TerminEinstellungenLeser };
+
+export async function loadOfficeHome(authorization: AuthorizationSnapshot,deferLive=false,ports?:OfficeHomePorts): Promise<OfficeHomeModel> {
+  if(!ports)return readOfficeHomeModelAction({deferLive});
+  return withPageReadBudget(()=>withPageReadPhase('home.total',()=>loadOfficeHomeWithinBudget(authorization,deferLive,ports)),DEFAULT_PAGE_READ_SETTINGS.queryTimeoutMs);
 }
-async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,deferLive:boolean,readModel:TodayModelReader): Promise<OfficeHomeModel> {
+async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,deferLive:boolean,{readModel,readTerminEinstellungen}:OfficeHomePorts): Promise<OfficeHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
@@ -55,8 +58,8 @@ async function loadOfficeHomeWithinBudget(authorization: AuthorizationSnapshot,d
       // Only an explicitly selected live path or a known empty model uses the
       // existing whole live collector. Individual disqualified model rows use
       // only their canonical live readers inside the model collection.
-      const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'}));
-      [orderSource,dashboard]=await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})),withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,now,ordersRead,modeled.tagQuellenPorts))]);
+      const ordersRead=withPageReadPhase('home.orders',()=>getOperationalOrders(authorization,{purpose:'today'},readTerminEinstellungen));
+      [orderSource,dashboard]=await Promise.all([ordersRead.then(orders=>({code:'OK' as const,orders})).catch(()=>({code:'SOURCE_INCOMPLETE' as const})),withPageReadPhase('home.dashboard',()=>readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction,readTerminEinstellungen,now,ordersRead,modeled.tagQuellenPorts))]);
       modelRead={source:modeled.code==='LIVE'?'live':'modell',pending:modeled.code==='EMPTY',incomplete:false,pollMs:modeled.settings.today.todayStalePollMs,maxPollMs:modeled.settings.today.todayShadowIntervalMs,rebuild:modeled.code==='EMPTY'};
     }
     if(modeled.settings.page===null)dashboard.datenluecken=[...(dashboard.datenluecken??[]),'PAGE_READ_SETTINGS_SOURCE'];

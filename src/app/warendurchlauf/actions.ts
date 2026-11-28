@@ -8,7 +8,6 @@ import { resolveAuthorization, hasAuthorizationArea, getAuthorizationActionGrant
 import {
   readTenantOrderStationReceipt,
   readTenantOrderStationCorrectionReceipt,
-  readTenantStationOrders,
   type OrderStationReceiptReadInput,
   type OrderStationCorrectionReceiptReadInput,
 } from "@/lib/server/orderStationRead";
@@ -67,39 +66,14 @@ export async function getStationReadyOrders(stationId: string): Promise<Warendur
   return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
 }
 
-async function getFixedStationOrders(station: "angenommen" | "galvanik"): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  noStore();
-  let authorization;
-  try {
-    authorization = await resolveAuthorization();
-  } catch {
-    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
-  }
-
-  if (!authorization.ok) {
-    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
-      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
-    }
-    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  }
-
-  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
-    return { ok: false, error: "FORBIDDEN", message: "Stationsliste ist nicht erlaubt." };
-  }
-
-  try {
-    return { ok: true, data: await readTenantStationOrders(authorization.data, station) };
-  } catch {
-    return { ok: false, error: "QUERY_ERROR", message: "Stationsliste konnte nicht sicher geladen werden." };
-  }
-}
-
 export async function getWareneingangOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  return getFixedStationOrders("angenommen");
+  const { getFixedStationOrdersAction } = await import("@/app/actions/orders.actions");
+  return getFixedStationOrdersAction("angenommen");
 }
 
 export async function getGalvanikOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  return getFixedStationOrders("galvanik");
+  const { getFixedStationOrdersAction } = await import("@/app/actions/orders.actions");
+  return getFixedStationOrdersAction("galvanik");
 }
 
 export async function getOrderStationReceiptAction(

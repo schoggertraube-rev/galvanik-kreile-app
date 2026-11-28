@@ -1,3 +1,4 @@
+import {readBetriebsruheInTransaction} from '@/modules/fundament/server-public';
 import {AsyncLocalStorage} from 'node:async_hooks';
 // @vitest-environment node
 
@@ -157,7 +158,7 @@ describe("PATH1 customer persistence", () => {
       role: "buero",
       tenantId: KREILE_TENANT_SLUG,
       userId: users.buero,
-    }, { customerId: foreign.receipt.customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate());
+    }, { customerId: foreign.receipt.customerId },(await import('@/modules/eingang/server-public')).openIntakePredicate(),readBetriebsruheInTransaction);
     expect(ownRead).toMatchObject({ code: "NOT_FOUND" });
   });
 
