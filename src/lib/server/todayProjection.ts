@@ -9,7 +9,9 @@ import {readCustomerProfile,readCustomerProfiles} from '@/modules/customers/serv
 import {readInvoiceVat,readCustomerCreditInTransaction} from '@/modules/accounting/server-public';
 import {readManualShippingBatch} from '@/modules/orders/server-public';
 import {readComplaintsForAuthorization} from '@/modules/complaints/server-public';
-import {readIntakeMessagesForAuthorization,liesEingangTagZeilenInTransaction} from '@/modules/eingang/server-public';
+import {readIntakeMessagesForAuthorization,liesEingangTagFaktenInTransaction} from '@/modules/eingang/server-public';
+import type {EingangTagFakten} from '@/modules/eingang/public';
+import type {AuthorizationSnapshot} from './authorization';
 import {leseBetriebsruhetage} from '@/lib/domain/workingDays';
 import {listOpenQuotesCommand,readQuoteCommand,readQuoteActors} from '@/modules/quotes/server-public';
 import {liesAufgabenFuerTag,readTaskForAuthorization,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
@@ -99,18 +101,28 @@ async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthoriz
 
 /** Per-run composition of the productive readers. No session/actor is forged;
  * personal rules, assignment ownership and command grants stay on the live path. */
-export async function liesEingangHinweise(auth: {tenantId:string}, jetzt:Date) {
- const aktiv=await isFeatureEnabled(auth,'E01');
- if(aktiv.code!=='OK')throw Error('I2_TAG_MODULSTAND_FEHLT');
- if(!aktiv.enabled)return [];
- return withPrivilegedTenantTransaction(auth,async tx=>{
+async function liesEingangHinweise(auth: {tenantId:string}, jetzt:Date):Promise<EingangTagFakten> {
+ try{
+  const aktiv=await isFeatureEnabled(auth,'E01');
+  if(aktiv.code!=='OK')throw Error('I2_TAG_MODULSTAND_FEHLT');
+  if(!aktiv.enabled)return {code:'OK',fakten:null};
+  const fakten=await withPrivilegedTenantTransaction(auth,async tx=>{
   const {eingang_liegefrist_arbeitsstunden,ki_sicherheitsschwelle}=await readErkennungsEinstellungenInTransaction(tx,auth.tenantId);
   const {nachfassfrist_gegenvorschlag_arbeitstage}=await readKanalFristenInTransaction(tx,auth.tenantId);
   const kalender=await readBetriebsruheInTransaction(tx,auth.tenantId),ruhe=leseBetriebsruhetage(kalender.betriebsruhe);
   if(eingang_liegefrist_arbeitsstunden==null||!ruhe)throw Error('I2_TAG_EINSTELLUNGEN_FEHLEN');
-  return liesEingangTagZeilenInTransaction(tx,auth.tenantId,jetzt,{liegefrist:eingang_liegefrist_arbeitsstunden,
+  return liesEingangTagFaktenInTransaction(tx,auth.tenantId,jetzt,{liegefrist:eingang_liegefrist_arbeitsstunden,
    nachfassfrist:nachfassfrist_gegenvorschlag_arbeitstage,schwelle:ki_sicherheitsschwelle,ruhe});
- });
+  });
+  return {code:'OK',fakten};
+ }catch{
+  console.error('[I2_TAG_HINWEISE_NICHT_VERFUEGBAR]');
+  return {code:'SOURCE_INCOMPLETE'};
+ }
+}
+
+export function liesNachrichtenFuerTag(auth:AuthorizationSnapshot,jetzt:Date){
+ return readIntakeMessagesForAuthorization(auth,'offen',undefined,undefined,()=>liesEingangHinweise(auth,jetzt));
 }
 
 function productivePorts():TodayProjectionPorts{
@@ -160,15 +172,9 @@ function productivePorts():TodayProjectionPorts{
      values.set(key,{code:'OK',payload:{result,liveCardStatus},sourceVersion:result.data.card.version,listed:true});
     }));
    }
-   let eingangZeilen:ReturnType<typeof liesEingangHinweise>|undefined;
-   const eingangQuelle = async (quelleId:string) =>
-    source({code:'OK',zeilen:(await (eingangZeilen??=liesEingangHinweise(auth,jetzt))).filter(zeile=>zeile.quelleId===quelleId)});
    const bestandsLeser:Readonly<Record<string,()=>Promise<TodayProjectionResult>>>={
     orders:async()=>source(access.orders?await orders(auth):{code:'FORBIDDEN'}),
-    messages:async()=>{const read=await readIntakeMessagesForAuthorization(auth,'offen');return source(read,known(read));},
-    eingang_offen:()=>eingangQuelle('eingang.offen'),
-    eingang_gegenvorschlag:()=>eingangQuelle('eingang.gegenvorschlag'),
-    eingang_unklar:()=>eingangQuelle('eingang.unklar'),
+    messages:async()=>{const read=await readIntakeMessagesForAuthorization(auth,'offen',undefined,undefined,()=>liesEingangHinweise(auth,jetzt));return source(read,known(read));},
     complaints:async()=>{const read=await readComplaintsForAuthorization(auth);return source(read,known(read));},
     company:async()=>{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise'),fresh:true});return source(read,known(read));},
     quote_followups:async()=>source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day))),

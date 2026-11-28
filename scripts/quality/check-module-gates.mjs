@@ -104,7 +104,7 @@ const TODAY_PROJECTOR_READ_FACADES = new Map([
   ])],
   ['quotes',new Set(['listOpenQuotesCommand','readQuoteCommand','readQuoteActors'])],
   ['complaints',new Set(['readComplaintsForAuthorization'])],
-  ['eingang',new Set(['readIntakeMessagesForAuthorization','liesEingangTagZeilenInTransaction'])],
+  ['eingang',new Set(['readIntakeMessagesForAuthorization','liesEingangTagFaktenInTransaction'])],
   ['tasks',new Set(['readTaskForAuthorization','readQuoteFollowupTasksForToday','liesAufgabenFuerTag'])],
   ['takt',new Set(['liesTaktAusfallZeilen'])],
 ]);
@@ -491,7 +491,10 @@ export function validTodayProjectorComposition(source) {
   const tree=todayReadCompositionTree(TODAY_PROJECTOR_FILE,source);
   if(!tree)return false;
   const exports=analyzeFacadeExports(source,TODAY_PROJECTOR_FILE);
-  if(exports.errors.length||exports.hasDefault||exports.hasExportEquals||exports.hasStarReexport||[...exports.symbols].sort().join(',')!=='ProjectorAuthorization,rebuildTodayModel,refreshTodayModel')return false;
+  const coreExports=[...exports.symbols].filter(symbol=>symbol!=='liesNachrichtenFuerTag').sort().join(',');
+  if(exports.errors.length||exports.hasDefault||exports.hasExportEquals||exports.hasStarReexport||coreExports!=='ProjectorAuthorization,rebuildTodayModel,refreshTodayModel')return false;
+  if(exports.symbols.has('liesNachrichtenFuerTag')&&!tree.statements.some(statement=>ts.isFunctionDeclaration(statement)
+    &&statement.name?.text==='liesNachrichtenFuerTag'&&hasModifier(statement,ts.SyntaxKind.ExportKeyword)))return false;
   if(!tree.statements.some(statement=>ts.isTypeAliasDeclaration(statement)&&statement.name.text==='ProjectorAuthorization'&&hasModifier(statement,ts.SyntaxKind.ExportKeyword)))return false;
   for(const statement of tree.statements){
     if(ts.isExportDeclaration(statement)||ts.isExportAssignment(statement))return false;
@@ -994,7 +997,7 @@ function gateImports(root, findings) {
   gateTsconfigAliases(root, findings);
   for (const file of listCodeFiles(root, "src", findings)) {
     const source = readFileSync(path.join(root, file), "utf8");
-    if(file===TODAY_PROJECTOR_FILE&&!validTodayProjectorComposition(source))findings.push(`[naht2] ${file}: E2-Projektor muss server-only bleiben, nur Lesefassaden konsumieren und genau die drei freigegebenen Exporte besitzen`);
+    if(file===TODAY_PROJECTOR_FILE&&!validTodayProjectorComposition(source))findings.push(`[naht2] ${file}: E2-Projektor muss server-only bleiben und darf nur die benannten Lesefassaden und Exporte verwenden`);
     const importer = moduleOf(file);
     for (const { spec, index } of importSources(source)) {
       const target = resolveSpec(file, spec);

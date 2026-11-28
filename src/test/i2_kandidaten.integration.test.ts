@@ -12,7 +12,7 @@ import { createCustomerAction } from '@/app/actions/customers.actions';
 import { importOutlookMailAction } from '@/app/actions/communications.actions';
 import { getIntakeAssignmentAction, finishIntakeFileAction, getIncomingInvoiceAction, prepareIntakeFileAction, saveIncomingInvoiceAction } from '@/app/actions/eingang.actions';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { liesEingangTagZeilenInTransaction } from '@/modules/eingang/server-public';
+import { liesEingangTagFaktenInTransaction } from '@/modules/eingang/server-public';
 import { withPrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 
 async function createTestCustomer(name: string, email: string, phone: string) {
@@ -178,7 +178,7 @@ it('liest eine alte offene Quelle einmal je Kanal und lässt sie bei längerer L
   VALUES (${id},${tenant},${id},'datei','geraet',${full.actorId},${seit}::timestamptz)`;
  const jetzt=new Date('2026-11-24T09:00:00+01:00');
  const read=(liegefrist:number)=>withPrivilegedTenantTransaction({tenantId:tenant},tx=>
-  liesEingangTagZeilenInTransaction(tx,tenant,jetzt,{liegefrist,nachfassfrist:2,schwelle:0.9,ruhe:new Set()}));
- expect((await read(24)).filter(zeile=>zeile.quelleId==='eingang.offen')).toMatchObject([{key:'eingang.offen:datei'}]);
- expect((await read(48)).filter(zeile=>zeile.quelleId==='eingang.offen')).toEqual([]);
+  liesEingangTagFaktenInTransaction(tx,tenant,jetzt,{liegefrist,nachfassfrist:2,schwelle:0.9,ruhe:new Set()}));
+ expect((await read(24)).filter(fakt=>fakt.art==='offen')).toMatchObject([{kanal:'datei'}]);
+ expect((await read(48)).filter(fakt=>fakt.art==='offen')).toEqual([]);
 });

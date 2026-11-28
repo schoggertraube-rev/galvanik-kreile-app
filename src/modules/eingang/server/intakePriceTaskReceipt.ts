@@ -2,7 +2,7 @@ import 'server-only';
 import {sql} from 'drizzle-orm';
 
 /** Qualify the same immutable receipt for a message row and for a direct read. */
-export function priceTaskReceipt(alias:'source'|'candidate'){
+export function priceTaskReceipt(alias:'source'|'candidate'|'item'|'mail'){
  const row=sql.identifier(alias);
  return sql`SELECT beleg.id,beleg.nachher->>'text' AS text
    FROM public.intake_event beleg

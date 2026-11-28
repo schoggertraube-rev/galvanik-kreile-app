@@ -2,7 +2,7 @@ import dynamic from 'next/dynamic';
 export type {TaskPorts} from '@/modules/tasks/public';
 export type {IntakeOriginalTakeover} from './captureContract';
 export const IntakeMessages=dynamic(()=>import('./ui/IntakeMessages').then(module=>module.IntakeMessages));
-export type {IntakeMessagesPorts} from './messageContract';
+export type {EingangTagFakten,IntakeMessagesPorts} from './messageContract';
 export type {AssignmentPorts} from './assignmentContract';
 export {
   GLOBAL_CREATE_OPEN_EVENT,

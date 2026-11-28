@@ -11,7 +11,7 @@ import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} fr
 import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
-import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult,type IntakeMessageSourcesResult} from '../messageContract';
+import {readFallbackMessagePriority,MESSAGE_FILTERS,type EingangTagFakten,type MessageFilter,type IntakeMessage,type IntakeMessagesResult,type IntakeMessageSourcesResult} from '../messageContract';
 
 function invalidMessageRead(filter:unknown,sourceItemId?:string,changedSince?:string):Exclude<IntakeMessagesResult,{code:'OK'}>|null{
  if(changedSince!==undefined&&(!Number.isFinite(Date.parse(changedSince))||new Date(changedSince).toISOString()!==changedSince))return {code:'VALIDATION_ERROR',message:OFFLINE_DEVICE_READ_COPY.invalidWindow};
@@ -29,15 +29,16 @@ export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:st
 }
 /** Same SQL/originals for the live wrapper and the identity-free source reader.
  * Current login, effective areas and live U2 commands remain session output. */
-export function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot,filter?:unknown,sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>;
-export function readIntakeMessagesForAuthorization(auth:AuthorizedReadContext,filter?:unknown,sourceItemId?:string,changedSince?:string):Promise<IntakeMessageSourcesResult>;
-export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot|AuthorizedReadContext,filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult|IntakeMessageSourcesResult>{
+type LeseTagFakten=()=>Promise<EingangTagFakten>;
+export function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot,filter?:unknown,sourceItemId?:string,changedSince?:string,leseTagFakten?:LeseTagFakten):Promise<IntakeMessagesResult>;
+export function readIntakeMessagesForAuthorization(auth:AuthorizedReadContext,filter?:unknown,sourceItemId?:string,changedSince?:string,leseTagFakten?:LeseTagFakten):Promise<IntakeMessageSourcesResult>;
+export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot|AuthorizedReadContext,filter:unknown='offen',sourceItemId?:string,changedSince?:string,leseTagFakten?:LeseTagFakten):Promise<IntakeMessagesResult|IntakeMessageSourcesResult>{
  const invalid=invalidMessageRead(filter,sourceItemId,changedSince);if(invalid)return invalid;
  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
  try{
   if(!readAuth.canReadArea('mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
   const canReadPrices=readAuth.canReadArea('preise');
-  return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const source=await withPrivilegedTenantTransaction(auth,async tx=>{
    const deviceMatches=(alias:'source'|'candidate')=>{const row=sql.identifier(alias);return sql`(${openIntakePredicate(alias)} OR EXISTS(SELECT 1 FROM public.intake_event changed WHERE changed.tenant_id=${row}.tenant_id AND changed.item_id=${row}.id AND changed.zeit>=${changedSince}::timestamptz))`;};
    const matches=changedSince!==undefined?deviceMatches('candidate'):filter==='offen'?openIntakePredicate('candidate')
     :filter==='zuordnen'?sql`candidate.aussortiert IS NULL AND candidate.zuordnung='offen'`
@@ -75,9 +76,10 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
     if(priceTaskReceipt)priceProtectedMessageIds.push(row.id);
     return {...row,fallbackPriority:priority,actorTrace:actors.get(row.id)};
    });
-   const source={code:'OK' as const,messages:messageFacts,priceProtectedMessageIds,captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}])};
-   return 'canReadArea'in auth?source:projectIntakeMessageSources(auth,source);
+   return {code:'OK' as const,messages:messageFacts,priceProtectedMessageIds,captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}])};
   });
+  const daten: IntakeMessageSourcesResult=leseTagFakten ? {...source,tagFakten:await leseTagFakten()} : source;
+  return 'canReadArea'in auth?daten:projectIntakeMessageSources(auth,daten);
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }
 /** The existing personal U2 projection is shared with qualified model facts. */
@@ -86,6 +88,8 @@ export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:In
  if(source.code!=='OK')return source;
  const canReadPrices=hasAuthorizationArea(auth,'preise');
  const priceProtected=new Set(source.priceProtectedMessageIds);
+ const tagFakten=source.tagFakten?.code==='OK'&&source.tagFakten.fakten&&!canReadPrices
+  ?{code:'OK' as const,fakten:source.tagFakten.fakten.filter(fakt=>!fakt.preisgeschuetzt)}:source.tagFakten;
  return {code:'OK',messages:source.messages.flatMap(message=>{
   // Persisted Today snapshots from before this change still carry the marker on the row.
   const {priceTaskReceipt,...row}=message as IntakeMessage&{priceTaskReceipt?:boolean};
@@ -93,5 +97,5 @@ export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:In
   const priority=row.fallbackPriority??readFallbackMessagePriority(row);
   const capture=source.captures.find(value=>value.itemId===row.id)?.value;
   return [{...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture)}];
- }),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+ }),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId,...(tagFakten?{tagFakten}:{})};
 }
