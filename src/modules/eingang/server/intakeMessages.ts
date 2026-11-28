@@ -90,7 +90,8 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
    });
    let tagFakten:EingangTagFakten|undefined;
    if(tag){
-    try{const fakten=await withTenantSavepoint(tx,nested=>liesEingangTagFaktenInTransaction(nested,auth.tenantId,tag,offeneEingaenge));
+    const paketeErlaubt='canReadArea'in auth?auth.canReadArea('eingang'):hasAuthorizationArea(auth,'eingang');
+    try{const fakten=await withTenantSavepoint(tx,nested=>liesEingangTagFaktenInTransaction(nested,auth.tenantId,tag,offeneEingaenge,paketeErlaubt));
      tagFakten={code:'OK',fakten};
     }catch{console.error('[I2_TAG_HINWEISE_NICHT_VERFUEGBAR]');tagFakten={code:'SOURCE_INCOMPLETE'};}
    }else if(tagStand)tagFakten=tagStand.code==='OK'?{code:'OK',fakten:null}:tagStand;
@@ -105,8 +106,10 @@ export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:In
  if(source.code!=='OK')return source;
  const canReadPrices=hasAuthorizationArea(auth,'preise');
  const priceProtected=new Set(source.priceProtectedMessageIds);
- const tagFakten=source.tagFakten?.code==='OK'&&source.tagFakten.fakten&&!canReadPrices
-  ?{code:'OK' as const,fakten:source.tagFakten.fakten.filter(fakt=>!fakt.preisgeschuetzt)}:source.tagFakten;
+ const canReadPackages=hasAuthorizationArea(auth,'eingang');
+ const tagFakten=source.tagFakten?.code==='OK'&&source.tagFakten.fakten
+  ?{code:'OK' as const,fakten:source.tagFakten.fakten.filter(fakt=>(canReadPrices||!fakt.preisgeschuetzt)&&
+    (canReadPackages||fakt.art!=='paketohnebezug'))}:source.tagFakten;
  return {code:'OK',messages:source.messages.flatMap(message=>{
   // Persisted Today snapshots from before this change still carry the marker on the row.
   const {priceTaskReceipt,...row}=message as IntakeMessage&{priceTaskReceipt?:boolean};

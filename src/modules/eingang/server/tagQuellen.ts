@@ -13,6 +13,7 @@ export const tagQuellen = [
   {id:offen,modul:'eingang',bereich:'mails',rang:null},
   {id:gegen,modul:'eingang',bereich:'mails',rang:null},
   {id:unklar,modul:'eingang',bereich:'mails',rang:null},
+  {id:'eingang.paketohnebezug',modul:'eingang',bereich:'eingang',rang:null},
 ] as const satisfies readonly TagQuelle[];
 
 function arbeitsstunden(seit:Date,jetzt:Date,ruhe:ReadonlySet<string>){
@@ -30,7 +31,7 @@ export type TagEinstellungen={jetzt:Date;liegefrist:number;nachfassfrist:number;
 export type EingangFakt={id:string;kanal:string;gruppe:string|null;seit:string|null;betreff:string|null;sicherheit:boolean;preisgeschuetzt:boolean};
 
 export async function liesEingangTagFaktenInTransaction(tx:PrivilegedTenantTransaction,tenantId:string,
-  settings:TagEinstellungen,nachrichten:readonly EingangFakt[]):Promise<EingangTagFakt[]>{
+  settings:TagEinstellungen,nachrichten:readonly EingangFakt[],paketeErlaubt:boolean):Promise<EingangTagFakt[]>{
   const {jetzt,liegefrist,nachfassfrist,ruhe}=settings;
   const heute=berlinCalendarDay(jetzt);
   if(!Number.isSafeInteger(liegefrist)||liegefrist<1||!Number.isSafeInteger(nachfassfrist)||nachfassfrist<0)
@@ -59,6 +60,15 @@ export async function liesEingangTagFaktenInTransaction(tx:PrivilegedTenantTrans
     const faellig=plusWorkingDays(berlinCalendarDay(gesendet),nachfassfrist,ruhe);
     if(faellig&&faellig<=heute)ergebnis.push({art:'gegenvorschlag',id:termin.id,kanal:'mail',gruppe:termin.gruppe,
       betreff:termin.nummer,preisgeschuetzt:termin.preisgeschuetzt,tage:0,faellig});
+  }
+  if(paketeErlaubt){
+    const pakete=await tx.execute<{id:string;ort:string;kanal:string;gruppe:string|null;betreff:string|null}>(sql`
+      SELECT paket.id::text,paket.lagerort AS ort,eingang.kanal,eingang.gruppe_adresse AS gruppe,eingang.betreff
+      FROM public.goods_receipt paket JOIN public.intake_item eingang
+        ON eingang.tenant_id=paket.tenant_id AND eingang.id=paket.item_id
+      WHERE paket.tenant_id=${tenantId} AND paket.modus='ohne_bezug' AND paket.auftrag_id IS NULL
+        AND paket.lagerort IS NOT NULL ORDER BY paket.id`);
+    for(const paket of pakete)ergebnis.push({...paket,art:'paketohnebezug',preisgeschuetzt:false,tage:0,faellig:null});
   }
   return ergebnis;
 }

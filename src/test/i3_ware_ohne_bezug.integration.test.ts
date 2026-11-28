@@ -6,8 +6,10 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
 import {full,sql,withSession} from '../../e2e/ablauf/replayHarness';
-import {chooseIntakeCaptureKindAction,getGoodsReceiptsAction,getIntakeCaptureAction,
+import {chooseIntakeCaptureKindAction,getGoodsReceiptsAction,getIntakeCaptureAction,getIntakeMessagesAction,
  legePaketOhneBezugAbAction,verknuepfePaketOhneBezugAction} from '@/app/actions/eingang.actions';
+import {resolveAuthorization} from '@/lib/server/authorization';
+import {projiziereEingangTagFakten} from '@/lib/server/todayDashboard';
 import {customerFixture,intakeOrderFixture} from '../../e2e/ablauf/orderFixture';
 import {storeIntakeGoodsPhoto} from '../../e2e/ablauf/photoFixture';
 
@@ -19,6 +21,20 @@ if(!database||database!==process.env.H18_EXPECTED_DATABASE_URL||new URL(database
 it('legt das Original am angegebenen Ort ab und verbindet es später einmalig mit dem echten Auftrag',async()=>{
  await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES (${tenant},'E04',false)
   ON CONFLICT(tenant,feature_id) DO UPDATE SET enabled=false`;
+ await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES (${tenant},'E01',true)`;
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,
+  material_aufschlag_prozent,lager_regelversion,eingang_liegefrist_arbeitsstunden)
+  VALUES (${randomUUID()},${tenant},'TEST Kreile','TEST Weg 1','70176','Stuttgart','DE',0,'TEST-I3',24)`;
+ const session=await withSession(full,resolveAuthorization);
+ if(!session.ok)throw Error('TEST_I3_TAG_AUTH');
+ const auth=session.data;
+ const paketZeilen=async()=>{
+  const tag=await withSession(full,()=>getIntakeMessagesAction({purpose:'tag',jetzt:new Date()}));
+  if(tag.code!=='OK'||!tag.tagFakten)throw Error('TEST_I3_TAG_LESEN');
+  const lesestand=projiziereEingangTagFakten(auth,tag.tagFakten);
+  if(lesestand.code!=='OK')throw Error('TEST_I3_TAG_QUELLE');
+  return lesestand.zeilen.filter(eintrag=>eintrag.quelleId==='eingang.paketohnebezug');
+ };
  const {itemId,fileId}=await storeIntakeGoodsPhoto();
  const lesen=()=>withSession(full,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:false}));
  const davor=await lesen();
@@ -31,6 +47,11 @@ it('legt das Original am angegebenen Ort ab und verbindet es später einmalig mi
  const abgelegt=await withSession(full,()=>legePaketOhneBezugAbAction(ablage));
  expect(abgelegt).toMatchObject({code:'OK',paket:{itemId,ort:ablage.ort,auftragId:null,verknuepftAm:null},wiederholt:false});
  if(abgelegt.code!=='OK')throw Error('TEST_I3_PAKET_ABLAGE:'+abgelegt.code);
+ expect(await paketZeilen()).toMatchObject([{key:'eingang.paketohnebezug:'+abgelegt.paket.id,
+  gegenstand:'Paket ohne Bezug liegt in TEST Regal 2',ziel:'/nachrichten'}]);
+ await sql`UPDATE public.tenant_features SET enabled=false WHERE tenant=${tenant} AND feature_id='E01'`;
+ expect(await paketZeilen()).toEqual([]);
+ await sql`UPDATE public.tenant_features SET enabled=true WHERE tenant=${tenant} AND feature_id='E01'`;
  expect(await withSession(full,()=>legePaketOhneBezugAbAction({...ablage})))
   .toEqual({...abgelegt,wiederholt:true});
  expect(await lesen()).toMatchObject({code:'OK',capture:{orderId:null,concerns:expect.arrayContaining(['ware_ohne_bezug']),
@@ -43,6 +64,7 @@ it('legt das Original am angegebenen Ort ab und verbindet es später einmalig mi
  expect(gebunden).toMatchObject({code:'OK',paket:{id:abgelegt.paket.id,ort:ablage.ort,auftragId:bindung.auftragId,
   version:abgelegt.paket.version+1,verknuepftAm:expect.any(String)},wiederholt:false});
  expect(await withSession(full,()=>verknuepfePaketOhneBezugAction({...bindung}))).toEqual({...gebunden,wiederholt:true});
+ expect(await paketZeilen()).toEqual([]);
  expect(await lesen()).toMatchObject({code:'OK',capture:{orderId:bindung.auftragId,files:[{id:fileId,secured:true}]}});
  expect(await withSession(full,()=>getGoodsReceiptsAction(bindung.auftragId))).toMatchObject({code:'OK',receipts:[]});
  expect(await sql`SELECT art,befehl_id AS befehl,nachher->'paket'->>'ort' AS ort FROM public.intake_event
