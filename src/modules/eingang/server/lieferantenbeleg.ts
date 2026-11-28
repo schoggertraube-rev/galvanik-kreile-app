@@ -5,7 +5,7 @@ import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {LagerBeleg,LagerBelegPosition} from '@/modules/lager/public';
 import {invoiceDate} from '../invoiceContract';
-import {gespeichertesBelegoriginal} from './intakeOriginal';
+import {gespeichertesBelegoriginal,invoicePageFilter} from './intakeOriginal';
 import {readIntakePositionValues} from './intakeRecognitionPositions';
 
 type Belegdatei = { id: string; sha256: string; status: string };
@@ -19,7 +19,8 @@ type Eingang = {
  erkennungFertig: boolean;
 };
 type Hinweis = { feld: string; wert: unknown; sicherheit: string | null };
-type Rechnung = { id: string; fileId: string; nummer: string | null; datum: string | null; zahlstatus: string };
+type Rechnung = { id: string; fileId: string; nummer: string | null; datum: string | null; zahlstatus: string;
+ lieferantId: string | null; seiteVon: number | null; seiteBis: number | null };
 
 function text(wert: unknown): string | null {
  return typeof wert === 'string' ? wert.trim() || null : null;
@@ -42,7 +43,7 @@ function lesePositionen(hinweise: readonly Hinweis[]): LagerBelegPosition[] {
  return [...positionen.values()];
 }
 
-async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string): Promise<LagerBeleg | null> {
+async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, itemId: string, rechnungId?:string): Promise<LagerBeleg | null> {
  const [eingang] = await tx.execute<Eingang>(sql`
   SELECT item.id::text,item.anliegen,item.kunde_id AS "kundeId",item.zuordnung,item.einsatz_aktion AS "einsatzAktion",
     coalesce((SELECT jsonb_agg(jsonb_build_object('id',file.id,'sha256',file.sha256,'status',file.erkennung_status)
@@ -56,6 +57,20 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
  const belegart = eingang.anliegen.includes('lieferschein') ? 'lieferschein'
   : eingang.anliegen.includes('rechnung') ? 'lieferantenrechnung' : null;
  if (belegart === null) return null;
+ if(rechnungId&&belegart!=='lieferantenrechnung')return null;
+ const rechnungen=belegart==='lieferantenrechnung'?await tx.execute<Rechnung>(sql`
+  SELECT id::text,file_id::text AS "fileId",nummer,datum::text,zahlstatus,lieferant_id AS "lieferantId",
+    seite_von AS "seiteVon",seite_bis AS "seiteBis"
+  FROM public.supplier_invoice WHERE tenant_id=${tenantId} AND item_id=${itemId}::uuid
+    ${rechnungId?sql`AND id=${rechnungId}::uuid`:sql``} LIMIT 2`):[];
+ if(rechnungen.length>1)throw Error('CONFLICT');
+ const rechnung=rechnungen[0];
+ if(rechnungId&&!rechnung)return null;
+ const original=rechnung?eingang.dateien.find(datei=>datei.id===rechnung.fileId):eingang.dateien[0];
+ if(!original)throw Error('EINGANG_BELEG_ORIGINAL_FEHLT');
+ const seiten=rechnung&&rechnung.seiteVon!==null&&rechnung.seiteBis!==null
+  ?{from:rechnung.seiteVon,to:rechnung.seiteBis}:null;
+ const lieferantId=rechnung?rechnung.lieferantId:eingang.kundeId;
 
  const hinweise = await tx.execute<Hinweis>(sql`
   SELECT s.feld,s.wert,s.sicherheit_wert::text AS sicherheit
@@ -64,18 +79,11 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
   WHERE s.tenant_id=${tenantId} AND s.item_id=${itemId}::uuid AND s.status IN ('offen','uebernommen')
     AND s.feld IN ('beleg.nummer','beleg.datum','rechnung.nummer','rechnung.datum','waehrung','bestellnummer','lieferscheinnummer','position')
     AND (s.file_id IS NULL AND s.feld<>'position' OR ${gespeichertesBelegoriginal})
+    ${belegart==='lieferantenrechnung'?sql`AND s.file_id=${original.id}::uuid`:sql``}
+    ${seiten?sql`AND ${invoicePageFilter(seiten)}`:sql``}
   ORDER BY CASE WHEN s.feld='position' THEN file.reihenfolge ELSE 0 END,
     CASE WHEN s.feld='position' AND s.wert->>'positionKey' ~ '^p[1-9][0-9]{0,9}$' THEN substring(s.wert->>'positionKey' FROM 2)::bigint END NULLS LAST,
     (s.status='uebernommen') DESC,s.geprueft_am DESC NULLS LAST,s.sicherheit_wert DESC NULLS LAST,file.reihenfolge,s.id`);
-
- const rechnungen = belegart === 'lieferantenrechnung' ? await tx.execute<Rechnung>(sql`
-  SELECT id::text,file_id::text AS "fileId",nummer,datum::text,zahlstatus
-  FROM public.supplier_invoice WHERE tenant_id=${tenantId} AND item_id=${itemId}::uuid LIMIT 2`) : [];
- // TODO_PL: Auswahl mehrerer Rechnungen je Eingang (I01 / I3).
- if (rechnungen.length > 1) throw Error('EINGANG_BELEG_RECHNUNGSBEZUG_UNKLAR');
- const rechnung = rechnungen[0];
- const original = rechnung ? eingang.dateien.find(datei=>datei.id===rechnung.fileId) : eingang.dateien[0];
- if (!original) throw Error('EINGANG_BELEG_ORIGINAL_FEHLT');
 
  const lieferanten = await tx.execute<{ id:string; name:string; zugeordnet:boolean; sicherheit:string|null; grund:string|null }>(sql`
   WITH hinweise AS (
@@ -84,10 +92,10 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
     AND s.feld='kunde' AND s.status IN ('offen','uebernommen') AND jsonb_typeof(s.wert)='string'
    ORDER BY s.wert #>> '{}',(s.status='uebernommen') DESC,s.sicherheit_wert DESC NULLS LAST,s.id
   )
-  SELECT l.id,l.name,l.id IS NOT DISTINCT FROM ${eingang.kundeId}::text AS zugeordnet,
+  SELECT l.id,l.name,l.id IS NOT DISTINCT FROM ${lieferantId}::text AS zugeordnet,
    h.sicherheit_wert::text AS sicherheit,CASE WHEN h.status='offen' THEN h.grund END AS grund
   FROM public.v_eingang_lieferanten_v1 l LEFT JOIN hinweise h ON h.id=l.id
-  WHERE l.tenant_id=${tenantId} AND (l.id=${eingang.kundeId} OR h.status='offen' AND h.grund IS NOT NULL)
+  WHERE l.tenant_id=${tenantId} AND (l.id=${lieferantId} OR h.status='offen' AND h.grund IS NOT NULL)
   ORDER BY zugeordnet DESC,h.sicherheit_wert DESC NULLS LAST,l.id LIMIT 4`);
  const lieferant = lieferanten.find(zeile=>zeile.zugeordnet);
  const vorschlag = (feld: string) => text(hinweise.find(zeile=>zeile.feld===feld)?.wert);
@@ -100,7 +108,7 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
   belegnummer:rechnung?.nummer ?? vorschlag(belegart==='lieferantenrechnung'?'rechnung.nummer':'beleg.nummer'),
   belegdatum:datum&&invoiceDate(datum)?datum:null,
   lieferantId:lieferant?.id??null,
-  lieferantSicherheit:lieferant ? ['bestaetigt','hand'].includes(eingang.zuordnung)?1:sicherheit(lieferant.sicherheit) : null,
+  lieferantSicherheit:lieferant ? rechnung||['bestaetigt','hand'].includes(eingang.zuordnung)?1:sicherheit(lieferant.sicherheit) : null,
   lieferantKandidaten:lieferanten.flatMap(({id,name,grund})=>grund ? [{id,name,grund}] : []).slice(0,3),
   waehrung:waehrung&&/^[A-Z]{3}$/u.test(waehrung)?waehrung:null,
   rechnungId:rechnung?.id??null,
@@ -112,11 +120,11 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
 }
 
 export async function leseLieferantenbelegFuerLagerInTransaction(tx: PrivilegedTenantTransaction,
- auth: AuthorizationSnapshot, itemId: string): Promise<LagerBeleg | null> {
+ auth: AuthorizationSnapshot, itemId: string, rechnungId?:string): Promise<LagerBeleg | null> {
  try {
   return await withTenantSavepoint(tx,async nested=>{
    await nested.execute(sql`SET LOCAL statement_timeout='2000ms'`);
-   return leseBeleg(nested,auth.tenantId,itemId);
+   return leseBeleg(nested,auth.tenantId,itemId,rechnungId);
   });
  } catch(error) {
   const ursache = error instanceof Error && error.cause ? error.cause : error;
