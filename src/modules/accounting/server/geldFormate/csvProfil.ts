@@ -1,5 +1,5 @@
 type Spalte = 'buchungstag' | 'valuta' | 'betrag' | 'waehrung' | 'referenz'
-  | 'verwendung' | 'gegenpartei' | 'iban' | 'satzart';
+  | 'verwendung' | 'gegenpartei' | 'iban' | 'satzart' | 'settlementId';
 
 export type ImportProfil = {
   trenner: string;
@@ -29,9 +29,9 @@ type Zeilenfehler = {
   feld: Spalte | 'format';
   code: 'FORMAT_UNBEKANNT' | 'SPALTE_FEHLT' | 'WERT_UNGUELTIG';
 };
-type Auszug = {
+type Auszug<Zeile extends RohBewegung> = {
   kopf: { anfangCents?: number; endeCents?: number; von?: string; bis?: string; auszugId?: string };
-  zeilen: RohBewegung[];
+  zeilen: Zeile[];
   fehler: Zeilenfehler[];
 };
 type CsvZeile = { zeile: number; werte: string[] };
@@ -102,13 +102,14 @@ function datum(text: string, format: string): string | undefined {
   if (Number.isFinite(tag.getTime()) && tag.toISOString().slice(0, 10) === iso) return iso;
 }
 
-export function leseProfilAuszug(
+export function leseProfilAuszug<Zeile extends RohBewegung>(
   bytes: Uint8Array,
   profil: ImportProfil,
   satzart: (wert: string | undefined) => Satzart | undefined,
-): Auszug {
-  const result: Auszug = { kopf: {}, zeilen: [], fehler: [] };
-  const formatFehlt = (zeile: number): Auszug => ({
+  projiziere: (bewegung: RohBewegung, roherWert: (feld: Spalte) => string | undefined) => Zeile,
+): Auszug<Zeile> {
+  const result: Auszug<Zeile> = { kopf: {}, zeilen: [], fehler: [] };
+  const formatFehlt = (zeile: number): Auszug<Zeile> => ({
     ...result, fehler: [{ zeile, feld: 'format', code: 'FORMAT_UNBEKANNT' }],
   });
   if (!profil.spalten.buchungstag || !profil.spalten.betrag
@@ -134,7 +135,8 @@ export function leseProfilAuszug(
   }
 
   for (const { zeile, werte } of saetze) {
-    const wert = (feld: Spalte) => werte[index.get(profil.spalten[feld] ?? '') ?? -1]?.trim() || undefined;
+    const roherWert = (feld: Spalte) => werte[index.get(profil.spalten[feld] ?? '') ?? -1];
+    const wert = (feld: Spalte) => roherWert(feld)?.trim() || undefined;
     const melde = (feld: Zeilenfehler['feld']) => {
       result.fehler.push({ zeile, feld, code: 'WERT_UNGUELTIG' });
     };
@@ -158,11 +160,11 @@ export function leseProfilAuszug(
     const valutaText = wert('valuta');
     const valuta = valutaText === undefined ? undefined : datum(valutaText, profil.datumsformat);
     if (valutaText && !valuta) { melde('valuta'); continue; }
-    result.zeilen.push({
+    result.zeilen.push(projiziere({
       zeile, art, buchungstag, valuta, betragCents, waehrung,
       transaktionsRef: wert('referenz'), verwendungszweck: wert('verwendung'),
       gegenpartei: wert('gegenpartei'), iban: wert('iban'),
-    });
+    }, roherWert));
   }
   return result;
 }
@@ -172,5 +174,5 @@ export function leseCsvAuszug(bytes: Uint8Array, profil: ImportProfil) {
     if (satz === 'Anfang') return 'anfang';
     if (satz === 'Ende') return 'ende';
     if (satz === 'Umsatz' || (satz === undefined && !profil.spalten.satzart)) return 'umsatz';
-  });
+  }, zeile => zeile);
 }

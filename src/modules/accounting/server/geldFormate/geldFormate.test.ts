@@ -28,6 +28,16 @@ it('liest Verkauf, Gebühr und Auszahlung aus der Original-Kartenabrechnung', ()
   expect(result.zeilen.map(zeile => [zeile.art, zeile.betragCents, zeile.transaktionsRef])).toEqual([
     ['kartenverkauf', 11900, 'P1-S'], ['anbietergebuehr', -200, 'P1-F'], ['anbieterauszahlung', -11700, 'P1-A'],
   ]);
+  expect(result.zeilen.map(zeile => zeile.settlementId)).toEqual([null, null, null]);
+});
+
+it('liest die ausdrücklich zugeordnete Settlement-Spalte unverändert', () => {
+  const bytes = new TextEncoder().encode('satz,referenz,tag,wert,charge\nAuszahlung,P1-A,2026-11-14,-117,"  TEST-X / 4  "\nAuszahlung,P2-A,2026-11-15,-50,');
+  const result = lesePspAbrechnung(bytes, {
+    ...quelle, spalten: { satzart: 'satz', referenz: 'referenz', buchungstag: 'tag', betrag: 'wert', settlementId: 'charge' },
+  });
+  expect(result.fehler).toEqual([]);
+  expect(result.zeilen.map(zeile => zeile.settlementId)).toEqual(['  TEST-X / 4  ', null]);
 });
 
 it('liest die Original-Kassenzählung als Anfangs- und Schlussbestand', () => {
