@@ -14,6 +14,7 @@ export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead
 export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from './server/intakeMailImport';
 export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction } from "./server/goodsReceipt";
+export {legePaketOhneBezugAb,verknuepfePaketOhneBezug} from './server/wareOhneBezug';
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
 export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation } from "./server/intakeDraft";
 

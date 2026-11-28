@@ -139,6 +139,8 @@
     "@/modules/eingang/server-public#confirmIntakeOriginal",
     "@/modules/eingang/server-public#saveGoodsReceipt",
     "@/modules/eingang/server-public#readGoodsReceipts",
+    "@/modules/eingang/server-public#legePaketOhneBezugAb",
+    "@/modules/eingang/server-public#verknuepfePaketOhneBezug",
     "@/modules/eingang/server-public#createGoodsReceiptStationBinding",
     "@/modules/eingang/server-public#writeCreatedOrderGoodsReceipt",
     "@/modules/eingang/server-public#GoodsReceiptResult",

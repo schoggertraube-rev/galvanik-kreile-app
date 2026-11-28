@@ -6,6 +6,8 @@ import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} fr
 import {readGoodsReceiptOrder} from '@/lib/server/goodsReceiptOrderPort';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {WARE_OHNE_BEZUG_COPY as copy} from '@/ui/eingangCopy';
+import {mayUseContinuationSources} from './intakeContinuationAccess';
+import {gespeichertesBelegoriginal} from './intakeOriginal';
 import {bindIntakeOriginalToOrder} from './intakeOrderBinding';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -66,16 +68,25 @@ export async function legePaketOhneBezugAb(wert:unknown):Promise<Ergebnis>{
  const {itemId,version,befehlId,ort}=input as Ablegen;
  const ablage=ort.trim(),absicht={aktion:'ware.ohne_bezug_ablegen',itemId,version,ort:ablage};
  return mitEingang(async(tx,auth)=>{
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${itemId},0))`);
-  const [eingang]=await tx.execute<{version:number;vorgangId:string|null;anliegen:string[];kanal:string;erstelltVon:string}>(sql`
-   SELECT version,vorgang_id AS "vorgangId",anliegen,kanal,erstellt_von::text AS "erstelltVon" FROM public.intake_item
-   WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid AND aussortiert IS NULL FOR UPDATE`);
+  const [eingang]=await tx.execute<{version:number;vorgangId:string|null;anliegen:string[];kanal:string;erstelltVon:string;
+   fortsetzungVon:string|null;handArt:string|null;hatOriginal:boolean}>(sql`
+   SELECT eingang.version,eingang.vorgang_id AS "vorgangId",eingang.anliegen,eingang.kanal,
+    eingang.erstellt_von::text AS "erstelltVon",eingang.fortsetzung_von::text AS "fortsetzungVon",
+    (SELECT s.wert #>> '{}' FROM public.intake_suggestion s WHERE s.tenant_id=eingang.tenant_id AND s.item_id=eingang.id
+      AND s.feld='art' AND s.status='uebernommen' ORDER BY s.id LIMIT 1) AS "handArt",
+    EXISTS(SELECT 1 FROM public.intake_file file WHERE file.tenant_id=eingang.tenant_id AND file.item_id=eingang.id
+      AND ${gespeichertesBelegoriginal}) AS "hatOriginal"
+   FROM public.intake_item eingang WHERE eingang.tenant_id=${auth.tenantId} AND eingang.id=${itemId}::uuid
+    AND eingang.aussortiert IS NULL FOR UPDATE OF eingang`);
   if(!eingang)return {code:'NOT_FOUND',message:copy.eingangFehlt};
   if((eingang.kanal==='mail'||eingang.erstelltVon!==auth.userId)&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:copy.recht};
+  if(eingang.fortsetzungVon&&!await mayUseContinuationSources(tx,auth,itemId))return {code:'FORBIDDEN',message:copy.recht};
   const replay=await wiederholung(tx,auth,itemId,befehlId,absicht);if(replay)return replay;
   if(eingang.vorgangId)return konflikt(copy.schonZugeordnet);
-  if(eingang.version!==version||!eingang.anliegen.some(art=>art==='ware'||art==='ware_ohne_bezug'))return konflikt();
-  const [paket]=await tx.execute<Paket>(sql`
+  const istWare=eingang.handArt!==null?eingang.handArt==='ware'
+   :eingang.anliegen.some(art=>art==='ware'||art==='ware_ohne_bezug');
+  if(eingang.version!==version||!eingang.hatOriginal||!istWare)return konflikt();
+  const [gespeichert]=await tx.execute<Paket&{belegt:boolean}>(sql`
    WITH stand AS (
     UPDATE public.intake_item SET anliegen=CASE WHEN 'ware_ohne_bezug'=ANY(anliegen) THEN anliegen ELSE array_append(anliegen,'ware_ohne_bezug') END,
       anliegen_offen=CASE WHEN 'ware_ohne_bezug'=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,'ware_ohne_bezug') END,
@@ -83,12 +94,19 @@ export async function legePaketOhneBezugAb(wert:unknown):Promise<Ergebnis>{
     WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid AND version=${version}
      AND NOT EXISTS(SELECT 1 FROM public.goods_receipt WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND modus='ohne_bezug')
     RETURNING id
-   )
-   INSERT INTO public.goods_receipt(id,tenant_id,client_key,item_id,modus,status,lagerort,karte,abgestellt,fotos,mengen,offen)
-   SELECT ${befehlId}::uuid,${auth.tenantId},${befehlId}::uuid,stand.id,'ohne_bezug','entwurf',${ablage},0,false,'[]'::jsonb,'[]'::jsonb,'{}'::text[]
-   FROM stand RETURNING ${paketSpalten}`);
-  if(!paket)return konflikt();
-  await speichereBeleg(tx,auth,befehlId,absicht,paket);
+   ), aufgegeben AS (
+    INSERT INTO public.goods_receipt(id,tenant_id,client_key,item_id,modus,status,lagerort,karte,abgestellt,fotos,mengen,offen)
+    SELECT ${befehlId}::uuid,${auth.tenantId},${befehlId}::uuid,stand.id,'ohne_bezug','entwurf',${ablage},0,false,'[]'::jsonb,'[]'::jsonb,'{}'::text[]
+    FROM stand RETURNING ${paketSpalten}
+   ), beleg AS (
+    INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+    SELECT ${auth.tenantId},paket."itemId"::uuid,'ware',${befehlId}::uuid,${auth.userId},
+      jsonb_build_object('absicht',${JSON.stringify(absicht)}::jsonb,'paket',to_jsonb(paket))
+    FROM aufgegeben paket RETURNING id
+   ) SELECT aufgegeben.*,EXISTS(SELECT 1 FROM beleg) AS belegt FROM aufgegeben`);
+  if(!gespeichert)return konflikt();
+  const {belegt,...paket}=gespeichert;
+  if(!belegt)throw Error('WARE_OHNE_BEZUG_BELEG_FEHLT');
   return erfolgreich(paket);
  });
 }
