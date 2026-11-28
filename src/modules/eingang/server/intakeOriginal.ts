@@ -4,7 +4,8 @@ import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
 import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
-import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
+import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {recordIntakeFileBlocked} from "@/lib/server/intakeOriginalAudit";
 import {readLiveOrderCard} from "@/lib/server/orderCardRead";
@@ -27,6 +28,23 @@ async function readOriginalFile(auth:AuthorizationSnapshot,fileId:string,mime?:I
     AND EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
      AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text AND original.nachher->>'sha256'=file.sha256)`:sql``}`));
  return rows.length===1?rows[0]:null;
+}
+
+export async function readSecuredIntakeMailOriginal(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string){
+ if(!canSynchronizeIntakeMailbox(auth))return null;
+ const files=await tx.execute<{id:string;name:string;mime:string;sha256:string}>(sql`
+  SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256
+  FROM public.intake_file file
+  WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${itemId}::uuid
+   AND file.art='mime' AND file.mime='message/rfc822' AND lower(file.dateiname) LIKE '%.eml'
+   AND EXISTS(SELECT 1 FROM public.intake_event stored WHERE stored.tenant_id=file.tenant_id
+    AND stored.item_id=file.item_id AND stored.art='original_gespeichert'
+    AND stored.nachher->>'fileId'=file.id::text AND stored.nachher->>'sha256'=file.sha256)
+   AND EXISTS(SELECT 1 FROM public.intake_event imported WHERE imported.tenant_id=file.tenant_id
+    AND imported.item_id=file.item_id AND imported.art='einsatz'
+    AND imported.nachher->>'action'='mail_import_complete' AND imported.nachher->'fileIds' ? file.id::text)
+  LIMIT 2`);
+ return files.length===1?files[0]:null;
 }
 
 function originalStorage(){return createAdminClient().storage.from('scans');}

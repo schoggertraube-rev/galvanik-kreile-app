@@ -10,7 +10,7 @@ import {resolveAuthorization,hasAuthorizationArea,type AuthorizationSnapshot} fr
 import {withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {normaliseIban,type CustomerStoredProfile} from '@/modules/customers/public';
 import {writeIntakeNoteInTransaction} from './intakeCapture';
-import {countVerifiedIntakePdfPages} from './intakeOriginal';
+import {countVerifiedIntakePdfPages,readSecuredIntakeMailOriginal} from './intakeOriginal';
 import {EMPTY_INVOICE_FIELDS,invoiceCents,invoiceDecimal,invoiceDate,invoiceFieldErrors,invoiceFieldShape,invoiceTaxBreakdown,
  type IncomingInvoice,type InvoiceChangeInput,type InvoiceDuplicate,type InvoiceFailure,type InvoiceFields,
  type InvoicePageRange,type InvoiceReadResult,type InvoiceResult,type InvoiceSaveInput,type InvoiceSupplier,type InvoiceView} from '../invoiceContract';
@@ -149,7 +149,8 @@ export async function readIncomingInvoice(input:unknown,deps:InvoiceReadDependen
    const [date]=await tx.execute<{due:string}>(sql`SELECT (${fields.datum}::date+${selected.paymentTermDays}::integer)::text AS due`);fields.faelligAm=date.due;
   }
   const actorTrace=(await readIntakeActorTraces(tx,auth,[row.id],invoice?.id)).get(row.id);
-  const view:InvoiceView={actorTrace,supplierPrefill,taxRateWarning:taxRates(suggestions,fields.ust,invoice).warning?INCOMING_INVOICE_COPY.taxRateMismatch:null,item:{id:row.id,version:row.version,at:row.at,channel:row.channel,sender:row.sender},invoice,supplier:selected,originals:[...originals],fileId:primaryFileId,
+  const mailOriginal=invoice&&row.channel==='mail'?await readSecuredIntakeMailOriginal(tx,auth,row.id):null;
+  const view:InvoiceView={actorTrace,supplierPrefill,taxRateWarning:taxRates(suggestions,fields.ust,invoice).warning?INCOMING_INVOICE_COPY.taxRateMismatch:null,item:{id:row.id,version:row.version,at:row.at,channel:row.channel,sender:row.sender},invoice,supplier:selected,originals:mailOriginal?[...originals,mailOriginal]:[...originals],fileId:primaryFileId,
    fields,uncertain:invoice?0:suggestions.filter(value=>value.sicherheit!=='sicher'&&!value.verified).length,conflict:supplierConflict,duplicate:await duplicate(tx,auth,fields,invoice?.id)};
   return {code:'OK' as const,view};
  });}catch(error){const result=failure(error);return result.code==='DUPLICATE'?{code:'CONFLICT',message:result.message}:result;}
