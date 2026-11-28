@@ -8,7 +8,8 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
 import {full,nativeFetch,sql,withSession} from '../../e2e/ablauf/replayHarness';
-import {finishIntakeFileAction,prepareIntakeFileAction} from '@/app/actions/eingang.actions';
+import {finishIntakeFileAction,getIntakeCaptureAction,prepareIntakeFileAction,saveIncomingInvoiceAction} from '@/app/actions/eingang.actions';
+import {createCustomerAction} from '@/app/actions/customers.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {createAdminClient} from '@/lib/supabase/admin';
@@ -20,11 +21,7 @@ beforeAll(async()=>{
   lager_regelversion,ki_sicherheitsschwelle) VALUES (${randomUUID()},${tenant},'TEST H8',0,'TEST-H8',0.95)`;
 });
 
-it.each([
- {name:'lieferschein',belegart:'lieferschein',belegnummer:'TEST-LS-03',einzelpreis:null},
- {name:'lieferantenrechnung',belegart:'lieferantenrechnung',belegnummer:'TEST-RE-03',einzelpreis:'24.80'},
-])('liest den gesicherten TEST-$name bis zum Lagerport',async({name,belegart,belegnummer,einzelpreis})=>{
- const roh=readFileSync('e2e/fixtures/erkennung/TEST_'+name+'.json','utf8');
+async function sichereErkanntesOriginal(name:string,seiten:number,roh:string){
  const host='https://i3-h8.example.invalid';
  vi.stubEnv('AZURE_DOCINTEL_ENDPOINT',host);
  vi.stubEnv('AZURE_DOCINTEL_KEY','TEST-H8-Anbieter');
@@ -36,7 +33,7 @@ it.each([
  });
  try{
   const itemId=randomUUID(),fileId=randomUUID(),pdf=await PDFDocument.create();
-  pdf.addPage().drawText('TEST '+name);
+  for(let seite=1;seite<=seiten;seite++)pdf.addPage().drawText('TEST '+name+' '+seite);
   const bytes=await pdf.save(),sha256=createHash('sha256').update(bytes).digest('hex');
   const grant=await withSession(full,()=>prepareIntakeFileAction({itemId,fileId,name:'TEST_'+name+'.pdf',
    mime:'application/pdf',bytes:bytes.length,sha256}));
@@ -48,13 +45,55 @@ it.each([
   const session=await withSession(full,resolveAuthorization);
   if(!session.ok)throw Error('TEST_I3_H8_AUTH');
   const auth=session.data;
-  const gelesen=await withPrivilegedTenantTransaction(auth,tx=>leseLieferantenbelegFuerLagerInTransaction(tx,auth,itemId));
-  expect(gelesen).toMatchObject({itemId,fileId,dokumentSha256:sha256,belegart,belegnummer,
-    bezug:{bestellNummer:'TEST-BESTELLUNG-03',lieferscheinNummern:['TEST-LS-03']},
-    positionen:[{positionKey:'p1',lieferantenArtikelNr:'TEST-FLANSCH-03',bezeichnung:'TEST Flansch',
-      menge:'4.25',einheitText:'Stück',einzelpreis}]});
+  return {itemId,fileId,sha256,lese:(rechnungId?:string)=>withPrivilegedTenantTransaction(auth,
+    tx=>leseLieferantenbelegFuerLagerInTransaction(tx,auth,itemId,rechnungId))};
  }finally{
   provider.mockRestore();
   vi.unstubAllEnvs();
+ }
+}
+
+it.each([
+ {name:'lieferschein',belegart:'lieferschein',belegnummer:'TEST-LS-03',einzelpreis:null},
+ {name:'lieferantenrechnung',belegart:'lieferantenrechnung',belegnummer:'TEST-RE-03',einzelpreis:'24.80'},
+])('liest den gesicherten TEST-$name bis zum Lagerport',async({name,belegart,belegnummer,einzelpreis})=>{
+ const roh=readFileSync('e2e/fixtures/erkennung/TEST_'+name+'.json','utf8');
+ const {itemId,fileId,sha256,lese}=await sichereErkanntesOriginal(name,1,roh);
+ expect(await lese()).toMatchObject({itemId,fileId,dokumentSha256:sha256,belegart,belegnummer,
+  bezug:{bestellNummer:'TEST-BESTELLUNG-03',lieferscheinNummern:['TEST-LS-03']},
+  positionen:[{positionKey:'p1',lieferantenArtikelNr:'TEST-FLANSCH-03',bezeichnung:'TEST Flansch',
+    menge:'4.25',einheitText:'Stück',einzelpreis}]});
+});
+
+it('ordnet die erkannten Positionen nur ihrer gespeicherten Rechnungsseite zu',async()=>{
+ const roh=JSON.parse(readFileSync('e2e/fixtures/erkennung/TEST_lieferantenrechnung.json','utf8'));
+ const seiten=[{pageNumber:1},{pageNumber:2}];
+ roh.analyzeResult.pages=seiten;
+ const tabelle=roh.analyzeResult.tables[0];
+ const zellen=tabelle.cells as {rowIndex:number;columnIndex:number;content:string}[];
+ const muster=zellen.filter(zelle=>zelle.rowIndex===1);
+ tabelle.boundingRegions=seiten;
+ tabelle.cells=[...zellen.filter(zelle=>zelle.rowIndex===0),...[1,2,3].flatMap(zeile=>muster.map(zelle=>({
+  ...zelle,rowIndex:zeile,content:zelle.columnIndex===0?'TEST-ZEILE-'+zeile:zelle.content,
+  boundingRegions:zeile===3?seiten:[{pageNumber:zeile}],
+ })))];
+ const {itemId,fileId,lese}=await sichereErkanntesOriginal('Zweiseitiger-Rechnungsbeleg',2,JSON.stringify(roh));
+ expect(await sql`SELECT wert->>'positionKey' AS schluessel,fundstelle->>'page' AS seite FROM public.intake_suggestion
+  WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position' AND status='offen' ORDER BY schluessel`)
+  .toEqual([{schluessel:'p1',seite:'1'},{schluessel:'p2',seite:'2'},{schluessel:'p3',seite:null}]);
+ const lieferant=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',
+  companyName:'TEST H8 Sammelrechnung',country:'DE'}));
+ if(lieferant.code!=='OK')throw Error('TEST_I3_H8_LIEFERANT:'+lieferant.code);
+ for(const seite of [1,2]){
+  const stand=await withSession(full,()=>getIntakeCaptureAction(itemId));
+  if(stand.code!=='OK')throw Error('TEST_I3_H8_QUELLE:'+stand.code);
+  const erfasst=await withSession(full,()=>saveIncomingInvoiceAction({itemId,fileId,version:stand.capture.version,
+   clientKey:randomUUID(),pages:{from:seite,to:seite},fields:{lieferantId:lieferant.customer.id,nummer:'TEST-H8-'+seite,
+    datum:'2026-11-27',netto:'10,00',ust:'0,00',brutto:'10,00',faelligAm:'2026-12-15',iban:'',ibanGeprueft:false},
+   status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null}));
+  if(erfasst.code!=='OK')throw Error('TEST_I3_H8_RECHNUNG:'+erfasst.code);
+  const gelesen=await lese(erfasst.invoice.id);
+  expect(gelesen).toMatchObject({rechnungId:erfasst.invoice.id,
+   positionen:[{positionKey:'p'+seite,lieferantenArtikelNr:'TEST-ZEILE-'+seite}]});
  }
 });

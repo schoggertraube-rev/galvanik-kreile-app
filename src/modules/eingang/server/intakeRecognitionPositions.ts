@@ -2,7 +2,7 @@ import "server-only";
 import type { LagerBelegPosition } from "@/modules/lager/public";
 
 type PositionValues = Omit<LagerBelegPosition, "positionKey" | "sicherheit">;
-type AzureCell = { rowIndex: number; columnIndex: number; content: string; kind?: unknown; confidence?: unknown };
+type AzureCell = { rowIndex: number; columnIndex: number; content: string; kind?: unknown; confidence?: unknown; boundingRegions?: unknown };
 
 const fields = new Map<string, keyof PositionValues>([
   ["bezeichnung", "bezeichnung"], ["beschreibung", "bezeichnung"], ["description", "bezeichnung"],
@@ -28,6 +28,16 @@ function numericText(value: string | undefined, places: number) {
   return (normalized.split(".")[1]?.length ?? 0) <= places ? normalized : null;
 }
 
+function pageOf(regions: readonly unknown[]): number | null {
+  let page: number | null = null;
+  for (const region of regions) {
+    const number = region && typeof region === 'object' && 'pageNumber' in region ? region.pageNumber : null;
+    if (typeof number !== 'number' || !Number.isSafeInteger(number) || number < 1 || page !== null && page !== number) return null;
+    page = number;
+  }
+  return page;
+}
+
 export function readIntakePositionValues(values: Partial<Record<keyof PositionValues, unknown>>): PositionValues {
   const text = (field: keyof PositionValues) => typeof values[field] === 'string' ? values[field].trim() || undefined : undefined;
   const ean = text('ean');
@@ -48,6 +58,7 @@ export function readIntakePositionValues(values: Partial<Record<keyof PositionVa
 export function readAzurePositionRows(tables: readonly unknown[]) {
   return tables.flatMap((table, tableIndex) => {
     if (!table || typeof table !== "object" || !("cells" in table) || !Array.isArray(table.cells)) return [];
+    const tablePage = 'boundingRegions' in table && Array.isArray(table.boundingRegions) ? pageOf(table.boundingRegions) : null;
     const columns = new Map<number, keyof PositionValues>();
     const rows = new Map<number, AzureCell[]>();
     const headerRows = new Set<number>();
@@ -78,7 +89,9 @@ export function readAzurePositionRows(tables: readonly unknown[]) {
       }
       const position = readIntakePositionValues(values);
       if (!Object.values(position).some(value => value !== null)) return [];
-      return [{ position, confidence, source: { tableIndex, rowIndex } }];
+      const rowRegions = cells.flatMap(cell => Array.isArray(cell.boundingRegions) ? cell.boundingRegions : []);
+      const page = rowRegions.length ? pageOf(rowRegions) : tablePage;
+      return [{ position, confidence, source: { tableIndex, rowIndex, page } }];
     });
   });
 }
