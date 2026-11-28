@@ -49,7 +49,7 @@ function htmlMailText(value:string){
 
 type MailBody={plain:boolean;text:string};
 function mailBodyFromEntity(entity:string,depth:number):MailBody|null{
- const separator=/\r?\n\r?\n/.exec(entity);
+ const separator=(depth>0 ? /^\r?\n|\r?\n\r?\n/ : /\r?\n\r?\n/).exec(entity);
  if(!separator||separator.index>65536||depth>8)return null;
  const headers=unfoldedMimeHeaders(entity.slice(0,separator.index));
  const header=(name:string)=>headers.find(line=>line.toLowerCase().startsWith(name+':'))?.slice(name.length+1).trim()??'';

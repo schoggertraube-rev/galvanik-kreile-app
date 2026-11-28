@@ -84,8 +84,10 @@ it('resumes secured waiting mail originals after a lost callback and reserves ma
  const message={id,internetMessageId,subject:'TEST Anhang',from:{emailAddress:{address:'test-i1@example.invalid'}},
   receivedDateTime:new Date().toISOString(),body:{contentType:'text',content:'TEST Ablage'},hasAttachments:true};
  const original=new TextEncoder().encode([
-  'Message-ID: '+internetMessageId,'Subject: '+message.subject,'Content-Type: text/html; charset=windows-1252',
-  'Content-Transfer-Encoding: quoted-printable','','<p>TEST St=FCck &amp; Ablage</p>',
+  'Message-ID: '+internetMessageId,'Subject: '+message.subject,'Content-Type: multipart/mixed; boundary=TEST',
+  '','--TEST','','TEST Hinweis','','Absatz ohne eigene Kopfzeilen.',
+  '--TEST','Content-Type: text/html; charset=windows-1252','Content-Transfer-Encoding: quoted-printable',
+  '','<p>TEST St=FCck &amp; Ablage</p>','--TEST--','',
  ].join('\r\n'));
  const attachment={id:'TEST-Anhang',name:'TEST-Dokument.pdf',contentType:'application/pdf',size:contents.length,
   contentBytes:contents.toString('base64'),isInline:false};
@@ -127,7 +129,7 @@ it('resumes secured waiting mail originals after a lost callback and reserves ma
    const reads=await Promise.all([retryIntakeRecognitionAction(retry),retryIntakeRecognitionAction(retry)]);
    for(const read of reads)expect(read.code).toBe('OK');
    expect(await retryIntakeRecognitionAction({...retry})).toMatchObject({code:'OK',capture:{files:expect.arrayContaining([
-    expect.objectContaining({id:retry.fileId,status:'fertig',recognizedText:'TEST Stück & Ablage\n'}),
+    expect.objectContaining({id:retry.fileId,status:'fertig',recognizedText:'TEST Hinweis\r\n\r\nAbsatz ohne eigene Kopfzeilen.\nTEST Stück & Ablage\n'}),
    ])}});
    const imports=await Promise.all([importMail(),importMail()]);
    for(const imported of imports)expect(imported).toMatchObject({code:'OK',itemId,replayed:true});
