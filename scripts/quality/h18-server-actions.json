@@ -316,6 +316,12 @@
     "src/app/actions/eingang.actions.ts#saveGoodsReceiptAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
+    "src/app/actions/eingang.actions.ts#legePaketOhneBezugAbAction": [
+      "src/test/i3_ware_ohne_bezug.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#verknuepfePaketOhneBezugAction": [
+      "src/test/i3_ware_ohne_bezug.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#openIntakeOriginalAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],

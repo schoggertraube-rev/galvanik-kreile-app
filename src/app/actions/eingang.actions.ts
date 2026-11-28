@@ -314,6 +314,7 @@ export async function chooseIntakeCaptureKindAction(input: unknown) {
 }
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation, loeseEntwurfskonflikt } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
+import {legePaketOhneBezugAb,verknuepfePaketOhneBezug} from '@/modules/eingang/server-public';
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
 import {transitionWareneingangToGalvanik} from "@/lib/server/commands/orderStationCommand";
 import {openIntakeOriginal,confirmIntakeOriginal} from "@/modules/eingang/server-public";
@@ -327,6 +328,14 @@ export async function confirmIntakeOriginalAction(input:unknown){
 }
 
 export async function getGoodsReceiptsAction(orderId:string){return readGoodsReceipts(orderId);}
+export async function legePaketOhneBezugAbAction(input:unknown){
+ return observeAction('legePaketOhneBezugAbAction',subjectForAction('legePaketOhneBezugAbAction',input),
+  ()=>legePaketOhneBezugAb(input),readLoggingSettings);
+}
+export async function verknuepfePaketOhneBezugAction(input:unknown){
+ return observeAction('verknuepfePaketOhneBezugAction',subjectForAction('verknuepfePaketOhneBezugAction',input),
+  ()=>verknuepfePaketOhneBezug(input),readLoggingSettings);
+}
 export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceiptResult>{
  return observeAction('saveGoodsReceiptAction',subjectForAction('saveGoodsReceiptAction',input),async()=>{
  if(input&&typeof input==='object'&&'quoteId'in input)return saveGoodsReceipt(input,goodsEffects);

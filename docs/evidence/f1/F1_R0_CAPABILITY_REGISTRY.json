@@ -496,6 +496,8 @@
         "getQuoteGoodsReturnsAction",
         "recordQuoteGoodsReturnAction",
         "saveGoodsReceiptAction",
+        "legePaketOhneBezugAbAction",
+        "verknuepfePaketOhneBezugAction",
         "openIntakeOriginalAction",
         "confirmIntakeOriginalAction",
         "getIntakeMessagesAction",

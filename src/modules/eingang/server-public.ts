@@ -14,6 +14,7 @@ export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead
 export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from './server/intakeMailImport';
 export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals,readDomainIntakeOriginals} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction } from "./server/goodsReceipt";
+export {legePaketOhneBezugAb,verknuepfePaketOhneBezug} from './server/wareOhneBezug';
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
 export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation, loeseEntwurfskonflikt } from "./server/intakeDraft";
 export { leseEingangVorschlag, fuehreEingangVorschlagAus } from './server/vorschlag';
@@ -41,5 +42,6 @@ export {observeIntakeMailboxImport,readIntakeMailboxWatermark} from "./server/in
 
 export {parkIntakeMailImportFailure,readFailedIntakeMailImports} from './server/intakeMailImport';
 export {tagQuellen} from './server/tagQuellen';
+export {leseLieferantenbelegFuerLagerInTransaction,setzeLieferantAmEingangInTransaction} from './server/lieferantenbeleg';
 export {pruefeZusage,type ZusageInput,type ZusageErgebnis,type ZusageLeser} from './server/zusagePruefung';
 export {erlaubteWirkung,type MailAnliegen,type MailWirkung} from './server/mailWirkungen';

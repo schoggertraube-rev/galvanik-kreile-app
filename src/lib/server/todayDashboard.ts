@@ -21,7 +21,7 @@ import type { TerminEinstellungenLeser } from "@/lib/server/orderStationRead";
 import {TAG_QUELLEN,TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
 import type {HeuteZeile} from '@/lib/today/todaySourceRegistry';
 import type {EingangTagFakten} from '@/modules/eingang/public';
-import {eingangCopy} from '@/ui/eingangCopy';
+import {eingangCopy,WARE_OHNE_BEZUG_COPY} from '@/ui/eingangCopy';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -359,17 +359,19 @@ export function projiziereEingangTagFakten(auth:AuthorizationSnapshot,stand:Eing
  const preise=hasAuthorizationArea(auth,'preise');
  for(const fakt of stand.fakten??[]){
   if(fakt.preisgeschuetzt&&!preise)continue;
+   if(fakt.art==='paketohnebezug'&&!hasAuthorizationArea(auth,'eingang'))continue;
   if(fakt.art==='offen'){
    if(kanaele.has(fakt.kanal))continue;
    kanaele.add(fakt.kanal);
   }
   const quelleId='eingang.'+fakt.art;
   const text=eingangCopy.tag;
-  const handlung=fakt.art==='offen'?text.offen:fakt.art==='unklar'?text.unklar:text.nachfassen;
+   const handlung=fakt.art==='offen'||fakt.art==='paketohnebezug'?text.offen:fakt.art==='unklar'?text.unklar:text.nachfassen;
   const grund=fakt.art==='offen'?(fakt.tage>=2?text.seit(fakt.tage):text.wartet)
-   :fakt.art==='unklar'?text.unsicher:text.gegenvorschlag;
+     :fakt.art==='unklar'?text.unsicher:fakt.art==='paketohnebezug'?text.wartet:text.gegenvorschlag;
   zeilen.push({quelleId,key:quelleId+':'+(fakt.art==='offen'?fakt.kanal:fakt.id),
-   gegenstand:fakt.betreff?.trim()||text.eingang,handlung,grund,faellig:fakt.faellig,rang:null,
+     gegenstand:fakt.art==='paketohnebezug'?WARE_OHNE_BEZUG_COPY.paketLiegt(fakt.ort):fakt.betreff?.trim()||text.eingang,
+     handlung,grund,faellig:fakt.faellig,rang:null,
    ziel:fakt.gruppe?'/nachrichten?gruppe='+encodeURIComponent(fakt.gruppe):'/nachrichten',befehl:null});
  }
  return {code:'OK',zeilen};

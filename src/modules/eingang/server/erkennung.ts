@@ -12,6 +12,7 @@ import { readMimeOriginalText, safeOfficeRecognitionBytes } from "../originalSaf
 import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
+import { leseGeldAnker } from './geldAnker';
 import { sucheKandidatenInTransaction, type KandidatenPorts, type EingangKandidatenEinstellungen } from "./kandidaten";
 import { findeVerdachtsmuster, istEigenerLieferantenwert, istLieferantenwert, rechnungsBelegwerte } from "./eingangsRegeln";
 import { istBelegart, schlageBelegidentitaetVor } from "./belegIdentitaet";
@@ -220,9 +221,12 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
       else if(druckbild?.length)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen'
         WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND feld='rechnung.druckbild' AND status='offen'`);
-      const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions,hatGedruckteRechnungsnummer), ...primaryHeads]:[];
+      const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions,hatGedruckteRechnungsnummer), ...primaryHeads,
+        ...(rawPath?leseGeldAnker(ocr.data.suggestions):[])]:[];
       const primaryKeys=new Set(primarySuggestions.map(suggestionKey));
-      const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions,hatGedruckteRechnungsnummer), ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto)].filter(suggestion=>{
+      const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions,hatGedruckteRechnungsnummer),
+        ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto),
+        ...(specialist?.rawPath?leseGeldAnker(specialistOcr.data.suggestions):[])].filter(suggestion=>{
         const key=suggestionKey(suggestion);
         if(primaryKeys.has(key))return false;
         primaryKeys.add(key);
@@ -313,7 +317,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
             const { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle, eingang_selbst_handeln } = stand;
             if (eingang_vorschlaege_max == null || eingang_kandidat_stufen == null) return 'keine';
             return sucheKandidatenInTransaction(nested, { tenantId, akteur }, file.item_id, receiptKey,
-              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle, eingang_selbst_handeln }, {...ports,firma:leseFirma});
+              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle, eingang_selbst_handeln }, {...ports,firma:leseFirma},complete&&goodsPhoto);
           });
         } catch {
           kandidaten = 'teilweise';

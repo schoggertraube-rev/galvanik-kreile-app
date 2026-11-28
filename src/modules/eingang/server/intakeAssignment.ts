@@ -13,7 +13,7 @@ import type {AssignmentReadResult,AssignmentFailure,AssignmentCustomer,Assignmen
 import {intakeInvoiceReviewRequired,intakeRequiredEffect} from '../intakeLifecycleContract';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 
-type CustomerReader=(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<CustomerStoredProfile|null>;
+type CustomerReader=(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<Pick<CustomerStoredProfile,'id'|'name'|'customerType'>|null>;
 type Source={id:string;version:number;kanal:string;richtung:string;zuordnung:string;einsatz:string;erstellt_von:string;geaendert_von:string|null;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;gruppe_adresse:string|null;absender_name:string|null;absender_adresse:string|null;betreff:string|null;text:string|null;at:string;anliegen:string[];anliegen_offen:string[]};
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const object=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -52,7 +52,8 @@ export async function readIntakeAssignment(input:unknown,readCustomer:CustomerRe
 }
 function validIdentity(input:Record<string,unknown>){return uuid(input.itemId)&&uuid(input.clientEventId)&&Number.isSafeInteger(input.version)&&(input.version as number)>0;}
 async function event(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,key:string,art:string,intent:unknown,after:unknown){
- await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${row.id}::uuid,${art},${key}::uuid,${auth.userId},${JSON.stringify({version:row.version,kundeId:row.kunde_id,vorgangArt:row.vorgang_art,vorgangId:row.vorgang_id,zuordnung:row.zuordnung,einsatz:row.einsatz})}::jsonb,${JSON.stringify({intent,version:row.version+1,...after as object})}::jsonb)`);
+ const belegt=await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher) VALUES(${auth.tenantId},${row.id}::uuid,${art},${key}::uuid,${auth.userId},${JSON.stringify({version:row.version,kundeId:row.kunde_id,vorgangArt:row.vorgang_art,vorgangId:row.vorgang_id,zuordnung:row.zuordnung,einsatz:row.einsatz})}::jsonb,${JSON.stringify({intent,version:row.version+1,...after as object})}::jsonb) RETURNING id`);
+ if(belegt.length!==1)throw Error('INTAKE_ASSIGNMENT_WRITE_CONFLICT');
 }
 /** The existing source-assignment gate, shared with read-only U2 binding.
  * Target-specific customer/supplier checks still run in the same writer. */
@@ -64,10 +65,21 @@ export async function assignIntakeCustomer(input:unknown,readCustomer:CustomerRe
   return await withPrivilegedTenantTransaction(auth,tx=>assignInTransaction(tx,auth,value,readCustomer));
  }catch(error){return failed(error);}
 }
-export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:AssignmentInput,readCustomer:CustomerReader,propagate=true):Promise<Exclude<AssignmentResult,AssignmentFailure>>{
-   // Serializes group propagation before row locks; all assignment writers use this order.
-   await lockIntakeAssignment(tx,auth.tenantId);
-   const row=await source(tx,auth,value.itemId,true),target=await customer(tx,auth,value.customerId,readCustomer),intent={command:'eingang.zuordnen',customerId:value.customerId,mode:value.mode,version:value.version};
+export async function readLockedAssignmentSource(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string){
+ // Serializes group propagation before row locks; all assignment writers use this order.
+ await lockIntakeAssignment(tx,auth.tenantId);
+ return source(tx,auth,itemId,true);
+}
+export async function recordInvoiceSupplierAssignment(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,row:Source,
+ key:string,rechnungId:string,lieferantId:string){
+ await event(tx,auth,row,key,'zugeordnet',{command:'rechnung.lieferant',rechnungId,lieferantId},
+  {version:row.version,customerId:row.kunde_id,rechnungId,lieferantId});
+}
+export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,value:AssignmentInput,readCustomer:CustomerReader,
+ propagate=true,beleg?:{row:Source;rechnungId:string|null}):Promise<Exclude<AssignmentResult,AssignmentFailure>>{
+   const row=beleg?.row??await readLockedAssignmentSource(tx,auth,value.itemId);
+   if(beleg&&row.id!==value.itemId.toLowerCase())reject('CONFLICT','Eingang wurde inzwischen geändert. Bitte neu lesen.');
+   const target=await customer(tx,auth,value.customerId,readCustomer),intent={command:'eingang.zuordnen',customerId:value.customerId,mode:value.mode,version:value.version};
    if(target.type!=='lieferant'&&!hasAuthorizationArea(auth,'kunden'))reject('FORBIDDEN','Kunde zuordnen benötigt Kunden.');
    const receipts=await tx.execute<{von:string;nachher:{intent:unknown;version:number;additional:number}}>(sql`SELECT von,nachher FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${row.id}::uuid AND art IN ('zugeordnet','umgehaengt') AND befehl_id=${value.clientEventId}::uuid`);
    if(receipts.length){const receipt=receipts[0];if(receipts.length!==1||receipt.von!==auth.userId||!isDeepStrictEqual(receipt.nachher.intent,intent)||row.kunde_id!==target.id||row.version!==receipt.nachher.version)reject('CONFLICT','Diese Anfragekennung gehört zu einem anderen Zuordnungsstand.');return {code:'OK' as const,customer:target,version:row.version,additional:receipt.nachher.additional,replayed:true};}
@@ -87,8 +99,9 @@ export async function assignInTransaction(tx:PrivilegedTenantTransaction,auth:Au
     for(const candidate of siblings){const sibling=await source(tx,auth,candidate.id,true);if((await suggestions(tx,auth,sibling.id)).some(proposal=>typeof proposal.wert==='string'&&proposal.wert!==target.id))continue;additional.push(sibling);}
    }
    for(const candidate of [row,...additional]){
-    const assigned=value.mode==='confirm'&&candidate.id===row.id?'bestaetigt':'hand',art=value.mode==='move'?'umgehaengt':'zugeordnet';
-    const changed=await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${target.id},vorgang_art=${value.mode==='move'?null:candidate.vorgang_art},vorgang_id=${value.mode==='move'?null:candidate.vorgang_id},zuordnung=${assigned},version=version+1,
+    const assigned=value.mode==='confirm'&&candidate.id===row.id?'bestaetigt':'hand',art=value.mode==='move'&&!beleg?'umgehaengt':'zugeordnet';
+    const loeseAltenBezug=value.mode==='move'&&(!beleg?.rechnungId||candidate.vorgang_id!==beleg.rechnungId||candidate.vorgang_art!=='rechnung');
+    const changed=await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${target.id},vorgang_art=${loeseAltenBezug?null:candidate.vorgang_art},vorgang_id=${loeseAltenBezug?null:candidate.vorgang_id},zuordnung=${assigned},version=version+1,
      geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${candidate.id}::uuid AND version=${candidate.version} RETURNING id`);
     if(changed.length!==1)throw Error('INTAKE_ASSIGNMENT_WRITE_CONFLICT');
     await tx.execute(sql`UPDATE public.intake_suggestion SET status='uebernommen',geprueft_von=${auth.userId}::uuid,geprueft_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND item_id=${candidate.id}::uuid AND feld='kunde' AND wert=${JSON.stringify(target.id)}::jsonb AND status='offen'`);

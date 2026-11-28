@@ -1,6 +1,7 @@
 import {OFFLINE_DEVICE_READ_COPY} from '@/ui/situationCatalog';
 import {mailImportFailureProjection} from './intakeMailFailureRead';
 import {openIntakePredicate} from './openIntakePredicate';
+import {ohneGeldAnker} from './geldAnker';
 import {readIntakeActorTraces} from './actorRead';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readMessageNextAction} from './messageNextAction';
@@ -51,7 +52,7 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
     :sql`candidate.einsatz='offen' OR candidate.erstellt_am>=statement_timestamp()-interval '90 days'`;
    const tagSpalten=tag?sql`CASE WHEN source.richtung='rein' AND ${openIntakePredicate('source')} THEN
     jsonb_build_object('seit',source.wartet_seit::text,'unsicher',EXISTS(SELECT 1 FROM public.intake_suggestion s
-      WHERE s.tenant_id=source.tenant_id AND s.item_id=source.id AND s.status='offen' AND s.geprueft_am IS NULL
+      WHERE s.tenant_id=source.tenant_id AND s.item_id=source.id AND s.status='offen' AND s.geprueft_am IS NULL AND ${ohneGeldAnker}
        AND (s.sicherheit='unsicher' OR s.sicherheit_wert<${tag.schwelle}::numeric))) END`:sql`NULL::jsonb`;
    const messages=await tx.execute<IntakeMessage&{priceTaskReceipt:boolean; tagEingang:{seit:string|null;unsicher:boolean}|null}>(sql`SELECT ${tagSpalten} AS "tagEingang",preisbeleg.id IS NOT NULL AS "priceTaskReceipt",${mailImportFailureProjection()} AS "importFailure",source.id::text,source.graph_message_id AS "graphMessageId",source.version,(SELECT max(changed.zeit)::text FROM public.intake_event changed WHERE changed.tenant_id=source.tenant_id AND changed.item_id=source.id) AS "serverChangedAt",source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
     source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,
@@ -89,7 +90,8 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
    });
    let tagFakten:EingangTagFakten|undefined;
    if(tag){
-    try{const fakten=await withTenantSavepoint(tx,nested=>liesEingangTagFaktenInTransaction(nested,auth.tenantId,tag,offeneEingaenge));
+    const paketeErlaubt='canReadArea'in auth?auth.canReadArea('eingang'):hasAuthorizationArea(auth,'eingang');
+    try{const fakten=await withTenantSavepoint(tx,nested=>liesEingangTagFaktenInTransaction(nested,auth.tenantId,tag,offeneEingaenge,paketeErlaubt));
      tagFakten={code:'OK',fakten};
     }catch{console.error('[I2_TAG_HINWEISE_NICHT_VERFUEGBAR]');tagFakten={code:'SOURCE_INCOMPLETE'};}
    }else if(tagStand)tagFakten=tagStand.code==='OK'?{code:'OK',fakten:null}:tagStand;
@@ -104,8 +106,10 @@ export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:In
  if(source.code!=='OK')return source;
  const canReadPrices=hasAuthorizationArea(auth,'preise');
  const priceProtected=new Set(source.priceProtectedMessageIds);
- const tagFakten=source.tagFakten?.code==='OK'&&source.tagFakten.fakten&&!canReadPrices
-  ?{code:'OK' as const,fakten:source.tagFakten.fakten.filter(fakt=>!fakt.preisgeschuetzt)}:source.tagFakten;
+ const canReadPackages=hasAuthorizationArea(auth,'eingang');
+ const tagFakten=source.tagFakten?.code==='OK'&&source.tagFakten.fakten
+  ?{code:'OK' as const,fakten:source.tagFakten.fakten.filter(fakt=>(canReadPrices||!fakt.preisgeschuetzt)&&
+    (canReadPackages||fakt.art!=='paketohnebezug'))}:source.tagFakten;
  return {code:'OK',messages:source.messages.flatMap(message=>{
   // Persisted Today snapshots from before this change still carry the marker on the row.
   const {priceTaskReceipt,...row}=message as IntakeMessage&{priceTaskReceipt?:boolean};
