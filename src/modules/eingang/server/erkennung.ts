@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { recordObservedFailure } from "@/lib/server/actionObservation";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { analyzeWithAzureDocumentIntelligence, EXCEL_WORKBOOK_MIME, readAzureRecognitionOriginal, supportsAzureDocument } from "@/lib/server/azureDocumentIntelligence";
+import { analyzeWithAzureDocumentIntelligence, azureOfficeFormat, readAzureRecognitionOriginal, supportsAzureDocument } from "@/lib/server/azureDocumentIntelligence";
 import type { DocumentSuggestion } from "@/lib/server/azureDocumentIntelligence";
 import { concernForCaptureKind, recognizeCaptureDocument } from "../captureRecognition";
-import { safeOriginalBytes } from "../originalSafety";
+import { safeOfficeRecognitionBytes } from "../originalSafety";
 import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
@@ -64,12 +64,12 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     claimOwned=true;
     // Structured originals use the same XML parser; unstructured documents retain the OCR path.
     const prefix=Buffer.from(bytes.subarray(0,512)).toString('utf8').replace(/^\uFEFF/u,'').trimStart();
-    const isXml=/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<');
+    const officeFormat = azureOfficeFormat(file.mime);
+    const isXml=!officeFormat&&(/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<'));
     const xmlResult=isXml?recognizeInvoiceXml(bytes):file.mime==='application/pdf'?await recognizeInvoicePdf(bytes):null;
-    const workbook = file.mime === EXCEL_WORKBOOK_MIME;
     const canRead = isXml ? xmlResult?.code==='OK'
       : supportsAzureDocument(file.mime, bytes.byteLength, true)
-        && (!workbook || /\.xlsx$/iu.test(file.dateiname) && safeOriginalBytes(file.dateiname, bytes));
+        && (!officeFormat || safeOfficeRecognitionBytes(file.dateiname, bytes, officeFormat));
     const needsOcr = !isXml && xmlResult?.code !== "OK" && canRead;
     const usesDocumentReader = !isXml && xmlResult?.code !== "OK";
     const settings = usesDocumentReader || xmlResult?.code === "OK"
@@ -81,7 +81,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       let result = await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
         (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
         undefined, { subject: { type: "intake", id: file.item_id }, originalRef: fileId, model,
-          allowWorkbook: workbook, keyValuePairs });
+          allowOffice: officeFormat !== null, keyValuePairs });
       if (result.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
       let rawPath: string | null = null;
       if (result.code === "OK" && result.original) {
@@ -109,7 +109,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const rawStorageFailed = ocr !== null && rawPath === null;
     const kind = xmlResult?.code === "OK" ? "rechnung" : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
     const models = settings?.erkennung_modelle;
-    const specialistModel = ocr && models && !workbook
+    const specialistModel = ocr && models && !officeFormat
       ? kind === "rechnung" ? models.rechnung : kind === "quittung" ? models.bon : null : null;
     const specialist = specialistModel ? await readModel(specialistModel, false) : null;
     const specialistOcr = specialist?.result.code === "OK" ? specialist.result : null;

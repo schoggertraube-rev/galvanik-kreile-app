@@ -41,18 +41,26 @@ it("reads stored company models and threshold, with the existing default layout"
   });
 });
 
-it("reads a secured Excel workbook with the document model and preserves the original", async () => {
-  const bytes = readFileSync(new URL("../../e2e/fixtures/TEST_i1_reading.xlsx", import.meta.url));
+it.each([
+  { extension: "xlsx", mime: EXCEL_WORKBOOK_MIME },
+  { extension: "docx", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+  { extension: "pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+  { extension: "html", mime: "text/html" },
+])("reads a secured $extension with the document model and preserves the original", async ({ extension, mime }) => {
+  const name = `TEST_i1_reading.${extension}`;
+  const bytes = extension === "html"
+    ? Buffer.from("<!doctype html><html lang='de'><head><title>TEST</title></head><body>TEST Office-Dokument 95</body></html>")
+    : readFileSync(new URL(`../../e2e/fixtures/${name}`, import.meta.url));
   const itemId = randomUUID();
   const fileId = randomUUID();
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const grant = await withSession(full, () => prepareIntakeFileAction({
-    itemId, fileId, name: "TEST_i1_reading.xlsx", mime: EXCEL_WORKBOOK_MIME,
+    itemId, fileId, name, mime,
     bytes: bytes.length, sha256,
   }));
   if (grant.code !== "OK" || !grant.upload) throw Error("TEST_I1_WORKBOOK_GRANT");
   const upload = await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(
-    grant.upload.path, grant.upload.token, bytes, { contentType: EXCEL_WORKBOOK_MIME },
+    grant.upload.path, grant.upload.token, bytes, { contentType: mime },
   );
   expect(upload.error).toBeNull();
 
@@ -69,7 +77,7 @@ it("reads a secured Excel workbook with the document model and preserves the ori
       } });
     }
     return Response.json({ status: "succeeded", analyzeResult: {
-      modelId: "prebuilt-layout", content: "TEST Arbeitsmappe\n95", pages: [{ pageNumber: 1 }],
+      modelId: "prebuilt-layout", content: "TEST Office-Dokument\n95", pages: [{ pageNumber: 1 }],
     } });
   });
   try {
@@ -83,7 +91,7 @@ it("reads a secured Excel workbook with the document model and preserves the ori
     }, true);
     const result = await withSession(full, () => getIntakeCaptureAction(itemId));
     expect(result).toMatchObject({ code: "OK", capture: { files: [expect.objectContaining({
-      id: fileId, status: "fertig", secured: true, recognizedText: "TEST Arbeitsmappe\n95",
+      id: fileId, status: "fertig", secured: true, recognizedText: "TEST Office-Dokument\n95",
     })] } });
     expect(requests).toHaveLength(1);
     expect(requests[0].url.pathname).toBe("/documentintelligence/documentModels/prebuilt-layout:analyze");
@@ -95,10 +103,17 @@ it("reads a secured Excel workbook with the document model and preserves the ori
     }]);
 
     const opened = await withSession(full, () => openIntakeOriginalAction({ fileId, clientEventId: randomUUID() }));
-    if (opened.code !== "OK" || !opened.original.downloadUrl) throw Error("TEST_I1_WORKBOOK_ORIGINAL");
-    const original = await nativeFetch(opened.original.downloadUrl);
-    expect(original.ok).toBe(true);
-    expect(Buffer.from(await original.arrayBuffer())).toEqual(bytes);
+    if (extension === "xlsx") {
+      if (opened.code !== "OK" || !opened.original.downloadUrl) throw Error("TEST_I1_WORKBOOK_ORIGINAL");
+      const original = await nativeFetch(opened.original.downloadUrl);
+      expect(original.ok).toBe(true);
+      expect(Buffer.from(await original.arrayBuffer())).toEqual(bytes);
+    } else {
+      expect(opened).toMatchObject({ code: "FILE_BLOCKED" });
+      const original = await createAdminClient().storage.from(grant.upload.bucket).download(grant.upload.path);
+      expect(original.error).toBeNull();
+      expect(Buffer.from(await original.data!.arrayBuffer())).toEqual(bytes);
+    }
   } finally {
     fetched.mockRestore();
     vi.unstubAllEnvs();

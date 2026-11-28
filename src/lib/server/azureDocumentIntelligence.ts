@@ -6,12 +6,23 @@ import type {LogSubject,TechnicalEvent} from '@/modules/logging/public';
 const API_VERSION = "2024-11-30";
 const DOCUMENT_FORMATS = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 export const EXCEL_WORKBOOK_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const OFFICE_FORMATS = new Map<string, AzureOfficeFormat>([
+  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
+  [EXCEL_WORKBOOK_MIME, "xlsx"],
+  ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"],
+  ["text/html", "html"],
+] as const);
+export type AzureOfficeFormat = "docx" | "xlsx" | "pptx" | "html";
 type Environment = Record<string, string | undefined>;
 type FetchPort = typeof fetch;
 
-export function supportsAzureDocument(mimeType: string, size: number, allowWorkbook = false): boolean {
+export function azureOfficeFormat(mimeType: string): AzureOfficeFormat | null {
+  return OFFICE_FORMATS.get(mimeType) ?? null;
+}
+
+export function supportsAzureDocument(mimeType: string, size: number, allowOffice = false): boolean {
   return size > 0 && size <= 20 * 1024 * 1024
-    && (DOCUMENT_FORMATS.has(mimeType) || allowWorkbook && mimeType === EXCEL_WORKBOOK_MIME);
+    && (DOCUMENT_FORMATS.has(mimeType) || allowOffice && azureOfficeFormat(mimeType) !== null);
 }
 
 export type DocumentSuggestion = {
@@ -139,12 +150,12 @@ export async function analyzeWithAzureDocumentIntelligence(
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowWorkbook?:boolean;keyValuePairs?:boolean},
+  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowOffice?:boolean;keyValuePairs?:boolean},
 ): Promise<AzureResult> {
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
   if (!endpointValue || !key) return { code: "IN_KLAERUNG", message: "Azure Document Intelligence ist noch nicht für die Preview verbunden." };
-  if (!supportsAzureDocument(mimeType, bytes.byteLength, diagnostic?.allowWorkbook)) {
+  if (!supportsAzureDocument(mimeType, bytes.byteLength, diagnostic?.allowOffice)) {
     return { code: "UNAVAILABLE", message: "Das Dokumentformat kann nicht sicher analysiert werden." };
   }
   let attempted=false;
@@ -157,7 +168,7 @@ export async function analyzeWithAzureDocumentIntelligence(
     const analyzeUrl = new URL(`documentintelligence/documentModels/${model}:analyze`, endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");
     analyzeUrl.searchParams.set("api-version", API_VERSION);
-    if (mimeType !== EXCEL_WORKBOOK_MIME && diagnostic?.keyValuePairs !== false) analyzeUrl.searchParams.set("features", "keyValuePairs");
+    if (azureOfficeFormat(mimeType) === null && diagnostic?.keyValuePairs !== false) analyzeUrl.searchParams.set("features", "keyValuePairs");
     attempted=true;
     const response = await fetchPort(analyzeUrl, {
       method: "POST",
