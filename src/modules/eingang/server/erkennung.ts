@@ -13,6 +13,7 @@ import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
 import { sucheKandidatenInTransaction, type KandidatenPorts, type EingangKandidatenEinstellungen } from "./kandidaten";
+import { findeVerdachtsmuster, istEigenerLieferantenwert, istLieferantenwert } from "./eingangsRegeln";
 import { eingangCopy } from "@/ui/eingangCopy";
 
 const BUCKET = "scans";
@@ -134,9 +135,12 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         && (!officeFormat || safeOfficeRecognitionBytes(file.dateiname, bytes, officeFormat));
     const usesDocumentReader = !isMail && !isXml && xmlResult?.code !== "OK";
     const needsOcr = usesDocumentReader && canRead;
-    const settings = usesDocumentReader || xmlResult?.code === "OK"
-      ? await withPrivilegedTenantTransaction(auth, tx => einstellungen(tx, auth.tenantId))
-      : null;
+    const leseEinstellungen = () => withPrivilegedTenantTransaction(auth, tx => einstellungen(tx, auth.tenantId));
+    const settings = mail ? await leseEinstellungen().catch(() => {
+      recordObservedFailure('INTAKE_RECOGNITION_SETTINGS_UNAVAILABLE');
+      return null;
+    })
+      : usesDocumentReader || xmlResult?.code === "OK" ? await leseEinstellungen() : null;
     const threshold = settings?.ki_sicherheitsschwelle ?? null;
     const deadline = AbortSignal.timeout(30_000);
     const readModel = async (model: string, keyValuePairs: boolean) => {
@@ -242,14 +246,30 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const widerspruch=pdfResult?.code==='OK'?pdfResult.widerspruch:null;
       const widerspruchsbeleg=widerspruch?[{field:'rechnung.abgleich',value:{xml:widerspruch.xml,pdf:widerspruch.pdf},confidence:null,model:null,
         source:{format:'ZUGFeRD',page:widerspruch.page}}]:[];
-      for (const suggestion of [...suggestions, ...positionSuggestions, ...widerspruchsbeleg]) {
+      const muster = findeVerdachtsmuster(documentText ?? '', settings?.eingang_verdacht_muster ?? []);
+      const verdacht = muster.length ? [{field:'text.verdacht',value:{muster},confidence:null,model:null,
+        source:mail ? {format:'EML'} : {page:null}}] : [];
+      const ports = kontext.kandidaten;
+      let firmendaten: ReturnType<KandidatenPorts['firma']> | undefined;
+      const leseFirma = () => firmendaten ??= ports?.firma(tenantId) ?? Promise.resolve(null);
+      const firma = suggestions.some(suggestion => istLieferantenwert(suggestion.field))
+        ? await leseFirma().catch(() => {
+          recordObservedFailure('INTAKE_COMPANY_IDENTITY_UNAVAILABLE');
+          return null;
+        }) : null;
+      for (const suggestion of [...suggestions, ...positionSuggestions, ...widerspruchsbeleg, ...verdacht]) {
         const confidence = suggestion.confidence;
-        const certainty = suggestion.field==='rechnung.abgleich' ? 'unsicher' : confidence === null || threshold === null
+        const eigeneFirma = istEigenerLieferantenwert(suggestion, firma);
+        const certainty = suggestion.field==='rechnung.abgleich' || suggestion.field==='text.verdacht' ? 'unsicher' : confidence === null || threshold === null
           ? 'vorschlag' : confidence >= threshold ? 'sicher' : 'unsicher';
+        const regel = eigeneFirma ? 'HC3' : suggestion.field==='text.verdacht' ? 'HC4' : mail ? 'mail' : 'datei';
+        const grund = eigeneFirma ? eingangCopy.eigeneFirma : suggestion.field==='text.verdacht' ? eingangCopy.verdaechtigerText
+          : suggestion.field==='rechnung.abgleich' ? eingangCopy.rechnungswiderspruch
+            : mail ? 'Signal im Originaltext' : xmlResult?.code==='OK' ? 'Strukturiertes XML' : 'Dokumenterkennung';
         const jsonValue = JSON.stringify(suggestion.value);
         const source = { ...suggestion.source, seite: file.reihenfolge };
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,sicherheit_wert,modell,regel,grund,fundstelle,status)
-            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${suggestion.model},${mail?'mail':'datei'},${suggestion.field==='rechnung.abgleich'?eingangCopy.rechnungswiderspruch:mail?'Signal im Originaltext':xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(source)}::jsonb,'offen'
+            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${suggestion.model},${regel},${grund},${JSON.stringify(source)}::jsonb,${eigeneFirma ? 'verworfen' : 'offen'}
           WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid
             AND feld=${suggestion.field} AND (feld<>'position' OR wert->>'positionKey'=(${jsonValue}::jsonb)->>'positionKey')
             AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
@@ -269,7 +289,6 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         : recognized?.code ?? (bytes.byteLength > 20 * 1024 * 1024 ? 'INTAKE_RECOGNITION_TOO_LARGE' : 'UNSUPPORTED_DOCUMENT_TYPE');
       const receiptKey = recognitionReceiptKey(fileId, retryKey);
       let kandidaten: 'ok' | 'teilweise' | 'keine' | undefined;
-      const ports = kontext.kandidaten;
       if (ports) {
         try {
           kandidaten = await withTenantSavepoint(tx, async nested => {
@@ -277,7 +296,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
             const { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle } = stand;
             if (eingang_vorschlaege_max == null || eingang_kandidat_stufen == null) return 'keine';
             return sucheKandidatenInTransaction(nested, { tenantId, akteur }, file.item_id, receiptKey,
-              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle }, ports);
+              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle }, {...ports,firma:leseFirma});
           });
         } catch {
           kandidaten = 'teilweise';

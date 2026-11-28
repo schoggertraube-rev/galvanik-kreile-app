@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { foldSearchText } from "@/lib/domain/searchText";
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { invoiceCents } from "../invoiceContract";
 
@@ -21,6 +22,35 @@ export async function speichereErkennungskorrekturen(tx: PrivilegedTenantTransac
 }
 
 type Belegwert = { field: string; value: unknown };
+
+export type Firmenhinweis = { name: string | null; ustId: string | null };
+
+export function istLieferantenwert(feld: string) {
+  return feld === 'lieferant.name' || feld === 'lieferant.ustid' || feld === 'rechnung.absender';
+}
+
+export function istEigenerLieferantenwert({field,value}: Belegwert, firma: Firmenhinweis | null) {
+  if (!firma) return false;
+  const name = field === 'lieferant.name' ? value
+    : field === 'rechnung.absender' && value && typeof value === 'object' && 'name' in value ? value.name : null;
+  const ustId = field === 'lieferant.ustid' ? value
+    : field === 'rechnung.absender' && value && typeof value === 'object' && 'ustId' in value ? value.ustId : null;
+  const firmenname = foldSearchText(firma.name ?? '');
+  const firmenUstId = falteBelegUstId(firma.ustId);
+  return Boolean(typeof name === 'string' && firmenname && foldSearchText(name) === firmenname)
+    || Boolean(typeof ustId === 'string' && firmenUstId && falteBelegUstId(ustId) === firmenUstId);
+}
+
+export function falteBelegUstId(wert: string | null) {
+  return wert?.replace(/\s+/gu, '').toUpperCase() ?? '';
+}
+
+export function findeVerdachtsmuster(text: string, muster: readonly string[]) {
+  const gefaltet = foldSearchText(text);
+  return [...new Set(muster.map(foldSearchText).filter(wert => wert && (wert === 'link'
+    ? /\b(?:https?:\/\/|www\.)[^\s<>]+/iu.test(text)
+    : wert === 'qr' ? /\bqr(?:[- ]?code)?\b/iu.test(text) : gefaltet.includes(wert))))];
+}
 export function findeRechnungswiderspruch(xml: readonly Belegwert[], pdf: readonly Belegwert[]) {
   const eindeutigerWert = <T>(quelle: readonly Belegwert[], feld: string, lesen: (wert: unknown) => T | null) => {
     const werte = new Set(quelle.filter(v => v.field === feld).map(v => lesen(v.value)).filter(wert => wert !== null));

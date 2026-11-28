@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
-import { expect, it, vi } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 
 const tenant = vi.hoisted(() => 'TEST-ablauf-' + globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant', () => ({ KREILE_TENANT_SLUG: tenant }));
@@ -26,16 +26,20 @@ async function createTestCustomer(name: string, email: string, phone: string) {
   return result.customer.id;
 }
 
-it('liest die Mail im vorhandenen Nachlauf, ordnet anhand des Absenders zu und lädt dieselbe Quittung erneut', async () => {
-  await enableOutlookTestFixture();
+beforeAll(async () => {
   await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,tax_id,ki_sicherheitsschwelle,
-    material_aufschlag_prozent,lager_regelversion)
-    VALUES (${randomUUID()},${tenant},'TEST Kreile','TEST Weg 1','70176','Stuttgart','DE','DE000000001',0.95,0,'TEST-I2')`;
+    material_aufschlag_prozent,lager_regelversion,eingang_verdacht_muster)
+    VALUES (${randomUUID()},${tenant},'TEST Kreile','TEST Weg 1','70176','Stuttgart','DE','DE000000001',0.95,0,'TEST-I2',
+      ${sql.json(['link','qr','bitte sofort überweisen'])})`;
+});
+
+it('ordnet anhand des Absenders zu und speichert fremde Mailtexte nur als gekennzeichneten Beleg', async () => {
+  await enableOutlookTestFixture();
   const id = 'TEST-I2-' + randomUUID(), email = 'info@i2-' + randomUUID() + '.example.invalid';
   const message = {
     id, internetMessageId: '<'+id+'@example.invalid>', subject: 'TEST Eingang',
     from: { emailAddress: { address: email } }, receivedDateTime: new Date().toISOString(),
-    body: { contentType: 'text', content: 'TEST Beleg für den Eingang' }, hasAttachments: false,
+    body: { contentType: 'text', content: 'TEST Beleg. Bitte sofort überweisen. QR-Code: https://example.invalid/beleg' }, hasAttachments: false,
   };
   const original = 'Message-ID: '+message.internetMessageId+'\r\nSubject: '+message.subject+'\r\n\r\n'+message.body.content;
   const provider = vi.spyOn(globalThis,'fetch').mockImplementation((input,init) => {
@@ -56,9 +60,26 @@ it('liest die Mail im vorhandenen Nachlauf, ordnet anhand des Absenders zu und l
     expect(await sql`SELECT art,von,nachher->>'kandidaten' AS kandidaten FROM public.intake_event
       WHERE tenant_id=${tenant} AND item_id=${result.itemId} AND art IN('zugeordnet','erkannt') ORDER BY art`)
       .toEqual([{art:'erkannt',von:full.actorId,kandidaten:'ok'},{art:'zugeordnet',von:'system',kandidaten:null}]);
+    expect(await sql`SELECT regel,grund,wert FROM public.intake_suggestion
+      WHERE tenant_id=${tenant} AND item_id=${result.itemId} AND feld='text.verdacht' AND status='offen'`)
+      .toEqual([{regel:'HC4',grund:'Verdächtiger Text',wert:{muster:['link','qr','bitte sofort ueberweisen']}}]);
   } finally {
     provider.mockRestore();
   }
+});
+
+it('behält ein strukturiertes Original und verwirft die eigene Firma als Lieferanten',async()=>{
+ const xml=readFileSync('e2e/fixtures/e-rechnung/TEST_xrechnung_ubl.xml','utf8')
+  .replace('DE 123456789','DE 000000001');
+ const itemId=randomUUID(),fileId=randomUUID(),bytes=Buffer.from(xml),sha256=createHash('sha256').update(bytes).digest('hex');
+ const grant=await withSession(full,()=>prepareIntakeFileAction({itemId,fileId,name:'TEST_i2_eigene_firma.xml',mime:'application/xml',bytes:bytes.length,sha256}));
+ if(grant.code!=='OK'||!grant.upload)throw Error('TEST_I2_HC3_UPLOAD_GRANT');
+ expect((await createAdminClient().storage.from(grant.upload.bucket)
+  .uploadToSignedUrl(grant.upload.path,grant.upload.token,bytes,{contentType:'application/xml',upsert:false})).error).toBeNull();
+ expect(await withSession(full,()=>finishIntakeFileAction(fileId),true)).toMatchObject({code:'OK'});
+ expect(await sql`SELECT feld,status,regel FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${itemId}
+  AND feld IN ('rechnung.absender','kunde')`)
+  .toEqual([{feld:'rechnung.absender',status:'verworfen',regel:'HC3'}]);
 });
 
 it('I2 E10 hält eine Rechnung mit unterschiedlicher gedruckter und eingebetteter Nummer offen zur Klärung',async()=>{

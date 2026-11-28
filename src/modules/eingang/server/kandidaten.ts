@@ -4,6 +4,7 @@ import { withTenantSavepoint, type PrivilegedTenantTransaction } from '@/lib/ser
 import { normaliseCustomerPhone } from '@/modules/customers/public';
 import { eingangCopy } from '@/ui/eingangCopy';
 import { findRecognizedCustomers } from '../customerRecognition';
+import { falteBelegUstId } from './eingangsRegeln';
 import { saveIntakeCandidatesInTransaction, type IntakeCandidate } from './intakeAssignment';
 
 export type KundenTrefferregel = 'ustid' | 'adresse' | 'domain' | 'name' | 'telefon';
@@ -185,9 +186,8 @@ export async function leseBelegteKundenTreffer(
   firma: { name: string | null; ustId: string | null },
   leseKunden: Kundenleser,
 ) {
-  const normUstId = (text: string | null) => text?.replace(/\s+/gu, '').toUpperCase() ?? '';
-  const eigeneUstId = normUstId(firma.ustId);
-  const lieferantenUstId = normUstId(eingang.lieferantenUstId);
+  const eigeneUstId = falteBelegUstId(firma.ustId);
+  const lieferantenUstId = falteBelegUstId(eingang.lieferantenUstId);
   const eigeneFirma = firma.name ? foldSearchText(firma.name) : '';
   const istEigenesUnternehmen = (name: string | null | undefined) =>
     Boolean(name && eigeneFirma && foldSearchText(name) === eigeneFirma);
