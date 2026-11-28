@@ -35,7 +35,7 @@ async function withReminderCalendar<T>(work: () => Promise<T>): Promise<T> {
   const previous = rows[0];
   const [fixture] = previous ? await sql<{id:string}[]>`
     UPDATE public.company_settings SET betriebsruhe='[]'::jsonb,termin_knapp_arbeitstage=2
-    WHERE id=${previous.id}::uuid RETURNING id::text` : await sql<{id:string}[]>`
+    WHERE id=${previous.id} RETURNING id::text` : await sql<{id:string}[]>`
     INSERT INTO public.company_settings (tenant_id,company_name,betriebsruhe,termin_knapp_arbeitstage)
     VALUES (${KREILE_TENANT_SLUG},'SYNTHETISCH H18 Terminkalender','[]'::jsonb,2) RETURNING id::text`;
   if (!fixture) throw Error("H18_REMINDER_COMPANY_REQUIRED");
@@ -44,8 +44,8 @@ async function withReminderCalendar<T>(work: () => Promise<T>): Promise<T> {
   } finally {
     if (previous) await sql`UPDATE public.company_settings
       SET betriebsruhe=${previous.ruhe}::jsonb,termin_knapp_arbeitstage=${previous.knapp}
-      WHERE id=${fixture.id}::uuid`;
-    else await sql`DELETE FROM public.company_settings WHERE id=${fixture.id}::uuid`;
+      WHERE id=${fixture.id}`;
+    else await sql`DELETE FROM public.company_settings WHERE id=${fixture.id}`;
   }
 }
 const secret = "h18-settings-actions-local-only";

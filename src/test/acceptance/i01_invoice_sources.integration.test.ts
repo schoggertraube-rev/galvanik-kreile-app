@@ -11,7 +11,10 @@ import {enableOutlookTestFixture, createFixture, full, nativeFetch, sql, withSes
 import { importOutlookMailAction } from '@/app/actions/communications.actions';
 import { createCustomerAction } from '@/app/actions/customers.actions';
 import { getIncomingInvoiceAction, openIntakeOriginalAction, saveIncomingInvoiceAction } from '@/app/actions/eingang.actions';
+import { resolveAuthorization } from '@/lib/server/authorization';
+import { withPrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import type { InvoiceSaveInput } from '@/modules/eingang/public';
+import { sperreLieferantenrechnungFuerGeldInTransaction } from '@/modules/eingang/server-public';
 
 beforeAll(enableOutlookTestFixture);
 
@@ -113,6 +116,24 @@ it('M03–M05 saves 95 and 55 on separate original files of a twice delivered ma
   const { itemId, fileIds, mailOriginal, mime } = await deliverTwice([await document('TEST-L-A.pdf'), await document('TEST-L-B.pdf')]);
   const initial = await invoice(itemId);
   const first = await save(command(itemId, fileIds[0], initial.item.version, supplierA, 'TEST-L-A', '95,00'));
+  const cashier = await createFixture(['zahlungen']);
+  const workshop = await createFixture(['eingang', 'auftraege'], 'werkstatt');
+  const [cashierAuth, workshopAuth] = await Promise.all([
+    withSession(cashier, resolveAuthorization),
+    withSession(workshop, resolveAuthorization),
+  ]);
+  if (!cashierAuth.ok || !workshopAuth.ok) throw Error('TEST_I04AH1_AUTH_REQUIRED');
+
+  const lockInvoice = (auth: typeof cashierAuth.data) => withPrivilegedTenantTransaction(auth,
+    tx => sperreLieferantenrechnungFuerGeldInTransaction(tx, auth, first.id));
+  expect(await lockInvoice(cashierAuth.data)).toEqual({
+    code: 'OK', data: { id: first.id, version: first.version, bruttoCents: 9500, zahlstatus: 'offen' },
+  });
+  expect(await lockInvoice(workshopAuth.data)).toEqual({ code: 'FORBIDDEN' });
+  // Synthetic second TEST tenant; the lookup uses a real tenant-scoped transaction.
+  expect(await lockInvoice({ ...cashierAuth.data, tenantId: 'TEST-ablauf-' + randomUUID() }))
+    .toEqual({ code: 'NOT_FOUND' });
+
   const firstRead = await invoice(itemId);
   expect(firstRead.invoice).toMatchObject({ id: first.id, file_id: fileIds[0], seite_von: null, seite_bis: null });
   const nextOriginal = await invoice(itemId, fileIds[1]);
