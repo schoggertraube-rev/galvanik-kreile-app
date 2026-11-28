@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 15,
     "api_routes": 9,
-    "server_action_groups": 46,
+    "server_action_groups": 47,
     "kpi_definitions": 0,
     "provider_connections": 9,
     "nav_links_without_page": 3,
-    "total": 82
+    "total": 83
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1309,6 +1309,26 @@
       "exported_functions": ["hinterlegeLagerPreis"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "B3-a hinterlegt Preise mit dem Recht Preise & Rechnungen und bewertet offene Entnahmen nach. Die Abnahme steht aus.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.lager-inventur",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/lager-inventur.actions.ts",
+      "exported_functions": [
+        "starteLagerInventurAction",
+        "leseLagerInventurZaehllisteAction",
+        "speichereLagerInventurZaehlungAction",
+        "leseLagerInventurwerteAction",
+        "schliesseLagerInventurAbAction",
+        "starteLagerInventurNachtragAction",
+        "leseLagerInventurOriginalAction",
+        "leseLagerInventurVergleichAction",
+        "setzeLagerInventurGrundAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "B1a-4 erfasst Zählungen und erstellt Inventuroriginale. Die Abnahme steht aus.",
       "visible": false,
       "reachable": true
     }
