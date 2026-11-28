@@ -26,6 +26,28 @@ if (parsed.protocol !== "postgresql:" || parsed.hostname !== "127.0.0.1" || pars
 if (process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("H18_LOCAL_REPLAY_REQUIRED: service role must be unset");
 
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
+
+async function withReminderCalendar<T>(work: () => Promise<T>): Promise<T> {
+  const rows = await sql<{id:string;ruhe:string|null;knapp:number|null}[]>`
+    SELECT id::text,betriebsruhe::text AS ruhe,termin_knapp_arbeitstage AS knapp
+    FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+  if (rows.length > 1) throw Error("H18_REMINDER_COMPANY_AMBIGUOUS");
+  const previous = rows[0];
+  const [fixture] = previous ? await sql<{id:string}[]>`
+    UPDATE public.company_settings SET betriebsruhe='[]'::jsonb,termin_knapp_arbeitstage=2
+    WHERE id=${previous.id}::uuid RETURNING id::text` : await sql<{id:string}[]>`
+    INSERT INTO public.company_settings (tenant_id,company_name,betriebsruhe,termin_knapp_arbeitstage)
+    VALUES (${KREILE_TENANT_SLUG},'SYNTHETISCH H18 Terminkalender','[]'::jsonb,2) RETURNING id::text`;
+  if (!fixture) throw Error("H18_REMINDER_COMPANY_REQUIRED");
+  try {
+    return await work();
+  } finally {
+    if (previous) await sql`UPDATE public.company_settings
+      SET betriebsruhe=${previous.ruhe}::jsonb,termin_knapp_arbeitstage=${previous.knapp}
+      WHERE id=${fixture.id}::uuid`;
+    else await sql`DELETE FROM public.company_settings WHERE id=${fixture.id}::uuid`;
+  }
+}
 const secret = "h18-settings-actions-local-only";
 const originalSecret = process.env.APP_SESSION_SECRET;
 process.env.APP_SESSION_SECRET = secret;
@@ -830,7 +852,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     expect(dashboard.layout).toEqual(layout);
   }, 30_000);
 
-  it("H18.8 saves a Der-Tag reminder through the UI action with DB, event and dashboard readback", async () => {
+  it("H18.8 saves a Der-Tag reminder through the UI action with DB, event and dashboard readback", async () => withReminderCalendar(async () => {
     const fixture = await createFixture("today-reminder");
     const dueDate = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Berlin",
@@ -902,7 +924,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     });
     const after = await readDashboard();
     expect(after.items).toContainEqual(expect.objectContaining({ key: item.key, snoozedUntil: saved.data.reminderUntil }));
-  }, 30_000);
+  }), 30_000);
 });
 
 it('4c persists editable email_templates through the real settings action, event, replay and reread',async()=>{

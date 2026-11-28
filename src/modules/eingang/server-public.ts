@@ -2,7 +2,10 @@ import "server-only";
 export {recognizeInvoicePdf} from './server/invoiceRecognition';
 export {recordIntakeQuoteEffect,readIntakeQuoteReplyReference} from './server/intakeQuoteEffect';
 export {readIntakeHandoverMail,recordIntakeHandoverEffect} from './server/intakeOrderBinding';
-export {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoiceTaskContext} from './server/incomingInvoice';
+export {
+  readIncomingInvoice, saveIncomingInvoice, changeIncomingInvoice, readInvoiceTaskContext,
+  sperreLieferantenrechnungFuerGeldInTransaction,
+} from './server/incomingInvoice';
 export type {InvoiceDependencies} from './server/incomingInvoice';
 export {readIntakeMessages,readIntakeMessagesForAuthorization,projectIntakeMessageSources} from './server/intakeMessages';
 export {readIntakeAssignment,assignIntakeCustomer,canAssignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from './server/intakeAssignment';

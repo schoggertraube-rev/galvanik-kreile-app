@@ -19,6 +19,7 @@
     "@/modules/eingang/server-public#readOrderIntakeOriginals",
     "@/modules/eingang/server-public#readDomainIntakeOriginals",
     "@/modules/eingang/server-public#readInvoiceTaskContext",
+    "@/modules/eingang/server-public#sperreLieferantenrechnungFuerGeldInTransaction",
     "@/modules/eingang/public#IncomingInvoiceDialogs",
     "@/modules/eingang/server-public#readIncomingInvoice",
     "@/modules/eingang/server-public#saveIncomingInvoice",

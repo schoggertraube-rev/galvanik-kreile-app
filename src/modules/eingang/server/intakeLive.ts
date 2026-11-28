@@ -16,7 +16,8 @@ export async function readIntakeFileChanges(since: string, after: string | null)
       SELECT e.id::text AS id, f.id::text AS "fileId", f.item_id::text AS "itemId",
         to_char(e.zeit AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at
       FROM public.intake_event e
-      JOIN public.intake_file f ON f.tenant_id=e.tenant_id AND f.item_id=e.item_id AND f.id=e.befehl_id
+      JOIN public.intake_file f ON f.tenant_id=e.tenant_id AND f.item_id=e.item_id
+        AND f.id::text=coalesce(e.nachher->>'fileId',e.befehl_id::text)
       WHERE e.tenant_id=${auth.tenantId} AND e.art IN ('original_gespeichert','erkannt')
         AND (e.zeit,e.id) > (${since}::timestamptz,${after ?? "00000000-0000-0000-0000-000000000000"}::uuid)
       ORDER BY e.zeit,e.id LIMIT 100

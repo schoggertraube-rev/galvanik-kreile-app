@@ -71,6 +71,16 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => boundary.permissions,
 }));
+vi.mock("@/app/actions/auth.actions", () => {
+  const unexpectedAuthRequest = () => { throw Error("TEST_UNEXPECTED_AUTH_REQUEST"); };
+  return {
+    getAuthorizationSnapshotAction: unexpectedAuthRequest,
+    recordAppSessionActivity: unexpectedAuthRequest,
+  };
+});
+vi.mock("@/app/actions/auth", () => ({
+  logout: () => { throw Error("TEST_UNEXPECTED_LOGOUT"); },
+}));
 vi.mock("@/components/layout/GlobalSearch", () => ({
   GlobalSearch: ({ open }: { open: boolean }) => open ? <div data-testid="global-search-marker" /> : null,
 }));

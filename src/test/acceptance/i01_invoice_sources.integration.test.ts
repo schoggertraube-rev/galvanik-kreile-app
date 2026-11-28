@@ -11,7 +11,10 @@ import {enableOutlookTestFixture, createFixture, full, nativeFetch, sql, withSes
 import { importOutlookMailAction } from '@/app/actions/communications.actions';
 import { createCustomerAction } from '@/app/actions/customers.actions';
 import { getIncomingInvoiceAction, openIntakeOriginalAction, saveIncomingInvoiceAction } from '@/app/actions/eingang.actions';
+import { resolveAuthorization } from '@/lib/server/authorization';
+import { withPrivilegedTenantTransaction } from '@/lib/server/privilegedDb';
 import type { InvoiceSaveInput } from '@/modules/eingang/public';
+import { sperreLieferantenrechnungFuerGeldInTransaction } from '@/modules/eingang/server-public';
 
 beforeAll(enableOutlookTestFixture);
 
@@ -113,6 +116,24 @@ it('M03–M05 saves 95 and 55 on separate original files of a twice delivered ma
   const { itemId, fileIds, mailOriginal, mime } = await deliverTwice([await document('TEST-L-A.pdf'), await document('TEST-L-B.pdf')]);
   const initial = await invoice(itemId);
   const first = await save(command(itemId, fileIds[0], initial.item.version, supplierA, 'TEST-L-A', '95,00'));
+  const cashier = await createFixture(['zahlungen']);
+  const workshop = await createFixture(['eingang', 'auftraege'], 'werkstatt');
+  const [cashierAuth, workshopAuth] = await Promise.all([
+    withSession(cashier, resolveAuthorization),
+    withSession(workshop, resolveAuthorization),
+  ]);
+  if (!cashierAuth.ok || !workshopAuth.ok) throw Error('TEST_I04AH1_AUTH_REQUIRED');
+
+  const lockInvoice = (auth: typeof cashierAuth.data) => withPrivilegedTenantTransaction(auth,
+    tx => sperreLieferantenrechnungFuerGeldInTransaction(tx, auth, first.id));
+  expect(await lockInvoice(cashierAuth.data)).toEqual({
+    code: 'OK', data: { id: first.id, version: first.version, bruttoCents: 9500, zahlstatus: 'offen' },
+  });
+  expect(await lockInvoice(workshopAuth.data)).toEqual({ code: 'FORBIDDEN' });
+  // Synthetic second TEST tenant; the lookup uses a real tenant-scoped transaction.
+  expect(await lockInvoice({ ...cashierAuth.data, tenantId: 'TEST-ablauf-' + randomUUID() }))
+    .toEqual({ code: 'NOT_FOUND' });
+
   const firstRead = await invoice(itemId);
   expect(firstRead.invoice).toMatchObject({ id: first.id, file_id: fileIds[0], seite_von: null, seite_bis: null });
   const nextOriginal = await invoice(itemId, fileIds[1]);
@@ -159,6 +180,12 @@ it('holds one two-page invoice and two separate page invoices on their respectiv
   const first = await save(command(whole.itemId, whole.fileIds[0], (await invoice(whole.itemId)).item.version,
     supplierId, 'TEST-L-2P', '95,00', { from: 1, to: 2 }));
   expect((await invoice(first.id)).invoice).toMatchObject({ seite_von: 1, seite_bis: 2, file_id: whole.fileIds[0] });
+  const overlap = command(whole.itemId, whole.fileIds[0], (await invoice(first.id)).item.version,
+    supplierId, 'TEST-L-UEBERLAPPUNG', '55,00', { from: 2, to: 2 });
+  expect(await withSession(full, () => saveIncomingInvoiceAction(overlap))).toMatchObject({
+    code: 'CONFLICT',
+    message: `Seite 1–2 von TEST-Rechnung-zwei-Seiten.pdf gehört schon zu Rechnung ${first.nummer_intern}. Wähl die übrigen Seiten.`,
+  });
 
   const split = await deliverTwice([await document('TEST-zwei-Rechnungen.pdf', 2)]);
   const start = command(split.itemId, split.fileIds[0], (await invoice(split.itemId)).item.version,
@@ -176,6 +203,32 @@ it('holds one two-page invoice and two separate page invoices on their respectiv
   expect(await withSession(full, () => saveIncomingInvoiceAction(repeated))).toMatchObject({ code: 'CONFLICT' });
   expect(await sql`SELECT count(*)::int AS count FROM public.supplier_invoice WHERE tenant_id=${tenant}
     AND item_id=${split.itemId}::uuid AND file_id=${split.fileIds[0]}::uuid`).toEqual([{ count: 2 }]);
+});
+
+it('blocks part of a registered whole PDF and keeps each supplier on their own original', async () => {
+  const [supplierA, supplierB] = await Promise.all([supplier('Zugeordnet-A'), supplier('Original-B')]);
+  const whole = await deliverTwice([await document('TEST-Ganze-Datei.pdf', 2)]);
+  const registered = await save(command(whole.itemId, whole.fileIds[0], (await invoice(whole.itemId)).item.version,
+    supplierA, 'TEST-GANZ', '95,00'));
+  const partial = command(whole.itemId, whole.fileIds[0], (await invoice(registered.id)).item.version,
+    supplierA, 'TEST-GANZ-P2', '55,00', { from: 2, to: 2 });
+  expect(await withSession(full, () => saveIncomingInvoiceAction(partial))).toMatchObject({
+    code: 'CONFLICT',
+    message: `TEST-Ganze-Datei.pdf ist schon ganz als Rechnung ${registered.nummer_intern} erfasst. Gehört ein Teil zu einer anderen Rechnung, grenz zuerst die Seiten von ${registered.nummer_intern} ein.`,
+  });
+
+  const multi = await deliverTwice([await document('TEST-Zugeordnet-A.pdf'), await document('TEST-Original-B.pdf')]);
+  // The isolated fixture starts with the forwarding mail already associated with A.
+  await sql`UPDATE public.intake_item SET kunde_id=${supplierA},zuordnung='bestaetigt'
+    WHERE tenant_id=${tenant} AND id=${multi.itemId}::uuid`;
+  const b = await save(command(multi.itemId, multi.fileIds[1], (await invoice(multi.itemId, multi.fileIds[1])).item.version,
+    supplierB, 'TEST-B-ZUERST', '55,00'));
+  const a = await save(command(multi.itemId, multi.fileIds[0], (await invoice(multi.itemId, multi.fileIds[0])).item.version,
+    supplierA, 'TEST-A-DANACH', '95,00'));
+  expect(b).toMatchObject({ file_id: multi.fileIds[1], lieferant_id: supplierB });
+  expect(a).toMatchObject({ file_id: multi.fileIds[0], lieferant_id: supplierA });
+  expect(await sql`SELECT kunde_id,zuordnung FROM public.intake_item
+    WHERE tenant_id=${tenant} AND id=${multi.itemId}::uuid`).toEqual([{ kunde_id: supplierA, zuordnung:'bestaetigt' }]);
 });
 
 it('checks the same original access before counting invoice pages or downloading the PDF', async () => {
