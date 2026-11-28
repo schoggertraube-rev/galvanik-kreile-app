@@ -15,6 +15,7 @@ import {uploadIntakeOriginal} from '@/modules/eingang/public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('S20_DEDICATED_TEST_REPLAY_REQUIRED');
 
 it('records actual OCR provider OK/HTTP failure/timeout and secured original hash, not document/key/content; fresh finish retry never invents another provider attempt',async()=>{
+ await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${KREILE_TENANT_SLUG},'E04',true)`;
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
   VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST S20 recognition',0,'TEST-S20')`;
  const originalFetch=globalThis.fetch;

@@ -179,7 +179,7 @@ it.each([
     if (specialist === "test-i1-invoice") {
       expect(await sql`SELECT wert,modell,fundstelle FROM public.intake_suggestion
         WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='rechnung.nummer' AND status='offen'`)
-        .toEqual([{ wert: "TEST-RE-94", modell: specialist, fundstelle: { page: 1, polygon: [] } }]);
+        .toEqual([{ wert: "TEST-RE-94", modell: specialist, fundstelle: { page: 1, polygon: [], seite: 1 } }]);
       expect((await storage.download(`${tenant}/${sha256}.erkennung.${specialist}.json`)).error).toBeNull();
     }
   } finally {
@@ -187,6 +187,65 @@ it.each([
     vi.unstubAllEnvs();
     await sql`UPDATE public.company_settings SET erkennung_modelle='{"dokument":null,"rechnung":null,"bon":"test-quittung"}'::jsonb
       WHERE tenant_id=${tenant}`;
+  }
+});
+
+it.each([
+  { text: "DHL\nSendungsnummer: TEST123456789", preset: null, fotoArt: "etikett" },
+  { text: "TEST Bauteil", preset: null, fotoArt: null },
+  { text: "DHL\nSendungsnummer: TEST123456789", preset: "teile", fotoArt: "teile" },
+])("reads a secured goods photo without overwriting a chosen type ($fotoArt)", async ({ text, preset, fotoArt }) => {
+  const itemId = randomUUID(), fileId = randomUUID();
+  const bytes = Buffer.concat([Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a3l8AAAAASUVORK5CYII=", "base64",
+  ), Buffer.from(fileId)]);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const grant = await withSession(full, () => prepareIntakeFileAction({
+    itemId, fileId, name: "TEST-Warenfoto.png", mime: "image/png", bytes: bytes.length, sha256, captureOrigin: "warenfoto",
+  }));
+  if (grant.code !== "OK" || !grant.upload) throw Error("TEST_I1_GOODS_UPLOAD");
+  const storage = createAdminClient().storage.from(grant.upload.bucket);
+  expect((await storage.uploadToSignedUrl(grant.upload.path, grant.upload.token, bytes, { contentType: "image/png" })).error).toBeNull();
+  if (preset) await sql`UPDATE public.intake_file SET foto_art=${preset} WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
+  const endpoint = "https://i1-goods.example.invalid";
+  vi.stubEnv("AZURE_DOCINTEL_ENDPOINT", endpoint);
+  vi.stubEnv("AZURE_DOCINTEL_KEY", "TEST-i1-goods");
+  let providerCalls = 0;
+  const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.origin !== endpoint) return nativeFetch(input, init);
+    if (init?.method === "POST") {
+      providerCalls++;
+      return new Response(null, { status: 202, headers: {
+        "operation-location": `${endpoint}/documentintelligence/documentModels/prebuilt-layout/analyzeResults/TEST-PHOTO`,
+      } });
+    }
+    return Response.json({ status: "succeeded", analyzeResult: {
+      modelId: "prebuilt-layout", content: text, pages: [{ pageNumber: 1 }],
+    } });
+  });
+  try {
+    await withSession(full, async () => {
+      expect(await finishIntakeFileAction(fileId)).toMatchObject({ code: "OK", capture: {
+        files: [{ id: fileId, status: "wartet", secured: true, captureOrigin: "warenfoto" }],
+      } });
+      expect(providerCalls).toBe(0);
+    }, true);
+    expect(providerCalls).toBe(1);
+    expect(await withSession(full, () => getIntakeCaptureAction(itemId))).toMatchObject({ code: "OK", capture: {
+      files: [{ id: fileId, status: "fertig", secured: true, recognizedText: text }],
+    } });
+    expect(await sql`SELECT foto_art FROM public.intake_file WHERE tenant_id=${tenant} AND id=${fileId}::uuid`)
+      .toEqual([{ foto_art: fotoArt }]);
+    expect(await sql`SELECT feld,wert FROM public.intake_suggestion WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid
+      AND feld IN ('paketdienst','sendungsnummer') ORDER BY feld`).toEqual(fotoArt ? [
+        { feld: "paketdienst", wert: "DHL" }, { feld: "sendungsnummer", wert: "TEST123456789" },
+      ] : []);
+    expect(await sql`SELECT nachher->>'code' AS code FROM public.intake_event
+      WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid AND art='erkannt'`).toEqual([{ code: "OK" }]);
+  } finally {
+    fetched.mockRestore();
+    vi.unstubAllEnvs();
   }
 });
 

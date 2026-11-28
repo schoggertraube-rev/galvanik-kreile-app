@@ -5,7 +5,7 @@ import { recordObservedFailure } from "@/lib/server/actionObservation";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { analyzeWithAzureDocumentIntelligence, azureOfficeFormat, readAzureRecognitionOriginal, supportsAzureDocument } from "@/lib/server/azureDocumentIntelligence";
 import type { DocumentSuggestion } from "@/lib/server/azureDocumentIntelligence";
-import { concernForCaptureKind, recognizeCaptureDocument } from "../captureRecognition";
+import { concernForCaptureKind, PARCEL_CARRIER, recognizeCaptureDocument } from "../captureRecognition";
 import { safeOfficeRecognitionBytes } from "../originalSafety";
 import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from "./invoiceRecognition";
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
@@ -36,11 +36,44 @@ function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').upda
 type RecognitionContext = {
   tenantId: string;
   akteur: string;
-  file: { item_id: string; dateiname: string; mime: string; sha256: string; aufnahme_herkunft: "warenfoto" | "dokument" };
+  file: { item_id: string; dateiname: string; mime: string; sha256: string; aufnahme_herkunft: "warenfoto" | "dokument"; reihenfolge: number };
   bytes: Uint8Array;
   onlyInvoiceAccess: boolean;
   retryKey?: string;
 };
+
+const headFields = [
+  ["beleg.nummer", /^(?:beleg|bon|quittungs) ?(?:nummer|nr)$/u],
+  ["beleg.datum", /^(?:beleg|bon|quittungs) ?datum$/u],
+  ["lieferant.name", /^(?:lieferant(?:enname)?|lieferanten name|händler|vendor name|merchant name)$/u],
+  ["lieferant.ustid", /^(?:umsatzsteuer id|ust id(?: nr)?|vat (?:id|number)|vendor tax id)$/u],
+  ["bestellnummer", /^(?:bestell ?(?:nummer|nr)|purchase order(?: number)?)$/u],
+  ["lieferscheinnummer", /^(?:lieferschein ?(?:nummer|nr)|delivery note(?: number)?)$/u],
+  ["waehrung", /^(?:währung|waehrung|currency)$/u],
+  ["sendungsnummer", /^(?:sendungs ?(?:nummer|nr)|tracking ?(?:nummer|number|no))$/u],
+  ["paketdienst", /^(?:paketdienst|versanddienstleister|carrier)$/u],
+] as const;
+
+function readHeadFields(suggestions: readonly DocumentSuggestion[], goodsPhoto: boolean) {
+  const heads: { field: string; value: string; confidence: number | null; source: DocumentSuggestion["source"] }[] = [];
+  for (const read of suggestions) {
+    const label = read.label.toLocaleLowerCase("de-DE").normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const match = headFields.find(([, pattern]) => pattern.test(label));
+    if (match) heads.push({ field: match[0], value: read.value, confidence: read.confidence, source: read.source });
+  }
+  const text = goodsPhoto ? suggestions.find(read => read.field === "DOCUMENT_TEXT") : null;
+  if (text) {
+    const carrier = PARCEL_CARRIER.exec(text.value)?.[0];
+    if (carrier && !heads.some(read => read.field === "paketdienst")) {
+      heads.push({ field: "paketdienst", value: carrier, confidence: null, source: text.source });
+    }
+    const tracking = /^[ \t]*(?:sendungs(?:nummer|nr\.?)|tracking[ \t]+(?:number|no\.?))[ \t:#]+([A-Z0-9][A-Z0-9-]*)[ \t]*$/imu.exec(text.value)?.[1];
+    if (tracking && /\d/u.test(tracking) && !heads.some(read => read.field === "sendungsnummer")) {
+      heads.push({ field: "sendungsnummer", value: tracking, confidence: null, source: text.source });
+    }
+  }
+  return heads;
+}
 
 export async function erkenneOriginal(kontext: RecognitionContext, fileId: string, einstellungen: ReadRecognitionSettings) {
   const { tenantId, akteur, file, bytes, onlyInvoiceAccess, retryKey } = kontext;
@@ -51,16 +84,11 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const claimed = await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
       const updated = await tx.execute<{ id: string }>(sql`UPDATE public.intake_file SET erkennung_status='laeuft' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='wartet' RETURNING id::text`);
-      if(updated.length===1&&file.aufnahme_herkunft!=="warenfoto")await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+      if(updated.length===1)await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         VALUES(${auth.tenantId},${file.item_id}::uuid,'einsatz',${claimKey}::uuid,${akteur},${JSON.stringify({action:'erkennung_gestartet',fileId,attemptKey:retryKey??fileId})}::jsonb) ON CONFLICT DO NOTHING`);
       return updated.length === 1;
     });
     if (!claimed) return;
-    if (file.aufnahme_herkunft === "warenfoto") {
-      await withPrivilegedTenantTransaction(auth, tx => tx.execute(sql`UPDATE public.intake_file SET lesbar=false,erkennung_status='fertig'
-        WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='laeuft'`));
-      return;
-    }
     claimOwned=true;
     // Structured originals use the same XML parser; unstructured documents retain the OCR path.
     const prefix=Buffer.from(bytes.subarray(0,512)).toString('utf8').replace(/^\uFEFF/u,'').trimStart();
@@ -107,7 +135,11 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const rawPath = primary?.rawPath ?? null;
     const ocr = recognized?.code === "OK" ? recognized : null;
     const rawStorageFailed = ocr !== null && rawPath === null;
-    const kind = xmlResult?.code === "OK" ? "rechnung" : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
+    const goodsPhoto = file.aufnahme_herkunft === "warenfoto" && file.mime.startsWith("image/");
+    const primaryHeads = ocr ? readHeadFields(ocr.data.suggestions, goodsPhoto) : [];
+    const parcelLabel = goodsPhoto && primaryHeads.some(read => read.field === "paketdienst" || read.field === "sendungsnummer" && /\d/u.test(read.value));
+    const kind = xmlResult?.code === "OK" ? "rechnung" : parcelLabel ? "ware"
+      : ocr ? recognizeCaptureDocument({ text: null, suggestions: ocr.data.suggestions }).kind : null;
     const models = settings?.erkennung_modelle;
     const specialistModel = ocr && models && !officeFormat
       ? kind === "rechnung" ? models.rechnung : kind === "quittung" ? models.bon : null : null;
@@ -130,13 +162,14 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const model = ocr?.original?.model ?? null;
       const complete = ocrDisabled || hasValues && !rawStorageFailed && !specialistArchiveFailed;
       await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead && !ocrDisabled && !ocrSettingMissing},erkennung_status=${complete ? "fertig" : "fehler"},
+          foto_art=CASE WHEN ${parcelLabel} THEN coalesce(foto_art,'etikett') ELSE foto_art END,
           erkannter_text=CASE WHEN ${replaceDocumentText} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
           erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
-      const primarySuggestions=ocr?documentSuggestions(ocr.data.suggestions):[];
+      const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions), ...primaryHeads]:[];
       const primaryKeys=new Set(primarySuggestions.map(suggestionKey));
-      const specialistSuggestions=specialistOcr?documentSuggestions(specialistOcr.data.suggestions).filter(suggestion=>{
+      const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions), ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto)].filter(suggestion=>{
         const key=suggestionKey(suggestion);
         if(primaryKeys.has(key))return false;
         primaryKeys.add(key);
@@ -173,8 +206,9 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         const certainty = confidence === null || threshold === null
           ? 'vorschlag' : confidence >= threshold ? 'sicher' : 'unsicher';
         const jsonValue = JSON.stringify(suggestion.value);
+        const source = { ...suggestion.source, seite: file.reihenfolge };
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,sicherheit_wert,modell,regel,grund,fundstelle,status)
-            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${suggestion.model},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
+            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${suggestion.model},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(source)}::jsonb,'offen'
           WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid
             AND feld=${suggestion.field} AND (feld<>'position' OR wert->>'positionKey'=(${jsonValue}::jsonb)->>'positionKey')
             AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
