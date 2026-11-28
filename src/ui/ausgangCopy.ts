@@ -14,6 +14,16 @@ export const GOODS_OUT_DEBT_COPY = {
     ? `Du kannst die Ware noch nicht herausgeben: Rechnung ${invoiceNumber} ist überfällig. Buche zuerst die Zahlung.`
     : 'Ausgabe gesperrt – Rechnung offen',
 } as const;
+const releaseProofMissing = 'Freigabebeleg fehlt';
+export const DISPATCH_BOARD_COPY = {
+  complaint: { status: 'Reklamation offen', action: 'Reklamation bearbeiten' },
+  releaseProofMissing: { status: releaseProofMissing, action: 'Freigabebeleg klären' },
+  handoverMissing: { status: 'Übergabeart fehlt', action: 'Abholung oder Versand festlegen' },
+  overdue: 'Gesperrt',
+  notify: { status: 'Nicht informiert', action: (customer: string | null) => `${customer ?? 'Kunden'} Bescheid geben` },
+  payment: { status: 'Geld fehlt', action: 'Zahlung am Auftrag öffnen' },
+  ready: { status: 'Darf raus', pickup: 'Übergeben', shipping: 'Einpacken' },
+} as const;
 export const MANUAL_SHIPPING_FIELDS={name:'Name / Firma',street:'Straße',houseNumber:'Hausnummer',zipCode:'PLZ',city:'Ort',country:'Land',phone:'Telefon',email:'E-Mail',reference:'Referenz'} as const;
 export const MANUAL_SHIPPING_HANDOVER_LABEL='Paket mit manuell übernommener Sendungsnummer übergeben';
 export const MANUAL_SHIPPING_COPY={
@@ -124,7 +134,7 @@ export const CUSTOMER_COLLECTION_COPY={
 };
 // S09: package text is fixed; additional failure copy stays in the same catalog (R8).
 export const SHIPPING_FEE_COPY={
- proposalMissing:(number:string,invoice:boolean,reason:'freigabe'|'einstellungen'|'original'|'quelle')=>`Versandvorschlag für ${invoice?'Rechnung':'Auftrag'} ${number.length>24?number.slice(0,23)+'…':number} fehlt: ${{freigabe:'Freigabebeleg fehlt',einstellungen:'Versandangaben fehlen',original:'Originalbeleg ist unklar',quelle:'Quelle nicht lesbar'}[reason]}.`,
+ proposalMissing:(number:string,invoice:boolean,reason:'freigabe'|'einstellungen'|'original'|'quelle')=>`Versandvorschlag für ${invoice?'Rechnung':'Auftrag'} ${number.length>24?number.slice(0,23)+'…':number} fehlt: ${{freigabe:releaseProofMissing,einstellungen:'Versandangaben fehlen',original:'Originalbeleg ist unklar',quelle:'Quelle nicht lesbar'}[reason]}.`,
  orderQuoteMissing:(number:string)=>`Preisbeleg zu Auftrag ${number.length>24?number.slice(0,23)+'…':number} ist nicht lesbar.`,
  noAdditionalInvoiceNeeded:'Versandkosten sind 0 € – keine Zusatzrechnung nötig',
  groupAlreadyCharged:(number:string,other:string)=>`${number} und ${other} sind schon einzeln mit Versand berechnet – verschick sie getrennt.`,

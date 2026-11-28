@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { canonicalJson } from '@/lib/domain/canonicalJson';
 import { readAppSession } from './appSession';
 import { goodsOutSignaturePath, readGoodsOutSignature } from './domainAttachmentStorage';
@@ -70,24 +70,55 @@ export async function writeGoodsOutCollector(tx: PrivilegedTenantTransaction, au
   }
 }
 
-export async function readGoodsOutCollector(tx: PrivilegedTenantTransaction, tenantId: string, orderId: string, goodsOutEventId?: string) {
-  const rows = await tx.execute<{ payload: { collector: unknown; occurredAt: string }; request_id: string; occurred_at: string; version: number }>(sql`
-    SELECT proof.payload, physical.client_event_id::text AS request_id, physical.aggregate_version AS version,
-      to_char(physical.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at
+type CollectorProof = {
+  event_id: string;
+  payload: { collector: unknown; occurredAt: string };
+  request_id: string;
+  occurred_at: string;
+  version: number;
+};
+
+function readCollectorProofs(tx: PrivilegedTenantTransaction, tenantId: string, selection: SQL, limit: SQL = sql``) {
+  return tx.execute<CollectorProof>(sql`
+    SELECT physical.id::text AS event_id, proof.payload, physical.client_event_id::text AS request_id,
+      physical.aggregate_version AS version, to_char(physical.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at
     FROM public.events proof JOIN public.events physical ON physical.id = proof.payload->>'goodsOutEventId'
       AND physical.tenant_id = proof.tenant_id AND physical.order_id = proof.order_id AND physical.user_id = proof.user_id
       AND physical.correlation_id = proof.correlation_id AND physical.aggregate_version = proof.aggregate_version
-    WHERE proof.tenant_id = ${tenantId} AND proof.order_id = ${orderId} AND proof.event_type = ${COLLECTOR_EVENT}
+    WHERE proof.tenant_id = ${tenantId} AND proof.event_type = ${COLLECTOR_EVENT}
       AND proof.status = 'success' AND proof.event_schema_version = 1 AND physical.status = 'success'
       AND physical.event_type IN ('ORDER_PICKED_UP_V1', 'ORDER_PICKED_UP_V2', 'ORDER_PICKED_UP_V3', 'ORDER_PICKED_UP_V4')
-      AND physical.payload->>'mode' = 'abholung' ${goodsOutEventId ? sql`AND physical.id = ${goodsOutEventId}` : sql``}
-    ORDER BY physical.aggregate_version DESC LIMIT 2`);
-  if (!rows.length) return null;
-  const first = rows[0];
-  if (rows[1]?.version === first.version || !isGoodsOutCollector(first.payload.collector)
-    || first.payload.occurredAt !== first.occurred_at
-    || first.payload.collector.unterschrift.storagePath !== goodsOutSignaturePath(tenantId, first.request_id)) {
+      AND physical.payload->>'mode' = 'abholung' AND (${selection})
+    ORDER BY physical.aggregate_version DESC ${limit}`);
+}
+
+function collectorFromProof(tenantId: string, proof: CollectorProof) {
+  const { collector, occurredAt } = proof.payload;
+  if (!isGoodsOutCollector(collector) || occurredAt !== proof.occurred_at
+    || collector.unterschrift.storagePath !== goodsOutSignaturePath(tenantId, proof.request_id)) {
     throw new Error('GOODS_OUT_COLLECTOR_RECEIPT_INVALID');
   }
-  return { collector: first.payload.collector, occurredAt: first.occurred_at };
+  return { collector, occurredAt };
+}
+
+export async function readGoodsOutCollector(tx: PrivilegedTenantTransaction, tenantId: string, orderId: string, goodsOutEventId?: string) {
+  const [newest, prior] = await readCollectorProofs(tx, tenantId,
+    sql`proof.order_id = ${orderId} ${goodsOutEventId ? sql`AND physical.id = ${goodsOutEventId}` : sql``}`, sql`LIMIT 2`);
+  if (!newest) return null;
+  if (prior?.version === newest.version) throw new Error('GOODS_OUT_COLLECTOR_RECEIPT_INVALID');
+  return collectorFromProof(tenantId, newest);
+}
+
+export async function readGoodsOutCollectorNames(
+  tx: PrivilegedTenantTransaction, tenantId: string, goodsOutEventIds: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  if (goodsOutEventIds.length === 0) return new Map();
+  const ids = sql.join(goodsOutEventIds.map(id => sql`${id}`), sql`, `);
+  const proofs = await readCollectorProofs(tx, tenantId, sql`physical.id IN (${ids})`);
+  const names = new Map<string, string>();
+  for (const proof of proofs) {
+    if (names.has(proof.event_id)) throw new Error('GOODS_OUT_COLLECTOR_RECEIPT_INVALID');
+    names.set(proof.event_id, collectorFromProof(tenantId, proof).collector.name);
+  }
+  return names;
 }

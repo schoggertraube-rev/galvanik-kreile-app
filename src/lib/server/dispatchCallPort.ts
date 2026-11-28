@@ -2,7 +2,7 @@ import 'server-only';
 import {CUSTOMER_COLLECTION_COPY} from '@/ui/situationCatalog';
 import {readPickupCustomerName} from './pickupAppointmentPort';
 import {randomUUID} from 'node:crypto';
-import {sql} from 'drizzle-orm';
+import {sql,type SQL} from 'drizzle-orm';
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from './authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from './privilegedDb';
@@ -33,15 +33,38 @@ async function task(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapsh
 }
 function validTask(record:CallTask,created:Created){return record.client_key===created.payload.meta.stageKey&&record.art==='rueckruf'&&record.bezug_typ==='auftrag'&&record.bezug_id!==null&&(created.originalOrderIds??created.payload.meta.orderIds).includes(record.bezug_id)&&record.erstellt_von===created.user_id;}
 
-export async function handedOverProofs(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,orderIds:readonly string[]){
- const rows=await tx.execute<{orderId:string;eventId:string}>(sql`SELECT orders.id AS "orderId",proof.id::text AS "eventId" FROM public.orders orders
-  JOIN LATERAL(SELECT event.id FROM public.events event WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id
+function handedOverSource(tenantId:string,auswahl:SQL){
+ return sql`FROM public.orders orders
+  LEFT JOIN public.customers customer ON customer.tenant_id=orders.tenant_id AND customer.id=orders.customer_id
+  JOIN LATERAL(SELECT event.id,event.created_at,event.payload->>'mode' AS mode FROM public.events event
+   WHERE event.tenant_id=orders.tenant_id AND event.order_id=orders.id
    AND event.event_type IN ('ORDER_PICKED_UP_V1','ORDER_PICKED_UP_V2','ORDER_PICKED_UP_V3','ORDER_PICKED_UP_V4') AND event.status='success' AND event.user_id IS NOT NULL
    AND event.from_station='fertig' AND event.station='abgeholt' AND event.payload->>'orderId'=orders.id
    AND event.payload->>'orderVersion'=event.aggregate_version::text AND event.aggregate_version<=orders.version ORDER BY event.created_at DESC,event.id DESC LIMIT 1) proof ON true
-  WHERE orders.tenant_id=${auth.tenantId} AND orders.id=ANY(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[])
-   AND orders.station='abgeholt' AND orders.status='abgeholt' AND orders.current_station='abgeholt' AND orders.current_station_id='abgeholt' ORDER BY orders.id`);
+  WHERE orders.tenant_id=${tenantId} AND (${auswahl})
+   AND orders.station='abgeholt' AND orders.status='abgeholt' AND orders.current_station='abgeholt' AND orders.current_station_id='abgeholt'`;
+}
+
+export async function handedOverProofs(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,orderIds:readonly string[]){
+ const auftrag = sql`orders.id=ANY(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[])`;
+ const rows=await tx.execute<{orderId:string;eventId:string}>(sql`SELECT orders.id AS "orderId",proof.id::text AS "eventId"
+  ${handedOverSource(auth.tenantId,auftrag)} ORDER BY orders.id`);
  return rows.length===orderIds.length?rows:null;
+}
+
+export async function readRecentHandoverProofs(tx:PrivilegedTenantTransaction,tenantId:string,now:Date,customerId?:string){
+ const bis=sql`(${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
+ const auswahl=sql`proof.created_at >= ${bis} - interval '30 days' AND proof.created_at <= ${bis}
+  ${customerId === undefined ? sql`` : sql`AND orders.customer_id=${customerId}`}`;
+ const rows=await tx.execute<{orderId:string;orderNumber:string;customerId:string|null;customerName:string|null;
+  eventId:string;occurredAt:string;mode:'abholung'|'versand'}>(sql`
+  SELECT orders.id AS "orderId",orders.order_number AS "orderNumber",orders.customer_id AS "customerId",
+    customer.name AS "customerName",proof.id::text AS "eventId",
+    to_char(proof.created_at,'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "occurredAt",proof.mode
+  ${handedOverSource(tenantId,auswahl)} ORDER BY proof.created_at DESC,orders.id
+ `);
+ if(rows.some(row=>row.mode!=='abholung'&&row.mode!=='versand'))throw Error('DISPATCH_HANDOVER_MODE_INVALID');
+ return [...rows];
 }
 
 /** The goods-out composition locks tasks before orders, matching completion lock order. */

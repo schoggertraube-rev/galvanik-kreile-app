@@ -19,6 +19,7 @@ import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {recordGoodsOutAction} from '@/app/actions/goodsOut.actions';
 import {readHistoricalDispatchClock,dispatchFollowupBoundary,historicalDispatchDate} from '../../../e2e/ablauf/historicalDispatchFixture';
 import {berlinCalendarDay} from '@/lib/domain/workingDays';
+import {readRecentDispatchHandovers} from '@/modules/orders/server-public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('DISPATCH_CALL_LOOPBACK_REQUIRED');
 async function proposal(id:string){const result=await withSession(full,()=>getOrdersDb());if(!result.ok)throw Error('CALL_QUEUE');const plan=result.data.find(row=>row.id===id)?.finishedDispatch?.reminder;if(!plan)throw Error('CALL_PLAN');return plan;}
 it('E5 settings persist an explicit final interval and active tenant login with actor, read-back and fresh retry',async()=>{
@@ -292,7 +293,38 @@ it('handing over the remaining goods completes the existing callback atomically 
  const {first,second,request,noticeThreadId}=await prepare('E3-Abgeholt');
  const created=await withSession(full,()=>createDispatchCallTaskAction(request));if(created.code!=='OK')throw Error('CALL_GONE_CREATE');
  const releaseFirst={orderId:first.orderId,expectedVersion:first.version,mode:'abholung' as const,clientEventId:randomUUID()};
- expect(await withSession(full,()=>recordGoodsOutAction(releaseFirst))).toMatchObject({code:'OK'});
+ const firstHandover=await withSession(full,()=>recordGoodsOutAction(releaseFirst));
+ if(firstHandover.code!=='OK')throw Error('CALL_GONE_FIRST_HANDOVER');
+ const {receipt:handover}=firstHandover;
+ await withSession(full,async()=>{
+  const {resolveAuthorization}=await import('@/lib/server/authorization');
+  const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');
+  const {goodsOutSignaturePath}=await import('@/lib/server/domainAttachmentStorage');
+  const {writeGoodsOutCollector}=await import('@/lib/server/goodsOutCollector');
+  const authorization=await resolveAuthorization();
+  if(!authorization.ok)throw Error('CALL_GONE_HISTORY_AUTH');
+  // Isolierter Nachweis einer bereits gespeicherten Unterschrift. Die Liste liest nur den Namen daraus.
+  await withPrivilegedTenantTransaction(authorization.data,tx=>writeGoodsOutCollector(tx,authorization.data,handover,{
+   art:'andere',name:'TEST Abholerin',unterschrift:{storagePath:goodsOutSignaturePath(KREILE_TENANT_SLUG,handover.clientEventId),
+    sha256:'a'.repeat(64),breitePx:300,hoehePx:120},
+  }));
+ });
+ const readHistory=(now?:Date,actor=full)=>withSession(actor,async()=>{
+  const {resolveAuthorization}=await import('@/lib/server/authorization');
+  const authorization=await resolveAuthorization();
+  if(!authorization.ok)throw Error('CALL_GONE_HISTORY_AUTH');
+  return readRecentDispatchHandovers(authorization.data,first.customerId,now);
+ });
+ expect(await readHistory()).toMatchObject({code:'OK',rows:[{
+  orderId:first.orderId,customerId:first.customerId,customerName:expect.any(String),eventId:firstHandover.receipt.eventId,
+  mode:'abholung',occurredAt:handover.occurredAt,collectorName:'TEST Abholerin',paymentState:'available',
+ }]});
+ const warehouse=await createFixture(['auftraege'],'werkstatt');
+ expect(await readHistory(undefined,warehouse)).toMatchObject({code:'OK',rows:[{
+  orderId:first.orderId,eventId:handover.eventId,collectorName:'TEST Abholerin',paymentState:'hidden',invoice:null,
+ }]});
+ const afterWindow=new Date(Date.parse(firstHandover.receipt.occurredAt)+30*24*60*60*1000+1000);
+ expect(await readHistory(afterWindow)).toMatchObject({code:'OK',rows:[]});
  expect(await proposal(second.orderId)).toMatchObject({state:'CALL_PENDING'});
  expect(await withSession(full,()=>createDispatchCallTaskAction(structuredClone(request)))).toMatchObject({code:'OK',taskId:created.taskId});
  const task=await withSession(full,()=>getIntakeTaskAction({taskId:created.taskId}));expect(task).toMatchObject({code:'OK',task:{status:'offen'},dispatchCall:{orderIds:[second.orderId]}});
