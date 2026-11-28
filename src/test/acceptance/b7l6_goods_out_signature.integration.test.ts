@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { createClient } from '@supabase/supabase-js';
+import { crc32, deflateSync } from 'node:zlib';
 import { expect, it, vi } from 'vitest';
 
 const tenant = vi.hoisted(() => 'TEST-ablauf-' + globalThis.crypto.randomUUID());
@@ -19,6 +19,15 @@ if (!databaseUrl || databaseUrl !== process.env.H18_EXPECTED_DATABASE_URL || new
   throw new Error('B7L6_DEDICATED_LOCAL_REPLAY_REQUIRED');
 }
 
+function pngChunk(name: string, data: Uint8Array): Buffer {
+  const payload = Buffer.concat([Buffer.from(name), data]);
+  const length = Buffer.alloc(4);
+  const checksum = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  checksum.writeUInt32BE(crc32(payload));
+  return Buffer.concat([length, payload, checksum]);
+}
+
 it('binds a signed pickup to its saved receipt', async () => {
   const order = await readyInvoiceOrder('TEST B7L Abholbeleg');
   expect(await withSession(full, () => confirmPaymentAction({ invoiceId: order.invoice.invoiceId,
@@ -34,7 +43,8 @@ it('binds a signed pickup to its saved receipt', async () => {
   // Isolated PNG fixture stands in for a pen stroke only in this test.
   const bytes = await readFile('e2e/fixtures/e-rechnung/TEST_invoice_scan.png');
   const { width, height } = getPngDataUrlDimensions(`data:image/png;base64,${bytes.subarray(0, 24).toString('base64')}`);
-  const storage = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!).storage.from('scans');
+  const { supabase } = await import('@/lib/supabase/client');
+  const storage = supabase.storage.from('scans');
   expect((await storage.uploadToSignedUrl(grant.storagePath, grant.token, bytes, { contentType: 'image/png' })).error).toBeNull();
   const input = { ...base, mode: 'abholung', collector: { art: 'kunde', name: 'TEST Abholperson',
     unterschrift: { storagePath: grant.storagePath, sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -49,7 +59,13 @@ it('binds a signed pickup to its saved receipt', async () => {
   const corruptedRequest = { ...base, clientEventId: randomUUID() };
   const corruptedGrant = await withSession(full, () => prepareGoodsOutSignatureUploadAction(corruptedRequest));
   if (corruptedGrant.code !== 'OK') throw new Error(`TEST_B7L_CORRUPT_GRANT:${corruptedGrant.code}`);
-  const truncated = Buffer.concat([bytes.subarray(0, 24), bytes.subarray(-12)]);
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  const halfRaster = Buffer.alloc((width + 1) * Math.floor(height / 2));
+  const truncated = Buffer.concat([bytes.subarray(0, 8), pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(halfRaster)), pngChunk('IEND', Buffer.alloc(0))]);
   expect((await storage.uploadToSignedUrl(corruptedGrant.storagePath, corruptedGrant.token, truncated, { contentType: 'image/png' })).error).toBeNull();
   expect(await book({ ...input, clientEventId: corruptedRequest.clientEventId, collector: { ...input.collector,
     unterschrift: { ...input.collector.unterschrift, storagePath: corruptedGrant.storagePath,

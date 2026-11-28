@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { PngEmbedder } from "pdf-lib";
 import { getPngDataUrlDimensions } from "@/lib/images/pngDimensions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasCompletePngRaster } from "./completePng";
 
 const BUCKET_ID = "scans";
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -94,7 +95,8 @@ export async function readGoodsOutSignature(path: string, expectedSha256: string
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const header = Buffer.from(bytes.subarray(0, 24)).toString("base64");
   const { width, height } = getPngDataUrlDimensions(`data:image/png;base64,${header}`);
-  if (sha256 !== expectedSha256 || width < 300 || height < 120 || width * height > MAX_SIGNATURE_PIXELS) {
+  if (sha256 !== expectedSha256 || width < 300 || height < 120 || width * height > MAX_SIGNATURE_PIXELS
+    || !hasCompletePngRaster(bytes, width, height)) {
     throw new DomainAttachmentStorageError("MISMATCH");
   }
   try {
