@@ -224,6 +224,7 @@ export type OrderCardModel = {
   }>;
   items: OrderCardItem[];
   evidence: OrderCardEvidence[];
+  intakePhotoParts?: readonly string[] | null;
   frozenAt: string | null;
   totalAmountCents: number | null;
   agreement?: CustomerAgreementRecord | null;

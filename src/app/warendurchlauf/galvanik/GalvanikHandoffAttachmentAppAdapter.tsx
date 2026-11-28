@@ -1,5 +1,9 @@
 "use client";
 
+import {useMemo} from "react";
+import {openIntakeOriginalAction} from "@/app/actions/eingang.actions";
+import {uploadContextOriginal} from "@/components/attachments/DomainAttachmentPanel";
+import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {
   finalizeGalvanikHandoffAttachmentAction,
   getGalvanikHandoffAttachmentOriginalAction,
@@ -58,7 +62,7 @@ export async function uploadSignedOrderAttachment(input: SignedUploadInput) {
   }
 }
 
-const ports: OrderStationAttachmentPorts = {
+const existingPorts = {
   read: getGalvanikHandoffAttachmentsAction,
   reserve: reserveGalvanikHandoffAttachmentAction,
   finalize: finalizeGalvanikHandoffAttachmentAction,
@@ -66,8 +70,27 @@ const ports: OrderStationAttachmentPorts = {
   uploadSigned: uploadSignedOrderAttachment,
 };
 
+export function useGalvanikHandoffAttachmentPorts() {
+  const {offlineScope}=usePermissions();
+  return useMemo<OrderStationAttachmentPorts>(()=>({
+    ...existingPorts,
+    capture:({orderId,itemId,expectedVersion,file})=>uploadContextOriginal({
+      auftragId:orderId,teilId:itemId,fotoArt:'teile',phase:'arbeit',uebergabeVersion:expectedVersion,
+    },file,offlineScope),
+    async openIntake({orderId,fileId}) {
+      const result=await openIntakeOriginalAction({orderId,fileId,clientEventId:crypto.randomUUID()});
+      if(result.code!=='OK')return {code:'UNAVAILABLE' as const,message:result.message};
+      if(result.original.id!==fileId||result.original.orderId!==orderId||!result.original.downloadUrl){
+        return {code:'UNAVAILABLE' as const,message:'Downloadfreigabe war nicht exakt gebunden.'};
+      }
+      return {code:'OK' as const,downloadUrl:result.original.downloadUrl};
+    },
+  }),[offlineScope]);
+}
+
 type Props = Omit<OrderStationAttachmentPanelProps, "ports">;
 
 export function GalvanikHandoffAttachmentAppAdapter(props: Props) {
+  const ports=useGalvanikHandoffAttachmentPorts();
   return <OrderStationAttachmentPanel {...props} ports={ports} />;
 }

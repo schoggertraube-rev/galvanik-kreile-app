@@ -33,7 +33,8 @@ export function projectTodayOrderSources(auth:AuthorizationSnapshot,sources:Awai
   const shipping=canTransportInvoiceDocument(auth)?raw.shipping:undefined;
   const payment=raw.payment===undefined?undefined:maskOrderPaymentCredit(auth,raw.payment);
   try{
-   const nextActionRule=readV45OrderRule(auth,card,raw.informed?{orderId:card.id,value:raw.informed}:undefined,{orderId:card.id,records:raw.records},{shipping,payment,shipment:raw.shipment});
+   const nextActionRule=readV45OrderRule(auth,card,raw.informed?{orderId:card.id,value:raw.informed}:undefined,
+    {orderId:card.id,records:raw.records,intakePhotoParts:raw.intakePhotoParts},{shipping,payment,shipment:raw.shipment});
    return {orderId,result:{code:'OK' as const,data:{card,handoverConsequences:shipping,pickupAppointment:raw.appointment,nextActionRule}}};
   }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
  });
@@ -70,7 +71,7 @@ export async function readTodayOrderSources(auth:AuthorizationSnapshot|TodayOrde
      card.station==='fertig'&&card.handoverMode==='pickup'?withPageReadPhase('action.appointment',()=>readOrderPickupAppointment(auth,card.id)):Promise.resolve(undefined),
     ]);
     if(informed?.code==='OK'&&informed.orderVersion!==card.version)return {orderId,result:{code:'UNAVAILABLE' as const,message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'}};
-    return {orderId,result:{code:'OK' as const,data:{card,records:proof.data,shipping,informed,payment,shipment,appointment}}};
+    return {orderId,result:{code:'OK' as const,data:{card,records:proof.data,intakePhotoParts:proof.intakePhotoParts,shipping,informed,payment,shipment,appointment}}};
    }catch(error){console.error('[TODAY_ORDER_RULE_SOURCE_FAILED]',{orderId,name:error instanceof Error?error.name:'UnknownError'});return {orderId,result:{code:'UNAVAILABLE' as const,message:'Auftragskarte konnte nicht sicher geladen werden.'}};}
   }));
   return rows;

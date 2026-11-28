@@ -14,9 +14,8 @@ import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { recognizeIntakeText } from "@/lib/server/intakeTextRecognition";
 import { readLiveOrderCard } from "@/lib/server/orderCardRead";
-import { recognizeNoteConcerns, type IntakeCapture, type IntakeCaptureResult, type IntakeContext, type IntakeNoteInput, type IntakeCaptureKindInput } from "../captureContract";
-import { CAPTURE_KINDS, captureRecognition } from "../captureRecognition";
-import { intakeInvoiceReviewRequired } from "../intakeLifecycleContract";
+import { recognizeNoteConcerns, type IntakeCapture, type IntakeCaptureResult, type IntakeContext, type IntakeNoteInput } from "../captureContract";
+import { captureRecognition } from "../captureRecognition";
 import {isIntakeOriginalTakeover} from '../captureContract';
 import type {IntakeOriginalTakeover} from '../captureContract';
 import {createHash} from 'node:crypto';
@@ -109,48 +108,6 @@ export async function readIntakeCapture(itemId: string, ctx?: IntakeContext): Pr
   if ("code" in auth) return auth;
   try { return await intakeCaptureSnapshot(auth, itemId, ctx); }
   catch{ recordObservedFailure('INTAKE_CAPTURE_READ_FAILED'); return failure("UNAVAILABLE", "Eingang konnte nicht geladen werden. Fehlercode: INTAKE_CAPTURE_READ_FAILED."); }
-}
-/** U-241: one explicit routing decision on the saved intake; the original never changes. */
-export async function chooseIntakeCaptureKind(input: unknown): Promise<IntakeCaptureResult> {
-  if (!record(input) || Object.keys(input).sort().join(",") !== "clientEventId,itemId,kind,version"
-    || typeof input.itemId !== "string" || !UUID.test(input.itemId)
-    || typeof input.clientEventId !== "string" || !UUID.test(input.clientEventId)
-    || !Number.isSafeInteger(input.version) || (input.version as number) < 1
-    || !CAPTURE_KINDS.some(kind => kind === input.kind)) return failure("VALIDATION_ERROR", "Art oder Eingangskennung fehlt.");
-  const value = input as IntakeCaptureKindInput;
-  const auth = await authorizedIntakeContext(); if ("code" in auth) return auth;
-  try {
-    const rejected = await withPrivilegedTenantTransaction(auth, async tx => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${value.itemId},0))`);
-      const rows = await tx.execute<{ version: number; kanal: string; erstellt_von: string; einsatz: string; anliegen: string[]; vorgang_art: string | null; vorgang_id: string | null }>(sql`
-        SELECT version, kanal, erstellt_von::text, einsatz, anliegen, vorgang_art, vorgang_id FROM public.intake_item
-        WHERE tenant_id=${auth.tenantId} AND id=${value.itemId}::uuid FOR UPDATE`);
-      if (rows.length !== 1) return failure("NOT_FOUND", "Eingang wurde nicht gefunden.");
-      const row = rows[0];
-      if (!mayAccessCaptureContent(auth, row.kanal) || row.erstellt_von !== auth.userId && !hasAuthorizationArea(auth, "mails")) return failure("FORBIDDEN", "Die Art dieses Eingangs darf nur der Erfasser oder das Büro wählen.");
-      const receipts = await tx.execute<{ von: string; nachher: { command: string; kind: string; inputVersion: number; version: number } }>(sql`
-        SELECT von::text, nachher FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${value.itemId}::uuid AND art='erkannt' AND befehl_id=${value.clientEventId}::uuid`);
-      if (receipts.length) {
-        const receipt = receipts[0];
-        return receipts.length === 1 && receipt.von === auth.userId && receipt.nachher.command === "eingang.art" && receipt.nachher.kind === value.kind
-          && receipt.nachher.inputVersion === value.version && receipt.nachher.version === row.version ? null : failure("CONFLICT", "Die Auswahlkennung gehört zu einem anderen Eingangsstand.");
-      }
-      if (row.version !== value.version || row.einsatz !== "offen") return failure("CONFLICT", "Eingang wurde inzwischen weiterbearbeitet. Bitte neu öffnen.");
-      if (value.kind !== "rechnung" && intakeInvoiceReviewRequired(row.anliegen, row.vorgang_art, row.vorgang_id)) return failure("CONFLICT", "Dieser Eingang enthält eine Rechnung. Bitte im Rechnungsweg bearbeiten.");
-      await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen',entschieden_von=${auth.userId},entschieden_am=statement_timestamp()
-        WHERE tenant_id=${auth.tenantId} AND item_id=${value.itemId}::uuid AND feld='art' AND status='uebernommen'`);
-      await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,feld,wert,sicherheit,regel,grund,status,entschieden_von,entschieden_am)
-        VALUES(${auth.tenantId},${value.itemId}::uuid,'art',${JSON.stringify(value.kind)}::jsonb,'sicher','hand','Art vom Erfasser gewählt','uebernommen',${auth.userId},statement_timestamp())`);
-      await tx.execute(sql`UPDATE public.intake_item SET version=version+1,geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),
-        anliegen=CASE WHEN ${value.kind === "rechnung"} AND NOT ('rechnung'=ANY(anliegen)) THEN array_append(anliegen,'rechnung') ELSE anliegen END,
-        anliegen_offen=CASE WHEN ${value.kind === "rechnung"} AND NOT ('rechnung'=ANY(anliegen_offen)) THEN array_append(anliegen_offen,'rechnung') ELSE anliegen_offen END
-        WHERE tenant_id=${auth.tenantId} AND id=${value.itemId}::uuid`);
-      await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-        VALUES(${auth.tenantId},${value.itemId}::uuid,'erkannt',${value.clientEventId}::uuid,${auth.userId},${JSON.stringify({ command: "eingang.art", kind: value.kind, inputVersion: value.version, version: row.version + 1 })}::jsonb)`);
-      return null;
-    });
-    return rejected ?? await intakeCaptureSnapshot(auth, value.itemId);
-  } catch{ recordObservedFailure('INTAKE_KIND_WRITE_FAILED'); return failure("UNAVAILABLE", "Die gewählte Art wurde nicht bestätigt. Original bleibt erhalten · Code: INTAKE_KIND_WRITE_FAILED."); }
 }
 export async function discardIntakeCapture(input:unknown):Promise<IntakeCaptureResult>{
   if(!record(input)||Object.keys(input).sort().join(",")!=="clientEventId,itemId,version"

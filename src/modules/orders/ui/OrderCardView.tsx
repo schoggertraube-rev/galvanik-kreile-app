@@ -10,6 +10,7 @@ import {
   type OrderCardActionPorts,
   type OrderCardEvidence,
   type OrderCardGoodsOutMode,
+  type OrderCardModel,
   type OrderCardState,
 } from "../server/types";
 import {
@@ -143,6 +144,11 @@ const EVIDENCE_STATE_LABEL: Record<OrderCardEvidence["state"], string> = {
 
 function evidenceLabel(entry: OrderCardEvidence): string {
   return `${EVIDENCE_SOURCE_LABEL[entry.source]} · ${EVIDENCE_STATE_LABEL[entry.state]}`;
+}
+
+function photoMissing(card: OrderCardModel, itemId: string): boolean | null {
+  if (card.intakePhotoParts?.includes(itemId) || card.evidence.some(entry => entry.itemIds.includes(itemId))) return false;
+  return card.intakePhotoParts === null ? null : true;
 }
 
 function OrderHandoverPanel({card}:{card:OrderCardData}){
@@ -335,7 +341,7 @@ export function OrderCardView({
     {complaintsPanel}
     {next ? <KartenBlock><NaechsteAktion titel={next.title} aktionen={<Button art={actions.freeze.visible ? "erledigen" : "primaer"} icon={next.icon} text={next.text} disabled={!next.enabled} onClick={next.onClick} />} /></KartenBlock> : null}
     <KartenBlock label="Teile" rechts={<Button art="leise" icon="plus" text="Teil hinzufügen" disabled={!contentEnabled || card.items.length >= 20} onClick={() => contentEnabled ? setItemOpen("new") : unavailable(actions.content?.reason)} />}>
-      <div className="kr-teile">{card.items.map((item) => <Teil key={item.id} nr={`Pos. ${item.position}`} name={item.name} meta={`${item.surface} · ${item.quantity} ${item.unit ?? "Einheit fehlt"} · ${item.material ?? "Material nicht hinterlegt"}${item.extraWork.length ? ` · ${item.extraWork.length} Mehrarbeit` : ""}`} fertig={Boolean(item.finished) || current >= 2} fotoFehlt={!card.evidence.some((entry) => entry.itemIds.includes(item.id))} geraet={device} onFoto={() => actions.photo?.enabled && actions.onOpenPhoto ? actions.onOpenPhoto() : unavailable(actions.photo?.reason)} aktionen={<><Button art={item.finished ? "erledigen" : "sekundaer"} icon="check" text={device === "handy" ? undefined : "fertig"} label={`Teil ${item.finished ? "wieder öffnen" : "fertig melden"}`} disabled={!actions.onToggleItemFinished || !actions.itemStatus?.enabled || current >= 2} onClick={() => void actions.onToggleItemFinished?.(item.id, !item.finished)} /><Button art="sekundaer" icon="edit" label="Teil bearbeiten" disabled={!contentEnabled} onClick={() => contentEnabled ? setItemOpen(item.id) : unavailable(actions.content?.reason)} /></>} />)}</div>
+      <div className="kr-teile">{card.items.map((item) => <Teil key={item.id} nr={`Pos. ${item.position}`} name={item.name} meta={`${item.surface} · ${item.quantity} ${item.unit ?? "Einheit fehlt"} · ${item.material ?? "Material nicht hinterlegt"}${item.extraWork.length ? ` · ${item.extraWork.length} Mehrarbeit` : ""}`} fertig={Boolean(item.finished) || current >= 2} fotoFehlt={photoMissing(card, item.id)} geraet={device} onFoto={() => actions.photo?.enabled && actions.onOpenPhoto ? actions.onOpenPhoto() : unavailable(actions.photo?.reason)} aktionen={<><Button art={item.finished ? "erledigen" : "sekundaer"} icon="check" text={device === "handy" ? undefined : "fertig"} label={`Teil ${item.finished ? "wieder öffnen" : "fertig melden"}`} disabled={!actions.onToggleItemFinished || !actions.itemStatus?.enabled || current >= 2} onClick={() => void actions.onToggleItemFinished?.(item.id, !item.finished)} /><Button art="sekundaer" icon="edit" label="Teil bearbeiten" disabled={!contentEnabled} onClick={() => contentEnabled ? setItemOpen(item.id) : unavailable(actions.content?.reason)} /></>} />)}</div>
       {card.items.length === 0 ? <Zustand art="leer" text="Für diesen Auftrag sind noch keine Positionen erfasst." /> : null}
       {actions.evidence.visible && attachmentPanel ? <div className="kr-stapel">{attachmentPanel}</div> : null}
     </KartenBlock>

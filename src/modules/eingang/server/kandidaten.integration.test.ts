@@ -69,9 +69,10 @@ it('ordnet einen belegten Kunden einmal zu und lässt bei zwei gleich sicheren T
         VALUES (${id},${tenant},${id},'datei','geraet',${auth.data.userId},${email})`;
       return id;
     };
-    const run = (itemId: string) => withPrivilegedTenantTransaction(auth.data, tx => sucheKandidatenInTransaction(tx,
+    const run = (itemId: string,selbstHandeln=true) => withPrivilegedTenantTransaction(auth.data, tx => sucheKandidatenInTransaction(tx,
       { tenantId: tenant, akteur: auth.data.userId }, itemId, randomUUID(),
       {
+        eingang_selbst_handeln:selbstHandeln,
         eingang_vorschlaege_max: 1, ki_sicherheitsschwelle: 1,
         eingang_kandidat_stufen: { ustid: 1, adresse: 1, domain: 1, name: 0.6, telefon: 0.8, mailfaden: 1, teil: 0.8, ware_erwartet: 0.6 },
       }, {
@@ -86,6 +87,11 @@ it('ordnet einen belegten Kunden einmal zu und lässt bei zwei gleich sicheren T
       WHERE tenant_id=${tenant} AND item_id=${id} AND feld='kunde'`;
 
     const firstCustomer = await createTestCustomer('Galvano Muster', email, '+49 711 5550101');
+    const nurVorschlag=await source();
+    expect(await run(nurVorschlag,false)).toBe('ok');
+    expect(await read(nurVorschlag)).toEqual([{kunde_id:null,zuordnung:'offen'}]);
+    expect(await readVorschlaege(nurVorschlag)).toMatchObject([{wert:firstCustomer,status:'offen',sicherheit:'sicher'}]);
+    expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${nurVorschlag} AND art='zugeordnet'`).toHaveLength(0);
     const unique = await source();
     expect(await run(unique)).toBe('ok');
     expect(await run(unique)).toBe('keine');

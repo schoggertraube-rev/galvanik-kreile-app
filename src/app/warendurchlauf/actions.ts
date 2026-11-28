@@ -260,11 +260,13 @@ export async function getGalvanikHandoffAttachmentsAction(
   const evidenceDomain = await import("@/lib/server/evidenceRead");
   const evidence = await evidenceDomain.readOrderEvidenceRecords(authorization.data, input);
   if (evidence.code !== "OK") return evidence;
+  const originals=await domain.readHandoffIntakeOriginals(authorization.data,input);
   return {
     code: "OK" as const,
     data: {
       receipts: result.data,
       evidenceRecords: evidence.data satisfies EvidenceReadRecord[],
+      ...(originals.code==='OK'?{intakeFiles:originals.data}:{intakeFilesUnavailable:originals.message}),
       canOperate: authorization.data.permissions.includes("perm_op_photos"),
       currentActorId: authorization.data.userId,
     },
@@ -288,7 +290,7 @@ export async function reserveGalvanikHandoffAttachmentAction(
   const authorization = await authorizeOrderStationAttachment("perm_op_photos");
   if (!authorization.ok) return authorization.result;
   const domain = await import("@/lib/server/orderStationAttachment");
-  return domain.reserveOrderStationAttachment(authorization.data, input);
+  return domain.reserveOrderStationAttachment(authorization.data, input,true);
 }
 
 export async function finalizeGalvanikHandoffAttachmentAction(

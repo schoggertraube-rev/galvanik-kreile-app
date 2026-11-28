@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { StartAppAdapter } from "./StartAppAdapter";
 import type { StartUserDto } from "@/lib/auth/userDtos";
@@ -10,7 +11,12 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 export const dynamic = "force-dynamic";
 
 export default async function StartPage() {
-  if ((await resolveAuthorization()).ok) redirect("/");
+  if ((await resolveAuthorization()).ok) {
+    // The PIN client opens the home page after the action has set the session.
+    // Avoid a second navigation in Next's render of the action response.
+    if ((await headers()).has("next-action")) return null;
+    redirect("/");
+  }
 
   let users: StartUserDto[] = [];
   let loginUnavailable = false;

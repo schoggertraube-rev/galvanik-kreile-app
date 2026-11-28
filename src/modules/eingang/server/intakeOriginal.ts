@@ -13,6 +13,7 @@ import {readLiveOrderCard} from "@/lib/server/orderCardRead";
 import {allowedOriginalExtension,automaticMimeReply,safeOriginalBytes} from "../originalSafety";
 import type {IntakeCapture} from '../captureContract';
 import type {InvoicePageRange} from '../invoiceContract';
+import {intakeFileContextEvidence,intakeFileHandoffEvidence} from '@/lib/server/orderStationAttachment';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -20,14 +21,15 @@ export const gespeichertesBelegoriginal = sql`file.art<>'mime' AND file.mime<>'m
  AND EXISTS(SELECT 1 FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
   AND event.art='original_gespeichert' AND event.nachher->>'fileId'=file.id::text
   AND (event.nachher->>'sha256' IS NULL OR event.nachher->>'sha256'=file.sha256))`;
-type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:string;mime:string;bytes:string;sha256:string;speicherpfad:string;geoeffnet:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;invoice_context:boolean};
+type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:string;mime:string;bytes:string;sha256:string;speicherpfad:string;geoeffnet:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;zuordnung_regel:string|null;invoice_context:boolean;handoff_context:boolean;handoff_proven:boolean};
 
 type IncomingMime={itemId:string;version:number};
 
 async function readOriginalFileInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,fileId:string,mime?:IncomingMime){
  const rows=await tx.execute<OriginalRow>(sql`
-  SELECT file.id::text,file.item_id::text,file.art,source.kanal,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.geoeffnet,source.kunde_id,source.vorgang_id,source.vorgang_art,
-   (source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context
+  SELECT file.id::text,file.item_id::text,file.art,source.kanal,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.geoeffnet,source.kunde_id,source.vorgang_id,source.vorgang_art,source.zuordnung_regel,
+   (source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context,
+   coalesce(${intakeFileContextEvidence} ? 'uebergabeVersion',false) AS handoff_context,${intakeFileHandoffEvidence} AS handoff_proven
   FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
   WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid
    ${mime?sql`AND source.id=${mime.itemId}::uuid AND source.version=${mime.version} AND source.kanal='mail' AND source.richtung='rein'
@@ -127,11 +129,20 @@ export async function readIntakeAutomaticReply(auth:AuthorizationSnapshot,input:
 }
 
 /** P103: project the same stored originals onto their associated order, without copying. */
+const validCustomerId=(id:unknown):id is string=>typeof id==='string'&&id.trim()===id&&id.length>0&&id.length<=128;
+
 export async function readOrderIntakeOriginals(orderId:unknown){
- if(typeof orderId!=='string'||!UUID.test(orderId))return {code:'VALIDATION_ERROR' as const,message:'Auftragskennung ist ungültig.'};
+ return readDomainIntakeOriginals('ORDER',orderId);
+}
+
+export async function readDomainIntakeOriginals(target:'ORDER'|'CUSTOMER',id:unknown){
+ if(target==='ORDER'?(typeof id!=='string'||!UUID.test(id)):!validCustomerId(id))return {code:'VALIDATION_ERROR' as const,message:target==='ORDER'?'Auftragskennung ist ungültig.':'Kundenkennung ist ungültig.'};
+ const targetId=id as string;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
  if(!auth.data.permissions.includes('perm_view_leitstand'))return {code:'FORBIDDEN' as const,message:'Auftragskarte ist nicht erlaubt.'};
- const order=await readLiveOrderCard(auth.data,{orderId});if(order.code!=='OK')return {code:order.code,message:order.message};
+ if(target==='ORDER'){
+  const order=await readLiveOrderCard(auth.data,{orderId:targetId});if(order.code!=='OK')return {code:order.code,message:order.message};
+ }else if(!hasAuthorizationArea(auth.data,'kunden'))return {code:'FORBIDDEN' as const,message:'Kundenkarte ist nicht erlaubt.'};
  try{return await withPrivilegedTenantTransaction(auth.data,async tx=>{
   const rows=await tx.execute<{id:string;itemId:string;name:string;mime:string;bytes:string;at:string;part:number;total:number;secured:boolean}>(sql`
    WITH RECURSIVE chain AS (
@@ -146,7 +157,8 @@ export async function readOrderIntakeOriginals(orderId:unknown){
     JOIN totals ON totals.root=chain.root JOIN public.intake_file file ON file.tenant_id=source.tenant_id AND (
       file.item_id=source.id OR EXISTS(SELECT 1 FROM public.intake_event created WHERE created.tenant_id=source.tenant_id
         AND created.item_id=source.id AND created.art='angelegt' AND jsonb_exists(created.nachher->'originalFileIds',file.id::text)))
-   WHERE source.tenant_id=${auth.data.tenantId} AND source.vorgang_art='auftrag' AND source.vorgang_id=${orderId}
+   WHERE source.tenant_id=${auth.data.tenantId} AND ${target==='ORDER'?sql`source.vorgang_art='auftrag' AND source.vorgang_id=${targetId}`:
+    sql`source.kunde_id=${targetId} AND source.zuordnung_regel='kontext' AND source.vorgang_art IS NULL AND source.kanal<>'mail'`}
    ORDER BY source.erstellt_am,source.id,file.reihenfolge,file.id`);
   return {code:'OK' as const,originals:rows.map(row=>({...row,bytes:Number(row.bytes)}))};
  });}catch(error){console.error('[ORDER_INTAKE_ORIGINALS_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Eingangsoriginale konnten nicht geladen werden. Code: ORDER_INTAKE_ORIGINALS_READ_FAILED.'};}
@@ -156,17 +168,19 @@ export async function openIntakeOriginal(input:unknown){
  if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Dateikennung fehlt."};
  const value=input as Record<string,unknown>;
  const keys=Object.keys(value).sort().join(',');
- if(!['clientEventId,fileId','clientEventId,fileId,orderId','clientEventId,fileId,invoiceId'].includes(keys)
+ if(!['clientEventId,fileId','clientEventId,fileId,orderId','clientEventId,fileId,invoiceId','clientEventId,customerId,fileId'].includes(keys)
   ||typeof value.fileId!=='string'||!UUID.test(value.fileId)
   ||typeof value.clientEventId!=='string'||!UUID.test(value.clientEventId)
   ||value.orderId!==undefined&&(typeof value.orderId!=='string'||!UUID.test(value.orderId))
-  ||value.invoiceId!==undefined&&(typeof value.invoiceId!=='string'||!UUID.test(value.invoiceId))) {
+  ||value.invoiceId!==undefined&&(typeof value.invoiceId!=='string'||!UUID.test(value.invoiceId))
+  ||value.customerId!==undefined&&!validCustomerId(value.customerId)) {
   return {code:'VALIDATION_ERROR' as const,message:'Dateikennung ist ungültig.'};
  }
  const requestedInvoice=typeof value.invoiceId==='string'?value.invoiceId:undefined;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:"UNAUTHENTICATED" as const,message:auth.message};
  const bookkeeping=hasAuthorizationArea(auth.data,'buchhaltung');
- if(!bookkeeping&&(requestedInvoice||!hasAuthorizationArea(auth.data,'eingang')&&!(value.orderId&&auth.data.permissions.includes('perm_view_leitstand')))) {
+ const customerVisible=typeof value.customerId==='string'&&auth.data.permissions.includes('perm_view_leitstand')&&hasAuthorizationArea(auth.data,'kunden');
+ if(!bookkeeping&&(requestedInvoice||!hasAuthorizationArea(auth.data,'eingang')&&!customerVisible&&!(value.orderId&&auth.data.permissions.includes('perm_view_leitstand')))) {
   return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
  }
  if(typeof value.orderId==='string'){
@@ -175,6 +189,9 @@ export async function openIntakeOriginal(input:unknown){
  try{
   const file=await readOriginalFile(auth.data,value.fileId);
   if(!file)return {code:"NOT_FOUND" as const,message:"Original wurde nicht gefunden."};
+  if(file.handoff_context&&(!value.orderId||!file.handoff_proven||!auth.data.permissions.includes('perm_op_photos'))){
+   return {code:'FORBIDDEN' as const,message:'Original gehört nicht zu diesem sichtbaren Auftrag.'};
+  }
   const orderAccess=value.orderId&&auth.data.permissions.includes('perm_view_leitstand')?await withPrivilegedTenantTransaction(auth.data,async tx=>{
    const linked=await tx.execute(sql`SELECT source.id FROM public.intake_item source
     WHERE source.tenant_id=${auth.data.tenantId} AND source.vorgang_art='auftrag' AND source.vorgang_id=${value.orderId}
@@ -183,10 +200,12 @@ export async function openIntakeOriginal(input:unknown){
    return linked.length===1;
   }):false;
   if(value.orderId&&!orderAccess)return {code:'FORBIDDEN' as const,message:'Original gehört nicht zu diesem sichtbaren Auftrag.'};
+  const customerAccess=customerVisible&&file.kunde_id===value.customerId&&file.vorgang_art===null&&file.zuordnung_regel==='kontext'&&file.kanal!=='mail'&&!isMailOriginal(file);
+  if(value.customerId&&!customerAccess)return {code:'FORBIDDEN' as const,message:'Original gehört nicht zu diesem Kunden.'};
   const invoice=bookkeeping&&!isMailOriginal(file)&&(requestedInvoice||file.invoice_context)?await withPrivilegedTenantTransaction(auth.data,
    tx=>invoiceLink(tx,auth.data.tenantId,file.item_id,file.id,requestedInvoice)):null;
   if(requestedInvoice&&!invoice)return {code:'NOT_FOUND' as const,message:'Original wurde nicht gefunden.'};
-  const {permitted,invoiceOnly,restricted}=originalAccess(auth.data,file,orderAccess,invoice!==null);
+  const {permitted,invoiceOnly,restricted}=originalAccess(auth.data,file,orderAccess||customerAccess,invoice!==null);
   if(!permitted)return {code:'FORBIDDEN' as const,message:originalAccessRequired};
   if(restricted)return {code:'OK' as const,original:{id:file.id,itemId:file.item_id,name:file.dateiname,mime:file.mime,bytes:Number(file.bytes),sha256:file.sha256,customerId:file.kunde_id,orderId:file.vorgang_art==='auftrag'?file.vorgang_id:null,previewable:false,url:null,downloadUrl:null,restricted:true}};
   if(!allowedOriginalExtension(file.dateiname)){await recordIntakeFileBlocked(auth.data,file.id,value.clientEventId,'Dateityp nicht freigegeben');return {code:"FILE_BLOCKED" as const,message:"Dateityp wird nicht geöffnet oder heruntergeladen. Fehlercode: FILE_BLOCKED."};}

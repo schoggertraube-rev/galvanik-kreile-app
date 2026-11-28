@@ -547,12 +547,12 @@ export async function getLiveOrderCardAction(input:{orderId:string}):ReturnType<
 
 async function readLiveOrderCardForPage(
   input: { orderId: string },
-): Promise<OrderCardActionResult<{ serverReadAt?:string; cacheLoginScope?:string; handoverConsequences?:Awaited<ReturnType<typeof import('@/lib/server/commands/immutableInvoiceCommand').readInvoiceShippingConsequences>>; nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
+): Promise<OrderCardActionResult<{ serverReadAt?:string; cacheLoginScope?:string; handoverConsequences?:Awaited<ReturnType<typeof import('@/lib/server/commands/immutableInvoiceCommand').readInvoiceShippingConsequences>>; nextActionRule?:ReturnType<typeof import('@/lib/server/v45OrderRead').readV45OrderRule>; card: LiveOrderCard; evidence: EvidenceReadRecord[]; intakePhotoParts?:readonly string[]|null; customerInformed?:Awaited<ReturnType<typeof import('@/lib/server/orderReleaseRead').readOrderInformed>>; manualShipping?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readManualShipping>>; printQueue?:Awaited<ReturnType<typeof import('@/modules/orders/server-public').readOrderPrintQueue>>; pickupAppointment?:Awaited<ReturnType<typeof import('@/lib/server/pickupAppointmentPort').readOrderPickupAppointment>> }>> {
   noStore();
   try {
     const authorization = await resolveOrderCardAuthorization();
     if (!authorization.ok) return authorization.result;
-    const [{ readLiveOrderCard }, { readEvidenceRecordsByTarget }] = await Promise.all([
+    const [{ readLiveOrderCard }, { readOrderEvidenceBatch }] = await Promise.all([
       import("@/lib/server/orderCardRead"),
       import("@/lib/server/evidenceRead"),
     ]);
@@ -591,7 +591,7 @@ async function readLiveOrderCardForPage(
       card.data.handoverNotice?.taskId?(async()=>{const {withPrivilegedTenantTransaction}=await import('@/lib/server/privilegedDb');return withPrivilegedTenantTransaction(authorization.data,tx=>tasks.readOrderHandoverTaskState(tx,authorization.data,{orderId:card.data.id,taskId:card.data.handoverNotice!.taskId!}));})():Promise.resolve(undefined),
       card.data.handoverMode==='shipping'?fundament.readShippingSettings({tenantId:authorization.data.tenantId,actorId:authorization.data.userId,canRead:true}):Promise.resolve(undefined),
       readInvoiceShippingConsequences(authorization.data,{orderId:card.data.id,expectedVersion:card.data.version,manualHandoverEventId:card.data.handoverNotice?.manualEventId},readInvoiceVat,fundament.readShippingSettingsInTransaction),
-      readEvidenceRecordsByTarget(authorization.data,{targetType:'ORDER',targetId:input.orderId}),
+      readOrderEvidenceBatch(authorization.data,[input.orderId]).then(results=>results.get(input.orderId)),
       orders.readOrderActors(authorization.data,{orderId:input.orderId,version:card.data.version}),
       card.data.handoverMode==='shipping'?readManualShippingForOrder(authorization.data,input.orderId):Promise.resolve(undefined),
       readOrderInformed(authorization.data,input.orderId),orders.readOrderPrintQueue(authorization.data,input.orderId),
@@ -605,9 +605,25 @@ async function readLiveOrderCardForPage(
       card.data.shippingService=shippingSettings.code==='OK'?shippingSettings.settings.service:null;
       if(shippingSettings.code!=='OK')card.data.shippingServiceError=shippingSettings.message;
     }
+    if(!evidence)return {code:'UNAVAILABLE',message:'Nachweise konnten nicht sicher geladen werden.'};
     if(evidence.code!=='OK')return evidence;
     if(customerInformed.code==='OK'&&customerInformed.orderVersion!==card.data.version)return {code:'UNAVAILABLE',message:'Der Auftrag wurde während des Lesens geändert. Lade die Auftragskarte erneut.'};
-    return { code: "OK", data: { ...(handoverConsequences?{handoverConsequences}:{}),serverReadAt:new Date().toISOString(),cacheLoginScope,nextActionRule:readV45OrderRule(authorization.data,card.data,{orderId:input.orderId,value:customerInformed},{orderId:input.orderId,records:evidence.data},{shipping:handoverConsequences,payment,shipment:manualShipping}),card: {...card.data,terminAnzeige,...(actors.code==='OK'?{actors:actors.actors}:{actorReadError:actors.message})}, evidence: evidence.data,customerInformed,printQueue,pickupAppointment,...(manualShipping?{manualShipping}:{}) } };
+    return {
+      code: "OK",
+      data: {
+        ...(handoverConsequences ? { handoverConsequences } : {}),
+        serverReadAt: new Date().toISOString(),
+        cacheLoginScope,
+        nextActionRule: readV45OrderRule(authorization.data, card.data, { orderId:input.orderId, value:customerInformed },
+          { orderId:input.orderId, records:evidence.data, intakePhotoParts:evidence.intakePhotoParts },
+          { shipping:handoverConsequences, payment, shipment:manualShipping }),
+        card: { ...card.data, terminAnzeige, ...(actors.code === "OK" ? { actors:actors.actors } : { actorReadError:actors.message }) },
+        evidence: evidence.data,
+        intakePhotoParts: evidence.intakePhotoParts,
+        customerInformed, printQueue, pickupAppointment,
+        ...(manualShipping ? { manualShipping } : {}),
+      },
+    };
   } catch (error) {
     console.error("[ORDER_CARD_ACTION_ERROR]", {
       orderId: input.orderId,

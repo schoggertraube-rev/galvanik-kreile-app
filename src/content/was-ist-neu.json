@@ -1,6 +1,16 @@
 [
   {
     "datum": "2026-11-28",
+    "pr": 348,
+    "seite": "auftraege",
+    "ziel": "/orders",
+    "punkte": [
+      "Neue Fotos und Dokumente aus Kundenkarte, Auftragskarte und Werkstatt landen im selben Eingang. Ältere Originale kannst du weiterhin öffnen.",
+      "Bei einem Entwurfskonflikt kannst du zwischen deiner und der neueren Fassung wählen."
+    ]
+  },
+  {
+    "datum": "2026-11-28",
     "pr": 347,
     "seite": "heute",
     "ziel": "/",
