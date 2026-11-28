@@ -45,8 +45,10 @@ export async function liesGetrenntenRechnungswiderspruch(tx:PrivilegedTenantTran
   originale.set(original.id,original);
  }
  for(const original of originale.values()){
-  const fehlendeDruckwerte=original.ocr.filter(ocr=>!original.werte.some(druck=>
-   druck.field===ocr.field&&(ocr.page===null||druck.page===ocr.page)));
+  const gedruckterBetrag=rechnungsBelegwerte(original.werte).bruttoCent;
+  const fehlendeDruckwerte=original.ocr.filter(ocr=>
+   (ocr.field!=='rechnung.betrag'||gedruckterBetrag===null)&&!original.werte.some(druck=>
+    druck.field===ocr.field&&(ocr.page===null||druck.page===ocr.page)));
   original.werte.push(...fehlendeDruckwerte);
  }
  const gewaehltes=originale.get(fileId);

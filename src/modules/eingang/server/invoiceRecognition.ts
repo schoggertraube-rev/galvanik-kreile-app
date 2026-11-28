@@ -11,11 +11,11 @@ function recognizedDate(raw:string){
  if(!match)return null;const iso=match[3]+'-'+match[2].padStart(2,'0')+'-'+match[1].padStart(2,'0');return invoiceDate(iso)?iso:null;
 }
 /** Translate the existing Azure response once, retaining its real source and uncertainty. */
-export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[]):InvoiceSuggestion[]{
+export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[],hatGedruckteRechnungsnummer=false):InvoiceSuggestion[]{
  const label=(value:string)=>value.toLocaleLowerCase('de-DE').normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
  const isNumber=(value:string)=>/^(rechnungs ?(nummer|nr)|rechnung nr|invoice (number|no|id))$/.test(value);
  const isDate=(value:string)=>/^(rechnungsdatum|rechnung datum|invoice date)$/.test(value);
- if(!suggestions.some(value=>isNumber(label(value.label))||isDate(label(value.label))))return [];
+ if(!hatGedruckteRechnungsnummer&&!suggestions.some(value=>isNumber(label(value.label))||isDate(label(value.label))))return [];
  const result:InvoiceSuggestion[]=[],amounts:Record<string,string>={},sources:DocumentSuggestion[]=[],seen=new Set<string>();
  let bruttoQuelle:DocumentSuggestion|undefined;
  for(const suggestion of suggestions){

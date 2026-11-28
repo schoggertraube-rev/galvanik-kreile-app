@@ -13,7 +13,7 @@ import { recognizeInvoiceFields, recognizeInvoicePdf, recognizeInvoiceXml } from
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
 import { sucheKandidatenInTransaction, type KandidatenPorts, type EingangKandidatenEinstellungen } from "./kandidaten";
-import { findeVerdachtsmuster, istEigenerLieferantenwert, istLieferantenwert } from "./eingangsRegeln";
+import { findeVerdachtsmuster, istEigenerLieferantenwert, istLieferantenwert, rechnungsBelegwerte } from "./eingangsRegeln";
 import { istBelegart, schlageBelegidentitaetVor } from "./belegIdentitaet";
 import { speichereGetrenntenRechnungswiderspruch } from "./invoiceOriginalAgreement";
 import { eingangCopy } from "@/ui/eingangCopy";
@@ -29,10 +29,10 @@ export type ReadRecognitionSettings = (tx: PrivilegedTenantTransaction, tenantId
   eingang_verdacht_muster?: readonly string[] | null;
 }>;
 
-function documentSuggestions(suggestions: readonly DocumentSuggestion[]) {
+function documentSuggestions(suggestions: readonly DocumentSuggestion[], hatGedruckteRechnungsnummer:boolean) {
   return [
     ...suggestions.filter(suggestion => suggestion.field !== "DOCUMENT_TEXT"),
-    ...recognizeInvoiceFields(suggestions),
+    ...recognizeInvoiceFields(suggestions,hatGedruckteRechnungsnummer),
   ];
 }
 
@@ -133,6 +133,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const pdfResult=file.mime==='application/pdf'&&!isXml?await recognizeInvoicePdf(bytes):null;
     const xmlResult=isXml?recognizeInvoiceXml(bytes):pdfResult;
     const druckbild=pdfResult?.code==='UNSUPPORTED'?pdfResult.druckwerte:null;
+    const hatGedruckteRechnungsnummer=Boolean(druckbild&&rechnungsBelegwerte(druckbild).nummer);
     const canRead = isMail ? mail !== null : isXml ? xmlResult?.code==='OK'
       : supportsAzureDocument(file.mime, bytes.byteLength, true)
         && (!officeFormat || safeOfficeRecognitionBytes(file.dateiname, bytes, officeFormat));
@@ -218,9 +219,9 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
       else if(druckbild?.length)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen'
         WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND feld='rechnung.druckbild' AND status='offen'`);
-      const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions), ...primaryHeads]:[];
+      const primarySuggestions=ocr?[...documentSuggestions(ocr.data.suggestions,hatGedruckteRechnungsnummer), ...primaryHeads]:[];
       const primaryKeys=new Set(primarySuggestions.map(suggestionKey));
-      const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions), ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto)].filter(suggestion=>{
+      const specialistSuggestions=specialistOcr?[...documentSuggestions(specialistOcr.data.suggestions,hatGedruckteRechnungsnummer), ...readHeadFields(specialistOcr.data.suggestions, goodsPhoto)].filter(suggestion=>{
         const key=suggestionKey(suggestion);
         if(primaryKeys.has(key))return false;
         primaryKeys.add(key);
