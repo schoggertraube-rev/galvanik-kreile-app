@@ -70,14 +70,15 @@ async function deliverTwice(files: Awaited<ReturnType<typeof document>>[], subje
       SELECT file.id::text,file.dateiname AS name,file.sha256 FROM public.intake_file file
       WHERE file.tenant_id=${tenant} AND file.item_id=${first.itemId}::uuid`;
     expect(originals).toHaveLength(files.length + 1);
-    expect(originals.map(original => original.sha256)).toContain(createHash('sha256').update(mime).digest('hex'));
+    const mailOriginal = originals.find(original => original.sha256 === createHash('sha256').update(mime).digest('hex'));
+    if (!mailOriginal) throw Error('TEST_I01_MAIL_ORIGINAL_REQUIRED');
     const fileIds = files.map(file => {
       const original = originals.find(entry => entry.name === file.name);
       expect(original?.sha256).toBe(createHash('sha256').update(file.bytes).digest('hex'));
       if (!original) throw Error('TEST_I01_ATTACHMENT_REQUIRED');
       return original.id;
     });
-    return { itemId: first.itemId, fileIds };
+    return { itemId: first.itemId, fileIds, mailOriginal, mime };
   } finally {
     graph.mockRestore();
   }
@@ -107,7 +108,7 @@ async function save(input: InvoiceSaveInput) {
 
 it('M03–M05 saves 95 and 55 on separate original files of a twice delivered mail', async () => {
   const [supplierA, supplierB] = await Promise.all([supplier('A'), supplier('B')]);
-  const { itemId, fileIds } = await deliverTwice([await document('TEST-L-A.pdf'), await document('TEST-L-B.pdf')]);
+  const { itemId, fileIds, mailOriginal, mime } = await deliverTwice([await document('TEST-L-A.pdf'), await document('TEST-L-B.pdf')]);
   const initial = await invoice(itemId);
   const first = await save(command(itemId, fileIds[0], initial.item.version, supplierA, 'TEST-L-A', '95,00'));
   const firstRead = await invoice(itemId);
@@ -125,8 +126,25 @@ it('M03–M05 saves 95 and 55 on separate original files of a twice delivered ma
   expect(second.id).not.toBe(first.id);
   expect(await withSession(full, () => saveIncomingInvoiceAction(JSON.parse(JSON.stringify(input)))))
     .toMatchObject({ code: 'OK', replayed: true, invoice: { id: second.id } });
-  expect((await invoice(first.id)).invoice).toMatchObject({ item_id: itemId, brutto: '95.00', file_id: fileIds[0] });
-  expect((await invoice(second.id)).invoice).toMatchObject({ item_id: itemId, brutto: '55.00', file_id: fileIds[1] });
+  const firstInvoice = await invoice(first.id);
+  const secondInvoice = await invoice(second.id);
+  expect(firstInvoice.invoice).toMatchObject({ item_id: itemId, brutto: '95.00', file_id: fileIds[0] });
+  expect(secondInvoice.invoice).toMatchObject({ item_id: itemId, brutto: '55.00', file_id: fileIds[1] });
+  for (const view of [firstInvoice, secondInvoice]) {
+    expect(view.originals.filter(file => file.mime === 'message/rfc822')).toEqual([{ ...mailOriginal, mime: 'message/rfc822' }]);
+  }
+  const opened = await withSession(full, () => openIntakeOriginalAction({ fileId: mailOriginal.id, clientEventId: randomUUID() }));
+  if (opened.code !== 'OK' || !opened.original.downloadUrl) throw Error('TEST_I01_MAIL_DOWNLOAD_REQUIRED');
+  const download = await nativeFetch(opened.original.downloadUrl);
+  expect(download.ok).toBe(true);
+  expect(new Uint8Array(await download.arrayBuffer())).toEqual(mime);
+  const bookkeepingOnly = await createFixture(['buchhaltung']);
+  const restricted = await withSession(bookkeepingOnly, () => getIncomingInvoiceAction({ id: first.id }));
+  expect(restricted.code).toBe('OK');
+  if (restricted.code !== 'OK') throw Error('TEST_I01_RESTRICTED_INVOICE_REQUIRED');
+  expect(restricted.view.originals.some(file => file.id === mailOriginal.id)).toBe(false);
+  expect(await withSession(full, () => getIncomingInvoiceAction({ id: itemId, fileId: mailOriginal.id })))
+    .toMatchObject({ code: 'NOT_FOUND' });
   expect((await invoice(itemId, fileIds[1])).invoice?.id).toBe(second.id);
   expect(await withSession(full, () => getIncomingInvoiceAction({ id: itemId }))).toMatchObject({ code: 'CONFLICT' });
   const mailOnly = await createFixture(['mails']);

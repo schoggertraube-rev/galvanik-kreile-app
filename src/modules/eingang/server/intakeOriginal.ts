@@ -4,12 +4,14 @@ import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
 import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
 import type {AuthorizationSnapshot} from "@/lib/server/authorization";
+import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import {createAdminClient} from "@/lib/supabase/admin";
 import {recordIntakeFileBlocked} from "@/lib/server/intakeOriginalAudit";
 import {readLiveOrderCard} from "@/lib/server/orderCardRead";
 import {allowedOriginalExtension,automaticMimeReply,safeOriginalBytes} from "../originalSafety";
 import type {IntakeCapture} from '../captureContract';
+import type {InvoicePageRange} from '../invoiceContract';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type OriginalRow={id:string;item_id:string;art:string;kanal:string;dateiname:string;mime:string;bytes:string;sha256:string;speicherpfad:string;geoeffnet:boolean;kunde_id:string|null;vorgang_id:string|null;vorgang_art:string|null;invoice_context:boolean};
@@ -29,6 +31,38 @@ async function readOriginalFileInTransaction(tx:PrivilegedTenantTransaction,auth
  return rows.length===1?rows[0]:null;
 }
 
+export async function readSecuredIntakeMailOriginal(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string){
+ if(!canSynchronizeIntakeMailbox(auth))return null;
+ const files=await tx.execute<{id:string;name:string;mime:string;sha256:string}>(sql`
+  SELECT file.id::text,file.dateiname AS name,file.mime,file.sha256
+  FROM public.intake_file file
+  WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${itemId}::uuid
+   AND file.art='mime' AND file.mime='message/rfc822' AND lower(file.dateiname) LIKE '%.eml'
+   AND EXISTS(SELECT 1 FROM public.intake_event stored WHERE stored.tenant_id=file.tenant_id
+    AND stored.item_id=file.item_id AND stored.art='original_gespeichert'
+    AND stored.nachher->>'fileId'=file.id::text AND stored.nachher->>'sha256'=file.sha256)
+   AND EXISTS(SELECT 1 FROM public.intake_event imported WHERE imported.tenant_id=file.tenant_id
+    AND imported.item_id=file.item_id AND imported.art='einsatz'
+    AND imported.nachher->>'action'='mail_import_complete' AND imported.nachher->'fileIds' ? file.id::text)
+  LIMIT 2`);
+ return files.length===1?files[0]:null;
+}
+
+async function invoiceLink(tx:PrivilegedTenantTransaction,tenantId:string,itemId:string,fileId:string,invoiceId?:string){
+ const rows=await tx.execute<{id:string;seite_von:number|null;seite_bis:number|null}>(sql`SELECT id::text,seite_von,seite_bis
+  FROM public.supplier_invoice WHERE tenant_id=${tenantId} AND item_id=${itemId}::uuid AND file_id=${fileId}::uuid
+  ${invoiceId?sql`AND id=${invoiceId}::uuid`:sql``} LIMIT 2`);
+ if(rows.length!==1)return null;
+ const row=rows[0];
+ const pages=row.seite_von!==null&&row.seite_bis!==null?{from:row.seite_von,to:row.seite_bis}:null;
+ return {id:row.id,pages};
+}
+
+export function invoicePageFilter(pages:InvoicePageRange|null){
+ return pages?sql`CASE WHEN jsonb_typeof(fundstelle->'page')='number'
+  THEN (fundstelle->>'page')::numeric BETWEEN ${pages.from} AND ${pages.to} ELSE false END`:sql`true`;
+}
+
 function readOriginalFile(auth:AuthorizationSnapshot,fileId:string,mime?:IncomingMime){
  return withPrivilegedTenantTransaction(auth,tx=>readOriginalFileInTransaction(tx,auth,fileId,mime));
 }
@@ -36,10 +70,14 @@ function readOriginalFile(auth:AuthorizationSnapshot,fileId:string,mime?:Incomin
 const originalAccessRequired='Dieses Original benötigt Eingang oder einen sichtbaren Auftrag.';
 const mailAccessRequired='Mail · Inhalt nur fürs Büro';
 
-function originalAccess(auth:AuthorizationSnapshot,file:Pick<OriginalRow,'art'|'mime'|'dateiname'|'kanal'|'invoice_context'>,orderAccess=false){
- const mailOriginal=file.art==='mime'||file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml');
+function isMailOriginal(file:Pick<OriginalRow,'art'|'mime'|'dateiname'>){
+ return file.art==='mime'||file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml');
+}
+
+function originalAccess(auth:AuthorizationSnapshot,file:Pick<OriginalRow,'art'|'mime'|'dateiname'|'kanal'|'invoice_context'>,orderAccess=false,linkedInvoice=false){
+ const mailOriginal=isMailOriginal(file);
  const intake=hasAuthorizationArea(auth,'eingang'),mail=hasAuthorizationArea(auth,'mails');
- const invoiceAccess=hasAuthorizationArea(auth,'buchhaltung')&&file.invoice_context===true&&!mailOriginal;
+ const invoiceAccess=hasAuthorizationArea(auth,'buchhaltung')&&(file.invoice_context===true||linkedInvoice)&&!mailOriginal;
  return {
   permitted:intake||invoiceAccess||orderAccess,
   invoiceOnly:!orderAccess&&invoiceAccess&&(!intake||file.kanal==='mail'&&!mail),
@@ -111,9 +149,20 @@ export async function readOrderIntakeOriginals(orderId:unknown){
 export async function openIntakeOriginal(input:unknown){
  if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Dateikennung fehlt."};
  const value=input as Record<string,unknown>;
- if(!['clientEventId,fileId','clientEventId,fileId,orderId'].includes(Object.keys(value).sort().join(','))||typeof value.fileId!=="string"||!UUID.test(value.fileId)||typeof value.clientEventId!=="string"||!UUID.test(value.clientEventId)||value.orderId!==undefined&&(typeof value.orderId!=='string'||!UUID.test(value.orderId)))return {code:"VALIDATION_ERROR" as const,message:"Dateikennung ist ungültig."};
+ const keys=Object.keys(value).sort().join(',');
+ if(!['clientEventId,fileId','clientEventId,fileId,orderId','clientEventId,fileId,invoiceId'].includes(keys)
+  ||typeof value.fileId!=='string'||!UUID.test(value.fileId)
+  ||typeof value.clientEventId!=='string'||!UUID.test(value.clientEventId)
+  ||value.orderId!==undefined&&(typeof value.orderId!=='string'||!UUID.test(value.orderId))
+  ||value.invoiceId!==undefined&&(typeof value.invoiceId!=='string'||!UUID.test(value.invoiceId))) {
+  return {code:'VALIDATION_ERROR' as const,message:'Dateikennung ist ungültig.'};
+ }
+ const requestedInvoice=typeof value.invoiceId==='string'?value.invoiceId:undefined;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:"UNAUTHENTICATED" as const,message:auth.message};
-  if(!hasAuthorizationArea(auth.data,'eingang')&&!hasAuthorizationArea(auth.data,'buchhaltung')&&!(value.orderId&&auth.data.permissions.includes('perm_view_leitstand')))return {code:"FORBIDDEN" as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
+ const bookkeeping=hasAuthorizationArea(auth.data,'buchhaltung');
+ if(!bookkeeping&&(requestedInvoice||!hasAuthorizationArea(auth.data,'eingang')&&!(value.orderId&&auth.data.permissions.includes('perm_view_leitstand')))) {
+  return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
+ }
  if(typeof value.orderId==='string'){
   const order=await readLiveOrderCard(auth.data,{orderId:value.orderId});if(order.code!=='OK')return {code:order.code,message:order.message};
  }
@@ -128,7 +177,10 @@ export async function openIntakeOriginal(input:unknown){
    return linked.length===1;
   }):false;
   if(value.orderId&&!orderAccess)return {code:'FORBIDDEN' as const,message:'Original gehört nicht zu diesem sichtbaren Auftrag.'};
-  const {permitted,invoiceOnly,restricted}=originalAccess(auth.data,file,orderAccess);
+  const invoice=bookkeeping&&!isMailOriginal(file)&&(requestedInvoice||file.invoice_context)?await withPrivilegedTenantTransaction(auth.data,
+   tx=>invoiceLink(tx,auth.data.tenantId,file.item_id,file.id,requestedInvoice)):null;
+  if(requestedInvoice&&!invoice)return {code:'NOT_FOUND' as const,message:'Original wurde nicht gefunden.'};
+  const {permitted,invoiceOnly,restricted}=originalAccess(auth.data,file,orderAccess,invoice!==null);
   if(!permitted)return {code:'FORBIDDEN' as const,message:originalAccessRequired};
   if(restricted)return {code:'OK' as const,original:{id:file.id,itemId:file.item_id,name:file.dateiname,mime:file.mime,bytes:Number(file.bytes),sha256:file.sha256,customerId:file.kunde_id,orderId:file.vorgang_art==='auftrag'?file.vorgang_id:null,previewable:false,url:null,downloadUrl:null,restricted:true}};
   if(!allowedOriginalExtension(file.dateiname)){await recordIntakeFileBlocked(auth.data,file.id,value.clientEventId,'Dateityp nicht freigegeben');return {code:"FILE_BLOCKED" as const,message:"Dateityp wird nicht geöffnet oder heruntergeladen. Fehlercode: FILE_BLOCKED."};}
@@ -139,18 +191,20 @@ export async function openIntakeOriginal(input:unknown){
   if(preview.error||download.error||!preview.data?.signedUrl||!download.data?.signedUrl)throw Error('INTAKE_ORIGINAL_LINK_UNAVAILABLE');
   const saved=await withPrivilegedTenantTransaction(auth.data,async tx=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-original-open:'||${auth.data.tenantId}||':'||${value.clientEventId},0))`);
-   const prior=await tx.execute<{nachher:{fileId:string;action:string}}>(sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${auth.data.tenantId} AND art='einsatz' AND befehl_id=${value.clientEventId}::uuid AND von=${auth.data.userId}`);
-   if(prior.length)return prior.length===1&&prior[0].nachher.fileId===file.id&&prior[0].nachher.action==='original_geoeffnet';
+   const prior=await tx.execute<{nachher:{fileId:string;action:string;invoiceId?:string}}>(sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${auth.data.tenantId} AND art='einsatz' AND befehl_id=${value.clientEventId}::uuid AND von=${auth.data.userId}`);
+   if(prior.length)return prior.length===1&&prior[0].nachher.fileId===file.id&&prior[0].nachher.action==='original_geoeffnet'&&prior[0].nachher.invoiceId===requestedInvoice;
    const changed=await tx.execute(sql`UPDATE public.intake_file SET geoeffnet=true WHERE tenant_id=${auth.data.tenantId} AND id=${file.id}::uuid AND item_id=${file.item_id}::uuid RETURNING id`);
    if(changed.length!==1)return false;
    await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher)
-    VALUES(${auth.data.tenantId},${file.item_id}::uuid,'einsatz',${value.clientEventId}::uuid,${auth.data.userId},${JSON.stringify({geoeffnet:file.geoeffnet})}::jsonb,${JSON.stringify({action:'original_geoeffnet',fileId:file.id,sha256:file.sha256,geoeffnet:true})}::jsonb)`);
+    VALUES(${auth.data.tenantId},${file.item_id}::uuid,'einsatz',${value.clientEventId}::uuid,${auth.data.userId},${JSON.stringify({geoeffnet:file.geoeffnet})}::jsonb,${JSON.stringify({action:'original_geoeffnet',fileId:file.id,sha256:file.sha256,geoeffnet:true,...(requestedInvoice?{invoiceId:requestedInvoice}: {})})}::jsonb)`);
    return true;
   });
   if(!saved)return {code:"CONFLICT" as const,message:"Originalzuordnung oder Anfrage wurde inzwischen geändert. Bitte erneut öffnen."};
-  const invoiceSuggestions=invoiceOnly?await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<NonNullable<IntakeCapture['suggestions']>[number]>(sql`SELECT id::text,file_id::text AS "fileId",order_id AS "orderId",feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,
-   fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt" FROM public.intake_suggestion WHERE tenant_id=${auth.data.tenantId} AND file_id=${file.id}::uuid AND feld LIKE 'rechnung.%' AND status<>'verworfen' ORDER BY id`)):undefined;
-  return {code:"OK" as const,original:{id:file.id,itemId:file.item_id,name:file.dateiname,mime:file.mime,bytes:bytes.byteLength,sha256:file.sha256,customerId:file.kunde_id,orderId:file.vorgang_art==='auftrag'?file.vorgang_id:null,invoiceId:file.vorgang_art==='rechnung'?file.vorgang_id:null,invoiceOnly,invoiceSuggestions:invoiceSuggestions?[...invoiceSuggestions]:undefined,previewable,url:preview.data.signedUrl,downloadUrl:download.data.signedUrl,restricted:false}};
+  const pages=requestedInvoice?invoice?.pages??null:null;
+  const invoiceSuggestions=invoiceOnly||requestedInvoice?await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<NonNullable<IntakeCapture['suggestions']>[number]>(sql`SELECT id::text,file_id::text AS "fileId",order_id AS "orderId",feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,
+   fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt" FROM public.intake_suggestion WHERE tenant_id=${auth.data.tenantId} AND file_id=${file.id}::uuid AND feld LIKE 'rechnung.%' AND status<>'verworfen' AND ${invoicePageFilter(pages)} ORDER BY id`)):undefined;
+  const url=pages&&file.mime==='application/pdf'?`${preview.data.signedUrl}#page=${pages.from}`:preview.data.signedUrl;
+  return {code:"OK" as const,original:{id:file.id,itemId:file.item_id,name:file.dateiname,mime:file.mime,bytes:bytes.byteLength,sha256:file.sha256,customerId:file.kunde_id,orderId:file.vorgang_art==='auftrag'?file.vorgang_id:null,invoiceId:invoice?.id??null,invoicePages:invoice?.pages??null,invoiceOnly,invoiceSuggestions:invoiceSuggestions?[...invoiceSuggestions]:undefined,previewable,url,downloadUrl:download.data.signedUrl,restricted:false}};
  }catch(error){console.error('[INTAKE_ORIGINAL_OPEN_FAILED]',{fileId:value.fileId,message:error instanceof Error?error.message:'UnknownError'});return {code:"UNAVAILABLE" as const,message:"Original konnte nicht sicher geöffnet werden. Fehlercode: INTAKE_ORIGINAL_OPEN_FAILED."};}
 }
 
@@ -158,25 +212,43 @@ export async function openIntakeOriginal(input:unknown){
 export async function confirmIntakeOriginal(input:unknown){
  if(!input||typeof input!=='object'||Array.isArray(input))return {code:'VALIDATION_ERROR' as const,message:'Originalkennung fehlt.'};
  const value=input as Record<string,unknown>;
- if(Object.keys(value).sort().join(',')!=='clientEventId,fileId'||typeof value.fileId!=='string'||!UUID.test(value.fileId)||typeof value.clientEventId!=='string'||!UUID.test(value.clientEventId))return {code:'VALIDATION_ERROR' as const,message:'Originalkennung ist ungültig.'};
+ const keys=Object.keys(value).sort().join(',');
+ if(!['clientEventId,fileId','clientEventId,fileId,invoiceId'].includes(keys)
+  ||typeof value.fileId!=='string'||!UUID.test(value.fileId)
+  ||typeof value.clientEventId!=='string'||!UUID.test(value.clientEventId)
+  ||value.invoiceId!==undefined&&(typeof value.invoiceId!=='string'||!UUID.test(value.invoiceId))) {
+  return {code:'VALIDATION_ERROR' as const,message:'Originalkennung ist ungültig.'};
+ }
+ const fileId=value.fileId;
+ const requestedInvoice=typeof value.invoiceId==='string'?value.invoiceId:undefined;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:auth.message};
- if(!hasAuthorizationArea(auth.data,'eingang')&&!hasAuthorizationArea(auth.data,'buchhaltung'))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
+ const bookkeeping=hasAuthorizationArea(auth.data,'buchhaltung');
+ if(!bookkeeping&&(requestedInvoice||!hasAuthorizationArea(auth.data,'eingang')))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};
  try{return await withPrivilegedTenantTransaction(auth.data,async tx=>{
   const files=await tx.execute<{item_id:string;geoeffnet:boolean;kanal:string;mime:string;dateiname:string;art:string;invoice_context:boolean}>(sql`SELECT file.item_id::text,file.geoeffnet,source.kanal,file.mime,file.dateiname,file.art,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file
     JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.data.tenantId} AND file.id=${value.fileId}::uuid FOR UPDATE OF file`);
   if(files.length!==1)return {code:'NOT_FOUND' as const,message:'Original nicht verfügbar.'};
   const file=files[0];
-  const {permitted,restricted}=originalAccess(auth.data,file);
+  const invoice=requestedInvoice&&!isMailOriginal(file)?await invoiceLink(tx,auth.data.tenantId,file.item_id,fileId,requestedInvoice):null;
+  if(requestedInvoice&&!invoice)return {code:'NOT_FOUND' as const,message:'Original nicht verfügbar.'};
+  const {permitted,restricted}=originalAccess(auth.data,file,false,invoice!==null);
   if(!permitted)return {code:'FORBIDDEN' as const,message:'Dieses Original benötigt Eingang.'};
   if(restricted)return {code:'FORBIDDEN' as const,message:mailAccessRequired};
   if(!file.geoeffnet)return {code:'CONFLICT' as const,message:'Original zuerst öffnen und prüfen.'};
-  const prior=await tx.execute<{nachher:{action:string;fileId:string;count:number}}>(sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${auth.data.tenantId} AND item_id=${file.item_id}::uuid AND art='einsatz' AND befehl_id=${value.clientEventId}::uuid AND von=${auth.data.userId}`);
-  if(prior.length)return prior.length===1&&prior[0].nachher.action==='original_geprueft'&&prior[0].nachher.fileId===value.fileId?{code:'OK' as const,count:prior[0].nachher.count,replayed:true}:{code:'CONFLICT' as const,message:'Anfrage wurde bereits anders verwendet.'};
+  const prior=await tx.execute<{nachher:{action:string;fileId:string;count:number;invoiceId?:string}}>(sql`SELECT nachher FROM public.intake_event WHERE tenant_id=${auth.data.tenantId} AND item_id=${file.item_id}::uuid AND art='einsatz' AND befehl_id=${value.clientEventId}::uuid AND von=${auth.data.userId}`);
+  if(prior.length)return prior.length===1&&prior[0].nachher.action==='original_geprueft'&&prior[0].nachher.fileId===value.fileId&&prior[0].nachher.invoiceId===requestedInvoice?{code:'OK' as const,count:prior[0].nachher.count,replayed:true}:{code:'CONFLICT' as const,message:'Anfrage wurde bereits anders verwendet.'};
+  if(requestedInvoice){
+   const opened=await tx.execute(sql`SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.data.tenantId} AND item_id=${file.item_id}::uuid
+    AND art='einsatz' AND von=${auth.data.userId} AND nachher->>'action'='original_geoeffnet'
+    AND nachher->>'fileId'=${value.fileId} AND nachher->>'invoiceId'=${requestedInvoice} LIMIT 1`);
+   if(!opened.length)return {code:'CONFLICT' as const,message:'Original zuerst öffnen und prüfen.'};
+  }
   const changed=await tx.execute<{id:string}>(sql`UPDATE public.intake_suggestion SET geprueft_von=${auth.data.userId}::uuid,geprueft_am=statement_timestamp()
     WHERE tenant_id=${auth.data.tenantId} AND file_id=${value.fileId}::uuid AND status='offen' AND sicherheit='unsicher' AND geprueft_am IS NULL
-    AND (${hasAuthorizationArea(auth.data,'eingang')&&hasAuthorizationArea(auth.data,'mails')||file.kanal!=='mail'&&hasAuthorizationArea(auth.data,'eingang')} OR feld LIKE 'rechnung.%') RETURNING id::text`);
+    AND (${!requestedInvoice&&(hasAuthorizationArea(auth.data,'eingang')&&hasAuthorizationArea(auth.data,'mails')||file.kanal!=='mail'&&hasAuthorizationArea(auth.data,'eingang'))} OR feld LIKE 'rechnung.%')
+    AND ${invoicePageFilter(invoice?.pages??null)} RETURNING id::text`);
   if(!changed.length)return {code:'OK' as const,count:0,replayed:true};
-  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.data.tenantId},${file.item_id}::uuid,'einsatz',${value.clientEventId}::uuid,${auth.data.userId},${JSON.stringify({action:'original_geprueft',fileId:value.fileId,count:changed.length,suggestionIds:changed.map(s=>s.id)})}::jsonb)`);
+  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${auth.data.tenantId},${file.item_id}::uuid,'einsatz',${value.clientEventId}::uuid,${auth.data.userId},${JSON.stringify({action:'original_geprueft',fileId:value.fileId,count:changed.length,suggestionIds:changed.map(s=>s.id),...(requestedInvoice?{invoiceId:requestedInvoice}:{})})}::jsonb)`);
   return {code:'OK' as const,count:changed.length,replayed:false};
  });}catch(error){console.error('[INTAKE_ORIGINAL_CONFIRM_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Originalprüfung nicht gespeichert. Fehlercode: INTAKE_ORIGINAL_CONFIRM_FAILED.'};}
 }
