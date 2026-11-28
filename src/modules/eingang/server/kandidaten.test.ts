@@ -119,6 +119,7 @@ it('liest jede vorhandene Herkunft einmal und verwendet nur passende Treffer', a
 
   expect(await leseBelegteKundenTreffer(eingang, firma, lesen)).toEqual({
     kandidaten: 'ok',
+    hinweiseVollstaendig: true,
     quellenVollstaendig: true,
     treffer: [
       { kundenId: 'lieferant', regel: 'ustid', grundWert: 'DE000000002' },
@@ -155,7 +156,7 @@ it('sucht weder bei fehlenden Absenderwerten noch nach der eigenen Firma als Lie
   expect(await leseBelegteKundenTreffer({
     absenderAdresse: null, absenderName: null, absenderTelefon: null,
     lieferantenUstId: firma.ustId, lieferantenName: firma.name,
-  }, firma, lesen)).toEqual({ kandidaten: 'keine', quellenVollstaendig: false, treffer: [] });
+  }, firma, lesen)).toEqual({ kandidaten: 'keine', hinweiseVollstaendig: true, quellenVollstaendig: false, treffer: [] });
   expect(lesen).not.toHaveBeenCalled();
 });
 

@@ -2,7 +2,7 @@ import "server-only";
 import type { LagerBelegPosition } from "@/modules/lager/public";
 
 type PositionValues = Omit<LagerBelegPosition, "positionKey" | "sicherheit">;
-type AzureCell = { rowIndex: number; columnIndex: number; content: string; kind?: unknown; confidence?: unknown };
+type AzureCell = { rowIndex: number; columnIndex: number; content: string; kind?: unknown; confidence?: unknown; boundingRegions?: unknown };
 
 const fields = new Map<string, keyof PositionValues>([
   ["bezeichnung", "bezeichnung"], ["beschreibung", "bezeichnung"], ["description", "bezeichnung"],
@@ -28,9 +28,37 @@ function numericText(value: string | undefined, places: number) {
   return (normalized.split(".")[1]?.length ?? 0) <= places ? normalized : null;
 }
 
+function pageOf(regions: readonly unknown[]): number | null {
+  let page: number | null = null;
+  for (const region of regions) {
+    const number = region && typeof region === 'object' && 'pageNumber' in region ? region.pageNumber : null;
+    if (typeof number !== 'number' || !Number.isSafeInteger(number) || number < 1 || page !== null && page !== number) return null;
+    page = number;
+  }
+  return page;
+}
+
+export function readIntakePositionValues(values: Partial<Record<keyof PositionValues, unknown>>): PositionValues {
+  const text = (field: keyof PositionValues) => typeof values[field] === 'string' ? values[field].trim() || undefined : undefined;
+  const ean = text('ean');
+
+  return {
+    bezeichnung: text('bezeichnung')?.slice(0, 500) ?? null,
+    lieferantenArtikelNr: text('lieferantenArtikelNr') ?? null,
+    ean: ean && /^(?:\d{8}|\d{12,14})$/u.test(ean) ? ean : null,
+    menge: numericText(text('menge'), 3),
+    einheitText: text('einheitText') ?? null,
+    einzelpreis: numericText(text('einzelpreis'), 4),
+    preisBezugMenge: numericText(text('preisBezugMenge'), 3),
+    rabattProzent: numericText(text('rabattProzent'), 4),
+    positionsNetto: numericText(text('positionsNetto'), 4),
+  };
+}
+
 export function readAzurePositionRows(tables: readonly unknown[]) {
   return tables.flatMap((table, tableIndex) => {
     if (!table || typeof table !== "object" || !("cells" in table) || !Array.isArray(table.cells)) return [];
+    const tablePage = 'boundingRegions' in table && Array.isArray(table.boundingRegions) ? pageOf(table.boundingRegions) : null;
     const columns = new Map<number, keyof PositionValues>();
     const rows = new Map<number, AzureCell[]>();
     const headerRows = new Set<number>();
@@ -59,19 +87,11 @@ export function readAzurePositionRows(tables: readonly unknown[]) {
         confidence = confidence !== null && typeof score === "number" && score >= 0 && score <= 1
           ? Math.min(confidence, score) : null;
       }
-      const position: PositionValues = {
-        bezeichnung: values.bezeichnung?.slice(0, 500) ?? null,
-        lieferantenArtikelNr: values.lieferantenArtikelNr ?? null,
-        ean: values.ean && /^(?:\d{8}|\d{12,14})$/u.test(values.ean) ? values.ean : null,
-        menge: numericText(values.menge, 3),
-        einheitText: values.einheitText ?? null,
-        einzelpreis: numericText(values.einzelpreis, 4),
-        preisBezugMenge: numericText(values.preisBezugMenge, 3),
-        rabattProzent: numericText(values.rabattProzent, 4),
-        positionsNetto: numericText(values.positionsNetto, 4),
-      };
+      const position = readIntakePositionValues(values);
       if (!Object.values(position).some(value => value !== null)) return [];
-      return [{ position, confidence, source: { tableIndex, rowIndex } }];
+      const rowRegions = cells.flatMap(cell => Array.isArray(cell.boundingRegions) ? cell.boundingRegions : []);
+      const page = rowRegions.length ? pageOf(rowRegions) : tablePage;
+      return [{ position, confidence, source: { tableIndex, rowIndex, page } }];
     });
   });
 }

@@ -4,6 +4,8 @@
   "owner": "Verkaufsstufe 1 Eingang (Paket/persoenlich)",
   "publicExports": [
     "@/modules/eingang/server-public#tagQuellen",
+    "@/modules/eingang/server-public#leseLieferantenbelegFuerLagerInTransaction",
+    "@/modules/eingang/server-public#setzeLieferantAmEingangInTransaction",
     "@/modules/eingang/public#EingangTagFakten",
     "@/modules/eingang/server-public#pruefeZusage",
     "@/modules/eingang/server-public#erlaubteWirkung",
@@ -139,6 +141,8 @@
     "@/modules/eingang/server-public#confirmIntakeOriginal",
     "@/modules/eingang/server-public#saveGoodsReceipt",
     "@/modules/eingang/server-public#readGoodsReceipts",
+    "@/modules/eingang/server-public#legePaketOhneBezugAb",
+    "@/modules/eingang/server-public#verknuepfePaketOhneBezug",
     "@/modules/eingang/server-public#createGoodsReceiptStationBinding",
     "@/modules/eingang/server-public#writeCreatedOrderGoodsReceipt",
     "@/modules/eingang/server-public#GoodsReceiptResult",
@@ -199,7 +203,8 @@
     "20261110070400_intake_delivery_evidence_view.sql",
     "20261110142424_intake_reply_evidence_view.sql",
     "20261123153000_einstellungen_crossmodule_reads.sql",
-    "20261128032648_i2_kandidaten.sql"
+    "20261128032648_i2_kandidaten.sql",
+    "20261128043812_i3_lieferantenbelege.sql"
   ],
   "viewsFunctions": [
     "private.v_intake_delivery_evidence_v1",
@@ -209,7 +214,8 @@
     "private.v_intake_message_contexts_v1",
     "public.v_quote_goods_receipt_v1",
     "public.v_eingang_supplier_invoice_settings_v1",
-    "public.v_eingang_email_template_settings_v1"
+    "public.v_eingang_email_template_settings_v1",
+    "public.v_eingang_lieferanten_v1"
   ],
   "ownsTables": [
     "public.intake_event",

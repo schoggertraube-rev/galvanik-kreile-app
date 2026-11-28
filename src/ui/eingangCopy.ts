@@ -1,5 +1,17 @@
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
+// TODO_PL: Fehlermeldungen zur Paketablage finalisieren.
+export const WARE_OHNE_BEZUG_COPY={
+ ablagesort:'Gib den Ablageort an, damit du das Paket wiederfindest.',
+ eingangFehlt:'Öffne den Eingang erneut. Das Paket wurde hier nicht gefunden.',
+ auftragFehlt:'Wähle einen offenen Auftrag für das Paket.',
+ geaendert:'Öffne den Eingang erneut. Das Paket wurde inzwischen geändert.',
+ schonZugeordnet:'Das Paket gehört bereits zu einem Auftrag. Öffne den gespeicherten Bezug.',
+ recht:'Für die Ablage und Zuordnung brauchst du den Bereich Eingang.',
+ speichern:'Das Paket konnte nicht sicher gespeichert werden. Öffne den Eingang erneut.',
+ sitzung:'Melde dich an, um das Paket zu speichern.',
+ paketLiegt:(ort:string)=>`Paket ohne Bezug liegt in ${ort}`,
+} as const;
 
 export const eingangCopy = {
   rechnungswiderspruch: 'PDF und XML widersprechen',

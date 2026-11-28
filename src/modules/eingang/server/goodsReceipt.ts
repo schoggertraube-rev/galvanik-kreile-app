@@ -124,7 +124,8 @@ export async function readGoodsReceipts(orderId:string):Promise<GoodsReceiptRead
  if(!hasAuthorizationArea(auth.data,'eingang')&&!hasAuthorizationArea(auth.data,'auftraege'))return {code:'FORBIDDEN' as const,message:'Warenprüfung ist nicht freigegeben.'};
  try{return await withPrivilegedTenantTransaction(auth.data,async tx=>{
   const order=await readGoodsReceiptOrder(tx,auth.data,orderId);if(!order)return {code:'NOT_FOUND' as const,message:'Auftrag nicht verfügbar.'};
-  const receipts=await tx.execute<ReceiptRow>(sql`SELECT ${receiptProjection} FROM public.goods_receipt WHERE tenant_id=${auth.data.tenantId} AND auftrag_id=${orderId} ORDER BY erstellt_am,id`);
+  const receipts=await tx.execute<ReceiptRow>(sql`SELECT ${receiptProjection} FROM public.goods_receipt
+   WHERE tenant_id=${auth.data.tenantId} AND auftrag_id=${orderId} AND modus IN ('erwartet','erfassung') ORDER BY erstellt_am,id`);
   return {code:'OK' as const,order,receipts,canStartGalvanik:hasAuthorizationArea(auth.data,'auftraege')};
  });}
  catch(error){console.error('[GOODS_RECEIPT_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Warenprüfung konnte nicht geladen werden. Fehlercode: GOODS_RECEIPT_READ_FAILED.'};}

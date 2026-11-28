@@ -17,8 +17,8 @@ export type IntakeMessage={
  graphMessageId?:string|null;actorTrace?:CaseActorTrace;id:string;version:number;channel:string;direction:string;assignment:string;usage:string;senderName:string|null;senderAddress:string|null;groupAddress:string|null;subject:string|null;text:string|null;at:string;customerId:string|null;customerName:string|null;customerType:string|null;orderId:string|null;orderKind:string|null;orderNumber:string|null;orderStation:string|null;goods:string|null;concerns:string[];openConcerns:string[];discardReason:string|null;createdBy:string;fileIds:string[];files?:Array<{id:string;name:string}>};
 /** Browser-safe read contract; no server implementation import enters the client facade. */
 export type MessageNextActionRead=import('@/lib/domain/u2ReadContract').U2Read & {nutzung:string;zuordnung:string;prioritaet?:number|null;source:{kind:'intake';id:string;version:number}};
-export type EingangTagFakt={art:'offen'|'gegenvorschlag'|'unklar';id:string;kanal:string;gruppe:string|null;betreff:string|null;
- preisgeschuetzt:boolean;tage:number;faellig:string|null};
+export type EingangTagFakt={id:string;kanal:string;gruppe:string|null;betreff:string|null;
+ preisgeschuetzt:boolean;tage:number;faellig:string|null}&({art:'offen'|'gegenvorschlag'|'unklar'}|{art:'paketohnebezug';ort:string});
 export type EingangTagFakten={code:'OK';fakten:readonly EingangTagFakt[]|null}|{code:'SOURCE_INCOMPLETE'};
 export type IntakeMessagesResult={code:'OK';serverReadAt?:string;cacheLoginScope?:string;messages:IntakeMessage[];areas:AccessArea[];currentLogin:string;tagFakten?:EingangTagFakten}|{code:'UNAUTHENTICATED'|'FORBIDDEN'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string};
 /** Shared stored facts, without a fabricated current login or live U2 buttons. */

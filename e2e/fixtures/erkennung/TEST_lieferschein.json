@@ -1,0 +1,26 @@
+{
+  "status": "succeeded",
+  "analyzeResult": {
+    "modelId": "prebuilt-layout",
+    "content": "Lieferschein TEST-LS-03\nTEST Lieferant\nTEST Flansch 4,25 Stück",
+    "pages": [{ "pageNumber": 1 }],
+    "keyValuePairs": [
+      { "key": { "content": "Lieferscheinnummer" }, "value": { "content": "TEST-LS-03" }, "confidence": 0.99 },
+      { "key": { "content": "Lieferant" }, "value": { "content": "TEST Lieferant" }, "confidence": 0.99 },
+      { "key": { "content": "Bestellnummer" }, "value": { "content": "TEST-BESTELLUNG-03" }, "confidence": 0.99 }
+    ],
+    "tables": [{
+      "boundingRegions": [{ "pageNumber": 1 }],
+      "cells": [
+        { "rowIndex": 0, "columnIndex": 0, "kind": "columnHeader", "content": "Artikelnummer" },
+        { "rowIndex": 0, "columnIndex": 1, "kind": "columnHeader", "content": "Bezeichnung" },
+        { "rowIndex": 0, "columnIndex": 2, "kind": "columnHeader", "content": "Menge" },
+        { "rowIndex": 0, "columnIndex": 3, "kind": "columnHeader", "content": "Einheit" },
+        { "rowIndex": 1, "columnIndex": 0, "content": "TEST-FLANSCH-03", "confidence": 0.99 },
+        { "rowIndex": 1, "columnIndex": 1, "content": "TEST Flansch", "confidence": 0.99 },
+        { "rowIndex": 1, "columnIndex": 2, "content": "4,25", "confidence": 0.98 },
+        { "rowIndex": 1, "columnIndex": 3, "content": "Stück", "confidence": 0.99 }
+      ]
+    }]
+  }
+}

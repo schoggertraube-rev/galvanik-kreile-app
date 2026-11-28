@@ -14,9 +14,9 @@ it("reads provider table rows in order and keeps confidence unknown for an unsco
   ] }]);
 
   expect(rows).toMatchObject([
-    { source: { tableIndex: 0, rowIndex: 1 }, confidence: 0.8,
+    { source: { tableIndex: 0, rowIndex: 1, page: null }, confidence: 0.8,
       position: { lieferantenArtikelNr: "TEST-1", menge: "4.25", einheitText: "kg" } },
-    { source: { tableIndex: 0, rowIndex: 2 }, confidence: null,
+    { source: { tableIndex: 0, rowIndex: 2, page: null }, confidence: null,
       position: { lieferantenArtikelNr: "TEST-2", menge: null, einheitText: null } },
   ]);
 });
