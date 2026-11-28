@@ -1,0 +1,7 @@
+satz,referenz,buchungstag,valuta,betrag_eur,verwendung
+Anfang,ER-O,2026-11-01,,1000.00,Anfangsbestand
+Umsatz,TEST-B1,2026-11-06,2026-11-06,120.00,TEST-R-A
+Umsatz,TEST-B2,2026-11-11,2026-11-11,100.00,TEST-R-B + TEST-R-C
+Umsatz,TEST-B3,2026-11-14,2026-11-14,117.00,TEST-P1 Auszahlung
+Umsatz,TEST-B4,2026-11-30,2026-12-01,-80.00,TEST-L-A Teilzahlung
+Ende,ER-E,2026-11-30,,1257.00,Endsaldo laut TEST-Kontoauszug

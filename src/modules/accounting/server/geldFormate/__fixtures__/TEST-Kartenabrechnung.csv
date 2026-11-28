@@ -1,0 +1,6 @@
+satz,referenz,tag,betrag_eur,bezug
+Anfang,PS-O,2026-11-01,0.00,Eröffnungsstand
+Verkauf,P1-S,2026-11-12,119.00,TEST-R-D
+Gebühr,P1-F,2026-11-13,-2.00,TEST-P1
+Auszahlung,P1-A,2026-11-14,-117.00,TEST-B3
+Ende,PS-E,2026-11-30,0.00,Endstand laut TEST-Abrechner
