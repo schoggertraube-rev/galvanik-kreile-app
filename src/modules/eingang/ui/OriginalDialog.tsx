@@ -6,26 +6,29 @@ import type {IntakeCapture,IntakeCaptureResult} from '../captureContract';
 import type {OriginalReadResult,OriginalConfirmResult} from '../originalContract';
 import {INTAKE_CHANGED_EVENT} from '../messageContract';
 
-export type OriginalPorts={open:(input:{fileId:string;clientEventId:string})=>Promise<OriginalReadResult>;confirm:(input:{fileId:string;clientEventId:string})=>Promise<OriginalConfirmResult>;capture:(itemId:string)=>Promise<IntakeCaptureResult>;retry:(input:{fileId:string;clientEventId:string})=>Promise<IntakeCaptureResult>};
+type OriginalRequest={fileId:string;clientEventId:string;invoiceId?:string};
+export type OriginalPorts={open:(input:OriginalRequest)=>Promise<OriginalReadResult>;confirm:(input:OriginalRequest)=>Promise<OriginalConfirmResult>;capture:(itemId:string)=>Promise<IntakeCaptureResult>;retry:(input:{fileId:string;clientEventId:string})=>Promise<IntakeCaptureResult>};
 type Data=Extract<OriginalReadResult,{code:'OK'}>['original'];
-export function OriginalDialog({fileId,ports,onClose,onAssign,onMessage}:{fileId:string;ports:OriginalPorts;onClose:()=>void;onAssign:(itemId:string,move:boolean)=>string|null;onMessage:(s:string)=>void}){
+export function OriginalDialog({fileId,invoiceId,ports,onClose,onAssign,onMessage}:{fileId:string;invoiceId?:string;ports:OriginalPorts;onClose:()=>void;onAssign:(itemId:string,move:boolean)=>string|null;onMessage:(s:string)=>void}){
  const [data,setData]=useState<Data|null>(null),[capture,setCapture]=useState<IntakeCapture|null>(null),[failure,setFailure]=useState<{message:string;blocked:boolean}|null>(null);
  const [loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[message,setMessage]=useState<string|null>(null);
  const working=useRef(false),openKey=useRef(crypto.randomUUID()),confirmKey=useRef(crypto.randomUUID()),retryKey=useRef(crypto.randomUUID());
+ const request=useCallback((clientEventId:string):OriginalRequest=>
+  invoiceId?{fileId,clientEventId,invoiceId}:{fileId,clientEventId},[fileId,invoiceId]);
  const load=useCallback(async()=>{
   setLoading(true);setFailure(null);
-  try{const result=await ports.open({fileId,clientEventId:openKey.current});if(result.code!=='OK'){setFailure({message:result.message,blocked:result.code==='FILE_BLOCKED'});return;}
-   setData(result.original);if(result.original.restricted||result.original.invoiceOnly){setCapture(null);return;}const read=await ports.capture(result.original.itemId);
+  try{const result=await ports.open(request(openKey.current));if(result.code!=='OK'){setFailure({message:result.message,blocked:result.code==='FILE_BLOCKED'});return;}
+   setData(result.original);if(invoiceId||result.original.restricted||result.original.invoiceOnly){setCapture(null);return;}const read=await ports.capture(result.original.itemId);
    if(read.code!=='OK'){setFailure({message:read.message,blocked:false});return;}setCapture(read.capture);
   }catch(error){console.error('[ORIGINAL_DIALOG_READ_FAILED]',error);setFailure({message:'Original nicht ladbar · Fehlercode: ORIGINAL_DIALOG_READ_FAILED.',blocked:false});}
   finally{setLoading(false);}
- },[fileId,ports]);
+ },[invoiceId,ports,request]);
  useEffect(()=>{const timer=setTimeout(()=>void load(),0);return()=>clearTimeout(timer);},[load]);
  useEffect(()=>{const changed=()=>void load();window.addEventListener(INTAKE_CHANGED_EVENT,changed);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,changed);},[load]);
  const confirm=async()=>{
   if(working.current||!data||data.restricted)return;working.current=true;setBusy(true);setMessage(null);
-  try{const result=await ports.confirm({fileId,clientEventId:confirmKey.current});if(result.code!=='OK'){setMessage(result.message);return;}
-   if(data.invoiceOnly){const read=await ports.open({fileId,clientEventId:openKey.current});if(read.code!=='OK'){setMessage(read.message);return;}setData(read.original);}
+  try{const result=await ports.confirm(request(confirmKey.current));if(result.code!=='OK'){setMessage(result.message);return;}
+   if(invoiceId||data.invoiceOnly){const read=await ports.open(request(openKey.current));if(read.code!=='OK'){setMessage(read.message);return;}setData(read.original);}
    else{const read=await ports.capture(data.itemId);if(read.code!=='OK'){setMessage(read.message);return;}setCapture(read.capture);}
    const text='Am Original geprüft · Vorschläge bestätigt';setMessage(text);onMessage(text);window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));
   }catch(error){console.error('[ORIGINAL_DIALOG_CONFIRM_FAILED]',error);setMessage('Prüfung nicht gespeichert · Fehlercode: ORIGINAL_DIALOG_CONFIRM_FAILED.');}
@@ -33,7 +36,9 @@ export function OriginalDialog({fileId,ports,onClose,onAssign,onMessage}:{fileId
  };
  const retry=async()=>{
   if(working.current||!data||data.restricted)return;working.current=true;setBusy(true);setMessage(null);
-  try{const result=await ports.retry({fileId,clientEventId:retryKey.current});if(result.code!=='OK'){setMessage(result.message);return;}setCapture(result.capture);retryKey.current=crypto.randomUUID();setMessage('Wird erneut gelesen');}
+  try{const result=await ports.retry({fileId,clientEventId:retryKey.current});if(result.code!=='OK'){setMessage(result.message);return;}
+   if(invoiceId)await load();else setCapture(result.capture);
+   retryKey.current=crypto.randomUUID();setMessage('Wird erneut gelesen');}
   catch(error){console.error('[ORIGINAL_DIALOG_RETRY_FAILED]',error);setMessage('Erkennung nicht erreichbar · Fehlercode: ORIGINAL_DIALOG_RETRY_FAILED.');}
   finally{working.current=false;setBusy(false);}
  };

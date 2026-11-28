@@ -37,12 +37,18 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   },250);return()=>{active=false;clearTimeout(timer);};
  },[supplierQuery,selected,ports]);
  useEffect(()=>{
-  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read({id:initial.item.id});if(result.code!=='OK'){setMessage(result.message);return;}
+  const request=initial.invoice?{id:initial.invoice.id}:{id:initial.item.id,...(initial.fileId?{fileId:initial.fileId}:{})};
+  const refresh=async(event:Event)=>{try{const detail=(event as CustomEvent<{itemId?:string;customerId?:string;customerName?:string}>).detail;const result=await ports.read(request);if(result.code!=='OK'){setMessage(result.message);return;}
    setView(result.view);setUncertain(result.view.uncertain);setSelected(result.view.supplier);setSupplierQuery(result.view.supplier?.name??'');setFields(current=>({...current,lieferantId:result.view.supplier?.id??current.lieferantId}));
    if(detail?.itemId===initial.item.id&&detail.customerId&&detail.customerName&&result.view.invoice&&!result.view.invoice.lieferant_id){const found=await ports.searchSuppliers(detail.customerName);if(found.code==='OK'){const supplier=found.suppliers.find(value=>value.id===detail.customerId);if(supplier){setSelected(supplier);setSupplierQuery(supplier.name);setFields(current=>({...current,lieferantId:supplier.id}));setCorrect(true);setOutcome('offen');}}}
   }catch(error){console.error('[INVOICE_RETURN_READ_FAILED]',error);setMessage('Lieferant konnte nicht neu gelesen werden · Fehlercode: INVOICE_RETURN_READ_FAILED.');}};
   window.addEventListener(INTAKE_CHANGED_EVENT,refresh);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,refresh);
- },[initial.item.id,ports]);
+ },[initial.invoice,initial.fileId,initial.item.id,ports]);
+ const openOriginal=(fileId:string)=>{
+  const saved=view.invoice;
+  if(saved?.file_id===fileId)ports.openOriginal(view.item.id,fileId,saved.id);
+  else ports.openOriginal(view.item.id,fileId);
+ };
  const chooseSupplier=(supplier:InvoiceSupplier)=>{if(view.invoice&&!view.invoice.lieferant_id){setCorrect(true);setOutcome('offen');}setSelected(supplier);setSupplierQuery(supplier.name);setSuppliers([]);setFields(current=>{
   const next={...current,lieferantId:supplier.id};if(!next.faelligAm&&invoiceDate(next.datum)&&supplier.paymentTermDays!==null){const date=new Date(next.datum+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+supplier.paymentTermDays);next.faelligAm=date.toISOString().slice(0,10);}return next;
  });};
@@ -120,7 +126,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage}:{initial
   {duplicate?<div data-spec-id="rechnungein.zustand.dublette"><Hinweis ton="warn">Rechnung {duplicate.number} von {selected?.name??'Lieferant fehlt'} gibt es schon ({duplicate.internalNumber})</Hinweis>
    {!duplicate.exact?<Feld label="Grund für die zweite Erfassung" fehler={errors.duplicateReason}><Eingabe data-spec-id="rechnungein.dublette_grund" maxLength={200} value={duplicateReason} onChange={event=>setDuplicateReason(event.target.value)}/></Feld>:null}</div>:null}
   {retry?<div data-spec-id="rechnungein.zustand.fehler"><p>Nicht gespeichert · alle Eingaben sind noch da</p><Button data-spec-id="rechnungein.erneut" text="Erneut" onClick={()=>{setRetry(false);setMessage(null);}} disabled={busy}/></div>:null}
-  <div className="r38-raster"><Kachel titel="Original" icon="file">{view.originals.map(file=><button key={file.id} className="kr-zeile" type="button" data-spec-id="rechnungein.original" onClick={()=>ports.openOriginal(view.item.id,file.id)}><span><b>{file.name||'Beleg'}</b><small>gesichert · unverändert</small></span></button>)}{!view.originals.length?<Hinweis ton="warn">Original fehlt</Hinweis>:null}</Kachel>
+  <div className="r38-raster"><Kachel titel="Original" icon="file">{view.originals.map(file=><button key={file.id} className="kr-zeile" type="button" data-spec-id="rechnungein.original" onClick={()=>openOriginal(file.id)}><span><b>{file.name||'Beleg'}</b><small>gesichert · unverändert</small></span></button>)}{!view.originals.length?<Hinweis ton="warn">Original fehlt</Hinweis>:null}</Kachel>
    <section aria-label="Rechnung"><h3 className="kr-block-label">1 · Rechnung</h3><div className="kr-form">
     <Feld label="Lieferant" voll fehler={errors.lieferantId}><Eingabe data-invoice-field="lieferantId" data-spec-id="rechnungein.lieferant" required value={supplierQuery} disabled={busy} readOnly={readOnly||!!view.invoice&&!missingSupplier} onChange={event=>{setSupplierQuery(event.target.value);setSelected(null);update('lieferantId','');}}/>
      {searching?<span role="status">Lieferant wird gesucht …</span>:null}

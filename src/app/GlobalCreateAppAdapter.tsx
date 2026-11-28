@@ -118,7 +118,9 @@ export function GlobalCreateAppAdapter() {
   }),[areas,openOrder,canAction]);
 
   const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
-    openOriginal:(itemId,fileId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:itemId+'#'+fileId}})),
+    openOriginal:(itemId,fileId,invoiceId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{
+     cancelable:true,detail:{ziel:'original',arg:[itemId,fileId,...(invoiceId?[invoiceId]:[])].join('#')},
+    })),
     openTask:taskId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'aufgabe',arg:taskId}})),
     createSupplier:async itemId=>{const source=await getIncomingInvoiceAction({id:itemId});if(source.code!=='OK')return source;requestGlobalCreate({intent:'CUSTOMER',prefill:{sourceItemId:itemId,sourceVersion:source.view.item.version,customerMode:'lieferant',name:source.view.supplierPrefill?.name??source.view.item.sender??undefined,vatId:source.view.supplierPrefill?.vatId}});return {code:'OK'};},
   }),[]);
