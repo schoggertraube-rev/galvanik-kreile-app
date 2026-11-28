@@ -404,11 +404,11 @@ export async function readTask(request:TaskOpenRequest|{calendar:true}):Promise<
  const auth=await session();if(!auth)return {code:'UNAUTHENTICATED',message:'Sitzung ist nicht verfügbar.'};
  return 'calendar'in request?readTaskForAuthorization(auth,request):readTaskForAuthorization(auth,request);
 }
-export function readTaskForAuthorization(auth:AuthorizationSnapshot,request:TaskOpenRequest):Promise<TaskReadResult>;
+export function readTaskForAuthorization(auth:AuthorizationSnapshot,request:TaskOpenRequest,transaction?:PrivilegedTenantTransaction):Promise<TaskReadResult>;
 export function readTaskForAuthorization(auth:AuthorizationSnapshot,request:{calendar:true}):Promise<TaskCalendarRead>;
 export function readTaskForAuthorization(auth:TaskReadContext,request:TaskOpenRequest):Promise<TaskSourceRead|TaskFailure>;
 export function readTaskForAuthorization(auth:TaskReadContext,request:{calendar:true}):Promise<TaskCalendarSources|TaskFailure>;
-export async function readTaskForAuthorization(auth:AuthorizationSnapshot|TaskReadContext,request:TaskOpenRequest|{calendar:true}):Promise<TaskReadResult|TaskCalendarRead|TaskSourceRead|TaskCalendarSources>{
+export async function readTaskForAuthorization(auth:AuthorizationSnapshot|TaskReadContext,request:TaskOpenRequest|{calendar:true},transaction?:PrivilegedTenantTransaction):Promise<TaskReadResult|TaskCalendarRead|TaskSourceRead|TaskCalendarSources>{
  const invalid=validateTaskRead(request);if(invalid)return invalid;
  const readAuth='canReadArea'in auth?auth:liveTaskReadContext(auth);
  if('calendar'in request){
@@ -429,10 +429,13 @@ export async function readTaskForAuthorization(auth:AuthorizationSnapshot|TaskRe
    return 'canReadArea'in auth?{code,rows:sources,missingTaskIds}:{code,rows,missingTaskIds};
   });}catch(error){return resultError(error);}
  }
- try{return await withPrivilegedTenantTransaction(auth,async tx=>{
-  const source=await readTaskSourceInTransaction(tx,auth,request);
-  return 'canReadArea'in auth?source:presentTaskSource(auth,source);
- });}catch(error){return resultError(error);}
+ try{
+  const read=async(tx:PrivilegedTenantTransaction)=>{
+   const source=await readTaskSourceInTransaction(tx,auth,request);
+   return 'canReadArea'in auth?source:presentTaskSource(auth,source);
+  };
+  return transaction?await withTenantSavepoint(transaction,read):await withPrivilegedTenantTransaction(auth,read);
+ }catch(error){return resultError(error);}
 }
 /** Same actor/recipient/reference projection as the live calendar read. */
 function projectCalendarTaskSource(auth:AuthorizationSnapshot,source:TaskSourceRead){

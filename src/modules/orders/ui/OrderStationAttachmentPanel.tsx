@@ -27,6 +27,7 @@ import type {
   ReserveOrderStationAttachmentInput,
 } from "@/lib/server/orderStationAttachment";
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
+import {INTAKE_FILE_CONTEXT_COPY} from '@/ui/eingangCopy';
 
 const BUCKET_ID = "item-photos";
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
@@ -55,6 +56,7 @@ const RESTART_REASONS = new Set<OrderStationAttachmentConflictReason>([
 ]);
 
 type AttachmentItem = { id: string; name: string };
+type IntakePhoto = {id:string;name:string;mime:string;bytes:number;at:string};
 type PanelState = "loading" | "ready" | "unavailable";
 type Operation =
   | "idle"
@@ -92,6 +94,8 @@ export type OrderStationAttachmentPanelProps = {
 type MetadataResult = OrderStationAttachmentResult<{
   receipts: OrderStationAttachmentReceipt[];
   evidenceRecords: EvidenceReadRecord[];
+  intakeFiles?: IntakePhoto[];
+  intakeFilesUnavailable?: string;
   canOperate: boolean;
   currentActorId: string;
 }>;
@@ -115,6 +119,10 @@ type OriginalResult = OrderStationAttachmentResult<{
 
 export type OrderStationAttachmentPorts = {
   read(input: GetOrderStationAttachmentsInput): Promise<MetadataResult>;
+  capture?(input:{orderId:string;itemId:string;expectedVersion:number;file:File}):Promise<
+    {code:'OK';id:string}|{code:'PENDING'|'FORBIDDEN';message:string}>;
+  openIntake?(input:{orderId:string;fileId:string}):Promise<
+    {code:'OK';downloadUrl:string}|{code:'UNAVAILABLE';message:string}>;
   reserve(input: ReserveOrderStationAttachmentInput): Promise<ReserveResult>;
   finalize(input: FinalizeOrderStationAttachmentInput): Promise<FinalizeResult>;
   readOriginal(
@@ -363,6 +371,7 @@ function OrderStationAttachmentPanelInner({
   const initialItemId = items.length === 1 ? items[0].id : "";
   const [selectedItemId, setSelectedItemId] = useState(initialItemId);
   const [receipts, setReceipts] = useState<OrderStationAttachmentReceipt[]>([]);
+  const [intakeFiles,setIntakeFiles]=useState<IntakePhoto[]>([]);
   const [evidenceRecords, setEvidenceRecords] = useState<EvidenceReadRecord[]>(
     [],
   );
@@ -431,6 +440,7 @@ function OrderStationAttachmentPanelInner({
       itemIdentity,
     );
     setReceipts([]);
+    setIntakeFiles([]);
     setEvidenceRecords([]);
     setServerCanOperate(false);
     setCurrentActorId(null);
@@ -496,6 +506,7 @@ function OrderStationAttachmentPanelInner({
           return null;
         if (result.code !== "OK") {
           setReceipts([]);
+          setIntakeFiles([]);
           setEvidenceRecords([]);
           setDownload(null);
           setCurrentActorId(null);
@@ -516,6 +527,7 @@ function OrderStationAttachmentPanelInner({
           )
         ) {
           setReceipts([]);
+          setIntakeFiles([]);
           setEvidenceRecords([]);
           setServerCanOperate(false);
           setDownload(null);
@@ -529,11 +541,12 @@ function OrderStationAttachmentPanelInner({
           return null;
         }
         setReceipts(result.data.receipts);
+        if(result.data.intakeFiles)setIntakeFiles(result.data.intakeFiles);
         setEvidenceRecords(result.data.evidenceRecords);
         setServerCanOperate(result.data.canOperate);
         if (!result.data.canOperate) setDownload(null);
         setCurrentActorId(result.data.currentActorId);
-        setMessage(preserveMessage ?? "");
+        setMessage(preserveMessage ?? result.data.intakeFilesUnavailable ?? "");
         setPanelState("ready");
         setLoadedScopeKey(requestScope.key);
         return result.data.receipts;
@@ -545,6 +558,7 @@ function OrderStationAttachmentPanelInner({
         )
           return null;
         setReceipts([]);
+        setIntakeFiles([]);
         setEvidenceRecords([]);
         setServerCanOperate(false);
         setDownload(null);
@@ -568,6 +582,7 @@ function OrderStationAttachmentPanelInner({
       setCurrentActorId,
       setDownload,
       setEvidenceRecords,
+      setIntakeFiles,
       setLoadedScopeKey,
       setMessage,
       setPanelState,
@@ -650,6 +665,7 @@ function OrderStationAttachmentPanelInner({
     )
       return false;
     setReceipts(result.data.receipts);
+    if(result.data.intakeFiles)setIntakeFiles(result.data.intakeFiles);
     setEvidenceRecords(result.data.evidenceRecords);
     setServerCanOperate(result.data.canOperate);
     if (!result.data.canOperate) setDownload(null);
@@ -931,6 +947,16 @@ function OrderStationAttachmentPanelInner({
         restartSelection?.reservationId === pending.reservationId &&
         restartSelection.intentKey === fileIntentKey(intent);
 
+      const captureInIntake=async()=>{
+        if(!ports.capture)return false;
+        setOperation('uploading');
+        const result=await ports.capture({orderId,itemId:selectedItemId,expectedVersion,file});
+        if(!workflowIsCurrent(scope))return true;
+        if(result.code==='OK')await loadReceipts(undefined,scope);
+        else setMessage(result.message);
+        return true;
+      };
+
       if (
         pending &&
         (!restartMatches || restartSelection?.reason === "UPLOAD_GRANT_EXPIRED")
@@ -939,6 +965,7 @@ function OrderStationAttachmentPanelInner({
         if (!workflowIsCurrent(scope) || outcome !== "NOT_READY") return;
         if (restartMatches) {
           setRestartSelection(null);
+          if(await captureInIntake())return;
           await reserveUploadFinalize(
             analyzed.bytes,
             intent,
@@ -960,6 +987,7 @@ function OrderStationAttachmentPanelInner({
       }
 
       if (restartMatches) setRestartSelection(null);
+      if(await captureInIntake())return;
       await reserveUploadFinalize(
         analyzed.bytes,
         intent,
@@ -1082,6 +1110,37 @@ function OrderStationAttachmentPanelInner({
     setSelectedItemId(itemId);
   };
 
+  const downloadIntakeOriginal=async(file: IntakePhoto)=>{
+    if(!scopeReady||!serverCanOperate||busy||!ports.openIntake)return;
+    const scope=beginWorkflow('downloading');
+    if(!scope)return;
+    const startedAt=nowMs();
+    setDownload(null);
+    setMessage('');
+    try{
+      const result=await ports.openIntake({orderId,fileId:file.id});
+      if(!workflowIsCurrent(scope))return;
+      if(result.code!=='OK'){setMessage(result.message);return;}
+      const signed=new URL(result.downloadUrl);
+      const base=process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if(!base||signed.origin!==new URL(base).origin||signed.username||signed.password||signed.hash||
+        !signed.pathname.startsWith('/storage/v1/object/sign/scans/')||signed.searchParams.getAll('token').length!==1){
+        setMessage('Downloadfreigabe war nicht exakt gebunden.');return;
+      }
+      const expiresAt=startedAt+ORIGINAL_DOWNLOAD_SECONDS*1000;
+      if(nowMs()>=expiresAt){setMessage('Private Downloadfreigabe ist abgelaufen.');return;}
+      setDownload({url:signed.toString(),expiresAt});
+      setMessage('Privater Download ist kurzzeitig verfügbar.');
+    }catch{
+      if(workflowIsCurrent(scope))setMessage('Originaldownload ist derzeit nicht verfügbar.');
+    }finally{finishWorkflow(scope);}
+  };
+
+  const documents=[
+    ...receipts.map(receipt=>({source:'historical' as const,at:receipt.verifiedAt??receipt.reservedAt,receipt})),
+    ...intakeFiles.map(file=>({source:'intake' as const,at:file.at,file})),
+  ].sort((left,right)=>Date.parse(right.at)-Date.parse(left.at));
+
   return (
     <section
       className="mt-3 rounded-xl border border-border bg-card p-3"
@@ -1148,13 +1207,28 @@ function OrderStationAttachmentPanelInner({
             </button>
           )}
         </div>
-      ) : selectedItemId && receipts.length === 0 ? (
+      ) : selectedItemId && documents.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           Noch kein Übergabeoriginal erfasst.
         </p>
       ) : (
         <ul className="space-y-2">
-          {receipts.map((receipt) => {
+          {documents.map((document) => {
+            if(document.source==='intake')return (
+              <li key={`intake:${document.file.id}`} className="rounded-lg border border-border p-2 text-xs">
+                <p className="font-medium">{document.file.name}</p>
+                <p className="mt-1 text-muted-foreground">
+                  {INTAKE_FILE_CONTEXT_COPY.photoDetails(document.file.mime,document.file.bytes,formatTimestamp(document.at))}
+                </p>
+                {scopeReady&&serverCanOperate&&ports.openIntake&&(
+                  <button className="mt-2 flex items-center gap-1 rounded-md border border-border px-2 py-1" type="button"
+                    disabled={busy} onClick={()=>void downloadIntakeOriginal(document.file)}>
+                    <Download className="h-3 w-3" /> {INTAKE_FILE_CONTEXT_COPY.releaseOriginal}
+                  </button>
+                )}
+              </li>
+            );
+            const {receipt}=document;
             const restartRequired =
               restartSelection?.reservationId === receipt.reservationId;
             const ownedByCurrentActor = receipt.actorId === currentActorId;
@@ -1247,7 +1321,7 @@ function OrderStationAttachmentPanelInner({
                       disabled={busy}
                       onClick={() => void downloadOriginal(receipt)}
                     >
-                      <Download className="h-3 w-3" /> Original freigeben
+                      <Download className="h-3 w-3" /> {INTAKE_FILE_CONTEXT_COPY.releaseOriginal}
                     </button>
                   )}
               </li>

@@ -90,7 +90,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
    try{
     const sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await entry.file.arrayBuffer())),byte=>byte.toString(16).padStart(2,'0')).join('');
     if(ports.currentScope()!==scope)break;
-    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.deviceCapturedAt?{deviceCapturedAt:entry.deviceCapturedAt}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{}),...(entry.takeover?{takeover:entry.takeover}:{})},scope);
+    const grant=await ports.prepare({itemId:entry.itemId,fileId:entry.id,name:entry.file.name,mime:entry.file.type||'application/octet-stream',bytes:entry.file.size,sha256,...(entry.deviceId?{deviceId:entry.deviceId}:{}),...(entry.deviceCapturedAt?{deviceCapturedAt:entry.deviceCapturedAt}:{}),...(entry.captureOrigin?{captureOrigin:entry.captureOrigin}:{}),...(entry.takeover?{takeover:entry.takeover}:{}),...(entry.kontext?{kontext:entry.kontext}:{})},scope);
     if(grant.code!=='OK'){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
     if(grant.upload)await ports.upload(grant.upload,entry.file);
     if(ports.currentScope()!==scope)break;
@@ -98,7 +98,7 @@ export function syncPendingFiles(scope:string,ports:Ports,options:{flushDelayed?
     if(finished.code!=='OK'||!finished.capture.files.some(file=>file.id===entry.id&&file.secured===true)){outcome.blocked++;blockedItems.add(entry.itemId);continue;}
     outcome.secured++;
     // Goods photos need their real receipt association, not merely a stored blob.
-    if(entry.context||entry.captureOrigin==='warenfoto'||ports.currentScope()!==scope)continue;
+    if(entry.context||entry.captureOrigin==='warenfoto'&&!entry.kontext||ports.currentScope()!==scope)continue;
     await acknowledgePendingOriginal(scope,entry.id,undefined,finished.capture.takeovers);outcome.acknowledged++;
    }catch{outcome.blocked++;blockedItems.add(entry.itemId);reportProtocolClientError('OFFLINE_ORIGINAL_SYNC_FAILED');}
   }

@@ -57,7 +57,7 @@ import {IntakeTermBlock,type IntakeTermSelection} from "./ui/IntakeTermBlock";
 import type {IntakeTermOrigin} from "@/lib/intakeSuggestionsContract";
 import { IntakeCaptureDialog } from "./ui/IntakeCaptureDialog";
 import { Rueckfrage } from "@/ui/kr/Dialog";
-import type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeFileInput, IntakeFileGrant, IntakeCaptureKindInput } from "./captureContract";
+import type { EingangVorschlagResult, IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeFileInput, IntakeFileGrant } from "./captureContract";
 import { recognizeNoteConcerns } from "./captureContract";
 import { findRecognizedCustomers } from "./customerRecognition";
 import { ORDER_POSITION_UNITS, ORDER_POSITION_SURFACES, normaliseOrderPositionUnit, normaliseOrderPositionSurface, orderPositionQuantityError, orderPositionPriceError, FREE_TEXT_VAT_RATE_BASIS_POINTS } from "@/lib/orderPositionContract";
@@ -226,8 +226,9 @@ export type GlobalCreatePorts = {
   readCaptureNote?: (text: string) => Promise<{ code: "OK"; data: IntakeNoteReading } | { code: "FORBIDDEN" | "VALIDATION_ERROR"; message: string }>;
   prepareCaptureFile?: (input: IntakeFileInput,pendingScope?:string) => Promise<IntakeFileGrant>;
   finishCaptureFile?: (id: string,pendingScope?:string) => Promise<IntakeCaptureResult>;
-  chooseCaptureKind?: (input: IntakeCaptureKindInput) => Promise<IntakeCaptureResult>;
-  openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware", arg: string) => boolean;
+  readCaptureProposal?: (itemId:string)=>Promise<EingangVorschlagResult>;
+  runCaptureProposal?: (input:{itemId:string;vorschlagId:string;clientEventId:string})=>Promise<EingangVorschlagResult>;
+  openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein" | "kvware" | "kv-vorbereiten", arg: string) => boolean;
   canCreateOrder: boolean;
   canCreateQuote: boolean;
   canManageMoney: boolean;
@@ -486,7 +487,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [statusChecked, setStatusChecked] = useState(false);
   const [retryConfirmed, setRetryConfirmed] = useState(false);
-  const [resumePackageSource,setResumePackageSource]=useState<string|null>(null);
+  const [resumeCaptureSource,setResumeCaptureSource]=useState<{id:string;onsite:boolean}|null>(null);
   const [resumePendingOriginal,setResumePendingOriginal]=useState<string|null>(null);
   const [copied, setCopied] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(EMPTY_CUSTOMER);
@@ -1103,7 +1104,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   function reset() {
     setResumePendingOriginal(null);
-    setResumePackageSource(null);
+    setResumeCaptureSource(null);
     setCustomerSource(null);
     prospectPending.current=null;setLastIntakeAction('book');
     setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;
@@ -1195,7 +1196,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const draft=result.drafts.find(value=>value.id===id);
       if(!draft||draft.art!=="eingang")throw Error("INTAKE_DRAFT_NOT_FOUND");
       const raw=draft.payload;
-      if(raw.kind==='package-onsite'&&typeof raw.sourceItemId==='string'){setResumePackageSource(raw.sourceItemId);setOpen(true);setStep('choose');return;}
+      if(raw.kind==='package-onsite'&&typeof raw.sourceItemId==='string'){setResumeCaptureSource({id:raw.sourceItemId,onsite:true});setOpen(true);setStep('choose');return;}
 
       // P67: version 0 remains editable. Missing business fields stay empty;
       // the stored payload is only changed by an explicit save or valid booking.
@@ -1702,6 +1703,17 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setQuote(result.quote);
       setQuoteReceipt(result.receipt);
       ports.rememberQuote(result.quote.quoteId);
+      if(quotePreparation&&ports.readCaptureProposal){
+        const itemId=quotePreparation.source.itemId;
+        try{
+          const next=await ports.readCaptureProposal(itemId);
+          if(next.code==='OK'&&next.vorschlag.anliegenRest.length){
+            setResumeCaptureSource({id:itemId,onsite:false});setStep('choose');
+            window.dispatchEvent(new Event('kreile:intake-changed'));
+            return;
+          }
+        }catch(error){console.error('[QUOTE_INTAKE_FOLLOWUP_READ_FAILED]',error);}
+      }
       if(quotePreparation||quoteComplaint){setOpen(false);window.dispatchEvent(new Event('kreile:intake-changed'));window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'kv',arg:result.quote.quoteId}}));}
       else navigate("quote-saved");
     } catch {
@@ -2353,7 +2365,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => openWithIntent("DIRECT_INTAKE")} aria-label="Neu erfassen" aria-haspopup="dialog" aria-expanded={open}>
         <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Neu erfassen</span>
       </button> : null}
-      {open && step === "choose" ? aboveCards(<IntakeCaptureDialog resumePendingId={resumePendingOriginal} resumeSourceId={resumePackageSource} ports={ports} handoverToken={handoverToken} onClose={(message)=>{closeNow();if(message)setIntakeToast(message);}} onOrder={(customerId,source)=>void loadDirectIntake(customerId, Boolean(customerId)&&!source, undefined, source)} onCustomer={(source)=>{
+      {open && step === "choose" ? aboveCards(<IntakeCaptureDialog resumePendingId={resumePendingOriginal} resumeSourceId={resumeCaptureSource?.id} startOnsite={resumeCaptureSource?.onsite} ports={ports} handoverToken={handoverToken} onClose={(message)=>{closeNow();if(message)setIntakeToast(message);}} onOrder={(customerId,source)=>void loadDirectIntake(customerId, Boolean(customerId)&&!source, undefined, source)} onCustomer={(source)=>{
         if(!ports.canCreateCustomer){deny("customer");return;}
         if(source&&!ports.createCustomerFromCapture)return "Kunde und Original können in diesem Stand noch nicht gemeinsam gespeichert werden · Code: CUSTOMER_INTAKE_PORT_MISSING.";
         navigate("customer");setCustomerSource(source?{itemId:source.id,version:source.version}:null);if(source){setIntakeSourceCaptures([source]);setCustomerRecognitionText(captureRecognitionText(source));}

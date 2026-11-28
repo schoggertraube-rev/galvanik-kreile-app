@@ -1,4 +1,10 @@
 /** S54e packet: existing supplier creation keeps the structured original's prefill. */
+export const INTAKE_FILE_CONTEXT_COPY={contextMismatch:'Eingang gehört nicht zu diesem Kontext.',
+ contextForbidden:'Dokumente und Fotos sind nicht erlaubt.',
+ stationPhoto:'Nur JPG, PNG oder WebP bis 12 MiB sind erlaubt.',
+ releaseOriginal:'Original freigeben',
+ photoDetails:(mime:string,bytes:number,at:string)=>`${mime} · ${bytes.toLocaleString('de-DE')} Byte · ${at}`,
+ pending:'Die Datei bleibt auf diesem Gerät und wartet auf die Übertragung.'} as const;
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
 // TODO_PL: Fehlermeldungen zur Paketablage finalisieren.
 export const WARE_OHNE_BEZUG_COPY={
@@ -11,6 +17,16 @@ export const WARE_OHNE_BEZUG_COPY={
  speichern:'Das Paket konnte nicht sicher gespeichert werden. Öffne den Eingang erneut.',
  sitzung:'Melde dich an, um das Paket zu speichern.',
  paketLiegt:(ort:string)=>`Paket ohne Bezug liegt in ${ort}`,
+} as const;
+
+export const EINGANG_VORSCHLAG_COPY={
+  sollZuordnen:(kunde:string)=>`Soll ich den Eingang ${kunde} zuordnen?`,
+  jaZuordnen:'Ja, zuordnen',vonWem:'Von wem ist das?',fertig:'Alles aus diesem Eingang ist erledigt',
+  sollKvVorbereiten:(kunde:string)=>`Soll ich für ${kunde} einen KV vorbereiten?`,
+  jaKvVorbereiten:'Ja, KV vorbereiten',
+  weiterMit:(anliegen:string)=>`Weiter mit ${anliegen}`,
+  veraltet:'Eingang wurde inzwischen geändert · bitte neu lesen.',
+  ungueltig:'Eingang oder Vorschlag ist ungültig.',recht:'Vorschläge benötigen Eingang.',
 } as const;
 
 export const eingangCopy = {

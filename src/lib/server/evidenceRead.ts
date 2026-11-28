@@ -2,7 +2,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction,withTenantSavepoint,type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { mapEvidenceVisibility, type EvidenceVisibility, type EvidenceVisibilityRow } from "@/lib/domain/evidenceVisibility";
 import {EVIDENCE_READ_COPY} from '@/ui/situationCatalog';
 
@@ -43,7 +43,7 @@ export type EvidenceReadRecord = {
 };
 
 export type EvidenceReadResult<T> =
-  | { code: "OK"; data: T }
+  | { code: "OK"; data: T; intakePhotoParts?: readonly string[] | null }
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
@@ -267,20 +267,31 @@ function mapRecord(
 
 /** Batch only the existing qualified order evidence projection; no originals
  * are fetched from Storage and a corrupt order cannot erase another order. */
-export async function readOrderEvidenceBatch(authorization:Pick<AuthorizationSnapshot,'tenantId'|'permissions'>,orderIds:readonly string[]):Promise<Map<string,EvidenceReadResult<EvidenceReadRecord[]>>>{
+export async function readOrderEvidenceBatch(authorization:Pick<AuthorizationSnapshot,'tenantId'|'permissions'>,
+ orderIds:readonly string[]):Promise<Map<string,EvidenceReadResult<EvidenceReadRecord[]>>>{
  const result=new Map<string,EvidenceReadResult<EvidenceReadRecord[]>>();
  if(!authorization.permissions.includes('perm_view_leitstand')||new Set(orderIds).size!==orderIds.length||orderIds.some(id=>!validId(id))){
   for(const id of orderIds)result.set(id,{code:'FORBIDDEN',message:'Nachweise sind nicht erlaubt.'});return result;
  }
  if(orderIds.length===0)return result;
  try{
-  const rows=await withPrivilegedTenantTransaction(authorization,tx=>tx.execute<EvidenceViewRow&{order_target:string}>(sql`
+  const {rows,intake}=await withPrivilegedTenantTransaction(authorization,async tx=>{
+   const rows=await tx.execute<EvidenceViewRow&{order_target:string}>(sql`
    SELECT wanted.id AS order_target,evidence.* FROM unnest(ARRAY[${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)}]::text[]) AS wanted(id)
    JOIN private.v_evidence_records_v3 evidence ON evidence.target_links @> jsonb_build_array(jsonb_build_object('targetType','ORDER','targetId',wanted.id))
    WHERE evidence.tenant_id=${authorization.tenantId} AND evidence.source_kind<>'INTAKE_FILE'
-   ORDER BY wanted.id,evidence.recorded_at DESC,evidence.evidence_key`));
+   ORDER BY wanted.id,evidence.recorded_at DESC,evidence.evidence_key`);
+   try{
+    const {readHandoffIntakeOriginalsInTransaction}=await import('./orderStationAttachment');
+    return {rows,intake:await withTenantSavepoint(tx,child=>readHandoffIntakeOriginalsInTransaction(child,authorization,{orderIds}))};
+   }catch(error){console.error('[INTAKE_HANDOFF_EVIDENCE_UNAVAILABLE]',error);return {rows,intake:null};}
+  });
   for(const id of orderIds){
-   try{result.set(id,{code:'OK',data:rows.filter(row=>row.order_target===id).map(row=>mapRecord(row,authorization,{targetType:'ORDER',targetId:id}))});}
+   try{
+    const parts=intake===null?null:[...new Set(intake.filter(file=>file.orderId===id).map(file=>file.itemId))];
+    result.set(id,{code:'OK',data:rows.filter(row=>row.order_target===id).map(row=>mapRecord(row,authorization,{targetType:'ORDER',targetId:id})),
+     ...(parts===null||parts.length?{intakePhotoParts:parts}:{})});
+   }
    catch{result.set(id,{code:'UNAVAILABLE',message:EVIDENCE_READ_COPY.unavailable});}
   }
  }catch{for(const id of orderIds)result.set(id,{code:'UNAVAILABLE',message:EVIDENCE_READ_COPY.unavailable});}

@@ -40,15 +40,9 @@ import {
   revokeCustomerAgreementAction,
   saveCustomerAgreementAction,
 } from "@/app/actions/customers.actions";
-import {
-  finalizeGalvanikHandoffAttachmentAction,
-  getGalvanikHandoffAttachmentOriginalAction,
-  getGalvanikHandoffAttachmentsAction,
-  getOrderStationReceiptAction,
-  reserveGalvanikHandoffAttachmentAction,
-} from "@/app/warendurchlauf/actions";
+import {getOrderStationReceiptAction} from "@/app/warendurchlauf/actions";
 import {createOrderIntakeAction} from "@/app/actions/eingang.actions";
-import { uploadSignedOrderAttachment } from "@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter";
+import {useGalvanikHandoffAttachmentPorts} from "@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter";
 import { DomainAttachmentPanel } from "@/components/attachments/DomainAttachmentPanel";
 import { CommunicationPanel } from "@/components/communication/CommunicationPanel";
 import {ComplaintPanel} from '@/modules/orders/public';
@@ -75,7 +69,6 @@ import {
   type OrderCardModel,
   type OrderCardPaymentContext,
   type OrderCardState,
-  type OrderStationAttachmentPorts,
 } from "@/modules/orders/public";
 
 type Snapshot = {
@@ -183,6 +176,7 @@ function mapCard(
   evidence: EvidenceReadRecord[],
   payment: OrderCardPaymentContext,
   catalog: NonNullable<OrderCardModel["catalog"]>,
+  intakePhotoParts: OrderCardModel["intakePhotoParts"],
 ): OrderCardModel {
   return {
     actors:card.actors,
@@ -225,6 +219,7 @@ function mapCard(
         frozen: line.frozen,
       })),
     })),
+    intakePhotoParts,
     evidence: evidence.map((record) => ({
       key: record.evidenceKey,
       source: record.source,
@@ -372,7 +367,7 @@ export function OrderCardAppAdapter({
         setSnapshot(next);
         setState({
           kind: "data",
-          card: {...mapCard(card, result.data.evidence, context, next.catalog),...(result.data.customerInformed?.code==='OK'&&result.data.customerInformed.invoiceMailQueued===true?{invoiceMailWaiting:INVOICE_DELIVERY_COPY.queued(card.customerName)}:{})},
+          card: {...mapCard(card, result.data.evidence, context, next.catalog, result.data.intakePhotoParts),...(result.data.customerInformed?.code==='OK'&&result.data.customerInformed.invoiceMailQueued===true?{invoiceMailWaiting:INVOICE_DELIVERY_COPY.queued(card.customerName)}:{})},
         });
         return next;
       } catch (error) {
@@ -926,16 +921,7 @@ export function OrderCardAppAdapter({
     delete requests.current.duplicate;
     success("duplicate", { actorId: result.receipt.actorId, occurredAt: result.receipt.recordedAt, eventId: result.receipt.eventId, receiptId: result.receipt.receiptId }, `Auftrag wurde als ${result.receipt.orderNumber} dupliziert.`);
   }, [fail, snapshot, success]);
-  const attachmentPorts = useMemo<OrderStationAttachmentPorts>(
-    () => ({
-      read: getGalvanikHandoffAttachmentsAction,
-      reserve: reserveGalvanikHandoffAttachmentAction,
-      finalize: finalizeGalvanikHandoffAttachmentAction,
-      readOriginal: getGalvanikHandoffAttachmentOriginalAction,
-      uploadSigned: uploadSignedOrderAttachment,
-    }),
-    [],
-  );
+  const attachmentPorts = useGalvanikHandoffAttachmentPorts();
   const attachmentVisible = snapshot?.card.station === "galvanik";
   const actions = useMemo<OrderCardActionPorts>(() => {
     const card = snapshot?.card;

@@ -45,9 +45,6 @@
     "src/app/actions/auth.actions.ts#recordAppSessionActivity": [
       "src/test/acceptance/l_g6c_session_activity.integration.test.ts"
     ],
-    "src/app/actions/domainAttachments.actions.ts#analyzeDomainAttachmentAction": [
-      "src/test/acceptance/s20_recognition_protocol.integration.test.ts"
-    ],
     "src/app/actions/logging.actions.ts#getProtocolLogAction": [
       "src/test/acceptance/s20_technical_protocol.integration.test.ts",
       "src/test/acceptance/s20_review_corrections.integration.test.ts"
@@ -289,6 +286,15 @@
     "src/app/actions/eingang.actions.ts#saveIntakeDraftAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
+    "src/app/actions/eingang.actions.ts#loeseEntwurfskonfliktAction": [
+      "src/test/acceptance/s23a_entwurf.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#fuehreEingangVorschlagAusAction": [
+      "src/test/acceptance/s23a_vorschlag.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#leseEingangVorschlagAction": [
+      "src/test/acceptance/s23a_vorschlag.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#discardIntakeDraftAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
@@ -339,9 +345,6 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#createCustomerForIntakeAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
-    ],
-    "src/app/actions/eingang.actions.ts#chooseIntakeCaptureKindAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#changeOrderPickupNoticeAction": [
@@ -490,9 +493,6 @@
       "src/test/acceptance/evidence_visibility_change.integration.test.ts",
       "src/test/acceptance/evidence_visibility_capture.browser.integration.test.ts"
     ],
-    "src/app/actions/domainAttachments.actions.ts#finalizeDomainAttachmentAction": [
-      "src/test/acceptance/evidence_visibility_upload.integration.test.ts"
-    ],
     "src/app/warendurchlauf/actions.ts#finalizeGalvanikHandoffAttachmentAction": [
       "src/test/acceptance/evidence_visibility_sources.integration.test.ts"
     ],
@@ -543,7 +543,6 @@
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#attachIntakeDraftAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/domainAttachments.actions.ts#reserveDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#createItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#deleteItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#updateItemDb": "H18.8 Bestand ohne Replay-Action-Test",
