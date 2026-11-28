@@ -119,6 +119,8 @@ it.each([
  {name:'andere Nummer',nummernEnde:'-DRUCK',brutto:'336,90',ziel:'offen',haelt:true,vat:'DE900000081'},
  {name:'anderer Bruttobetrag im Scan',nummernEnde:'',brutto:'337,90',ziel:'bezahlt',haelt:true,vat:'DE900000082',scan:true},
  {name:'übereinstimmende Angaben',nummernEnde:'',brutto:'336,90',ziel:'offen',haelt:false,vat:'DE900000083'},
+ {name:'gedruckter Nummer und abweichendem Brutto auf der Scan-Seite',nummernEnde:'',brutto:'338,90',
+  ziel:'bezahlt',haelt:true,vat:'DE900000084',scan:true,hybrid:true},
 ])('I2 E10 vergleicht getrennte gesicherte Originale bei $name',async(fall)=>{
  const nummer='TEST-I2-E10-'+randomUUID().slice(0,8);
  const supplier=await withSession(full,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'lieferant',
@@ -129,7 +131,9 @@ it.each([
  const pdf=await PDFDocument.create(),page=pdf.addPage();
  if(fall.scan){
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1EAAAAASUVORK5CYII=','base64');
-  page.drawImage(await pdf.embedPng(png),{x:24,y:710,width:30,height:30});
+  if(fall.hybrid)page.drawText('Rechnungsnummer: '+nummer,{x:24,y:740,size:12});
+  const scanSeite=fall.hybrid?pdf.addPage():page;
+  scanSeite.drawImage(await pdf.embedPng(png),{x:24,y:710,width:30,height:30});
  }else{
   page.drawText('Rechnungsnummer: '+nummer+fall.nummernEnde,{x:24,y:740,size:12});
   page.drawText('Brutto: '+fall.brutto+' EUR',{x:24,y:710,size:12});
@@ -157,9 +161,12 @@ it.each([
    const model=url.pathname.match(/documentModels\/([^:/]+)/u)?.[1];
    if(init?.method==='POST')return new Response(null,{status:202,headers:{'operation-location':
     host+'/documentintelligence/documentModels/'+model+'/analyzeResults/TEST-I2-Scan'}});
+   const fundstellen=fall.hybrid?[{pageNumber:1},{pageNumber:2}]:[{pageNumber:1}];
+   const werte=[{key:'Rechnungsnummer',value:fall.hybrid?nummer+'-OCR':nummer,page:1},
+    {key:'Netto',value:'300,00',page:1},{key:'Brutto',value:fall.brutto,page:fall.hybrid?2:1}];
    return Response.json({status:'succeeded',analyzeResult:{modelId:model,content:'Rechnung\nRechnungsnummer: '+nummer,
-    pages:[{pageNumber:1}],keyValuePairs:[['Rechnungsnummer',nummer],['Brutto',fall.brutto]].map(([key,value])=>
-     ({key:{content:key},value:{content:value},confidence:0.99}))}});
+    pages:fundstellen,keyValuePairs:werte.map(({key,value,page})=>
+     ({key:{content:key},value:{content:value,boundingRegions:[{pageNumber:page}]},confidence:0.99}))}});
   });
   try{
    await sichereOriginal(xmlId,'TEST_i2_getrennt.xml','application/xml',xml);
@@ -179,6 +186,9 @@ it.each([
   AND feld='rechnung.abgleich' AND status='offen' ORDER BY file_id`;
  expect(abgleiche).toEqual(fall.haelt?[pdfId,xmlId].sort().map(file_id=>({file_id,grund:'PDF und XML widersprechen',
   sicherheit:'unsicher',pdf:pdfId,xml:xmlId})):[]);
+ if(fall.hybrid)expect(await sql`SELECT fundstelle->>'page' AS seite,wert->'pdf' AS druckwerte
+  FROM public.intake_suggestion WHERE tenant_id=${tenant} AND item_id=${itemId} AND file_id=${pdfId}
+  AND feld='rechnung.abgleich' AND status='offen'`).toEqual([{seite:'2',druckwerte:{nummer:nummer.toUpperCase(),bruttoCent:33890}}]);
  const read=await withSession(full,()=>getIncomingInvoiceAction({id:itemId,fileId:xmlId}));
  if(read.code!=='OK')throw Error('TEST_E10_READ:'+read.code);
  const save={itemId,fileId:xmlId,version:read.view.item.version,clientKey:randomUUID(),

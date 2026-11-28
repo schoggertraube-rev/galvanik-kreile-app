@@ -8,7 +8,7 @@ import {findeRechnungswiderspruch,rechnungsBelegwerte} from './eingangsRegeln';
 import {gespeichertesBelegoriginal} from './intakeOriginal';
 
 type Druckwert={field:string;value:unknown;page:number|null};
-type Original={id:string;art:'pdf'|'xml';werte:Druckwert[]};
+type Original={id:string;art:'pdf'|'xml';werte:Druckwert[];ocr:Druckwert[]};
 
 export async function liesGetrenntenRechnungswiderspruch(tx:PrivilegedTenantTransaction,
  tenantId:string,itemId:string,fileId:string,pages:InvoicePageRange|null=null){
@@ -21,15 +21,13 @@ export async function liesGetrenntenRechnungswiderspruch(tx:PrivilegedTenantTran
     AND s.status IN ('offen','uebernommen') AND (
      file.mime='application/pdf' AND (s.feld='rechnung.druckbild' OR (
       file.erkennung_roh_pfad IS NOT NULL AND s.feld IN ('rechnung.nummer','rechnung.betrag')
-      AND s.fundstelle->>'format' IS NULL
-      AND NOT EXISTS(SELECT 1 FROM public.intake_suggestion druck WHERE druck.tenant_id=file.tenant_id
-       AND druck.file_id=file.id AND druck.feld='rechnung.druckbild' AND druck.status IN ('offen','uebernommen'))))
+      AND s.fundstelle->>'format' IS NULL))
      OR file.mime<>'application/pdf' AND s.fundstelle->>'format' IN ('UBL','CII')
         AND s.feld IN ('rechnung.nummer','rechnung.betrag'))
   ORDER BY file.reihenfolge,file.id,s.id`);
  const originale=new Map<string,Original>();
  for(const quelle of quellen){
-  const original:Original=originale.get(quelle.fileId)??{id:quelle.fileId,art:quelle.art,werte:[]};
+  const original:Original=originale.get(quelle.fileId)??{id:quelle.fileId,art:quelle.art,werte:[],ocr:[]};
   if(quelle.feld==='rechnung.druckbild'&&Array.isArray(quelle.wert)){
    for(const wert of quelle.wert){
     if(!wert||typeof wert!=='object'||!['rechnung.nummer','rechnung.betrag'].includes(wert.field)
@@ -39,10 +37,17 @@ export async function liesGetrenntenRechnungswiderspruch(tx:PrivilegedTenantTran
    }
   }else if(quelle.feld!=='rechnung.druckbild'){
    const seite=quelle.seite&&/^\d+$/u.test(quelle.seite)?Number(quelle.seite):null;
-   if(!pages||quelle.fileId!==fileId||quelle.art==='xml'||seite!==null&&seite>=pages.from&&seite<=pages.to)
-    original.werte.push({field:quelle.feld,value:quelle.wert,page:seite});
+   if(!pages||quelle.fileId!==fileId||quelle.art==='xml'||seite!==null&&seite>=pages.from&&seite<=pages.to){
+    const werte=quelle.art==='pdf'?original.ocr:original.werte;
+    werte.push({field:quelle.feld,value:quelle.wert,page:seite});
+   }
   }
   originale.set(original.id,original);
+ }
+ for(const original of originale.values()){
+  const fehlendeDruckwerte=original.ocr.filter(ocr=>!original.werte.some(druck=>
+   druck.field===ocr.field&&(ocr.page===null||druck.page===ocr.page)));
+  original.werte.push(...fehlendeDruckwerte);
  }
  const gewaehltes=originale.get(fileId);
  if(!gewaehltes?.werte.length)return null;

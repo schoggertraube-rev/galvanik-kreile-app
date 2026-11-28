@@ -17,6 +17,7 @@ export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[]
  const isDate=(value:string)=>/^(rechnungsdatum|rechnung datum|invoice date)$/.test(value);
  if(!suggestions.some(value=>isNumber(label(value.label))||isDate(label(value.label))))return [];
  const result:InvoiceSuggestion[]=[],amounts:Record<string,string>={},sources:DocumentSuggestion[]=[],seen=new Set<string>();
+ let bruttoQuelle:DocumentSuggestion|undefined;
  for(const suggestion of suggestions){
   const key=label(suggestion.label);let field:string|null=null,value:unknown=null;
   if(isNumber(key)){field='rechnung.nummer';value=suggestion.value.trim();}
@@ -25,13 +26,20 @@ export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[]
   else if(/^(iban|bankverbindung iban)$/.test(key)){field='rechnung.iban';value=suggestion.value.replace(/\s/g,'');}
   else{
    const amountKey=/^(netto|nettobetrag|gesamt netto|net amount|subtotal)$/.test(key)?'netto':/^(ust|umsatzsteuer|mwst|mehrwertsteuer|steuerbetrag|tax amount|total tax)$/.test(key)?'ust':/^(brutto|bruttobetrag|gesamtbetrag|rechnungsbetrag|zahlbetrag|invoice total|total amount|amount due)$/.test(key)?'brutto':null;
-   if(amountKey){const cents=invoiceCents(suggestion.value.replace(/\s*(?:€|EUR)\s*$/iu,''));if(cents!==null&&!Object.hasOwn(amounts,amountKey)){amounts[amountKey]=invoiceDecimal(cents);sources.push(suggestion);}}
+   if(amountKey){
+    const cents=invoiceCents(suggestion.value.replace(/\s*(?:€|EUR)\s*$/iu,''));
+    if(cents!==null&&!Object.hasOwn(amounts,amountKey)){
+     amounts[amountKey]=invoiceDecimal(cents);
+     sources.push(suggestion);
+     if(amountKey==='brutto')bruttoQuelle=suggestion;
+    }
+   }
   }
   if(field&&value!==null&&value!==''&&!seen.has(field)){result.push({field,value,confidence:suggestion.confidence,source:suggestion.source});seen.add(field);}
  }
  if(sources.length){
   const confidence=sources.reduce<number|null>((minimum,value)=>minimum===null||value.confidence===null?null:Math.min(minimum,value.confidence),1);
-  result.push({field:'rechnung.betrag',value:amounts,confidence,source:sources[0].source});
+  result.push({field:'rechnung.betrag',value:amounts,confidence,source:(bruttoQuelle??sources[0]).source});
  }
  return result;
 }
