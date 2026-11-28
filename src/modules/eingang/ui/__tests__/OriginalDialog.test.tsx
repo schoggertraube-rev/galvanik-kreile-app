@@ -39,9 +39,10 @@ describe('Original: O07 metadata without Mails',()=>{
   const itemId='22222222-2222-4222-8222-222222222222';
   const invoiceId='33333333-3333-4333-8333-333333333333';
   const file={id:fileId,name:'TEST Beleg.pdf',mime:'application/pdf',sha256:'a'.repeat(64)};
+  const mail={id:'44444444-4444-4444-8444-444444444444',name:'TEST Original.eml',mime:'message/rfc822',sha256:'b'.repeat(64)};
   const view:InvoiceView={
    item:{id:itemId,version:1,at:'2026-11-18T08:00:00Z',channel:'mail',sender:null},
-   originals:[file],fileId,supplier:null,fields:{...EMPTY_INVOICE_FIELDS},uncertain:0,conflict:null,duplicate:null,
+   originals:[file,mail],fileId,supplier:null,fields:{...EMPTY_INVOICE_FIELDS},uncertain:0,conflict:null,duplicate:null,
    invoice:{...{seite_von:2,seite_bis:2},id:invoiceId,item_id:itemId,file_id:fileId,nummer_intern:'TEST-2',lieferant_id:null,nummer:null,datum:null,
     netto:null,ust:null,brutto:null,ust_saetze:null,faellig_am:null,iban:null,iban_geprueft:false,zahlstatus:'bezahlt',
     bezahlt_am:null,nachweis_file_id:null,verweis_id:null,dublette_grund:null,unklar_grund:null,aufgabe_id:null,
@@ -58,7 +59,8 @@ describe('Original: O07 metadata without Mails',()=>{
     detail:{ziel:'original',arg:[item,file,scope].join('#')},cancelable:true,
    }))),
   };
-  render(<><IncomingInvoiceDialog initial={view} ports={invoice} onClose={vi.fn()} onMessage={vi.fn()}/>
+  const selectOriginal=vi.fn();
+  render(<><IncomingInvoiceDialog initial={view} ports={invoice} onClose={vi.fn()} onMessage={vi.fn()} onSelectOriginal={selectOriginal}/>
    <IntakeObjectDialogs allowed ports={{original,goods:{} as IntakeObjectPorts['goods'],quoteGoods:{} as IntakeObjectPorts['quoteGoods']}}
     onRefresh={vi.fn()} onOpenCustomer={vi.fn()} onOpenOrder={vi.fn()} onOpenQuote={vi.fn()}/></>);
   fireEvent.click(screen.getByRole('button',{name:/TEST Beleg.pdf/}));
@@ -68,6 +70,9 @@ describe('Original: O07 metadata without Mails',()=>{
   expect(original.confirm).toHaveBeenCalledWith({fileId,invoiceId,clientEventId:expect.any(String)});
   await waitFor(()=>expect(invoice.read).toHaveBeenCalledWith({id:invoiceId}));
   expect(original.capture).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:/TEST Original.eml/}));
+  expect(invoice.openOriginal).toHaveBeenLastCalledWith(itemId,mail.id);
+  expect(selectOriginal).not.toHaveBeenCalled();
  });
  it('keeps early Escape for the requested original and leaves the conversation underneath open',async()=>{
   vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));

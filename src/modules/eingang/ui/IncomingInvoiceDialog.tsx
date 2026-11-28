@@ -45,9 +45,9 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onSelectO
   }catch(error){console.error('[INVOICE_RETURN_READ_FAILED]',error);setMessage('Lieferant konnte nicht neu gelesen werden · Fehlercode: INVOICE_RETURN_READ_FAILED.');}};
   window.addEventListener(INTAKE_CHANGED_EVENT,refresh);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,refresh);
  },[initial.invoice,initial.fileId,initial.item.id,ports]);
- const openOriginal=(fileId:string)=>{
+ const openOriginal=({id:fileId,mime}:InvoiceView['originals'][number])=>{
   if(working.current)return;
-  if(onSelectOriginal&&fileId!==view.fileId){
+  if(mime!=='message/rfc822'&&onSelectOriginal&&fileId!==view.fileId){
    if(changed){setPendingOriginal(fileId);setDiscard(true);}
    else onSelectOriginal(fileId);
    return;
@@ -139,7 +139,7 @@ export function IncomingInvoiceDialog({initial,ports,onClose,onMessage,onSelectO
   {duplicate?<div data-spec-id="rechnungein.zustand.dublette"><Hinweis ton="warn">Rechnung {duplicate.number} von {selected?.name??'Lieferant fehlt'} gibt es schon ({duplicate.internalNumber})</Hinweis>
    {!duplicate.exact?<Feld label="Grund für die zweite Erfassung" fehler={errors.duplicateReason}><Eingabe data-spec-id="rechnungein.dublette_grund" maxLength={200} value={duplicateReason} onChange={event=>setDuplicateReason(event.target.value)}/></Feld>:null}</div>:null}
   {retry?<div data-spec-id="rechnungein.zustand.fehler"><p>Nicht gespeichert · alle Eingaben sind noch da</p><Button data-spec-id="rechnungein.erneut" text="Erneut" onClick={()=>{setRetry(false);setMessage(null);}} disabled={busy}/></div>:null}
-  <div className="r38-raster"><Kachel titel="Original" icon="file">{view.originals.map(file=><button key={file.id} className="kr-zeile" type="button" data-spec-id="rechnungein.original" onClick={()=>openOriginal(file.id)}><span><b>{file.name||'Beleg'}</b><small>gesichert · unverändert</small></span></button>)}{!view.originals.length?<Hinweis ton="warn">Original fehlt</Hinweis>:null}</Kachel>
+  <div className="r38-raster"><Kachel titel="Original" icon="file">{view.originals.map(file=><button key={file.id} className="kr-zeile" type="button" data-spec-id="rechnungein.original" onClick={()=>openOriginal(file)}><span><b>{file.name||'Beleg'}</b><small>gesichert · unverändert</small></span></button>)}{!view.originals.length?<Hinweis ton="warn">Original fehlt</Hinweis>:null}</Kachel>
    <section aria-label="Rechnung"><h3 className="kr-block-label">1 · Rechnung</h3><div className="kr-form">
     <Feld label="Lieferant" voll fehler={errors.lieferantId}><Eingabe data-invoice-field="lieferantId" data-spec-id="rechnungein.lieferant" required value={supplierQuery} disabled={busy} readOnly={readOnly||!!view.invoice&&!missingSupplier} onChange={event=>{setSupplierQuery(event.target.value);setSelected(null);update('lieferantId','');}}/>
      {searching?<span role="status">Lieferant wird gesucht …</span>:null}
