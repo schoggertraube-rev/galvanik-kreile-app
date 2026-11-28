@@ -4,21 +4,39 @@ import {reportObservedTechnical} from './actionObservation';
 import type {LogSubject,TechnicalEvent} from '@/modules/logging/public';
 
 const API_VERSION = "2024-11-30";
+const DOCUMENT_FORMATS = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+export const EXCEL_WORKBOOK_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const OFFICE_FORMATS = new Map<string, AzureOfficeFormat>([
+  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
+  [EXCEL_WORKBOOK_MIME, "xlsx"],
+  ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "pptx"],
+  ["text/html", "html"],
+] as const);
+export type AzureOfficeFormat = "docx" | "xlsx" | "pptx" | "html";
 type Environment = Record<string, string | undefined>;
 type FetchPort = typeof fetch;
+
+export function azureOfficeFormat(mimeType: string): AzureOfficeFormat | null {
+  return OFFICE_FORMATS.get(mimeType) ?? null;
+}
+
+export function supportsAzureDocument(mimeType: string, size: number, allowOffice = false): boolean {
+  return size > 0 && size <= 20 * 1024 * 1024
+    && (DOCUMENT_FORMATS.has(mimeType) || allowOffice && azureOfficeFormat(mimeType) !== null);
+}
 
 export type DocumentSuggestion = {
   field: "CUSTOMER_NAME" | "CONTACT_PERSON" | "EMAIL" | "PHONE" | "ADDRESS" | "DUE_DATE" | "ITEM_DESCRIPTION" | "QUANTITY" | "MATERIAL" | "SURFACE" | "DOCUMENT_TEXT" | "OTHER";
   label: string;
   value: string;
   confidence: number | null;
-  source: { page: number; polygon: number[] };
+  source: { page: number | null; polygon: number[] };
 };
 
 type AzureResult = {
   code: "OK";
   data: { suggestions: DocumentSuggestion[] };
-  original?: { bytes: Uint8Array; model: string; pages: number | null; tables: unknown[] };
+  original?: { bytes: Uint8Array; model: string; pages: number | null; tables: unknown[]; language: string | null };
 } | { code: "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
 
 function readAzurePayload(bytes: Uint8Array): Record<string, unknown> {
@@ -27,13 +45,28 @@ function readAzurePayload(bytes: Uint8Array): Record<string, unknown> {
   return payload as Record<string, unknown>;
 }
 
+function readDocumentLanguage(languages: unknown): string | null {
+  if (!Array.isArray(languages) || !languages.length) return null;
+  let language: string | null = null;
+  for (const entry of languages) {
+    if (typeof entry?.locale !== "string") return null;
+    let locale: string;
+    try { [locale] = Intl.getCanonicalLocales(entry.locale); }
+    catch { return null; }
+    if (!locale || locale === "und" || language !== null && language !== locale) return null;
+    language = locale;
+  }
+  return language;
+}
+
 function successfulResult(payload: Record<string, unknown>, bytes: Uint8Array, model: string): Extract<AzureResult, { code: "OK" }> {
   const analysis = payload.analyzeResult;
   const document = analysis && typeof analysis === "object" ? analysis as Record<string, unknown> : null;
   if (document?.modelId !== undefined && document.modelId !== model) throw Error("AZURE_RESULT_MODEL_INVALID");
   const pages = Array.isArray(document?.pages) && document.pages.length > 0 ? document.pages.length : null;
   const tables = Array.isArray(document?.tables) ? document.tables : [];
-  return { code: "OK", data: { suggestions: suggestions(payload) }, original: { bytes, model, pages, tables } };
+  const language = readDocumentLanguage(document?.languages);
+  return { code: "OK", data: { suggestions: suggestions(payload) }, original: { bytes, model, pages, tables, language } };
 }
 
 export function readAzureRecognitionOriginal(bytes: Uint8Array, model: string) {
@@ -63,13 +96,50 @@ function classify(label: string): DocumentSuggestion["field"] {
   return "OTHER";
 }
 
+const modelFieldLabels = {
+  InvoiceId: "Invoice ID",
+  InvoiceDate: "Invoice date",
+  DueDate: "Due date",
+  VendorName: "Lieferant",
+  VendorTaxId: "Umsatzsteuer-ID",
+  PurchaseOrder: "Bestellnummer",
+  MerchantName: "Händler",
+  TransactionDate: "Belegdatum",
+} as const;
+
+function modelSuggestions(documents: unknown): DocumentSuggestion[] {
+  if (!Array.isArray(documents)) return [];
+  const result: DocumentSuggestion[] = [];
+  for (const document of documents) {
+    const fields = document?.fields;
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) continue;
+    for (const [name, label] of Object.entries(modelFieldLabels)) {
+      const field = fields[name];
+      if (!field || typeof field !== "object") continue;
+      const value = typeof field.valueDate === "string" ? field.valueDate
+        : typeof field.content === "string" ? field.content.trim() : "";
+      const confidence = field.confidence ?? null;
+      const region = Array.isArray(field.boundingRegions) && field.boundingRegions.length === 1
+        ? field.boundingRegions[0] : null;
+      if (!value || !region || !Number.isSafeInteger(region.pageNumber) || region.pageNumber < 1
+        || confidence !== null && (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1)) continue;
+      const polygon = Array.isArray(region.polygon) ? region.polygon.filter((point: unknown): point is number =>
+        typeof point === "number" && Number.isFinite(point)).slice(0, 16) : [];
+      result.push({ field: classify(label), label, value, confidence, source: { page: region.pageNumber, polygon } });
+    }
+  }
+  return result;
+}
+
 function suggestions(payload: unknown): DocumentSuggestion[] {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
   const result = (payload as Record<string, unknown>).analyzeResult;
   if (!result || typeof result !== "object" || Array.isArray(result)) return [];
   const analysis = result as Record<string, unknown>;
   const pairs = Array.isArray(analysis.keyValuePairs) ? analysis.keyValuePairs : [];
-  const output: DocumentSuggestion[] = [];
+  const singlePage = Array.isArray(analysis.pages) && analysis.pages.length === 1
+    && analysis.pages[0]?.pageNumber === 1 ? 1 : null;
+  const output: DocumentSuggestion[] = modelSuggestions(analysis.documents);
   for (const pairValue of pairs) {
     if (!pairValue || typeof pairValue !== "object" || Array.isArray(pairValue)) continue;
     const pair = pairValue as Record<string, unknown>;
@@ -80,7 +150,10 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
     const confidence = typeof pair.confidence === "number" ? pair.confidence : typeof value.confidence === "number" ? value.confidence : null;
     const regions = Array.isArray(value.boundingRegions) ? value.boundingRegions : Array.isArray(key.boundingRegions) ? key.boundingRegions : [];
     const region = regions[0] && typeof regions[0] === "object" && !Array.isArray(regions[0]) ? regions[0] as Record<string, unknown> : {};
-    const page = typeof region.pageNumber === "number" && Number.isInteger(region.pageNumber) ? region.pageNumber : 1;
+    const reportedPage = region.pageNumber;
+    const page = typeof reportedPage === "number" && Number.isSafeInteger(reportedPage) && reportedPage > 0
+      && regions.every(value => value?.pageNumber === reportedPage) ? reportedPage
+      : regions.length === 0 ? singlePage : null;
     const polygon = Array.isArray(region.polygon) ? region.polygon.filter((point): point is number => typeof point === "number" && Number.isFinite(point)).slice(0, 16) : [];
     if (!label || !content || (confidence !== null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1))) continue;
     output.push({ field: classify(label), label, value: content, confidence, source: { page, polygon } });
@@ -94,15 +167,16 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
 export async function analyzeWithAzureDocumentIntelligence(
   bytes: Uint8Array,
   mimeType: string,
+  model: string,
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  diagnostic?: {subject:LogSubject;originalRef:string;model?:string},
+  diagnostic?: {subject:LogSubject;originalRef:string;allowOffice?:boolean;keyValuePairs?:boolean;languages?:boolean},
 ): Promise<AzureResult> {
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
   if (!endpointValue || !key) return { code: "IN_KLAERUNG", message: "Azure Document Intelligence ist noch nicht für die Preview verbunden." };
-  if (bytes.byteLength < 1 || bytes.byteLength > 20 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mimeType)) {
+  if (!supportsAzureDocument(mimeType, bytes.byteLength, diagnostic?.allowOffice)) {
     return { code: "UNAVAILABLE", message: "Das Dokumentformat kann nicht sicher analysiert werden." };
   }
   let attempted=false;
@@ -110,12 +184,13 @@ export async function analyzeWithAzureDocumentIntelligence(
   try {
     const endpoint = new URL(endpointValue);
     if (endpoint.protocol !== "https:") throw new Error("AZURE_ENDPOINT_INVALID");
-    const model = diagnostic?.model ?? "prebuilt-layout";
     if (!/^[a-z0-9-]{3,64}$/u.test(model)) throw new Error("AZURE_MODEL_INVALID");
     const analyzeUrl = new URL(`documentintelligence/documentModels/${model}:analyze`, endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");
     analyzeUrl.searchParams.set("api-version", API_VERSION);
-    analyzeUrl.searchParams.set("features", "keyValuePairs");
+    if (azureOfficeFormat(mimeType) === null && diagnostic?.keyValuePairs !== false) {
+      analyzeUrl.searchParams.set("features", diagnostic?.languages ? "keyValuePairs,languages" : "keyValuePairs");
+    }
     attempted=true;
     const response = await fetchPort(analyzeUrl, {
       method: "POST",

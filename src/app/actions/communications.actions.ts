@@ -1,7 +1,8 @@
 "use server";
 
+import {after} from 'next/server';
 import {observeAction,subjectForAction} from '@/modules/logging/server-public';
-import {readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {isFeatureEnabled,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
 import {storeQuoteMailOriginal,readQuoteMailOriginal} from '@/lib/server/communicationOriginalPort';
 import {quoteOperationContext} from '@/lib/server/quoteAuthorization';
 import {readQuoteCommand} from '@/modules/quotes/server-public';
@@ -27,7 +28,7 @@ import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {readInvoicePdf} from '@/lib/server/invoiceRead';
 import {readCollectionReminderReceipt,applyCollectionReminderMailEffects,assertCollectionReminderCurrent,collectionReminderIntent,type CollectionReminderMeta} from '@/lib/server/collectionReminderPort';
-import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY,PAGE_READ_COPY} from '@/ui/situationCatalog';
+import {INVOICE_DELIVERY_COPY,COLLECTION_REMINDER_COPY,CUSTOMER_COLLECTION_COPY,PAGE_READ_COPY,MAILBOX_SYNC_COPY} from '@/ui/situationCatalog';
 import {recordInvoiceManualHandover,InvoiceManualHandoverConflict,recordInvoiceMailRemainderFailure,freezeInvoiceMailRequest,readInvoiceMailRequestSnapshot,readInvoiceMailOpenRemainder} from '@/lib/server/communicationDocumentPort';
 import {synchronizeInvoiceMailRemainderTask} from '@/modules/tasks/server-public';
 
@@ -52,7 +53,15 @@ export async function listOutlookInboxAction(input?: TargetInput) {
   noStore();
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
-  if(!input)return readCommunicationInbox(authorizationResult.data);
+  if(!input){
+    const auth=authorizationResult.data;
+    if(hasAuthorizationArea(auth,'mails')){
+      const outlook=await isFeatureEnabled(auth,'E05');
+      if(outlook.code!=='OK')return {code:'UNAVAILABLE' as const,message:MAILBOX_SYNC_COPY.unavailable};
+      if(!outlook.enabled)return {code:'OK' as const,data:[]};
+    }
+    return readCommunicationInbox(auth);
+  }
   const legacy=await readLinkedCommunicationMessages(authorizationResult.data,input);
   if(legacy.code!=='OK')return legacy;
   const canonical=await readLinkedIntakeMails(authorizationResult.data,input);
@@ -332,7 +341,7 @@ async function sendCustomerMailGroup(input:CustomerMailInput,snapshotIds?:readon
  },readLoggingSettings);
 }
 
-import {importIntakeGraphMail} from '@/modules/eingang/server-public';
+import {finishIntakeFile,importIntakeGraphMail} from '@/modules/eingang/server-public';
 import {recordDispatchReply} from '@/lib/server/dispatchReplyPort';
 import {finishDispatchCallsForReply} from '@/lib/server/dispatchCallPort';
 import {finishPostalTasksForReply} from '@/lib/server/storagePostalPort';
@@ -370,14 +379,23 @@ async function withDispatchReply<T extends {code:string;itemId?:string}>(auth:Au
  }
 }
 import {readMicrosoftGraphAttachments,readMicrosoftGraphMime,readMicrosoftGraphMessage,type GraphInboxMessage} from '@/lib/server/microsoftGraph';
+function returnSavedMail(auth:AuthorizationSnapshot,saved:Extract<Awaited<ReturnType<typeof readIntakeMailImportReceipt>>,{code:'OK'}>,recognitionEnabled:boolean){
+ const {waitingFileIds,...result}=saved;
+ if(recognitionEnabled&&waitingFileIds.length)after(async()=>{
+  await Promise.all(waitingFileIds.map(fileId=>finishIntakeFile(fileId,{
+   authorization:auth,readSettings:readErkennungsEinstellungenInTransaction,importingMail:true,
+  })));
+ });
+ return result;
+}
+
 async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>[0],mail:GraphInboxMessage){
  const [mime,files]=await Promise.all([readMicrosoftGraphMime(mail.id),readMicrosoftGraphAttachments(mail.id)]);
  if(mime.code!=='OK')return mime;
  if(files.code!=='OK')return files;
- const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],readCommunicationImportContext,files.data.skipped);
- if(result.code!=='OK')return result;
- const saved=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
- return saved.code==='OK'?{...saved,replayed:result.replayed}:saved;
+ const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],
+  readErkennungsEinstellungenInTransaction,readCommunicationImportContext,files.data.skipped);
+ return result.code==='OK'?returnSavedMail(auth,result,true):result;
 }
 export async function importOutlookMailAction(graphMessageId:string,options?:{deferDispatchReply?:boolean}){
  return observeAction('importOutlookMailAction',subjectForAction('importOutlookMailAction',graphMessageId),async()=>{
@@ -386,7 +404,10 @@ export async function importOutlookMailAction(graphMessageId:string,options?:{de
  if(!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
  if(typeof graphMessageId!=='string'||!graphMessageId||graphMessageId.length>1024)return {code:'VALIDATION_ERROR' as const,message:'Mailkennung ungültig.'};
  const saved=await readIntakeMailImportReceipt(authorization.data,{graphMessageId});
- if(saved.code!=='NOT_FOUND')return withDeliveryFailure(authorization.data,saved,options?.deferDispatchReply===true);
+ if(saved.code!=='NOT_FOUND'&&saved.code!=='OK')return saved;
+ const outlook=await isFeatureEnabled(authorization.data,'E05');
+ if(outlook.code!=='OK'||!outlook.enabled)return saved.code==='OK'?returnSavedMail(authorization.data,saved,false):{code:'UNAVAILABLE' as const,message:MAILBOX_SYNC_COPY.unavailable};
+ if(saved.code==='OK')return withDeliveryFailure(authorization.data,returnSavedMail(authorization.data,saved,true),options?.deferDispatchReply===true);
  const mail=await readMicrosoftGraphMessage(graphMessageId);
  if(mail.code!=='OK')return mail;
  return withDeliveryFailure(authorization.data,await importIntakeMessage(authorization.data,mail.data),options?.deferDispatchReply===true);

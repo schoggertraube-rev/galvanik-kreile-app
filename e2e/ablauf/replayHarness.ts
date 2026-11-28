@@ -40,7 +40,7 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>,flushAfter=
   const request = new NextRequest("http://127.0.0.1/TEST-ein34-mail", { headers: { ...requestHeaders,cookie } });
   const afterJobs:Promise<unknown>[]=[],closeCallbacks:Array<()=>void>=[],afterErrors:unknown[]=[];
   const {AfterContext}=await import('next/dist/server/after/after-context');
-  const nativeAfter=flushAfter?new AfterContext({waitUntil:promise=>{afterJobs.push(promise);},onClose:callback=>{closeCallbacks.push(callback);},onTaskError:error=>{afterErrors.push(error);}}):{};
+  const nativeAfter=new AfterContext({waitUntil:promise=>{afterJobs.push(promise);},onClose:callback=>{closeCallbacks.push(callback);},onTaskError:error=>{afterErrors.push(error);}});
   const workStore = {
     isStaticGeneration: false,
     page: "/TEST-ein34-mail",
@@ -106,6 +106,11 @@ async function createFixture(rights: string[],role:AppSession['role']='meister')
   return { actorId, actorIssuedAt, role };
 }
 
+
+export async function enableOutlookTestFixture() {
+  await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled)
+    VALUES (${KREILE_TENANT_SLUG},'E05',true) ON CONFLICT (tenant,feature_id) DO NOTHING`;
+}
 
 export {sql,full,withSession,withRequest,nativeFetch,storageApi,createFixture};
 

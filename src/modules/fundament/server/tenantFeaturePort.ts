@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { SALES_STAGE_FEATURES, type SalesStageFeature, type SalesStageFeatureId } from "../featureCatalog";
 
 export type TenantFeatureContext = { tenantId: string; actorId: string; canManage: boolean };
@@ -28,17 +28,19 @@ export function mapTenantFeatureRows(rows: TenantFeatureRow[]): SalesStageFeatur
   return SALES_STAGE_FEATURES.map(({ id }) => ({ id, enabled: mapped.get(id) === true }));
 }
 
+export function readTenantFeatureRows(tx: PrivilegedTenantTransaction, tenantId: string) {
+  return tx.execute<TenantFeatureRow>(sql`
+    SELECT feature_id, enabled
+    FROM public.tenant_features
+    WHERE tenant = ${tenantId}
+    ORDER BY feature_id
+  `);
+}
+
 export async function readTenantFeatures(context: TenantFeatureContext) {
   try {
-    const features = await withPrivilegedTenantTransaction(context, async (tx) => {
-      const rows = await tx.execute<TenantFeatureRow>(sql`
-        SELECT feature_id, enabled
-        FROM public.tenant_features
-        WHERE tenant = ${context.tenantId}
-        ORDER BY feature_id
-      `);
-      return mapTenantFeatureRows(rows);
-    });
+    const features = await withPrivilegedTenantTransaction(context, async tx =>
+      mapTenantFeatureRows(await readTenantFeatureRows(tx, context.tenantId)));
     return { code: "OK" as const, features };
   } catch (error) {
     logTenantFeatureFailure("TENANT_FEATURE_READ_FAILED", error);
@@ -69,8 +71,14 @@ export async function setTenantFeature(context: TenantFeatureContext, input: unk
   }
 }
 
-export async function isFeatureEnabled(context: TenantFeatureContext, id: SalesStageFeatureId) {
-  const result = await readTenantFeatures(context);
-  if (result.code !== "OK") return result;
-  return { code: "OK" as const, enabled: result.features.find((feature) => feature.id === id)?.enabled === true };
+export async function isFeatureEnabled(context: Pick<TenantFeatureContext, "tenantId">, id: SalesStageFeatureId) {
+  try {
+    const rows = await withPrivilegedTenantTransaction(context, tx => readTenantFeatureRows(tx, context.tenantId));
+    const feature = rows.find(row => row.feature_id === id);
+    if (typeof feature?.enabled !== "boolean") throw Error("TENANT_FEATURE_MISSING");
+    return { code: "OK" as const, enabled: feature.enabled };
+  } catch (error) {
+    logTenantFeatureFailure("TENANT_FEATURE_READ_FAILED", error);
+    return { code: "UNAVAILABLE" as const, message: "Stufen-Schalter konnten nicht sicher gelesen werden." };
+  }
 }

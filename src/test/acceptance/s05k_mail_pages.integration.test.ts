@@ -1,13 +1,15 @@
 // @vitest-environment node
 // Explicit TEST Graph pages only; actual intake/Auth/DB/Storage and original receipts.
-import {it,expect,vi} from 'vitest';
+import {beforeAll,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {readIntakeMailboxWatermark} from '@/modules/eingang/server-public';
 import {getOpenIntakeMailsAction,getIntakeTaskAction} from '@/app/actions/eingang.actions';
+
+beforeAll(enableOutlookTestFixture);
 
 it('S05K A1 imports 45 originals across three Graph pages and rereads without duplicates',async()=>{
  const run=randomUUID(),text='TEST Bitte senden Sie einen Kostenvoranschlag für vier Trompeten.';

@@ -29,7 +29,9 @@ beforeAll(async()=>{
  process.env.SUPABASE_SERVICE_ROLE_KEY=local.SERVICE_ROLE_KEY;
  process.env.APP_SESSION_SECRET='TEST-ein34-local-only';
  process.env.MS_GRAPH_TENANT_ID='TEST-tenant';process.env.MS_GRAPH_CLIENT_ID='TEST-client';process.env.MS_GRAPH_CLIENT_SECRET='TEST-provider-fixture';process.env.MS_GRAPH_MAILBOX='TEST-mailbox@example.invalid';
- await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,mailbox_fetch_state) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST MIME mailbox',NULL)`;
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,mailbox_fetch_state,material_aufschlag_prozent,lager_regelversion)
+  VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST MIME mailbox',NULL,0,'TEST-EIN34')`;
+ await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E05',true)`;
  full=await createFixture(['eingang','mails','kunden','auftraege','preise','zahlungen','buchhaltung']);restricted=await createFixture(['eingang','kunden']);
 });
 afterAll(async()=>{vi.restoreAllMocks();for(const key of Object.keys(process.env))if(!(key in originalEnv))delete process.env[key];Object.assign(process.env,originalEnv);await sql.end({timeout:5});});
@@ -38,12 +40,15 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T
   const { createRequestStoreForAPI } = await import("next/dist/server/async-storage/request-store");
   const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external");
   const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external");
+  const {AfterContext}=await import('next/dist/server/after/after-context');
+  const jobs:Promise<unknown>[]=[],closed:Array<()=>void>=[],errors:unknown[]=[];
+  const after=new AfterContext({waitUntil:job=>{jobs.push(job);},onClose:callback=>{closed.push(callback);},onTaskError:error=>{errors.push(error);}});
   const request = new NextRequest("http://127.0.0.1/TEST-ein34-mail", { headers: { cookie } });
   const workStore = {
     isStaticGeneration: false,
     page: "/TEST-ein34-mail",
     route: "/TEST-ein34-mail",
-    afterContext: {},
+    afterContext: after,
     previouslyRevalidatedTags: [],
     refreshTagsByCacheKind: new Map(),
     shouldTrackFetchMetrics: false,
@@ -61,7 +66,13 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T
     undefined,
     undefined as never,
   );
-  return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, work));
+  return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, async () => {
+    const result=await work();
+    for(const close of closed)close();
+    await Promise.all(jobs);
+    if(errors.length)throw new AggregateError(errors,'TEST_NEXT_AFTER_FAILED');
+    return result;
+  }));
 }
 
 async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise<T> {
@@ -142,6 +153,10 @@ it('imports one MIME + inline/non-inline originals via the real UI action, rerea
  expect(first.mails).toContainEqual(expect.objectContaining({id:row.id,fileCount:2}));
  const events=await sql`SELECT art,nachher FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid`;
  expect(events.filter(event=>event.art==='angelegt')).toHaveLength(1);
+ const [mailFile]=await sql`SELECT id::text FROM public.intake_file
+   WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${row.id}::uuid AND mime='message/rfc822'`;
+ const mailReadings=events.filter(event=>event.art==='erkannt'&&event.nachher.fileId===mailFile.id);
+ expect(mailReadings.map(event=>event.nachher.code).sort()).toEqual(['INTAKE_FILE_FINISH_FAILED','OK']);
  expect(events.find(event=>event.art==='angelegt')?.nachher.replyChain).toEqual({source:'original_mime',originalSha256:createHash('sha256').update(mime).digest('hex'),status:'present',inReplyTo:['<TEST-KV-Edition1@example.invalid>'],references:['<TEST-Request@example.invalid>','<TEST-KV-Edition1@example.invalid>']});
  const {resolveAuthorization}=await import('@/lib/server/authorization');
  const {readIntakeMailImportReceipt}=await import('@/modules/eingang/server-public');

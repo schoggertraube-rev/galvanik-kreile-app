@@ -1,11 +1,11 @@
 // @vitest-environment node
 import {createHash,randomUUID} from 'node:crypto';
-import {expect,it,vi} from 'vitest';
+import {beforeAll,expect,it,vi} from 'vitest';
 
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
-import {createFixture,full,nativeFetch,sql,withSession} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,createFixture,full,nativeFetch,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture,intakeOrderFixture,readyInvoiceOrder,readyOrderForInvoice} from '../../../e2e/ablauf/orderFixture';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {berlinCalendarDay,plusWorkingDays} from '@/lib/domain/workingDays';
@@ -20,6 +20,8 @@ import {readCustomerProfile} from '@/modules/customers/server-public';
 import {leseLagerAuftragsmaterialInTransaction} from '@/modules/lager/server-public';
 import {MAIL_PROMISE_COPY} from '@/ui/eingangMailCopy';
 import {pruefeZusage as zusage,type ZusageLeser} from '@/modules/eingang/server-public';
+
+beforeAll(enableOutlookTestFixture);
 
 const leser:ZusageLeser={
   termin:(auth,input,options)=>readIntakeSuggestions(auth,input,readBetriebsruheInTransaction,options),

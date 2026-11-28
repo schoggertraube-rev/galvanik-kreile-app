@@ -14,7 +14,11 @@ import type { AppSession } from "@/lib/server/appSession";
 (globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 // AP-EIN packet: fixed provider response only at the existing Azure boundary in isolated Replay tests.
-vi.mock("@/lib/server/azureDocumentIntelligence", () => ({ analyzeWithAzureDocumentIntelligence: vi.fn(async () => ({ code: "OK", data: { suggestions: [] } })) }));
+vi.mock("@/lib/server/azureDocumentIntelligence", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/server/azureDocumentIntelligence")>();
+  const bytes = new TextEncoder().encode(JSON.stringify({ status: 'succeeded', analyzeResult: { modelId: 'prebuilt-layout' } }));
+  return { ...actual, analyzeWithAzureDocumentIntelligence: vi.fn(async () => actual.readAzureRecognitionOriginal(bytes, 'prebuilt-layout')) };
+});
 vi.mock("@/lib/server/microsoftGraph", () => ({ sendMicrosoftGraphMail: vi.fn(async () => ({ code: "OK", data: {} })), readMicrosoftGraphConfigurationStatus: vi.fn(()=>({code:"READY"})) }));
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -324,7 +328,9 @@ describe("AP-EIN F05: real Actions, local Storage, DB and fresh read",()=>{
   const uploaded=await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}));
   expect(uploaded.ok).toBe(true);
   }
-  const finished=await withSession(fixture,()=>finishIntakeFileAction(input.fileId));
+  expect(await withSession(fixture,()=>finishIntakeFileAction(input.fileId)))
+   .toMatchObject({code:"OK",capture:{files:[{id:input.fileId,secured:true,status:"wartet"}]}});
+  const finished=await withSession(fixture,()=>getIntakeCaptureAction(input.itemId));
   expect(finished).toMatchObject({code:"OK",capture:{id:input.itemId,assignment:"offen",files:[{id:input.fileId,name:input.name,readable:false,status:"fehler"}]}});
   const rows=await sql`SELECT item_id::text,dateiname,sha256,speicherpfad,lesbar,erkennung_status FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`;
   expect(rows).toEqual([{item_id:input.itemId,dateiname:input.name,sha256:input.sha256,speicherpfad:KREILE_TENANT_SLUG+"/"+input.sha256,lesbar:false,erkennung_status:"fehler"}]);
@@ -535,15 +541,18 @@ describe("P55 E40: phone and photograph provenance",()=>{
   const actor=await createFixture();
   const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
   const content='SYNTHETISCH · Rechnung · Rechnungsnummer TEST-P63';
-  vi.mocked(analyzeWithAzureDocumentIntelligence).mockResolvedValueOnce({code:'OK',data:{suggestions:[{field:'DOCUMENT_TEXT',label:'Dokumenttext',value:content,confidence:0,source:{page:1,polygon:[]}}]}});
+  const {readAzureRecognitionOriginal}=await import('@/lib/server/azureDocumentIntelligence');
+  vi.mocked(analyzeWithAzureDocumentIntelligence).mockResolvedValueOnce(readAzureRecognitionOriginal(new TextEncoder().encode(JSON.stringify({
+   status:'succeeded',analyzeResult:{modelId:'prebuilt-layout',content},
+  })),'prebuilt-layout'));
   const {prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
   const {uploadIntakeOriginal}=await import('@/modules/eingang/public');
-  const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=','base64');
+  const bytes=Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=','base64'),Buffer.from(randomUUID())]);
   const input={itemId:randomUUID(),fileId:randomUUID(),name:'synthetisch-p63.png',mime:'image/png',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),captureOrigin:'dokument' as const};
   const grant=await withSession(actor,()=>prepareIntakeFileAction(input));if(grant.code!=='OK')throw Error('P63_FILE_GRANT:'+grant.message);
   if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).ok).toBe(true);
-  expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung',text:content}}});
-  expect(await sql`SELECT feld,wert FROM public.intake_suggestion WHERE tenant_id=${KREILE_TENANT_SLUG} AND file_id=${input.fileId}::uuid`).toEqual([{feld:'DOCUMENT_TEXT',wert:content}]);
+  expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true,status:'wartet'}]}});
+  expect(await sql`SELECT erkannter_text FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`).toEqual([{erkannter_text:content}]);
   expect(await sql`SELECT anliegen,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`).toEqual([{anliegen:['rechnung'],anliegen_offen:['rechnung']}]);
   expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung',text:content},files:[{id:input.fileId,status:'fertig'}]}});
   expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK'});
@@ -953,7 +962,8 @@ describe("Owner model RT02: recognition retry against Replay DB",()=>{
   const grant=await withSession(fixture,()=>prepareIntakeFileAction(input));
   expect(grant.code).toBe("OK");if(grant.code!=="OK")throw Error("RT02_UPLOAD_REQUIRED");
   if(grant.upload)expect(await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).toMatchObject({ok:true});
-  expect(await withSession(fixture,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:"OK",capture:{files:[{id:input.fileId,status:"fertig"}]}});
+  expect(await withSession(fixture,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:"OK",capture:{files:[{id:input.fileId,secured:true,status:"wartet"}]}});
+  expect(await withSession(fixture,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:"OK",capture:{files:[{id:input.fileId,status:"fertig"}]}});
   // The supplied RT02 precondition is a persisted recognition failure, never a mock DB.
   await sql`UPDATE public.intake_file SET erkennung_status='fehler' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`;
   const retry={fileId:input.fileId,clientEventId:randomUUID()};

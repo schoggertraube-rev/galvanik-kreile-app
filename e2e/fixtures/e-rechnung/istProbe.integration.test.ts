@@ -51,14 +51,15 @@ for(const input of inputs)it('S54a actual incoming original: '+input.file,async(
   const upload=await nativeFetch(url,{method:'PUT',headers:{'content-type':'application/xml','x-upsert':'false'},body:new Uint8Array(bytes)});
   observation.uploadStatus=upload.status;expect(upload.ok).toBe(true);
  }
- const finished=await withSession(full,()=>finishIntakeFileAction(fileId));observation.finishCode=finished.code;
+ const finished=await withSession(full,()=>finishIntakeFileAction(fileId),true);observation.finishCode=finished.code;
  expect(finished.code).toBe('OK');if(finished.code!=='OK')throw Error('S54A_FINISH:'+finished.code);
- const file=finished.capture.files.find(value=>value.id===fileId);observation.file=file;observation.recognition=finished.capture.recognition;
- expect(file?.secured).toBe(true);
  const reread=await withSession(full,()=>getIntakeCaptureAction(itemId));expect(reread.code).toBe('OK');
+ if(reread.code!=='OK')throw Error('S54A_REREAD:'+reread.code);
+ const file=reread.capture.files.find(value=>value.id===fileId);observation.file=file;observation.recognition=reread.capture.recognition;
+ expect(file?.secured).toBe(true);
  const invoice=await withSession(full,()=>getIncomingInvoiceAction({id:itemId}));observation.readCode=invoice.code;
  expect(invoice.code).toBe('OK');if(invoice.code!=='OK')throw Error('S54A_INVOICE_READ:'+invoice.code);
- observation.fields=invoice.view.fields;observation.sender=invoice.view.item.sender;observation.suggestions=finished.capture.suggestions;
+ observation.fields=invoice.view.fields;observation.sender=invoice.view.item.sender;observation.suggestions=reread.capture.suggestions;
  expect(invoice.view.originals).toEqual(expect.arrayContaining([expect.objectContaining({id:fileId,sha256:originalSha256})]));
  const original=await withSession(full,()=>openIntakeOriginalAction({fileId,clientEventId:randomUUID()}));observation.openCode=original.code;
  if(original.code==='OK'){

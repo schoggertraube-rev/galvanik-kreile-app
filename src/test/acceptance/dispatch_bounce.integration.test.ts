@@ -1,11 +1,11 @@
 // @vitest-environment node
 import {withRestoredTestSource} from '@/test/fixtures/restoredTestSource';
-import {vi,it,expect} from 'vitest';
+import {beforeAll,vi,it,expect} from 'vitest';
 import {createHash,randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
-import {sql,full,withSession,nativeFetch} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,nativeFetch} from '../../../e2e/ablauf/replayHarness';
 import {readyInvoiceOrder} from '../../../e2e/ablauf/orderFixture';
 import {sendCustomerMailAction,importOutlookMailAction,attachOutlookMailAction} from '@/app/actions/communications.actions';
 import {getOrdersDb,getLiveOrderCardAction} from '@/app/actions/orders.actions';
@@ -13,6 +13,8 @@ import {createDispatchCallTaskAction} from '@/app/actions/eingang.actions';
 import {updateCustomerAction} from '@/app/actions/customers.actions';
 import {readShippingSettingsAction,saveShippingSettingsAction} from '@/app/actions/settings.actions';
 import {emptyDispatchPolicy} from '@/modules/fundament/public';
+
+beforeAll(enableOutlookTestFixture);
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1')throw Error('BOUNCE_LOOPBACK_REQUIRED');
 function mime(messageId:string,recipient:string,action='failed',status='5.1.1'){
  return 'Message-ID: <TEST-report@example.invalid>\r\nFrom: postmaster@example.invalid\r\nContent-Type: multipart/report; report-type=delivery-status; boundary="TEST-report"\r\n\r\n--TEST-report\r\nContent-Type: text/plain\r\n\r\nTEST untrusted human body\r\n--TEST-report\r\nContent-Type: message/delivery-status\r\n\r\nReporting-MTA: dns; TEST.example.invalid\r\n\r\nFinal-Recipient: rfc822; '+recipient+'\r\nAction: '+action+'\r\nStatus: '+status+'\r\n\r\n--TEST-report\r\nContent-Type: text/rfc822-headers\r\n\r\nMessage-ID: '+messageId+'\r\nFrom: TEST-mailbox@example.invalid\r\nTo: '+recipient+'\r\n--TEST-report--\r\n';

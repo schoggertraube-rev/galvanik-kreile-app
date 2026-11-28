@@ -58,8 +58,17 @@ function nextDate(day: number, month: number, year: number | null, today: Date):
   return candidate.toISOString().slice(0, 10);
 }
 
-export function recognizeIntakeText(text: string, today = new Date()): IntakeTextRecognition {
-  if (text.length > 20_000) throw new Error("INTAKE_TEXT_TOO_LONG");
+function firstEmail(text: string): string | undefined {
+  for (const [token] of text.matchAll(/[A-Z0-9._%+@-]+/gi)) {
+    // Walk the full mail once and constrain address matching to a single short token.
+    if (token.length > 255 || !token.includes("@")) continue;
+    const email = token.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0];
+    if (email && email.length <= 254) return email;
+  }
+}
+
+export function recognizeIntakeText(text: string, today = new Date(), securedMailOriginal = false): IntakeTextRecognition {
+  if (!securedMailOriginal && text.length > 20_000) throw new Error("INTAKE_TEXT_TOO_LONG");
   const normalized = text.trim();
   if (!normalized) return { fields: [], positions: [] };
   const fields: IntakeTextRecognitionField[] = [];
@@ -69,9 +78,9 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
   };
 
   const lines = normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const email = normalized.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0];
+  const email = firstEmail(normalized);
   if (email) addField("email", email, `Text Zeile ${Math.max(1, lines.findIndex((line) => line.includes(email)) + 1)}`);
-  const phone = normalized.match(/(?:\+49|0049|0)[\d\s/()-]{5,}\d/)?.[0]?.trim();
+  const phone = normalized.match(/(?:\+49|0049|0)[\d\s/()-]{5,80}\d/)?.[0]?.trim();
   if (phone && phone.replace(/\D/g, "").length >= 6) addField("phone", phone, `Text Zeile ${Math.max(1, lines.findIndex((line) => line.includes(phone)) + 1)}`);
   const address = normalized.match(/\b(\d{5})\s+([\p{L}][\p{L}\s.-]{1,80})/u);
   if (address) {
@@ -100,7 +109,7 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
     }
   }
 
-  const positions = corrected.split(/\r?\n|;|,(?=\s*\d)|\s+und\s+/i).flatMap((part, index) => {
+  const positions = corrected.split(/\r?\n|;|,(?=\s*\d)|(?<=\s)und(?=\s)/i).flatMap((part, index) => {
     const content=part.trim().replace(/^bitte\s+/i, "");
     const explicit=content.match(/^(\d+(?:[.,]\d+)?|ein dutzend|ein paar|eins|ein|eine|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|zwanzig|dreißig|hundert|einige)\s*(kg|Stück|Stk\.?|St\.?|Teile|x)\b\s*(.*)$/i);
     // A counted part with an explicit treatment needs no word "Stück".

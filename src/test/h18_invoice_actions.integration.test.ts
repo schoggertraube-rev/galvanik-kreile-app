@@ -41,12 +41,19 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T
   const { createRequestStoreForAPI } = await import("next/dist/server/async-storage/request-store");
   const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external");
   const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external");
+  const { AfterContext } = await import("next/dist/server/after/after-context");
+  const jobs: Promise<unknown>[] = [], close: (() => void)[] = [], errors: unknown[] = [];
+  const afterContext = new AfterContext({
+    waitUntil: job => { jobs.push(job); },
+    onClose: done => { close.push(done); },
+    onTaskError: error => { errors.push(error); },
+  });
   const request = new NextRequest("http://127.0.0.1/h18-invoice-actions", { headers: { cookie } });
   const workStore = {
     isStaticGeneration: false,
     page: "/h18-invoice-actions",
     route: "/h18-invoice-actions",
-    afterContext: {},
+    afterContext,
     previouslyRevalidatedTags: [],
     refreshTagsByCacheKind: new Map(),
     shouldTrackFetchMetrics: false,
@@ -64,7 +71,11 @@ async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T
     undefined,
     undefined as never,
   );
-  return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, work));
+  const result=await workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, work));
+  for(const done of close)done();
+  await Promise.all(jobs);
+  if(errors.length)throw new AggregateError(errors,'H18_INVOICE_AFTER_RESPONSE_FAILED');
+  return result;
 }
 
 async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise<T> {
@@ -557,7 +568,7 @@ describe('P55 structured electronic invoice originals',()=>{
    const input={itemId:randomUUID(),fileId:randomUUID(),name:'synthetisch-xrechnung.xml',mime:'application/xml',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
    const grant=await withSession(fixture,()=>prepareIntakeFileAction(input));if(grant.code!=='OK')throw Error('XML_GRANT:'+grant.message);
    if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).ok).toBe(true);
-   const saved=await withSession(fixture,()=>finishIntakeFileAction(input.fileId));expect(saved).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung'},files:[{id:input.fileId,status:'fertig'}]}});
+   const saved=await withSession(fixture,()=>finishIntakeFileAction(input.fileId));expect(saved).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true,status:'wartet'}]}});
    expect(await withSession(fixture,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung'},concerns:['rechnung']}});
    expect(ocr).not.toHaveBeenCalled();
    expect(await sql`SELECT erkennung_status FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`).toEqual([{erkennung_status:'fertig'}]);

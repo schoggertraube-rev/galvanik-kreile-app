@@ -2,16 +2,18 @@
 // Explicit TEST mail at the Graph boundary; real intake, invoices and original storage.
 import { createHash, randomUUID } from 'node:crypto';
 import { PDFDocument } from 'pdf-lib';
-import { expect, it, vi } from 'vitest';
+import {beforeAll, expect, it, vi } from 'vitest';
 
 const tenant = vi.hoisted(() => 'TEST-ablauf-' + globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant', () => ({ KREILE_TENANT_SLUG: tenant }));
 
-import { createFixture, full, nativeFetch, sql, withSession } from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture, createFixture, full, nativeFetch, sql, withSession } from '../../../e2e/ablauf/replayHarness';
 import { importOutlookMailAction } from '@/app/actions/communications.actions';
 import { createCustomerAction } from '@/app/actions/customers.actions';
 import { getIncomingInvoiceAction, openIntakeOriginalAction, saveIncomingInvoiceAction } from '@/app/actions/eingang.actions';
 import type { InvoiceSaveInput } from '@/modules/eingang/public';
+
+beforeAll(enableOutlookTestFixture);
 
 async function document(name: string, pageCount = 1) {
   const pdf = await PDFDocument.create();

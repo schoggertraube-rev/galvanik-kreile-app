@@ -7,14 +7,14 @@ describe("P63 Azure recognition boundary", () => {
     const fetchPort = vi.fn().mockResolvedValueOnce(new Response(null, { status: 202,
       headers: { "operation-location": "https://docs.example.invalid/documentintelligence/documentModels/prebuilt-layout/analyzeResults/p63" } }))
       .mockResolvedValueOnce(Response.json({ status: "succeeded", analyzeResult: { content } }));
-    const result = await analyzeWithAzureDocumentIntelligence(new Uint8Array([1]), "image/heic", env, fetchPort, async () => undefined);
+    const result = await analyzeWithAzureDocumentIntelligence(new Uint8Array([1]), "image/heic", "prebuilt-layout", env, fetchPort, async () => undefined);
     expect(result).toMatchObject({ code: "OK", data: { suggestions: [{ field: "DOCUMENT_TEXT", value: content }] } });
     expect(fetchPort).toHaveBeenCalledTimes(2);
   });
 
   it("P63: never sends structured XML to OCR", async () => {
     const fetchPort = vi.fn();
-    expect(await analyzeWithAzureDocumentIntelligence(new TextEncoder().encode("<Invoice/>"), "application/xml", env, fetchPort)).toMatchObject({ code: "UNAVAILABLE" });
+    expect(await analyzeWithAzureDocumentIntelligence(new TextEncoder().encode("<Invoice/>"), "application/xml", "prebuilt-layout", env, fetchPort)).toMatchObject({ code: "UNAVAILABLE" });
     expect(fetchPort).not.toHaveBeenCalled();
   });
 

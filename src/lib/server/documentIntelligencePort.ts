@@ -2,7 +2,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { analyzeWithAzureDocumentIntelligence, readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -12,7 +12,11 @@ function logDocumentIntelligenceFailure(code: string, error: unknown) {
   console.error(`[${code}]`, error instanceof Error ? error.message : "UNKNOWN_ERROR");
 }
 
-export async function analyzeDomainAttachment(auth: AuthorizationSnapshot, input: { attachmentId: string; targetType: "CUSTOMER" | "ORDER" | "INTAKE_DRAFT"; targetId: string }) {
+export async function analyzeDomainAttachment(
+  auth: AuthorizationSnapshot,
+  input: { attachmentId: string; targetType: "CUSTOMER" | "ORDER" | "INTAKE_DRAFT"; targetId: string },
+  readSettings: (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{ erkennung_modelle: { dokument: string } }>,
+) {
   if (!input || !UUID.test(input.attachmentId) || !["CUSTOMER", "ORDER", "INTAKE_DRAFT"].includes(input.targetType) || typeof input.targetId !== "string" || input.targetId.length < 1 || input.targetId.length > 128) {
     return { code: "VALIDATION_ERROR" as const, message: "Dokument oder Zuordnung ist ungültig." };
   }
@@ -32,7 +36,9 @@ export async function analyzeDomainAttachment(auth: AuthorizationSnapshot, input
     }
     const storage = await import("@/lib/server/domainAttachmentStorage");
     const stable = await storage.readStableDomainAttachment(row.original_storage_path, { fileBytes, mimeType: row.file_type });
-    const analyzed = await analyzeWithAzureDocumentIntelligence(stable.bytes, row.file_type,undefined,undefined,undefined,{subject:{type:'attachment',id:row.id},originalRef:row.id});
+    const { erkennung_modelle } = await withPrivilegedTenantTransaction(auth, tx => readSettings(tx, auth.tenantId));
+    const analyzed = await analyzeWithAzureDocumentIntelligence(stable.bytes, row.file_type, erkennung_modelle.dokument,
+      undefined,undefined,undefined,{subject:{type:'attachment',id:row.id},originalRef:row.id});
     if (analyzed.code !== "OK") return analyzed;
     // The existing attachment preview uses zero for an unavailable confidence value.
     const suggestions = analyzed.data.suggestions.map(item => ({ ...item, confidence: item.confidence ?? 0 }));

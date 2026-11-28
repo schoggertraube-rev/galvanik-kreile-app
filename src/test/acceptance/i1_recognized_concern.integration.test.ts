@@ -3,7 +3,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 
-const tenant = vi.hoisted(() => "TEST-ablauf-i1-concern-" + globalThis.crypto.randomUUID());
+const tenant = vi.hoisted(() => "TEST-ablauf-" + globalThis.crypto.randomUUID());
 vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: tenant }));
 
 import { full, nativeFetch, sql, withSession } from "../../../e2e/ablauf/replayHarness";
@@ -11,6 +11,7 @@ import { finishIntakeFileAction, prepareIntakeFileAction, retryIntakeRecognition
 import { createAdminClient } from "@/lib/supabase/admin";
 
 it("I1-a binds a saved delivery note to a single open concern", async () => {
+  await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E04',true)`;
   const itemId = randomUUID();
   const fileId = randomUUID();
   const tinyImage = Buffer.from(
@@ -41,7 +42,7 @@ it("I1-a binds a saved delivery note to a single open concern", async () => {
     );
     expect(saved.error).toBeNull();
 
-    expect(await withSession(full, () => finishIntakeFileAction(fileId))).toMatchObject({ code: "OK" });
+    expect(await withSession(full, () => finishIntakeFileAction(fileId), true)).toMatchObject({ code: "OK" });
     expect(await withSession(full, () => retryIntakeRecognitionAction({ fileId, clientEventId: randomUUID() })))
       .toMatchObject({ code: "OK" });
     expect(await sql`SELECT anliegen, anliegen_offen FROM public.intake_item

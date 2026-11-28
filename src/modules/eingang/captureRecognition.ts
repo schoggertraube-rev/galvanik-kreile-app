@@ -2,6 +2,7 @@ import type { IntakeSelectableConcern } from "./intakeLifecycleContract";
 
 export const CAPTURE_KINDS = ["ware", "anfrage", "rechnung", "dokument", "kontakt", "notiz"] as const;
 export type CaptureKind = typeof CAPTURE_KINDS[number] | "unklar";
+export const PARCEL_CARRIER = /\b(?:DHL|DPD|UPS|GLS|Hermes|FedEx)\b/iu;
 
 const concernByKind = {
   anfrage: "kv_anfrage", kontakt: "kontakt", lieferschein: "lieferschein",
@@ -38,7 +39,7 @@ export function recognizeCaptureDocument(capture: CaptureEvidence): { kind: Docu
   if (deliveryNote && receipt) return { kind: "dokument", text };
   if (deliveryNote) return { kind: "lieferschein", text };
   if (receipt) return { kind: "quittung", text };
-  if (/\b(?:DHL|DPD|UPS|GLS|Hermes|FedEx|Sendungsnummer|Absender)\b/iu.test(text)) return { kind: "ware", text };
+  if (PARCEL_CARRIER.test(text) || /\b(?:Sendungsnummer|Absender)\b/iu.test(text)) return { kind: "ware", text };
   if (/\blieferschein\b/iu.test(text)) return { kind: "dokument", text };
   if (/\b(?:bestellung|bestellen|anfrage|angebot)\b/iu.test(text) || fields.has("ITEM_DESCRIPTION") && fields.has("QUANTITY")) return { kind: "anfrage", text };
   if (fields.has("CUSTOMER_NAME") && (fields.has("EMAIL") || fields.has("PHONE")) && !fields.has("ITEM_DESCRIPTION")) return { kind: "kontakt", text };

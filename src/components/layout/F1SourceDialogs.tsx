@@ -34,7 +34,7 @@ export type F1MailCustomerChoice = {
   handoverPreference?: "pickup" | "shipping" | null;
 };
 type CustomerChoice = F1MailCustomerChoice;
-type Suggestion = { field: string; label: string; value: string; confidence: number; source: { page: number } };
+type Suggestion = { field: string; label: string; value: string; confidence: number; source: { page: number | null } };
 
 export type F1SourceMode = "camera" | "document" | "mail";
 
@@ -235,7 +235,7 @@ export function F1SourceDialogs(props: Props) {
     {input}
     {!attachmentId ? <div className={styles.f1DocumentEmpty}><FileText /><p>Beleg wählen oder fotografieren</p><Button icon="upload" text="Datei wählen" disabled={busy} onClick={() => fileInput.current?.click()} /></div> : <div className={styles.f1DocumentGrid}>
       <section><h3>Original</h3><p>{fileName || "Gesichertes Original"}</p><small>gesichert · unverändert</small></section>
-      <section><h3>Vorschläge</h3>{suggestions.map((item, index) => <label key={`${item.field}:${index}`} className={styles.f1Suggestion}><input type="checkbox" checked={Boolean(selected[index])} onChange={(event) => setSelected((current) => ({ ...current, [index]: event.target.checked }))} /><span><b>{item.label}</b><em>{item.value}</em><small>Seite {item.source.page} · Sicherheit {Math.round(item.confidence * 100)} %</small></span></label>)}</section>
+      <section><h3>Vorschläge</h3>{suggestions.map((item, index) => <label key={`${item.field}:${index}`} className={styles.f1Suggestion}><input type="checkbox" checked={Boolean(selected[index])} onChange={(event) => setSelected((current) => ({ ...current, [index]: event.target.checked }))} /><span><b>{item.label}</b><em>{item.value}</em><small>{item.source.page === null ? <>{Math.round(item.confidence * 100)} %</> : <>Seite {item.source.page} · Sicherheit {Math.round(item.confidence * 100)} %</>}</small></span></label>)}</section>
     </div>}
     <div data-spec-id="beleg.geprueft"><Checkbox checked={reviewed} onChange={setReviewed}>Am Original geprüft</Checkbox></div>
     {message ? <Hinweis ton={suggestions.length ? undefined : "warn"}>{busy ? <Loader2 /> : null}{message}</Hinweis> : null}

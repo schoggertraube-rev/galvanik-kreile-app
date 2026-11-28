@@ -3,6 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { readWerkstattWochenzielInTransaction } from "@/lib/server/werkstattStationszahlen";
+import { readTenantFeatureRows } from "./tenantFeaturePort";
 
 type Entnahme = "umlagerung" | "verbrauch";
 type Bilanzbewertung = "letzter_ek" | "gleitender_durchschnitt" | "hoechster_ek";
@@ -487,7 +488,9 @@ export async function readErkennungsEinstellungenInTransaction(tx: PrivilegedTen
     || new Set(annahme_zustaende.map(chip => chip.id)).size !== annahme_zustaende.length) {
     throw Error("S16D_ANNAHME_ZUSTAENDE_UNGUELTIG");
   }
-  return { ki_sicherheitsschwelle, annahme_zustaende, erkennung_modelle };
+  const features = await readTenantFeatureRows(tx, tenantId);
+  const dokument_lesen = features.find(({ feature_id }) => feature_id === "E04")?.enabled ?? null;
+  return { ki_sicherheitsschwelle, annahme_zustaende, erkennung_modelle, dokument_lesen };
 }
 
 function istSuchaliasGruppe(wert: unknown): wert is string[] {

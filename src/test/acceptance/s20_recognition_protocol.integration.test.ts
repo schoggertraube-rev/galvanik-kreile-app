@@ -15,7 +15,9 @@ import {uploadIntakeOriginal} from '@/modules/eingang/public';
 if(!process.env.DATABASE_URL||process.env.DATABASE_URL!==process.env.H18_EXPECTED_DATABASE_URL||new URL(process.env.DATABASE_URL).hostname!=='127.0.0.1'||!KREILE_TENANT_SLUG.startsWith('TEST-ablauf-'))throw Error('S20_DEDICATED_TEST_REPLAY_REQUIRED');
 
 it('records actual OCR provider OK/HTTP failure/timeout and secured original hash, not document/key/content; fresh finish retry never invents another provider attempt',async()=>{
- await sql`INSERT INTO public.company_settings(id,tenant_id,company_name) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST S20 recognition')`;
+ await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${KREILE_TENANT_SLUG},'E04',true)`;
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
+  VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST S20 recognition',0,'TEST-S20')`;
  const originalFetch=globalThis.fetch;
  let mode:'ok'|'fehler'|'zeitueberschreitung'='ok',attempts=0;
  vi.stubEnv('AZURE_DOCINTEL_ENDPOINT','https://test-s20-ocr.invalid/');vi.stubEnv('AZURE_DOCINTEL_KEY','TEST_PRIVATE_PROVIDER_KEY');
@@ -40,7 +42,7 @@ it('records actual OCR provider OK/HTTP failure/timeout and secured original has
    await uploadIntakeOriginal(prepared.upload,file);
    expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND original_ref=${input.fileId}`).toHaveLength(0);
    const before=attempts;
-   expect(await withSession(full,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true}]}});
+   expect(await withSession(full,()=>finishIntakeFileAction(input.fileId),true)).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true,status:'wartet'}]}});
    expect(attempts).toBe(before+1);
    const entries=await sql`SELECT * FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND dienst='belegerkennung' AND original_ref=${input.fileId}`;
    expect(entries).toHaveLength(1);expect(entries[0]).toMatchObject({user_id:full.actorId,event_type:'external',ergebnis:expected,subject_id:input.itemId,original_sha256:sha256});

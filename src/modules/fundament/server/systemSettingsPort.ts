@@ -39,7 +39,7 @@ import type {
   SystemSettingsSnapshot,
   UpdateManagedUserInput,
 } from "../public";
-import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
+import { mapTenantFeatureRows, readTenantFeatureRows } from "./tenantFeaturePort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const validTodayRefreshLeaseSeconds=(value:unknown):value is number=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=1&&value*1000<=MAX_TODAY_REFRESH_MS;
@@ -237,7 +237,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
         GROUP BY users.id, users.email, users.full_name, users.kuerzel, users.bezeichnung, users.role, users.active
         ORDER BY users.full_name, users.id
       `);
-      const featureRows = await tx.execute<TenantFeatureRow>(sql`SELECT feature_id, enabled FROM public.tenant_features WHERE tenant = ${context.tenantId} ORDER BY feature_id`);
+      const featureRows = await readTenantFeatureRows(tx, context.tenantId);
       const company = companies[0];
       return {
         company: company ? {

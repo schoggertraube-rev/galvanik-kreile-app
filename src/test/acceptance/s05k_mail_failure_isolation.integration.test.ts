@@ -1,14 +1,16 @@
 // @vitest-environment node
 // Explicit TEST Graph failure only; intake originals/Auth/DB/Storage are real.
-import {it,expect,vi} from 'vitest';
+import {beforeAll,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
-import {sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
+import {enableOutlookTestFixture,sql,full,withSession,nativeFetch,createFixture} from '../../../e2e/ablauf/replayHarness';
 import {listOutlookInboxAction} from '@/app/actions/communications.actions';
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {getOpenIntakeMailsAction,getIntakeMessagesAction,getIntakeCaptureAction,getIntakeTaskAction,assignIntakeCustomerAction,saveIntakeTaskAction} from '@/app/actions/eingang.actions';
 import {MAIL_IMPORT_COPY} from '@/ui/situationCatalog';
+
+beforeAll(enableOutlookTestFixture);
 
 it('S05K A2 parks one failed Graph mail while securing the other two originals',async()=>{
  const run=randomUUID(),text='TEST Bitte senden Sie einen Kostenvoranschlag.';

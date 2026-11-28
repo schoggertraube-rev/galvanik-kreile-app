@@ -22,7 +22,7 @@ async function receive(name:string,mime:string,bytes:Uint8Array){
   expect(url.hostname).toBe('127.0.0.1');url.searchParams.set('token',grant.upload.token);
   const upload=await nativeFetch(url,{method:'PUT',headers:{'content-type':mime,'x-upsert':'false'},body:new Uint8Array(bytes)});expect(upload.ok).toBe(true);
  }
- const finish=await withSession(full,()=>finishIntakeFileAction(fileId));expect(finish.code).toBe('OK');
+ const finish=await withSession(full,()=>finishIntakeFileAction(fileId),true);expect(finish.code).toBe('OK');
  const reread=await withSession(full,()=>getIntakeCaptureAction(itemId));expect(reread).toMatchObject({code:'OK',capture:{files:expect.arrayContaining([expect.objectContaining({id:fileId,secured:true})])}});
  const original=await withSession(full,()=>openIntakeOriginalAction({fileId,clientEventId:randomUUID()}));expect(original.code).toBe('OK');
  if(original.code!=='OK'||!original.original.downloadUrl)throw Error('TEST_ORIGINAL_MISSING');
