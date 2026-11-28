@@ -25,6 +25,7 @@ export type ReadRecognitionSettings = (tx: PrivilegedTenantTransaction, tenantId
   ki_sicherheitsschwelle: number | null;
   dokument_lesen: boolean | null;
   eingang_vorschlaege_max?: number | null;
+  eingang_selbst_handeln?: boolean | null;
   eingang_kandidat_stufen?: EingangKandidatenEinstellungen['eingang_kandidat_stufen'] | null;
   eingang_verdacht_muster?: readonly string[] | null;
 }>;
@@ -309,10 +310,10 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         try {
           kandidaten = await withTenantSavepoint(tx, async nested => {
             const stand = settings ?? await einstellungen(nested, tenantId);
-            const { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle } = stand;
+            const { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle, eingang_selbst_handeln } = stand;
             if (eingang_vorschlaege_max == null || eingang_kandidat_stufen == null) return 'keine';
             return sucheKandidatenInTransaction(nested, { tenantId, akteur }, file.item_id, receiptKey,
-              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle }, {...ports,firma:leseFirma});
+              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle, eingang_selbst_handeln }, {...ports,firma:leseFirma});
           });
         } catch {
           kandidaten = 'teilweise';

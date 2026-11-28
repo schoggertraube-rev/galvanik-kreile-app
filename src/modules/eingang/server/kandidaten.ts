@@ -28,6 +28,7 @@ type KandidatenEinstellungen = Readonly<{
 }>;
 
 export type EingangKandidatenEinstellungen = KandidatenEinstellungen & Readonly<{
+  eingang_selbst_handeln?: boolean | null;
   eingang_kandidat_stufen: Readonly<Record<VorgangsTrefferregel, number>>;
 }>;
 
@@ -353,7 +354,7 @@ export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransacti
       arten.push('kunde');
       const auswahl = waehleKundenKandidaten({ zuordnung: quelle.zuordnung, quellenVollstaendig: kundenVollstaendig,
         treffer: erkannt.treffer, einstellungen });
-      automatischKundenId = auswahl.automatischKundenId;
+      if(einstellungen.eingang_selbst_handeln===true) automatischKundenId = auswahl.automatischKundenId;
       for (const kunde of auswahl.vorschlaege) {
         kundenIds.add(kunde.kundenId);
         einfuegen('kunde', kunde.kundenId, kunde.regel, kunde.sicherheitWert);

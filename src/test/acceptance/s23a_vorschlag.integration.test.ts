@@ -8,6 +8,9 @@ vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {createFixture,full,sql,withSession} from '../../../e2e/ablauf/replayHarness';
 import {customerFixture} from '../../../e2e/ablauf/orderFixture';
 import {fuehreEingangVorschlagAusAction,getIntakeCaptureAction,leseEingangVorschlagAction,saveIntakeNoteAction} from '@/app/actions/eingang.actions';
+import {readErkennungsEinstellungenInTransaction} from '@/modules/fundament/server-public';
+import {resolveAuthorization} from '@/lib/server/authorization';
+import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 
 it('leitet den Kundenvorschlag aus der gespeicherten Erkennung ab und bestätigt ihn über die vorhandene Zuordnung',async()=>{
  const kundeId=await customerFixture('TEST S23a Vorschlag');
@@ -34,4 +37,15 @@ it('leitet den Kundenvorschlag aus der gespeicherten Erkennung ab und bestätigt
   .toMatchObject({code:'CONFLICT',vorschlag:{haupt:null}});
  expect(await sql`SELECT art FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${itemId}::uuid
    AND befehl_id=${input.clientEventId}::uuid ORDER BY art`).toEqual([{art:'einsatz'},{art:'zugeordnet'}]);
+});
+
+it('liest die Vorgabe und den ausgeschalteten Wert aus den vorhandenen Firmeneinstellungen',async()=>{
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
+  VALUES (${randomUUID()},${tenant},'TEST S23a',0,'TEST-S23a')`;
+ const auth=await withSession(full,resolveAuthorization);
+ if(!auth.ok)throw Error('TEST_S23A_EINSTELLUNG_AUTH');
+ const settings=()=>withPrivilegedTenantTransaction(auth.data,tx=>readErkennungsEinstellungenInTransaction(tx,tenant));
+ expect(await settings()).toMatchObject({eingang_selbst_handeln:true});
+ await sql`UPDATE public.company_settings SET eingang_selbst_handeln=false WHERE tenant_id=${tenant}`;
+ expect(await settings()).toMatchObject({eingang_selbst_handeln:false});
 });

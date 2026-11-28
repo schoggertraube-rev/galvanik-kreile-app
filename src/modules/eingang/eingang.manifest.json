@@ -204,7 +204,8 @@
     "20261110070400_intake_delivery_evidence_view.sql",
     "20261110142424_intake_reply_evidence_view.sql",
     "20261123153000_einstellungen_crossmodule_reads.sql",
-    "20261128032648_i2_kandidaten.sql"
+    "20261128032648_i2_kandidaten.sql",
+    "20261128065203_s23a_eingang_selbst_handeln.sql"
   ],
   "viewsFunctions": [
     "private.v_intake_delivery_evidence_v1",
