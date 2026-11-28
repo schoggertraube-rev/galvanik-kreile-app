@@ -5,7 +5,7 @@ import {DISPATCH_BOARD_COPY as boardCopy} from '@/ui/ausgangCopy';
 
 export type DispatchBoardStep = {
  color: 'rot'|'gelb'|'gruen'; status: string; action: string; orderId: string;
- kind: 'complaint'|'overdue'|'handover-mode'|'notify'|'payment'|'pickup'|'shipping';
+ kind: 'complaint'|'overdue'|'release-proof'|'handover-mode'|'notify'|'payment'|'pickup'|'shipping';
  complaintIds?: readonly string[];
 };
 
@@ -25,8 +25,8 @@ export function dispatchBoardStep(input:{orderId:string;customerName:string|null
  if(blockReason==='open_complaint')return {orderId,color:'rot',kind:'complaint',...boardCopy.complaint,complaintIds};
  if(blockReason==='overdue_invoice')return {orderId,color:'rot',kind:'overdue',
   status:boardCopy.overdue,action:boardCopy.payment.action};
+ if(blockReason==='not_frozen')return {orderId,color:'rot',kind:'release-proof',...boardCopy.releaseProofMissing};
  if(!handover)return {orderId,color:'rot',kind:'handover-mode',...boardCopy.handoverMissing};
- if(blockReason==='not_frozen')return null;
  if(!informed)return {orderId,color:'rot',kind:'notify',status:boardCopy.notify.status,
   action:boardCopy.notify.action(customerName)};
  if(releaseAllowed)return {orderId,color:'gruen',kind:handover,status:boardCopy.ready.status,action:boardCopy.ready[handover]};
