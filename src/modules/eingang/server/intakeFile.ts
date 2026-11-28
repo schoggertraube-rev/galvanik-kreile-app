@@ -4,7 +4,7 @@ import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {offlineOccurrenceTime} from '@/lib/domain/offlineOriginal';
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
 import { analyzeWithAzureDocumentIntelligence, readAzureRecognitionOriginal } from "@/lib/server/azureDocumentIntelligence";
@@ -20,6 +20,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument"; aufgenommen_von:string };
+type ReadRecognitionSettings = (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
+  erkennung_modelle: { dokument: string };
+  ki_sicherheitsschwelle: number | null;
+}>;
+type IntakeFileCompletion =
+  | { originalOnly: true; retryKey?: never }
+  | { originalOnly?: false; retryKey?: string; readSettings: ReadRecognitionSettings };
 async function fileAuthorization(takeover=false){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&(takeover||!hasAuthorizationArea(result.data,'buchhaltung')))return {code:'FORBIDDEN' as const,message:FINANCIAL_ACCESS_COPY.bookkeepingMissing};return result.data;}
 function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
 function inputFile(value: unknown): value is IntakeFileInput {
@@ -84,7 +91,8 @@ export async function prepareIntakeFile(input: unknown, ensureOriginal=false): P
     return { code: "UNAVAILABLE", message: "Datei ist noch nicht vollständig gesichert. Eingaben bleiben erhalten. Fehlercode: INTAKE_FILE_PREPARE_FAILED." };
   }
 }
-export async function finishIntakeFile(fileId: string, retryKey?: string, originalOnly=false): Promise<IntakeCaptureResult> {
+export async function finishIntakeFile(fileId: string, options: IntakeFileCompletion): Promise<IntakeCaptureResult> {
+  const { originalOnly = false, retryKey } = options;
   if (!UUID.test(fileId)) return { code: "VALIDATION_ERROR", message: "Ungültige Dateikennung." };
   const auth = await fileAuthorization();
   if ("code" in auth) return auth;
@@ -117,7 +125,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     if (stored.error || !stored.data) throw new Error("INTAKE_FILE_UPLOAD_INCOMPLETE");
     const bytes = new Uint8Array(await stored.data.arrayBuffer());
     if (bytes.byteLength !== Number(file.bytes) || createHash("sha256").update(bytes).digest("hex") !== file.sha256) throw new Error("INTAKE_FILE_ORIGINAL_HASH_MISMATCH");
-    if(originalOnly){
+    if(options.originalOnly){
       await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
         await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
@@ -154,10 +162,15 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
     const isXml=/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<');
     const xmlResult=isXml?recognizeInvoiceXml(bytes):file.mime==='application/pdf'?await recognizeInvoicePdf(bytes):null;
     const canRead = isXml ? xmlResult?.code==='OK' : bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
+    const needsOcr = !isXml && xmlResult?.code !== "OK" && canRead;
+    const settings = needsOcr || xmlResult?.code === "OK"
+      ? await withPrivilegedTenantTransaction(auth, tx => options.readSettings(tx, auth.tenantId))
+      : null;
+    const threshold = settings?.ki_sicherheitsschwelle ?? null;
     const deadline = AbortSignal.timeout(30_000);
-    let recognized = !isXml && xmlResult?.code !== "OK" && canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
+    let recognized = needsOcr && settings ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
       (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
-      undefined, { subject: { type: "intake", id: file.item_id }, originalRef: file.id })
+      undefined, { subject: { type: "intake", id: file.item_id }, originalRef: file.id, model: settings.erkennung_modelle.dokument })
       : null;
     if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
     let rawPath: string | null = null;
@@ -221,9 +234,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       });
       for (const suggestion of [...suggestions, ...positionSuggestions]) {
         const confidence = suggestion.confidence;
-        const certainty = suggestion.field.startsWith('rechnung.')
-          ? confidence !== null && confidence >= 0.9 ? 'sicher' : 'unsicher'
-          : 'vorschlag';
+        const certainty = confidence === null || threshold === null
+          ? 'vorschlag' : confidence >= threshold ? 'sicher' : 'unsicher';
         const jsonValue = JSON.stringify(suggestion.value);
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,sicherheit_wert,modell,regel,grund,fundstelle,status)
             SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${jsonValue}::jsonb,${certainty},${confidence},${model},'datei',${xmlResult?.code==='OK'?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
@@ -263,10 +275,10 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
   }
 }
 
-export async function retryIntakeRecognition(input:unknown):Promise<IntakeCaptureResult>{
+export async function retryIntakeRecognition(input:unknown, readSettings: ReadRecognitionSettings):Promise<IntakeCaptureResult>{
   if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR",message:"Ungültiger Erkennungsversuch."};
   const value=input as Record<string,unknown>;
   if(Object.keys(value).sort().join(",")!=="clientEventId,fileId"||typeof value.fileId!=="string"||!UUID.test(value.fileId)
     ||typeof value.clientEventId!=="string"||!UUID.test(value.clientEventId))return {code:"VALIDATION_ERROR",message:"Ungültiger Erkennungsversuch."};
-  return finishIntakeFile(value.fileId,value.clientEventId);
+  return finishIntakeFile(value.fileId,{retryKey:value.clientEventId,readSettings});
 }

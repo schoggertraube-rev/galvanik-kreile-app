@@ -107,7 +107,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
     const saved=await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(grant.upload.path,grant.upload.token,original.bytes,{contentType:original.mime,upsert:false});
     if(saved.error)throw Error('INTAKE_MAIL_ORIGINAL_UPLOAD_FAILED');
    }
-   const secured=await finishIntakeFile(fileId,undefined,true);
+   const secured=await finishIntakeFile(fileId,{originalOnly:true});
    if(secured.code!=='OK')return secured;
    if(!secured.capture.files.some(file=>file.id===fileId&&file.secured))throw Error('INTAKE_MAIL_ORIGINAL_NOT_CONFIRMED');
   }

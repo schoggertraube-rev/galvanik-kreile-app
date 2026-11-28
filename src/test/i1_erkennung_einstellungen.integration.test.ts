@@ -37,11 +37,15 @@ it("reads stored company models and threshold, with the existing default layout"
 });
 
 it.each([
-  { text: "TEST Rechnung", damagedArchive: true },
-  { text: null, damagedArchive: true },
-  { text: null, damagedArchive: false },
-])("stores the original, pages and position (text=$text, damagedArchive=$damagedArchive)", async ({ text, damagedArchive }) => {
-  const model = "prebuilt-layout";
+  { text: "TEST Rechnung", damagedArchive: true, documentModel: null },
+  { text: null, damagedArchive: true, documentModel: null },
+  { text: null, damagedArchive: false, documentModel: "test-kreile-layout" },
+])("stores the original and reads the model setting (text=$text, damagedArchive=$damagedArchive, model=$documentModel)", async ({ text, damagedArchive, documentModel }) => {
+  const model = documentModel ?? "prebuilt-layout";
+  if (documentModel) await sql`UPDATE public.company_settings
+    SET erkennung_modelle=jsonb_set(erkennung_modelle,'{dokument}',to_jsonb(${documentModel}::text)),
+        ki_sicherheitsschwelle=0.85
+    WHERE tenant_id=${tenant}`;
   const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
     modelId: model, content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
     keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" } }],
@@ -143,23 +147,27 @@ it.each([
     expect(await original.data!.text()).toBe(rawReply + (damagedArchive ? " " : ""));
     expect(await sql`SELECT id FROM public.intake_suggestion
       WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='DOCUMENT_TEXT'`).toEqual([]);
-    const positions = await sql`SELECT wert,modell,sicherheit_wert::float8 AS confidence,status FROM public.intake_suggestion
+    const positions = await sql`SELECT wert,modell,sicherheit,sicherheit_wert::float8 AS confidence,status FROM public.intake_suggestion
       WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='position'`;
     expect(positions).toHaveLength(damagedArchive ? 3 : 2);
     expect(positions.filter(position => position.status === "offen")).toHaveLength(1);
     for (const position of positions) expect(position).toMatchObject({
       wert: { positionKey: "p1", lieferantenArtikelNr: "TEST-BELEGZEILE", menge: "4.25" },
-      modell: model, confidence: 0.8,
+      modell: model, sicherheit: documentModel ? "unsicher" : "sicher", confidence: 0.8,
     });
     expect(await sql`SELECT sicherheit,sicherheit_wert FROM public.intake_suggestion
       WHERE tenant_id=${tenant} AND file_id=${fileId}::uuid AND feld='rechnung.nummer' AND status='offen'`)
-      .toEqual([{ sicherheit: "unsicher", sicherheit_wert: null }]);
+      .toEqual([{ sicherheit: "vorschlag", sicherheit_wert: null }]);
     expect(await withSession(full, () => openIntakeOriginalAction({ fileId, clientEventId: randomUUID() })))
       .toMatchObject({ code: "OK" });
     expect(await withSession(full, () => confirmIntakeOriginalAction({ fileId, clientEventId: randomUUID() })))
-      .toMatchObject({ code: "OK", count: 1 });
+      .toMatchObject({ code: "OK", count: documentModel ? 1 : 0 });
   } finally {
     fetched.mockRestore();
     vi.unstubAllEnvs();
+    if (documentModel) await sql`UPDATE public.company_settings
+      SET erkennung_modelle=jsonb_set(erkennung_modelle,'{dokument}','null'::jsonb),
+          ki_sicherheitsschwelle=0.5
+      WHERE tenant_id=${tenant}`;
   }
 });
