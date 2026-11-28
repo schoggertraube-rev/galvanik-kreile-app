@@ -3,6 +3,8 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import {hasAuthorizationArea} from "@/lib/auth/authorizationContract";
 import {type AuthorizationSnapshot} from "@/lib/server/authorization";
+import {searchOrderIntakeCustomers} from "@/lib/server/orderIntakeRead";
+import {foldSearchText} from "@/lib/domain/searchText";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { isWorkingDay, berlinCalendarDay, leseBetriebsruhetage, plusWorkingDays, previousWorkingDay, workingDaysBetween } from "@/lib/domain/workingDays";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError } from "@/lib/orderPositionContract";
@@ -60,14 +62,28 @@ function integer(value: number | string, code: string): number {
   return parsed;
 }
 
-function normalized(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("de-DE")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim()
-    .replace(/\s+/g, " ");
+function normalized(value: string) {
+  return foldSearchText(value.normalize('NFC')).normalize('NFKD').replace(/\p{M}+/gu, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+type Firmenleser = (input: { tenantId: string; canRead: true; includeDeliveryNoteIdentity: true; fresh: true }) =>
+  Promise<{ code: 'OK'; company: { companyName: string; taxId?: string | null } }
+    | { code: 'NOT_FOUND' | 'UNAVAILABLE' | 'VALIDATION_ERROR' | 'FORBIDDEN' }>;
+
+export function bindIntakeCandidatePorts(firmendaten: Firmenleser) {
+  return {
+    firma: async (tenantId: string) => {
+      const read = await firmendaten({ tenantId, canRead: true, includeDeliveryNoteIdentity: true, fresh: true });
+      return read.code === 'OK' ? { name: read.company.companyName, ustId: read.company.taxId ?? null } : null;
+    },
+    leseKunden: async (tx: PrivilegedTenantTransaction, tenantId: string, query: string,
+      options?: Parameters<typeof searchOrderIntakeCustomers>[2]) => {
+      const kunden = await searchOrderIntakeCustomers({ tenantId }, { query },
+        options?.exactSupplier === 'vat' ? { ...options, includeCustomerVat: true } : options, tx);
+      return { kunden, vollstaendig: kunden.length < 10 };
+    },
+  };
 }
 
 function normalizedUnit(value: string | null): string | null {

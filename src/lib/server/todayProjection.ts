@@ -146,7 +146,8 @@ function productivePorts():TodayProjectionPorts{
    }
    const bestandsLeser:Readonly<Record<string,()=>Promise<TodayProjectionResult>>>={
     orders:async()=>source(access.orders?await orders(auth):{code:'FORBIDDEN'}),
-    messages:async()=>{const read=await readIntakeMessagesForAuthorization(auth,'offen');return source(read,known(read));},
+    messages:async()=>{const read=await readIntakeMessagesForAuthorization(auth,'offen',undefined,undefined,
+     {jetzt,leseEinstellungen:readTodayReadSettings});return source(read,known(read));},
     complaints:async()=>{const read=await readComplaintsForAuthorization(auth);return source(read,known(read));},
     company:async()=>{const read=await readCompanyLetterSettings({tenantId:auth.tenantId,canRead:auth.canReadArea('preise'),fresh:true});return source(read,known(read));},
     quote_followups:async()=>source(await withPrivilegedTenantTransaction(auth,tx=>readQuoteFollowupTasksForToday(tx,auth,day))),

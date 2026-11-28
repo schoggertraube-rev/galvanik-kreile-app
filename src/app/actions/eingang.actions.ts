@@ -6,7 +6,8 @@ import { KALENDER_COPY } from "@/ui/kalenderCopy";
 import {recordObservedFailure} from '@/lib/server/actionObservation';
 import {observeAction,subjectForAction,logTechnical} from '@/modules/logging/server-public';
 import {readObservedAuthorization} from '@/lib/server/actionObservation';
-import {readBetriebsruheInTransaction,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings} from '@/modules/fundament/server-public';
+import {readBetriebsruheInTransaction,readCompanyLetterSettings,readErkennungsEinstellungenInTransaction,readLoggingSettings,readPageReadSettings,readTodayReadSettings} from '@/modules/fundament/server-public';
+import {bindIntakeCandidatePorts} from '@/lib/server/intakeSuggestions';
 import {repairInvoiceReissueTask} from '@/lib/server/commands/immutableInvoiceCommand';
 import {readCacheLoginScope} from '@/lib/server/authBootstrap';
 import {canSynchronizeIntakeMailbox} from "@/lib/auth/authorizationContract";
@@ -74,7 +75,14 @@ export async function getOrderIntakeSuggestionsAction(
   }
 }
 
-export async function getIntakeMessagesAction(filter:unknown='offen'){const device=!!filter&&typeof filter==='object'&&!Array.isArray(filter)&&Object.keys(filter).length===1&&'purpose' in filter&&filter.purpose==='device';const result=await readIntakeMessages(device?'alle':filter,undefined,device?new Date(Date.now()-24*60*60*1000).toISOString():undefined);return result.code==='OK'||device&&result.code==='FORBIDDEN'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;}
+export async function getIntakeMessagesAction(filter:unknown='offen'){
+ const tagZeit=filter&&typeof filter==='object'&&Object.keys(filter).length===2&&'purpose'in filter&&filter.purpose==='tag'
+  &&'jetzt'in filter&&filter.jetzt instanceof Date&&Number.isFinite(filter.jetzt.getTime())?filter.jetzt:undefined;
+ const device=!!filter&&typeof filter==='object'&&!Array.isArray(filter)&&Object.keys(filter).length===1&&'purpose' in filter&&filter.purpose==='device';
+ const result=await readIntakeMessages(tagZeit?'offen':device?'alle':filter,undefined,
+  device?new Date(Date.now()-24*60*60*1000).toISOString():undefined,tagZeit&&{jetzt:tagZeit,leseEinstellungen:readTodayReadSettings});
+ return result.code==='OK'||device&&result.code==='FORBIDDEN'?{...result,serverReadAt:new Date().toISOString(),cacheLoginScope:await readCacheLoginScope()}:result;
+}
 import {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
 export async function getIntakeAssignmentAction(input:unknown){return readIntakeAssignment(input,readCustomerProfile);}
 export async function assignIntakeCustomerAction(input:unknown){
@@ -354,8 +362,10 @@ export async function discardIntakeDraftAction(input:unknown) {
  return observeAction('discardIntakeDraftAction',subjectForAction('discardIntakeDraftAction',input),async()=>{ return discardIntakeDraft(input);
  },readLoggingSettings);
 }
+const intakeCandidatePorts = bindIntakeCandidatePorts(readCompanyLetterSettings);
+
 export async function retryIntakeRecognitionAction(input:unknown) {
- return observeAction('retryIntakeRecognitionAction',subjectForAction('retryIntakeRecognitionAction',input),async()=>{ return retryIntakeRecognition(input,readErkennungsEinstellungenInTransaction);
+ return observeAction('retryIntakeRecognitionAction',subjectForAction('retryIntakeRecognitionAction',input),async()=>{ return retryIntakeRecognition(input,readErkennungsEinstellungenInTransaction,intakeCandidatePorts);
  },readLoggingSettings);
 }
 
@@ -417,7 +427,7 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  return observeAction('finishIntakeFileAction',subjectForAction('finishIntakeFileAction',{fileId}),async()=>{
  if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after}),fileId);if(result.code!=='OK')return result;
+ const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after,kandidaten:intakeCandidatePorts}),fileId);if(result.code!=='OK')return result;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
  const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
  const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,

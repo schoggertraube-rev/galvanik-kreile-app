@@ -2,6 +2,7 @@ import 'server-only';
 import {XMLParser,XMLValidator} from 'fast-xml-parser';
 import type {DocumentSuggestion} from '@/lib/server/azureDocumentIntelligence';
 import {invoiceCents,invoiceDate,invoiceDecimal} from '../invoiceContract';
+import {findeRechnungswiderspruch} from './eingangsRegeln';
 
 type InvoiceSuggestion={field:string;value:unknown;confidence:DocumentSuggestion['confidence'];source:DocumentSuggestion['source']};
 function recognizedDate(raw:string){
@@ -10,12 +11,13 @@ function recognizedDate(raw:string){
  if(!match)return null;const iso=match[3]+'-'+match[2].padStart(2,'0')+'-'+match[1].padStart(2,'0');return invoiceDate(iso)?iso:null;
 }
 /** Translate the existing Azure response once, retaining its real source and uncertainty. */
-export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[]):InvoiceSuggestion[]{
+export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[],hatGedruckteRechnungsnummer=false):InvoiceSuggestion[]{
  const label=(value:string)=>value.toLocaleLowerCase('de-DE').normalize('NFKC').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
  const isNumber=(value:string)=>/^(rechnungs ?(nummer|nr)|rechnung nr|invoice (number|no|id))$/.test(value);
  const isDate=(value:string)=>/^(rechnungsdatum|rechnung datum|invoice date)$/.test(value);
- if(!suggestions.some(value=>isNumber(label(value.label))||isDate(label(value.label))))return [];
+ if(!hatGedruckteRechnungsnummer&&!suggestions.some(value=>isNumber(label(value.label))||isDate(label(value.label))))return [];
  const result:InvoiceSuggestion[]=[],amounts:Record<string,string>={},sources:DocumentSuggestion[]=[],seen=new Set<string>();
+ let bruttoQuelle:DocumentSuggestion|undefined;
  for(const suggestion of suggestions){
   const key=label(suggestion.label);let field:string|null=null,value:unknown=null;
   if(isNumber(key)){field='rechnung.nummer';value=suggestion.value.trim();}
@@ -24,13 +26,20 @@ export function recognizeInvoiceFields(suggestions:readonly DocumentSuggestion[]
   else if(/^(iban|bankverbindung iban)$/.test(key)){field='rechnung.iban';value=suggestion.value.replace(/\s/g,'');}
   else{
    const amountKey=/^(netto|nettobetrag|gesamt netto|net amount|subtotal)$/.test(key)?'netto':/^(ust|umsatzsteuer|mwst|mehrwertsteuer|steuerbetrag|tax amount|total tax)$/.test(key)?'ust':/^(brutto|bruttobetrag|gesamtbetrag|rechnungsbetrag|zahlbetrag|invoice total|total amount|amount due)$/.test(key)?'brutto':null;
-   if(amountKey){const cents=invoiceCents(suggestion.value.replace(/\s*(?:€|EUR)\s*$/iu,''));if(cents!==null&&!Object.hasOwn(amounts,amountKey)){amounts[amountKey]=invoiceDecimal(cents);sources.push(suggestion);}}
+   if(amountKey){
+    const cents=invoiceCents(suggestion.value.replace(/\s*(?:€|EUR)\s*$/iu,''));
+    if(cents!==null&&!Object.hasOwn(amounts,amountKey)){
+     amounts[amountKey]=invoiceDecimal(cents);
+     sources.push(suggestion);
+     if(amountKey==='brutto')bruttoQuelle=suggestion;
+    }
+   }
   }
   if(field&&value!==null&&value!==''&&!seen.has(field)){result.push({field,value,confidence:suggestion.confidence,source:suggestion.source});seen.add(field);}
  }
  if(sources.length){
   const confidence=sources.reduce<number|null>((minimum,value)=>minimum===null||value.confidence===null?null:Math.min(minimum,value.confidence),1);
-  result.push({field:'rechnung.betrag',value:amounts,confidence,source:sources[0].source});
+  result.push({field:'rechnung.betrag',value:amounts,confidence,source:(bruttoQuelle??sources[0]).source});
  }
  return result;
 }
@@ -134,8 +143,13 @@ export function recognizeInvoiceXml(bytes:Uint8Array):{code:'OK';suggestions:Xml
  }catch(error){console.error('[INVOICE_XML_PARSE_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});return {code:'UNSUPPORTED'};}
 }
 
-/** Read the original PDF container before OCR, feeding its XML into the same recognizer. */
-export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<ReturnType<typeof recognizeInvoiceXml>>{
+type XmlRead=Extract<ReturnType<typeof recognizeInvoiceXml>,{code:'OK'}>;
+type PdfDruckwert={field:'rechnung.nummer'|'rechnung.betrag';value:unknown;page:number};
+type PdfRead=(XmlRead & {widerspruch?:NonNullable<ReturnType<typeof findeRechnungswiderspruch>> & {page:number}})
+ | {code:'UNSUPPORTED';druckwerte?:readonly PdfDruckwert[]};
+
+/** Read the embedded invoice and compare it with labelled values in the PDF text layer. */
+export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<PdfRead>{
  if(bytes.byteLength>20*1024*1024)return {code:'UNSUPPORTED'};
  try{
   const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -151,7 +165,31 @@ export async function recognizeInvoicePdf(bytes:Uint8Array):Promise<ReturnType<t
     // PL09:21: different valid originals must never be selected arbitrarily.
     if(valid.length>1)return {code:'UNSUPPORTED'};
    }
-   return valid.length===1?valid[0].result:{code:'UNSUPPORTED'};
+   const xml=valid[0]?.result;
+   try{
+    const sichtbareWerte:PdfDruckwert[]=[];
+    for(let page=1;page<=document.numPages;page++){
+     const original=await document.getPage(page);
+     const {items}=await original.getTextContent();
+     const text=items.map(item=>'str'in item?item.str+(item.hasEOL?'\n':' '):'').join('');
+     for(const zeile of text.split(/\r?\n/)){
+      const nummer=/^\s*(?:Rechnungs(?:nummer|nr\.?)|Rechnung\s+Nr\.?|Invoice\s+(?:number|no\.?|id))\s*:?\s+([^\s:]{1,100})\s*$/iu.exec(zeile)?.[1];
+      if(nummer)sichtbareWerte.push({field:'rechnung.nummer',value:nummer,page});
+      const brutto=/^\s*(?:Brutto|Gesamtbetrag|Rechnungsbetrag|Invoice\s+total|Total\s+amount)\s*:?\s+([\d.,+\- ]{1,40})(?:\s*(?:EUR|€))?\s*$/iu.exec(zeile)?.[1]?.trim();
+      if(brutto&&invoiceCents(brutto)!==null)sichtbareWerte.push({field:'rechnung.betrag',value:{brutto},page});
+     }
+    }
+    if(!xml)return sichtbareWerte.length?{code:'UNSUPPORTED',druckwerte:sichtbareWerte}:{code:'UNSUPPORTED'};
+    const widerspruch=findeRechnungswiderspruch(xml.suggestions,sichtbareWerte);
+    if(!widerspruch)return xml;
+    const feld=widerspruch.xml.nummer!==null&&widerspruch.pdf.nummer!==null&&widerspruch.xml.nummer!==widerspruch.pdf.nummer
+     ?'rechnung.nummer':'rechnung.betrag';
+    const page=sichtbareWerte.find(wert=>wert.field===feld)?.page;
+    return page===undefined?xml:{...xml,widerspruch:{...widerspruch,page}};
+   }catch(error){
+    console.error('[INVOICE_PDF_TEXT_READ_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});
+    return xml??{code:'UNSUPPORTED'};
+   }
   }finally{await task.destroy();}
  }catch(error){console.error('[INVOICE_PDF_XML_READ_FAILED]',{errorName:error instanceof Error?error.name:'UnknownError'});return {code:'UNSUPPORTED'};}
 }
