@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { expect, it, vi } from "vitest";
 
 const tenant = vi.hoisted(() => "TEST-ablauf-i1-settings-" + globalThis.crypto.randomUUID());
@@ -15,6 +16,7 @@ import {
 } from "@/app/actions/eingang.actions";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { EXCEL_WORKBOOK_MIME } from "@/lib/server/azureDocumentIntelligence";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readErkennungsEinstellungenInTransaction } from "@/modules/fundament/server-public";
 
@@ -34,6 +36,57 @@ it("reads stored company models and threshold, with the existing default layout"
     ki_sicherheitsschwelle: 0.5,
     erkennung_modelle: { dokument: "prebuilt-layout", rechnung: null, bon: "test-quittung" },
   });
+});
+
+it("reads a secured Excel workbook with the document model and preserves the original", async () => {
+  const bytes = readFileSync(new URL("../../e2e/fixtures/TEST_i1_reading.xlsx", import.meta.url));
+  const fileId = randomUUID();
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const grant = await withSession(full, () => prepareIntakeFileAction({
+    itemId: randomUUID(), fileId, name: "TEST_i1_reading.xlsx", mime: EXCEL_WORKBOOK_MIME,
+    bytes: bytes.length, sha256,
+  }));
+  if (grant.code !== "OK" || !grant.upload) throw Error("TEST_I1_WORKBOOK_GRANT");
+  const upload = await createAdminClient().storage.from(grant.upload.bucket).uploadToSignedUrl(
+    grant.upload.path, grant.upload.token, bytes, { contentType: EXCEL_WORKBOOK_MIME },
+  );
+  expect(upload.error).toBeNull();
+
+  vi.stubEnv("AZURE_DOCINTEL_ENDPOINT", "https://i1-workbook.example.invalid/");
+  vi.stubEnv("AZURE_DOCINTEL_KEY", "TEST-i1-workbook");
+  const requests: { url: URL; body?: BodyInit | null }[] = [];
+  const fetched = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname !== "i1-workbook.example.invalid") return nativeFetch(input, init);
+    if (init?.method === "POST") {
+      requests.push({ url, body: init.body });
+      return new Response(null, { status: 202, headers: {
+        "operation-location": "https://i1-workbook.example.invalid/documentintelligence/documentModels/prebuilt-layout/analyzeResults/TEST-XLSX",
+      } });
+    }
+    return Response.json({ status: "succeeded", analyzeResult: {
+      modelId: "prebuilt-layout", content: "TEST Arbeitsmappe\n95", pages: [{ pageNumber: 1 }],
+    } });
+  });
+  try {
+    const result = await withSession(full, () => finishIntakeFileAction(fileId));
+    expect(result).toMatchObject({ code: "OK", capture: { files: [expect.objectContaining({
+      id: fileId, status: "fertig", secured: true, recognizedText: "TEST Arbeitsmappe\n95",
+    })] } });
+    expect(requests).toHaveLength(1);
+    expect(requests[0].url.pathname).toBe("/documentintelligence/documentModels/prebuilt-layout:analyze");
+    expect(requests[0].url.searchParams.has("features")).toBe(false);
+    expect(JSON.parse(String(requests[0].body)).base64Source).toBe(bytes.toString("base64"));
+
+    const opened = await withSession(full, () => openIntakeOriginalAction({ fileId, clientEventId: randomUUID() }));
+    if (opened.code !== "OK" || !opened.original.downloadUrl) throw Error("TEST_I1_WORKBOOK_ORIGINAL");
+    const original = await nativeFetch(opened.original.downloadUrl);
+    expect(original.ok).toBe(true);
+    expect(Buffer.from(await original.arrayBuffer())).toEqual(bytes);
+  } finally {
+    fetched.mockRestore();
+    vi.unstubAllEnvs();
+  }
 });
 
 it.each([

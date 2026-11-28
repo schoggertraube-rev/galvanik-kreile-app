@@ -4,8 +4,15 @@ import {reportObservedTechnical} from './actionObservation';
 import type {LogSubject,TechnicalEvent} from '@/modules/logging/public';
 
 const API_VERSION = "2024-11-30";
+const DOCUMENT_FORMATS = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+export const EXCEL_WORKBOOK_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 type Environment = Record<string, string | undefined>;
 type FetchPort = typeof fetch;
+
+export function supportsAzureDocument(mimeType: string, size: number, allowWorkbook = false): boolean {
+  return size > 0 && size <= 20 * 1024 * 1024
+    && (DOCUMENT_FORMATS.has(mimeType) || allowWorkbook && mimeType === EXCEL_WORKBOOK_MIME);
+}
 
 export type DocumentSuggestion = {
   field: "CUSTOMER_NAME" | "CONTACT_PERSON" | "EMAIL" | "PHONE" | "ADDRESS" | "DUE_DATE" | "ITEM_DESCRIPTION" | "QUANTITY" | "MATERIAL" | "SURFACE" | "DOCUMENT_TEXT" | "OTHER";
@@ -97,12 +104,12 @@ export async function analyzeWithAzureDocumentIntelligence(
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  diagnostic?: {subject:LogSubject;originalRef:string;model?:string},
+  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowWorkbook?:boolean},
 ): Promise<AzureResult> {
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
   if (!endpointValue || !key) return { code: "IN_KLAERUNG", message: "Azure Document Intelligence ist noch nicht für die Preview verbunden." };
-  if (bytes.byteLength < 1 || bytes.byteLength > 20 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mimeType)) {
+  if (!supportsAzureDocument(mimeType, bytes.byteLength, diagnostic?.allowWorkbook)) {
     return { code: "UNAVAILABLE", message: "Das Dokumentformat kann nicht sicher analysiert werden." };
   }
   let attempted=false;
@@ -115,7 +122,7 @@ export async function analyzeWithAzureDocumentIntelligence(
     const analyzeUrl = new URL(`documentintelligence/documentModels/${model}:analyze`, endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");
     analyzeUrl.searchParams.set("api-version", API_VERSION);
-    analyzeUrl.searchParams.set("features", "keyValuePairs");
+    if (mimeType !== EXCEL_WORKBOOK_MIME) analyzeUrl.searchParams.set("features", "keyValuePairs");
     attempted=true;
     const response = await fetchPort(analyzeUrl, {
       method: "POST",

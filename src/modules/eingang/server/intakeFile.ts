@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
-import { analyzeWithAzureDocumentIntelligence, readAzureRecognitionOriginal } from "@/lib/server/azureDocumentIntelligence";
+import { analyzeWithAzureDocumentIntelligence, EXCEL_WORKBOOK_MIME, readAzureRecognitionOriginal, supportsAzureDocument } from "@/lib/server/azureDocumentIntelligence";
 import {recognizeInvoiceFields,recognizeInvoiceXml,recognizeInvoicePdf} from './invoiceRecognition';
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { intakeCaptureSnapshot,validIntakeOriginalTakeover } from "./intakeCapture";
@@ -15,6 +15,7 @@ import { concernForCaptureKind, recognizeCaptureDocument } from "../captureRecog
 import {isIntakeOriginalTakeover} from '../captureContract';
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
 import { readAzurePositionRows } from "./intakeRecognitionPositions";
+import { safeOriginalBytes } from "../originalSafety";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUCKET = "scans";
@@ -161,7 +162,10 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
     const prefix=Buffer.from(bytes.subarray(0,512)).toString('utf8').replace(/^\uFEFF/u,'').trimStart();
     const isXml=/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<');
     const xmlResult=isXml?recognizeInvoiceXml(bytes):file.mime==='application/pdf'?await recognizeInvoicePdf(bytes):null;
-    const canRead = isXml ? xmlResult?.code==='OK' : bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
+    const workbook = file.mime === EXCEL_WORKBOOK_MIME;
+    const canRead = isXml ? xmlResult?.code==='OK'
+      : supportsAzureDocument(file.mime, bytes.byteLength, true)
+        && (!workbook || /\.xlsx$/iu.test(file.dateiname) && safeOriginalBytes(file.dateiname, bytes));
     const needsOcr = !isXml && xmlResult?.code !== "OK" && canRead;
     const settings = needsOcr || xmlResult?.code === "OK"
       ? await withPrivilegedTenantTransaction(auth, tx => options.readSettings(tx, auth.tenantId))
@@ -170,7 +174,7 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
     const deadline = AbortSignal.timeout(30_000);
     let recognized = needsOcr && settings ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
       (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
-      undefined, { subject: { type: "intake", id: file.item_id }, originalRef: file.id, model: settings.erkennung_modelle.dokument })
+      undefined, { subject: { type: "intake", id: file.item_id }, originalRef: file.id, model: settings.erkennung_modelle.dokument, allowWorkbook: workbook })
       : null;
     if (recognized && recognized.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
     let rawPath: string | null = null;
