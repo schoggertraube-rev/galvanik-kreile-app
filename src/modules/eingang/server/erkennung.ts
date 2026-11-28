@@ -16,6 +16,7 @@ const BUCKET = "scans";
 export type ReadRecognitionSettings = (tx: PrivilegedTenantTransaction, tenantId: string) => Promise<{
   erkennung_modelle: { dokument: string; rechnung: string | null; bon: string | null };
   ki_sicherheitsschwelle: number | null;
+  dokument_lesen: boolean | null;
 }>;
 
 function documentSuggestions(suggestions: readonly DocumentSuggestion[]) {
@@ -70,7 +71,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       : supportsAzureDocument(file.mime, bytes.byteLength, true)
         && (!workbook || /\.xlsx$/iu.test(file.dateiname) && safeOriginalBytes(file.dateiname, bytes));
     const needsOcr = !isXml && xmlResult?.code !== "OK" && canRead;
-    const settings = needsOcr || xmlResult?.code === "OK"
+    const usesDocumentReader = !isXml && xmlResult?.code !== "OK";
+    const settings = usesDocumentReader || xmlResult?.code === "OK"
       ? await withPrivilegedTenantTransaction(auth, tx => einstellungen(tx, auth.tenantId))
       : null;
     const threshold = settings?.ki_sicherheitsschwelle ?? null;
@@ -97,7 +99,10 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       }
       return { result, rawPath };
     };
-    const primary = needsOcr && settings ? await readModel(settings.erkennung_modelle.dokument, true) : null;
+    const ocrDisabled = usesDocumentReader && settings?.dokument_lesen === false;
+    const ocrSettingMissing = needsOcr && settings?.dokument_lesen == null;
+    const primary = needsOcr && settings?.dokument_lesen === true
+      ? await readModel(settings.erkennung_modelle.dokument, true) : null;
     const recognized = primary?.result ?? null;
     const rawPath = primary?.rawPath ?? null;
     const ocr = recognized?.code === "OK" ? recognized : null;
@@ -123,7 +128,8 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const replaceDocumentText = ocr !== null && (documentText !== null || !rawStorageFailed);
       const pages = ocr?.original?.pages ?? null;
       const model = ocr?.original?.model ?? null;
-      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${hasValues && !rawStorageFailed && !specialistArchiveFailed ? "fertig" : "fehler"},
+      const complete = ocrDisabled || hasValues && !rawStorageFailed && !specialistArchiveFailed;
+      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead && !ocrDisabled && !ocrSettingMissing},erkennung_status=${complete ? "fertig" : "fehler"},
           erkannter_text=CASE WHEN ${replaceDocumentText} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
           erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
@@ -180,6 +186,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
           version=version+1, geaendert_von=${akteur}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
         WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT (${concern}::text=ANY(anliegen))`);
       const recognitionCode = xmlResult?.code === 'OK' ? 'OK' : isXml ? 'UNSUPPORTED_XML'
+        : ocrDisabled ? 'AUSGESCHALTET' : ocrSettingMissing ? 'IN_KLAERUNG'
         : rawStorageFailed || specialistArchiveFailed ? 'INTAKE_RAW_NOT_SAVED'
         : specialist && !specialistOcr ? 'TEILWEISE'
         : recognized?.code ?? (bytes.byteLength > 20 * 1024 * 1024 ? 'INTAKE_RECOGNITION_TOO_LARGE' : 'UNSUPPORTED_DOCUMENT_TYPE');
@@ -188,6 +195,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${akteur},${JSON.stringify(receipt)}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);
+      // H6b: Lagerbeleg vorbereiten
     });
   } catch (error) {
     await recordIntakeRecognitionFailure(auth, akteur, fileId, retryKey, claimOwned);

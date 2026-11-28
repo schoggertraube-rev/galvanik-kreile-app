@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, it, vi } from "vitest";
 
-const tenant = vi.hoisted(() => "TEST-ablauf-i1-settings-" + globalThis.crypto.randomUUID());
+const tenant = vi.hoisted(() => "TEST-ablauf-" + globalThis.crypto.randomUUID());
 vi.mock("@/lib/tenant", () => ({ KREILE_TENANT_SLUG: tenant }));
 
 import { full, nativeFetch, sql, withSession } from "../../e2e/ablauf/replayHarness";
@@ -22,6 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { readErkennungsEinstellungenInTransaction } from "@/modules/fundament/server-public";
 
 it("reads stored company models and threshold, with the existing default layout", async () => {
+  await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E04',true)`;
   await sql`INSERT INTO public.company_settings
     (id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion,ki_sicherheitsschwelle,erkennung_modelle)
     VALUES (${randomUUID()},${tenant},'TEST I1 Einstellungen',0,'TEST-I1',0.5,
@@ -34,6 +35,7 @@ it("reads stored company models and threshold, with the existing default layout"
   });
 
   expect(settings).toMatchObject({
+    dokument_lesen: true,
     ki_sicherheitsschwelle: 0.5,
     erkennung_modelle: { dokument: "prebuilt-layout", rechnung: null, bon: "test-quittung" },
   });

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { SALES_STAGE_FEATURES, type SalesStageFeature, type SalesStageFeatureId } from "../featureCatalog";
 
 export type TenantFeatureContext = { tenantId: string; actorId: string; canManage: boolean };
@@ -28,17 +28,19 @@ export function mapTenantFeatureRows(rows: TenantFeatureRow[]): SalesStageFeatur
   return SALES_STAGE_FEATURES.map(({ id }) => ({ id, enabled: mapped.get(id) === true }));
 }
 
+export function readTenantFeatureRows(tx: PrivilegedTenantTransaction, tenantId: string) {
+  return tx.execute<TenantFeatureRow>(sql`
+    SELECT feature_id, enabled
+    FROM public.tenant_features
+    WHERE tenant = ${tenantId}
+    ORDER BY feature_id
+  `);
+}
+
 export async function readTenantFeatures(context: TenantFeatureContext) {
   try {
-    const features = await withPrivilegedTenantTransaction(context, async (tx) => {
-      const rows = await tx.execute<TenantFeatureRow>(sql`
-        SELECT feature_id, enabled
-        FROM public.tenant_features
-        WHERE tenant = ${context.tenantId}
-        ORDER BY feature_id
-      `);
-      return mapTenantFeatureRows(rows);
-    });
+    const features = await withPrivilegedTenantTransaction(context, async tx =>
+      mapTenantFeatureRows(await readTenantFeatureRows(tx, context.tenantId)));
     return { code: "OK" as const, features };
   } catch (error) {
     logTenantFeatureFailure("TENANT_FEATURE_READ_FAILED", error);
