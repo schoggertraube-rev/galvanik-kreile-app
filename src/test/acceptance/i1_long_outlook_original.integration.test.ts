@@ -32,7 +32,15 @@ it('I1-a preserves the complete text and bytes of a long Outlook original on ret
   return Response.json(message);
  });
 
- const imported=await withSession(full,()=>importOutlookMailAction(id,{deferDispatchReply:true}));
+ const imported=await withSession(full,async()=>{
+  const result=await importOutlookMailAction(id,{deferDispatchReply:true});
+  if(result.code!=='OK')return result;
+  expect(await getIntakeCaptureAction(result.itemId)).toMatchObject({code:'OK',capture:{files:[
+   expect.objectContaining({mime:'message/rfc822',secured:true,status:'wartet',recognizedText:null}),
+  ]}});
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${tenant} AND item_id=${result.itemId}::uuid AND art='erkannt'`).toEqual([]);
+  return result;
+ },true);
  expect(imported.code).toBe('OK');
  if(imported.code!=='OK')throw Error('TEST_I1_IMPORT_FAILED');
  const initialProviderCalls=providerCalls;

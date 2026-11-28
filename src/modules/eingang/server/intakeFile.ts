@@ -111,7 +111,11 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
       if(!retry)return snapshot();
       file.erkennung_status='wartet';
     }
-    if (["fertig", "fehler"].includes(file.erkennung_status)) return snapshot();
+    const terminalStatus = ["fertig", "fehler"].includes(file.erkennung_status);
+    if (terminalStatus) {
+      const current = await snapshot();
+      if (current.code !== "OK" || current.capture.files.some(entry => entry.id === fileId && entry.secured)) return current;
+    }
     const stored = await createAdminClient().storage.from(BUCKET).download(file.speicherpfad);
     if (stored.error || !stored.data) throw new Error("INTAKE_FILE_UPLOAD_INCOMPLETE");
     const bytes = new Uint8Array(await stored.data.arrayBuffer());
@@ -119,9 +123,12 @@ export async function finishIntakeFile(fileId: string, options: IntakeFileComple
     // The original is secured before recognition. A provider failure cannot undo this event.
     await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
-      await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+      const saved = await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         SELECT ${auth.tenantId},${file.item_id}::uuid,'original_gespeichert',${fileId}::uuid,${auth.userId},${JSON.stringify({ fileId, sha256: file.sha256, bytes: bytes.byteLength })}::jsonb
-        WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='original_gespeichert' AND befehl_id=${fileId}::uuid)`);
+        WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='original_gespeichert' AND befehl_id=${fileId}::uuid)
+        RETURNING id`);
+      if (terminalStatus && saved.length === 1) await tx.execute(sql`UPDATE public.intake_file SET erkennung_status='wartet'
+        WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status IN ('fertig','fehler')`);
       if (file.aufgenommen_auf) await tx.execute(sql`UPDATE public.device_request SET status='fotos_da'
         WHERE tenant_id=${auth.tenantId} AND login_id=${auth.userId}::uuid AND item_id=${file.item_id}::uuid
           AND status='angenommen' AND angenommen_auf @> ARRAY[${file.aufgenommen_auf}]::text[]`);

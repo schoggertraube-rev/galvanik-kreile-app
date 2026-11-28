@@ -110,7 +110,7 @@ export async function importIntakeGraphMail(auth:AuthorizationSnapshot,mail:Mail
    }
    const secured=await finishIntakeFile(fileId,{
     readSettings:recognition.readSettings,importingMail:true,
-    scheduleRecognition:original===mailOriginal?undefined:work=>{background.push(work);},
+    scheduleRecognition:work=>{background.push(work);},
    });
    if(secured.code!=='OK')return secured;
    if(!secured.capture.files.some(file=>file.id===fileId&&file.secured))throw Error('INTAKE_MAIL_ORIGINAL_NOT_CONFIRMED');
