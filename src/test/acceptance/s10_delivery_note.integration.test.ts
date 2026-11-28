@@ -8,9 +8,9 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,withRequest,createFixture} from '../../../e2e/ablauf/replayHarness';
-import {readyInvoiceOrder,deliveryNoteInputFixture} from '../../../e2e/ablauf/orderFixture';
+import {readyInvoiceOrder,readyOrderForInvoice,deliveryNoteInputFixture} from '../../../e2e/ablauf/orderFixture';
 import {generateDeliveryNote} from '@/app/actions/pdf.actions';
-import {confirmPaymentAction} from '@/app/actions/payments.actions';
+import {confirmPaymentAction,getOrderPaymentStateAction,setPaymentModeAction} from '@/app/actions/payments.actions';
 import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 it('A10-4/5 paid invoice produces one real immutable-byte delivery original, never a new payment or receivable',async()=>{
@@ -49,7 +49,7 @@ it('A10-4/5 paid invoice produces one real immutable-byte delivery original, nev
  writeFileSync('.git/kreile-s10-delivery-note-paid-proof.json',JSON.stringify({at:new Date().toISOString(),tenant:KREILE_TENANT_SLUG,receipt:created.receipt,text,source:original.payload.snapshot},null,2));
 });
 
-it('N8 denies real missing rights/session and unpaid sources without writing a document',async()=>{
+it('N8 lehnt fehlende Rechte und unvollständige Belegaufträge ohne Schreibwirkung ab',async()=>{
  const order=await readyInvoiceOrder('TEST S10 Lieferschein Rechte');
  // Explicit malformed envelope tests validation separately from the real unpaid source.
  const input={orderIds:[order.orderId],clientEventId:randomUUID(),expectedVersions:{[order.orderId]:order.version}} as unknown as import('@/lib/domain/deliveryNoteContract').DeliveryNoteInput;
@@ -58,11 +58,7 @@ it('N8 denies real missing rights/session and unpaid sources without writing a d
  expect(await withSession(goodsOnly,()=>generateDeliveryNote(input))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withRequest('',()=>generateDeliveryNote(input))).toMatchObject({code:'UNAUTHENTICATED'});
  expect(await withSession(full,()=>generateDeliveryNote(input))).toMatchObject({code:'VALIDATION_ERROR'});
- // Existing string adapter captures the real canonical unpaid source, with no fake hashes.
- await expect(withSession(goodsOnly,()=>generateDeliveryNote(order.orderId))).rejects.toThrow('Für diesen Auftrag ist noch keine Rechnung bezahlt.');
  expect(await sql`SELECT count(*)::integer AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId} AND event_type IN ('DELIVERY_NOTE_ORIGINAL_V1','DELIVERY_NOTE_REQUESTED_V1')`).toEqual([{n:0}]);
- const {getOrderPaymentStateAction}=await import('@/app/actions/payments.actions');
- expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId,includeDeliveryNoteSource:true}))).toMatchObject({code:'OK',deliveryNoteSource:{code:'VALIDATION_ERROR'}});
  expect(await withSession(full,()=>confirmPaymentAction({invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
  const own=await deliveryNoteInputFixture([order.orderId]);
  // Explicit synthetic source in a different TEST tenant, not a nonexistent ID.
@@ -73,6 +69,69 @@ it('N8 denies real missing rights/session and unpaid sources without writing a d
  expect(await sql`SELECT tenant_id FROM public.orders WHERE id=${foreignOrder}`).toEqual([{tenant_id:foreignTenant}]);
  expect(await withSession(full,()=>generateDeliveryNote({orderIds:[foreignOrder],expectedVersions:{[foreignOrder]:1},expectedSources:{[foreignOrder]:own.expectedSources[order.orderId]},clientEventId:randomUUID()}))).toMatchObject({code:'NOT_FOUND'});
  expect(await sql`SELECT count(*)::int AS n FROM public.events WHERE order_id=${foreignOrder} AND event_type IN ('DELIVERY_NOTE_ORIGINAL_V1','DELIVERY_NOTE_REQUESTED_V1')`).toEqual([{n:0}]);
+});
+
+it('B7L-3 Vorkasse wechselt nach der Zahlung vom Vorab- zum regulären Lieferschein',async()=>{
+ const order=await readyInvoiceOrder('TEST B7L-3 Vorkasse');
+ const changed=await withSession(full,()=>setPaymentModeAction({orderId:order.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:randomUUID()}));
+ expect(changed).toMatchObject({code:'OK'});
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:false}});
+ const input=await deliveryNoteInputFixture([order.orderId]);
+ const original=await withSession(full,()=>generateDeliveryNote(input));
+ if(original.code!=='OK')throw Error('TEST_B7L3_VORAB_ORIGINAL');
+ expect(await withSession(full,()=>generateDeliveryNote(order.orderId))).toBe(original.pdfBase64);
+ const opening=getDocument({data:new Uint8Array(Buffer.from(original.pdfBase64,'base64')),useSystemFonts:true});
+ try{
+  const pdf=await opening.promise;
+  const content=await (await pdf.getPage(1)).getTextContent();
+  expect(content.items.map(item=>'str'in item?item.str:'').join(' ')).toContain('Vorab-Lieferschein – Ware erst nach Zahlung');
+ }finally{await opening.destroy();}
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:false}});
+ const [before]=await sql`SELECT payload->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${original.receipt.originalEventId}`;
+ expect(before.snapshot).toMatchObject({vorab:'delivery_note.preview_payment_required',orders:[{id:order.orderId,payments:[]}]});
+
+ const zahlung=await withSession(full,()=>confirmPaymentAction({
+  invoiceId:order.invoice.invoiceId,amount:order.invoice.grossAmountCents,method:'bar',expectedVersion:0,
+  expectedOpenAmountCents:order.invoice.grossAmountCents,clientEventId:randomUUID(),
+ }));
+ if(zahlung.code!=='OK')throw Error('TEST_B7L3_ZAHLUNG_FEHLT');
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({code:'OK',data:{goodsOutAllowed:true}});
+ const neuerStand=await deliveryNoteInputFixture([order.orderId]);
+ const regulaer=await withSession(full,()=>generateDeliveryNote(neuerStand));
+ if(regulaer.code!=='OK')throw Error('TEST_B7L3_LIEFERSCHEIN_FEHLT');
+ expect(regulaer.receipt.originalEventId).not.toBe(original.receipt.originalEventId);
+ const [nachher]=await sql`SELECT payload->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${regulaer.receipt.originalEventId}`;
+ expect(nachher.snapshot).not.toHaveProperty('vorab');
+ expect(nachher.snapshot.orders[0].payments).toMatchObject([{paymentEventId:zahlung.receipt.eventId}]);
+ expect(await withSession(full,()=>generateDeliveryNote(input))).toMatchObject({code:'OK',replayed:true,pdfBase64:original.pdfBase64});
+});
+
+it('B7L-3 stellt bei freier Herausgabe den regulären Lieferschein ohne Zahlungsbeleg aus',async()=>{
+ const order=await readyOrderForInvoice('TEST B7L-3 Herausgabe auf Rechnung');
+ expect(await withSession(full,()=>getOrderPaymentStateAction({orderId:order.orderId}))).toMatchObject({
+  code:'OK',data:{mode:'rechnung',invoiceState:'not_issued',goodsOutAllowed:true},
+ });
+ const input=await deliveryNoteInputFixture([order.orderId]);
+ const original=await withSession(full,()=>generateDeliveryNote(input));
+ if(original.code!=='OK')throw Error('TEST_B7L3_REGULAERES_ORIGINAL');
+ const [saved]=await sql`SELECT payload->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${original.receipt.originalEventId}`;
+ expect(saved.snapshot).toMatchObject({orders:[{id:order.orderId,payments:[]}]});
+ expect(saved.snapshot).not.toHaveProperty('vorab');
+ expect(await sql`SELECT count(*)::int AS n FROM public.invoices WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}`).toEqual([{n:0}]);
+});
+
+it('B7L-3 verwendet die Einzelquellen auch für einen gemeinsamen Vorab-Lieferschein',async()=>{
+ const released=await readyOrderForInvoice('TEST B7L-3 Herausgabe auf Rechnung im Verbund');
+ const preview=await readyInvoiceOrder('TEST B7L-3 Vorkasse im Verbund','pickup',false,released.customerId);
+ expect(await withSession(full,()=>setPaymentModeAction({orderId:preview.orderId,paymentMode:'vorkasse',expectedVersion:0,clientEventId:randomUUID()})))
+  .toMatchObject({code:'OK'});
+ const input=await deliveryNoteInputFixture([released.orderId,preview.orderId]);
+ const result=await withSession(full,()=>generateDeliveryNote(input));
+ if(result.code!=='OK')throw Error('TEST_B7L3_VERBUND_LIEFERSCHEIN:'+result.code);
+ const [saved]=await sql`SELECT payload->'snapshot' AS snapshot FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${result.receipt.originalEventId}`;
+ expect(saved.snapshot).toMatchObject({vorab:'delivery_note.preview_payment_required',orders:expect.arrayContaining([
+  expect.objectContaining({id:released.orderId}),expect.objectContaining({id:preview.orderId}),
+ ])});
 });
 
 it('N8 a missing SQL receipt retains the secured original bytes and the same request retries without a second payment',async()=>{

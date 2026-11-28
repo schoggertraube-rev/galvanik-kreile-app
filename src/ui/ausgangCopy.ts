@@ -1,6 +1,9 @@
 import {LEGACY_ACTION_ACCESS_COPY} from './allgemeinCopy';
 // PL14Nov18:09: one payment line per real existing invoice payment.
 export const DELIVERY_NOTE_COPY={title:'Lieferschein',date:'Datum:',order:'Auftrag',description:'Beschreibung',quantity:'Anzahl Teile',payment:(date:string,amount:string)=>`Bezahlt am ${date}: ${amount}`,invalid:'Wähle den Auftrag erneut.',sourceMissing:'Für diesen Auftrag ist noch keine Rechnung bezahlt. Öffne die Zahlung am Auftrag.',changed:'Die Zahlung hat sich geändert. Lade den Auftrag neu und erzeuge den Lieferschein erneut.',unavailable:'Geht nur mit Netz'} as const;
+export const DELIVERY_NOTE_PREVIEW_COPY = {
+  'delivery_note.preview_payment_required': 'Vorab-Lieferschein – Ware erst nach Zahlung',
+} as const;
 export const DELIVERY_NOTE_SOURCE_COPY={companyMissing:'Firmendaten fehlen. Trag sie in den Einstellungen ein.',addressMissing:(field:string)=>`${field} fehlt beim Kunden. Trag es in den Kundendaten ein.`,mixedCustomers:'Ein Lieferschein gilt für einen Kunden. Wähle nur dessen Aufträge.',orderChanged:'Der Auftrag hat sich geändert. Lade ihn neu und erzeuge den Lieferschein erneut.',handoverSignature:'Übergabe (Firma)',takeoverSignature:'Übernahme (Kunde)',phone:'Tel:'} as const;
 export const GOODS_OUT_DEBT_COPY = {
   overrideRecorded: 'Du hast die Ware trotz der Kundensperre herausgegeben.',

@@ -2,13 +2,14 @@ import React,{type ReactElement} from 'react';
 import {Document,Page,StyleSheet,Text,View,Image as PdfImage,type DocumentProps} from '@react-pdf/renderer';
 import {realpathSync,readFileSync} from 'node:fs';
 import path from 'node:path';
-import {DELIVERY_NOTE_COPY as copy,DELIVERY_NOTE_SOURCE_COPY as sourceCopy,INVOICE_VAT_COPY} from '@/ui/situationCatalog';
+import {DELIVERY_NOTE_COPY as copy,DELIVERY_NOTE_SOURCE_COPY as sourceCopy,DELIVERY_NOTE_PREVIEW_COPY} from '@/ui/ausgangCopy';
+import {INVOICE_VAT_COPY} from '@/ui/situationCatalog';
 import {formatEuro} from '@/lib/domain/formatEuro';
 
 /** Frozen, already authorized facts only. No repository or current clock in
  * the renderer; the private original remains byte-identical on retry. */
 export type PaidDeliveryNoteSnapshot={
- schemaVersion:1|2;createdAt:string;
+ schemaVersion:1|2;createdAt:string;vorab?:keyof typeof DELIVERY_NOTE_PREVIEW_COPY;
  company:{companyName:string;street:string;zip:string;city:string;country:string;phone?:string|null;taxId?:string|null;logoUrl?:string|null};
  customer:{id:string;name:string;street:string;zip:string;city:string;country:string};
  orders:Array<{id:string;number:string;version:number;title:string;paymentSourceHash?:string;parts:Array<{itemId:string;name:string;quantity:number}>;
@@ -54,6 +55,7 @@ export const DeliveryNoteDocument=({snapshot:s,logo}:{snapshot:PaidDeliveryNoteS
   <Page size="A4" style={styles.page}>
    <View style={styles.header}><View>{logo?<PdfImage src={logo} style={{width:120,height:50,objectFit:'contain',marginBottom:10}}/>:null}<Text style={styles.title}>{copy.title}</Text><Text>{copy.date} {date(s.createdAt)}</Text></View><View style={styles.company}><Text>{s.company.companyName}</Text><Text>{s.company.street}</Text><Text>{s.company.zip} {s.company.city}</Text><Text>{s.company.country}</Text>{s.company.phone?.trim()?<Text>{sourceCopy.phone} {s.company.phone}</Text>:null}</View></View>
    <View style={styles.recipient}><Text>{s.customer.name}</Text><Text>{s.customer.street}</Text><Text>{s.customer.zip} {s.customer.city}</Text><Text>{s.customer.country}</Text></View>
+   {s.vorab?<Text style={{marginBottom:12,fontWeight:'bold'}}>{DELIVERY_NOTE_PREVIEW_COPY[s.vorab]}</Text>:null}
    <View style={[styles.row,styles.tableHead]}><Text style={styles.order}>{copy.order}</Text><Text style={styles.description}>{copy.description}</Text><Text style={styles.quantity}>{copy.quantity}</Text></View>
    {s.orders.flatMap(order=>order.parts.map(part=><View key={order.id+':'+part.itemId} style={styles.row} wrap={false}><Text style={styles.order}>{order.number}</Text><Text style={styles.description}>{order.title ? order.title+' · '+part.name : part.name}</Text><Text style={styles.quantity}>{part.quantity.toLocaleString('de-DE')}</Text></View>))}
    <View style={styles.section}/>
