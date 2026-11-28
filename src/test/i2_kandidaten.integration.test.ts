@@ -115,6 +115,63 @@ it('I2 E10 hält eine Rechnung mit unterschiedlicher gedruckter und eingebettete
   .toMatchObject({code:'OK',replayed:true,invoice:{id:result.invoice.id,zahlstatus:'unklar'}});
 });
 
+it('schlägt denselben Beleg am jüngeren Eingang nach Foto und Mail vor',async()=>{
+ await enableOutlookTestFixture();
+ await sql`INSERT INTO public.tenant_features (tenant,feature_id,enabled) VALUES (${tenant},'E04',true)`;
+ const vat='DE900000077',nummer='TEST-I2-GLEICH-'+randomUUID().slice(0,8);
+ const xml=Buffer.from(readFileSync('e2e/fixtures/e-rechnung/TEST_xrechnung_ubl.xml','utf8')
+  .replace('DE 123456789',vat).replace('123456XX',nummer));
+ const pdf=await PDFDocument.create();
+ pdf.addPage().drawText('Rechnungsnummer: '+nummer);
+ await pdf.attach(xml,'factur-x.xml',{mimeType:'application/xml'});
+ const anhang=Buffer.from(await pdf.save());
+ const foto=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1EAAAAASUVORK5CYII=','base64');
+ const itemId=randomUUID(),fileId=randomUUID(),sha256=createHash('sha256').update(foto).digest('hex');
+ const graphId='TEST-I2-Paar-'+randomUUID(),internetMessageId='<'+graphId+'@example.invalid>';
+ const mail={id:graphId,internetMessageId,subject:'TEST Rechnung',from:{emailAddress:{address:'beleg@example.invalid'}},
+  receivedDateTime:'',body:{contentType:'text',content:'Rechnung im Anhang.'},hasAttachments:true};
+ const mime='Message-ID: '+internetMessageId+'\r\nSubject: TEST Rechnung\r\n\r\nRechnung im Anhang.';
+ const host='https://i2-dokumentlesen.example.invalid';
+ const fields=[['Rechnungsnummer',nummer],['USt-ID',vat]];
+ vi.stubEnv('AZURE_DOCINTEL_ENDPOINT',host);
+ vi.stubEnv('AZURE_DOCINTEL_KEY','TEST-I2-Dokumentlesen');
+ const upstream=vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if(url.hostname==='login.microsoftonline.com')return Response.json({access_token:'TEST-I2-Graph-Token'.repeat(2)});
+  if(url.hostname==='graph.microsoft.com'){
+   if(url.pathname.endsWith('/$value'))return new Response(mime);
+   if(url.pathname.endsWith('/attachments'))return Response.json({value:[{id:'TEST-PDF',name:'TEST-Rechnung.pdf',
+    contentType:'application/pdf',size:anhang.length,contentBytes:anhang.toString('base64'),isInline:false}]});
+   return Response.json(mail);
+  }
+  if(url.origin!==host)return nativeFetch(input,init);
+  const model=url.pathname.match(/documentModels\/([^:/]+)/u)?.[1];
+  if(init?.method==='POST')return new Response(null,{status:202,headers:{'operation-location':
+   host+'/documentintelligence/documentModels/'+model+'/analyzeResults/TEST-I2'}});
+  return Response.json({status:'succeeded',analyzeResult:{modelId:model,content:'Rechnung\nRechnungsnummer: '+nummer,
+   pages:[{pageNumber:1}],keyValuePairs:fields.map(([key,value])=>({key:{content:key},value:{content:value},confidence:0.99}))}});
+ });
+ try {
+  const grant=await withSession(full,()=>prepareIntakeFileAction({itemId,fileId,name:'TEST_i2_rechnung.png',mime:'image/png',bytes:foto.length,sha256}));
+  if(grant.code!=='OK'||!grant.upload)throw Error('TEST_I2_FOTO_GRANT');
+  expect((await createAdminClient().storage.from(grant.upload.bucket)
+   .uploadToSignedUrl(grant.upload.path,grant.upload.token,foto,{contentType:'image/png',upsert:false})).error).toBeNull();
+  expect(await withSession(full,()=>finishIntakeFileAction(fileId),true)).toMatchObject({code:'OK'});
+  expect(await sql`SELECT phase FROM public.intake_file WHERE tenant_id=${tenant} AND id=${fileId}`).toEqual([{phase:'eingang'}]);
+  mail.receivedDateTime=new Date().toISOString();
+  const importMail=()=>importOutlookMailAction(graphId,{deferDispatchReply:true});
+  const result=await withSession(full,importMail,true);
+  if(result.code!=='OK')throw Error('TEST_I2_PAAR_MAIL:'+result.code);
+  expect(await withSession(full,importMail,true)).toMatchObject({code:'OK',itemId:result.itemId,replayed:true});
+  expect(await sql`SELECT item_id,wert FROM public.intake_suggestion WHERE tenant_id=${tenant}
+   AND feld='beleg.identitaet' AND status='offen' AND item_id IN (${itemId},${result.itemId})`)
+   .toEqual([{item_id:result.itemId,wert:{itemId}}]);
+ } finally {
+  upstream.mockRestore();
+  vi.unstubAllEnvs();
+ }
+});
+
 it('liest eine alte offene Quelle einmal je Kanal und lässt sie bei längerer Liegefrist offen ohne Tag-Zeile',async()=>{
  const id=randomUUID(),seit='2026-11-23T08:00:00+01:00';
  await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,quelle,erstellt_von,wartet_seit)

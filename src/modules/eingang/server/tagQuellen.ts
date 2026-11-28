@@ -36,7 +36,8 @@ export async function liesEingangTagZeilenInTransaction(tx:PrivilegedTenantTrans
   const fakten=await tx.execute<EingangFakt>(sql`
     SELECT item.id::text,item.kanal,item.gruppe_adresse AS gruppe,item.wartet_seit::text AS seit,item.betreff,
       EXISTS(SELECT 1 FROM public.intake_suggestion s WHERE s.tenant_id=item.tenant_id
-        AND s.item_id=item.id AND s.status='offen' AND s.sicherheit_wert<${schwelle}::numeric) AS sicherheit
+        AND s.item_id=item.id AND s.status='offen'
+        AND (s.sicherheit='unsicher' OR s.sicherheit_wert<${schwelle}::numeric)) AS sicherheit
     FROM public.intake_item item WHERE item.tenant_id=${tenantId} AND item.richtung='rein'
       AND item.einsatz='offen' AND item.aussortiert IS NULL ORDER BY item.wartet_seit NULLS LAST,item.id`);
   const termine=await tx.execute<{id:string;nummer:string;gruppe:string|null;gesendet:string}>(sql`

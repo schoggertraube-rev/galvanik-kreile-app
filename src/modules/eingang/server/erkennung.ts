@@ -14,6 +14,7 @@ import { readAzurePositionRows } from "./intakeRecognitionPositions";
 import { saveIntakeRecognitionOriginal } from "./intakeRecognitionStorage";
 import { sucheKandidatenInTransaction, type KandidatenPorts, type EingangKandidatenEinstellungen } from "./kandidaten";
 import { findeVerdachtsmuster, istEigenerLieferantenwert, istLieferantenwert } from "./eingangsRegeln";
+import { istBelegart, schlageBelegidentitaetVor } from "./belegIdentitaet";
 import { eingangCopy } from "@/ui/eingangCopy";
 
 const BUCKET = "scans";
@@ -188,7 +189,10 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
     const primaryPositions = ocr?.original ? readAzurePositionRows(ocr.original.tables) : [];
     const positionRows = primaryPositions.length || !specialistOcr?.original
       ? primaryPositions : readAzurePositionRows(specialistOcr.original.tables);
+    const belegart = istBelegart(kind) ? kind : null;
     await withPrivilegedTenantTransaction(auth, async tx => {
+      if (belegart) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(
+        'intake-belegidentitaet:'||${tenantId}||':'||${belegart},0))`);
       if (positionRows.length > 0) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${file.item_id},0))`);
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
@@ -301,6 +305,17 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
         } catch {
           kandidaten = 'teilweise';
           recordObservedFailure('INTAKE_CANDIDATES_FAILED');
+        }
+      }
+      if (belegart && recognitionCode === 'OK') {
+        try {
+          await withTenantSavepoint(tx, async nested => {
+            await nested.execute(sql`SET LOCAL statement_timeout='2000ms'`);
+            await schlageBelegidentitaetVor(nested, {tenantId,fileId,art:belegart});
+          });
+        } catch {
+          kandidaten = 'teilweise';
+          recordObservedFailure('INTAKE_DOCUMENT_IDENTITY_FAILED');
         }
       }
       const receipt = { fileId, kind, modelle: [model,specialistModel].filter((name):name is string=>name!==null),

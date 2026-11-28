@@ -99,6 +99,20 @@ async function projectorAuthorization(tenantId:string):Promise<ProjectorAuthoriz
 
 /** Per-run composition of the productive readers. No session/actor is forged;
  * personal rules, assignment ownership and command grants stay on the live path. */
+export async function liesEingangHinweise(auth: {tenantId:string}, jetzt:Date) {
+ const aktiv=await isFeatureEnabled(auth,'E01');
+ if(aktiv.code!=='OK')throw Error('I2_TAG_MODULSTAND_FEHLT');
+ if(!aktiv.enabled)return [];
+ return withPrivilegedTenantTransaction(auth,async tx=>{
+  const {eingang_liegefrist_arbeitsstunden,ki_sicherheitsschwelle}=await readErkennungsEinstellungenInTransaction(tx,auth.tenantId);
+  const {nachfassfrist_gegenvorschlag_arbeitstage}=await readKanalFristenInTransaction(tx,auth.tenantId);
+  const kalender=await readBetriebsruheInTransaction(tx,auth.tenantId),ruhe=leseBetriebsruhetage(kalender.betriebsruhe);
+  if(eingang_liegefrist_arbeitsstunden==null||!ruhe)throw Error('I2_TAG_EINSTELLUNGEN_FEHLEN');
+  return liesEingangTagZeilenInTransaction(tx,auth.tenantId,jetzt,{liegefrist:eingang_liegefrist_arbeitsstunden,
+   nachfassfrist:nachfassfrist_gegenvorschlag_arbeitstage,schwelle:ki_sicherheitsschwelle,ruhe});
+ });
+}
+
 function productivePorts():TodayProjectionPorts{
  const orderLists=new WeakMap<ProjectorAuthorization,ReturnType<typeof getOperationalOrders>>();
  const orders=(auth:ProjectorAuthorization)=>{
@@ -146,22 +160,9 @@ function productivePorts():TodayProjectionPorts{
      values.set(key,{code:'OK',payload:{result,liveCardStatus},sourceVersion:result.data.card.version,listed:true});
     }));
    }
-   const liesEingang = async () => {
-    const aktiv=await isFeatureEnabled(auth,'E01');
-    if(aktiv.code!=='OK')throw Error('I2_TAG_MODULSTAND_FEHLT');
-    if(!aktiv.enabled)return [];
-    return withPrivilegedTenantTransaction(auth,async tx=>{
-     const {eingang_liegefrist_arbeitsstunden,ki_sicherheitsschwelle}=await readErkennungsEinstellungenInTransaction(tx,auth.tenantId);
-     const {nachfassfrist_gegenvorschlag_arbeitstage}=await readKanalFristenInTransaction(tx,auth.tenantId);
-     const kalender=await readBetriebsruheInTransaction(tx,auth.tenantId),ruhe=leseBetriebsruhetage(kalender.betriebsruhe);
-     if(eingang_liegefrist_arbeitsstunden==null||!ruhe)throw Error('I2_TAG_EINSTELLUNGEN_FEHLEN');
-     return liesEingangTagZeilenInTransaction(tx,auth.tenantId,jetzt,{liegefrist:eingang_liegefrist_arbeitsstunden,
-      nachfassfrist:nachfassfrist_gegenvorschlag_arbeitstage,schwelle:ki_sicherheitsschwelle,ruhe});
-    });
-   };
-   let eingangZeilen:ReturnType<typeof liesEingang>|undefined;
+   let eingangZeilen:ReturnType<typeof liesEingangHinweise>|undefined;
    const eingangQuelle = async (quelleId:string) =>
-    source({code:'OK',zeilen:(await (eingangZeilen??=liesEingang())).filter(zeile=>zeile.quelleId===quelleId)});
+    source({code:'OK',zeilen:(await (eingangZeilen??=liesEingangHinweise(auth,jetzt))).filter(zeile=>zeile.quelleId===quelleId)});
    const bestandsLeser:Readonly<Record<string,()=>Promise<TodayProjectionResult>>>={
     orders:async()=>source(access.orders?await orders(auth):{code:'FORBIDDEN'}),
     messages:async()=>{const read=await readIntakeMessagesForAuthorization(auth,'offen');return source(read,known(read));},

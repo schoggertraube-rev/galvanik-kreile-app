@@ -5,6 +5,7 @@ export const eingangCopy = {
   rechnungswiderspruch: 'PDF und XML widersprechen',
   verdaechtigerText: 'Verdächtiger Text',
   eigeneFirma: 'Eigene Firma',
+  gleicherBeleg: 'Gleicher Aussteller, gleiche Belegart und Nummer',
   tag: {
     eingang: 'Eingang',
     offen: 'Eingang öffnen',
