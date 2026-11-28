@@ -57,6 +57,30 @@ async function findInvoice(tx:PrivilegedTenantTransaction,auth:AuthorizationSnap
  if(rows.length>1)reject('CONFLICT',invalidInvoiceRequest);
  return rows[0]??null;
 }
+
+/** Hält den Rechnungsstand bis zum Ende der Geldtransaktion fest. */
+export async function sperreLieferantenrechnungFuerGeldInTransaction(
+  tx: PrivilegedTenantTransaction,
+  auth: AuthorizationSnapshot,
+  rechnungId: string,
+) {
+  if (!auth.active || !hasAuthorizationArea(auth, 'zahlungen')) return { code: 'FORBIDDEN' as const };
+  if (!uuid(rechnungId)) return { code: 'NOT_FOUND' as const };
+
+  const invoice = await findInvoice(tx, auth, rechnungId, false, true);
+  if (!invoice) return { code: 'NOT_FOUND' as const };
+
+  return {
+    code: 'OK' as const,
+    data: {
+      id: invoice.id,
+      version: invoice.version,
+      bruttoCents: invoice.brutto === null ? null : invoiceCents(invoice.brutto),
+      zahlstatus: invoice.zahlstatus,
+    },
+  };
+}
+
 /** The caller holds the intake lock before choosing and locking the exact invoice. */
 export async function readInvoiceForSupplierChange(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,rechnungId?:string){
  const invoice=await findInvoice(tx,auth,rechnungId??itemId,rechnungId===undefined,true,undefined,rechnungId?itemId:undefined);
