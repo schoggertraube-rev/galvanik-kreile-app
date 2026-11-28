@@ -89,6 +89,7 @@ type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellung
   kanal_zielgeraete: readonly string[];
   kanal_aufbewahrung: string;
   ki_sicherheitsschwelle: number | null;
+  erkennung_modelle: Readonly<{ dokument: string; rechnung: string | null; bon: string | null }>;
   annahme_zustaende: unknown;
   suchalias_gruppen: unknown;
   energie_pauschale_cent_je_verfahren: Readonly<Record<string, number>>;
@@ -190,6 +191,9 @@ async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string)
         'betrieb_messgrenzen', firma.betrieb_messgrenzen,
         'kanal_aufbewahrung', firma.kanal_aufbewahrung,
         'ki_sicherheitsschwelle', firma.ki_sicherheitsschwelle,
+        'erkennung_modelle', CASE WHEN firma.erkennung_modelle->'dokument' = 'null'::jsonb
+          THEN jsonb_set(firma.erkennung_modelle, '{dokument}', private.s16d_spur_d_standardwerte()->'erkennung_modelle'->'dokument')
+          ELSE firma.erkennung_modelle END,
         'annahme_zustaende', firma.annahme_zustaende,
         'suchalias_gruppen', firma.suchalias_gruppen,
         'energie_pauschale_cent_je_verfahren', firma.energie_pauschale_cent_je_verfahren,
@@ -478,12 +482,12 @@ function istZustandsChip(wert: unknown): wert is ZustandsChip {
 }
 
 export async function readErkennungsEinstellungenInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
-  const { ki_sicherheitsschwelle, annahme_zustaende } = await readSpurDStand(tx, tenantId);
+  const { ki_sicherheitsschwelle, annahme_zustaende, erkennung_modelle } = await readSpurDStand(tx, tenantId);
   if (!Array.isArray(annahme_zustaende) || !annahme_zustaende.every(istZustandsChip)
     || new Set(annahme_zustaende.map(chip => chip.id)).size !== annahme_zustaende.length) {
     throw Error("S16D_ANNAHME_ZUSTAENDE_UNGUELTIG");
   }
-  return { ki_sicherheitsschwelle, annahme_zustaende };
+  return { ki_sicherheitsschwelle, annahme_zustaende, erkennung_modelle };
 }
 
 function istSuchaliasGruppe(wert: unknown): wert is string[] {

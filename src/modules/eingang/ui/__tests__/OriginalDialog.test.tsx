@@ -59,8 +59,7 @@ describe('Original: O07 metadata without Mails',()=>{
     detail:{ziel:'original',arg:[item,file,scope].join('#')},cancelable:true,
    }))),
   };
-  const selectOriginal=vi.fn();
-  render(<><IncomingInvoiceDialog initial={view} ports={invoice} onClose={vi.fn()} onMessage={vi.fn()} onSelectOriginal={selectOriginal}/>
+  render(<><IncomingInvoiceDialog initial={view} ports={invoice} onClose={vi.fn()} onMessage={vi.fn()}/>
    <IntakeObjectDialogs allowed ports={{original,goods:{} as IntakeObjectPorts['goods'],quoteGoods:{} as IntakeObjectPorts['quoteGoods']}}
     onRefresh={vi.fn()} onOpenCustomer={vi.fn()} onOpenOrder={vi.fn()} onOpenQuote={vi.fn()}/></>);
   fireEvent.click(screen.getByRole('button',{name:/TEST Beleg.pdf/}));
@@ -72,7 +71,21 @@ describe('Original: O07 metadata without Mails',()=>{
   expect(original.capture).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button',{name:/TEST Original.eml/}));
   expect(invoice.openOriginal).toHaveBeenLastCalledWith(itemId,mail.id);
-  expect(selectOriginal).not.toHaveBeenCalled();
+ });
+ it('shows recognized text from the opened file only, without a suggestion copy',async()=>{
+  const fileId='11111111-1111-4111-8111-111111111111';
+  const itemId='22222222-2222-4222-8222-222222222222';
+  const file={id:fileId,name:'TEST Scan.pdf',mime:'application/pdf',bytes:90,readable:true,status:'fertig'};
+  const ports:OriginalPorts={
+   open:vi.fn().mockResolvedValue({code:'OK',original:{...file,itemId,sha256:'a'.repeat(64),restricted:false}}),
+   capture:vi.fn().mockResolvedValue({code:'OK',capture:{id:itemId,text:null,files:[
+    {...file,recognizedText:'TEST Volltext dieses Originals'},
+    {...file,id:'33333333-3333-4333-8333-333333333333',recognizedText:'TEST eigener Text des anderen Anhangs'},
+   ],suggestions:[]}}),confirm:vi.fn(),retry:vi.fn(),
+  };
+  render(<OriginalDialog fileId={fileId} ports={ports} onClose={vi.fn()} onAssign={vi.fn()} onMessage={vi.fn()}/>);
+  expect(await screen.findByText('TEST Volltext dieses Originals')).toBeVisible();
+  expect(screen.queryByText('TEST eigener Text des anderen Anhangs')).toBeNull();
  });
  it('keeps early Escape for the requested original and leaves the conversation underneath open',async()=>{
   vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));

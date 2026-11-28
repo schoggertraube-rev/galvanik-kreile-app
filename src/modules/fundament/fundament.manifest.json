@@ -6,6 +6,7 @@
     "@/modules/fundament/server-public#tagQuellen",
     "@/modules/fundament/server-public#readPackageSwitchValuesForTakt",
     "@/modules/fundament/server-public#readLoggingSettings",
+    "@/modules/fundament/server-public#readErkennungsEinstellungenInTransaction",
     "@/modules/fundament/public#CompanyLetterSettings",
     "@/modules/fundament/server-public#readCompanyLetterSettings",
     "@/modules/fundament/public#ProductStartProfile",
