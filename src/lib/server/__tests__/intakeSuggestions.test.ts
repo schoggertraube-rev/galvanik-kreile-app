@@ -67,6 +67,13 @@ describe("intake suggestions", () => {
     expect(workingDaysBetween("2026-12-24", "2026-12-28")).toBe(1);
   });
 
+  it("matches historic free-text prices across punctuation, spaces and German spellings", () => {
+    const oldPrice = history({ name: "Schraube  M6", surface: "Glaenzend hell" });
+    expect(choosePriceSuggestion({ ...position, name: "Schraube-M6", surfaceRequested: "Glänzend,  hell" },
+      oldPrice.customerId, [oldPrice], null))
+      .toMatchObject({ source: "gleich", unitPriceCents: 1_200, lineTotalCents: 2_400 });
+  });
+
   it("calculates an achievable date and rates the customer wish", () => {
     const eingabe = {
       today: "2026-10-26",

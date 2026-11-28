@@ -5,13 +5,14 @@ import {readIntakeActorTraces} from './actorRead';
 import {intakeCaptureSnapshot} from './intakeCapture';
 import {readMessageNextAction} from './messageNextAction';
 import {priceTaskReceipt} from './intakePriceTaskReceipt';
+import {liesEingangTagFaktenInTransaction,type EingangFakt,type TagEinstellungen} from './tagQuellen';
 import 'server-only';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {authorizationReadContext,type AuthorizedReadContext} from '@/lib/server/authorizationReadContext';
-import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,withTenantSavepoint} from '@/lib/server/privilegedDb';
 import {ACCESS_AREAS} from '@/lib/auth/authorizationContract';
-import {readFallbackMessagePriority,MESSAGE_FILTERS,type MessageFilter,type IntakeMessage,type IntakeMessagesResult,type IntakeMessageSourcesResult} from '../messageContract';
+import {readFallbackMessagePriority,MESSAGE_FILTERS,type EingangTagFakten,type MessageFilter,type IntakeMessage,type IntakeMessagesResult,type IntakeMessageSourcesResult} from '../messageContract';
 
 function invalidMessageRead(filter:unknown,sourceItemId?:string,changedSince?:string):Exclude<IntakeMessagesResult,{code:'OK'}>|null{
  if(changedSince!==undefined&&(!Number.isFinite(Date.parse(changedSince))||new Date(changedSince).toISOString()!==changedSince))return {code:'VALIDATION_ERROR',message:OFFLINE_DEVICE_READ_COPY.invalidWindow};
@@ -20,31 +21,39 @@ function invalidMessageRead(filter:unknown,sourceItemId?:string,changedSince?:st
  return null;
 }
 /** One projection of intake_item; no communications/phone_notes shadow inbox. */
-export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>{
+export async function readIntakeMessages(filter:unknown='offen',sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessagesResult>{
  const invalid=invalidMessageRead(filter,sourceItemId,changedSince);if(invalid)return invalid;
  try{
   const result=await resolveAuthorization();if(!result.ok)return {code:result.reason==='AUTHORIZATION_UNAVAILABLE'?'UNAVAILABLE':'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden. Code: INTAKE_MESSAGES_SESSION.'};
-  return readIntakeMessagesForAuthorization(result.data,filter,sourceItemId,changedSince);
+  return readIntakeMessagesForAuthorization(result.data,filter,sourceItemId,changedSince,tagAnfrage);
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }
 /** Same SQL/originals for the live wrapper and the identity-free source reader.
  * Current login, effective areas and live U2 commands remain session output. */
-export function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot,filter?:unknown,sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult>;
-export function readIntakeMessagesForAuthorization(auth:AuthorizedReadContext,filter?:unknown,sourceItemId?:string,changedSince?:string):Promise<IntakeMessageSourcesResult>;
-export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot|AuthorizedReadContext,filter:unknown='offen',sourceItemId?:string,changedSince?:string):Promise<IntakeMessagesResult|IntakeMessageSourcesResult>{
+type TagStand={code:'OK';einstellungen:Omit<TagEinstellungen,'jetzt'>|null}|{code:'SOURCE_INCOMPLETE'};
+type TagAnfrage={jetzt:Date;leseEinstellungen:(context:{tenantId:string;zweck:'eingang-tag'})=>Promise<TagStand>};
+export function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot,filter?:unknown,sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessagesResult>;
+export function readIntakeMessagesForAuthorization(auth:AuthorizedReadContext,filter?:unknown,sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessageSourcesResult>;
+export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnapshot|AuthorizedReadContext,filter:unknown='offen',sourceItemId?:string,changedSince?:string,tagAnfrage?:TagAnfrage):Promise<IntakeMessagesResult|IntakeMessageSourcesResult>{
  const invalid=invalidMessageRead(filter,sourceItemId,changedSince);if(invalid)return invalid;
  const readAuth='canReadArea'in auth?auth:authorizationReadContext(auth);
  try{
   if(!readAuth.canReadArea('mails'))return {code:'FORBIDDEN',message:'Nachrichten benötigen das Recht Mails.'};
   const canReadPrices=readAuth.canReadArea('preise');
-  return await withPrivilegedTenantTransaction(auth,async tx=>{
+  const tagStand=await tagAnfrage?.leseEinstellungen({tenantId:auth.tenantId,zweck:'eingang-tag'});
+  const tag=tagStand?.code==='OK'&&tagStand.einstellungen&&tagAnfrage?{jetzt:tagAnfrage.jetzt,...tagStand.einstellungen}:null;
+  const source=await withPrivilegedTenantTransaction(auth,async tx=>{
    const deviceMatches=(alias:'source'|'candidate')=>{const row=sql.identifier(alias);return sql`(${openIntakePredicate(alias)} OR EXISTS(SELECT 1 FROM public.intake_event changed WHERE changed.tenant_id=${row}.tenant_id AND changed.item_id=${row}.id AND changed.zeit>=${changedSince}::timestamptz))`;};
    const matches=changedSince!==undefined?deviceMatches('candidate'):filter==='offen'?openIntakePredicate('candidate')
     :filter==='zuordnen'?sql`candidate.aussortiert IS NULL AND candidate.zuordnung='offen'`
     :filter==='erledigt'?sql`candidate.aussortiert IS NULL AND candidate.einsatz IN ('erledigt','info')`
     :filter==='aussortiert'?sql`candidate.aussortiert IS NOT NULL`
     :sql`candidate.einsatz='offen' OR candidate.erstellt_am>=statement_timestamp()-interval '90 days'`;
-   const messages=await tx.execute<IntakeMessage&{priceTaskReceipt:boolean}>(sql`SELECT preisbeleg.id IS NOT NULL AS "priceTaskReceipt",${mailImportFailureProjection()} AS "importFailure",source.id::text,source.graph_message_id AS "graphMessageId",source.version,(SELECT max(changed.zeit)::text FROM public.intake_event changed WHERE changed.tenant_id=source.tenant_id AND changed.item_id=source.id) AS "serverChangedAt",source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
+   const tagSpalten=tag?sql`CASE WHEN source.richtung='rein' AND ${openIntakePredicate('source')} THEN
+    jsonb_build_object('seit',source.wartet_seit::text,'unsicher',EXISTS(SELECT 1 FROM public.intake_suggestion s
+      WHERE s.tenant_id=source.tenant_id AND s.item_id=source.id AND s.status='offen' AND s.geprueft_am IS NULL
+       AND (s.sicherheit='unsicher' OR s.sicherheit_wert<${tag.schwelle}::numeric))) END`:sql`NULL::jsonb`;
+   const messages=await tx.execute<IntakeMessage&{priceTaskReceipt:boolean; tagEingang:{seit:string|null;unsicher:boolean}|null}>(sql`SELECT ${tagSpalten} AS "tagEingang",preisbeleg.id IS NOT NULL AS "priceTaskReceipt",${mailImportFailureProjection()} AS "importFailure",source.id::text,source.graph_message_id AS "graphMessageId",source.version,(SELECT max(changed.zeit)::text FROM public.intake_event changed WHERE changed.tenant_id=source.tenant_id AND changed.item_id=source.id) AS "serverChangedAt",source.kanal AS channel,source.richtung AS direction,source.sendestatus AS "sendState",
     source.zuordnung AS assignment,source.einsatz AS usage,source.absender_name AS "senderName",source.absender_adresse AS "senderAddress",source.gruppe_adresse AS "groupAddress",source.betreff AS subject,
     coalesce(preisbeleg.text,source.text,(SELECT original.nachher->>'text' FROM public.intake_event created JOIN public.intake_event original
       ON original.tenant_id=created.tenant_id AND original.item_id::text=created.nachher->>'textSourceId' AND original.id::text=created.nachher->>'originalTextEventId'
@@ -71,13 +80,22 @@ export async function readIntakeMessagesForAuthorization(auth:AuthorizationSnaps
    const actors=await readIntakeActorTraces(tx,auth,messages.map(row=>row.id));
    const sources=await Promise.all(messages.map(async row=>{const priority=readFallbackMessagePriority(row);const capture=priority.code==='OK'&&priority.rank===3?await intakeCaptureSnapshot(auth,row.id):undefined;return {row,priority,capture};}));
    const priceProtectedMessageIds:string[]=[];
-   const messageFacts=sources.map(({row:{priceTaskReceipt,...row},priority})=>{
+   const offeneEingaenge:EingangFakt[]=[];
+   const messageFacts=sources.map(({row:{priceTaskReceipt,tagEingang,...row},priority})=>{
     if(priceTaskReceipt)priceProtectedMessageIds.push(row.id);
+    if(tagEingang)offeneEingaenge.push({id:row.id,kanal:row.channel,gruppe:row.groupAddress,betreff:row.subject,
+     seit:tagEingang.seit,sicherheit:tagEingang.unsicher,preisgeschuetzt:priceTaskReceipt});
     return {...row,fallbackPriority:priority,actorTrace:actors.get(row.id)};
    });
-   const source={code:'OK' as const,messages:messageFacts,priceProtectedMessageIds,captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}])};
-   return 'canReadArea'in auth?source:projectIntakeMessageSources(auth,source);
+   let tagFakten:EingangTagFakten|undefined;
+   if(tag){
+    try{const fakten=await withTenantSavepoint(tx,nested=>liesEingangTagFaktenInTransaction(nested,auth.tenantId,tag,offeneEingaenge));
+     tagFakten={code:'OK',fakten};
+    }catch{console.error('[I2_TAG_HINWEISE_NICHT_VERFUEGBAR]');tagFakten={code:'SOURCE_INCOMPLETE'};}
+   }else if(tagStand)tagFakten=tagStand.code==='OK'?{code:'OK',fakten:null}:tagStand;
+   return {code:'OK' as const,messages:messageFacts,priceProtectedMessageIds,captures:sources.flatMap(({row,capture})=>capture===undefined?[]:[{itemId:row.id,value:capture}]),...(tagFakten?{tagFakten}:{})};
   });
+  return 'canReadArea'in auth?source:projectIntakeMessageSources(auth,source);
  }catch(error){console.error('[INTAKE_MESSAGES_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Nachrichten konnten nicht geladen werden · Fehlercode: INTAKE_MESSAGES_READ_FAILED.'};}
 }
 /** The existing personal U2 projection is shared with qualified model facts. */
@@ -86,6 +104,8 @@ export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:In
  if(source.code!=='OK')return source;
  const canReadPrices=hasAuthorizationArea(auth,'preise');
  const priceProtected=new Set(source.priceProtectedMessageIds);
+ const tagFakten=source.tagFakten?.code==='OK'&&source.tagFakten.fakten&&!canReadPrices
+  ?{code:'OK' as const,fakten:source.tagFakten.fakten.filter(fakt=>!fakt.preisgeschuetzt)}:source.tagFakten;
  return {code:'OK',messages:source.messages.flatMap(message=>{
   // Persisted Today snapshots from before this change still carry the marker on the row.
   const {priceTaskReceipt,...row}=message as IntakeMessage&{priceTaskReceipt?:boolean};
@@ -93,5 +113,5 @@ export function projectIntakeMessageSources(auth:AuthorizationSnapshot,source:In
   const priority=row.fallbackPriority??readFallbackMessagePriority(row);
   const capture=source.captures.find(value=>value.itemId===row.id)?.value;
   return [{...row,fallbackPriority:priority,nextActionRule:readMessageNextAction(auth,row,priority,capture)}];
- }),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId};
+ }),areas:ACCESS_AREAS.filter(area=>hasAuthorizationArea(auth,area)),currentLogin:auth.userId,...(tagFakten?{tagFakten}:{})};
 }

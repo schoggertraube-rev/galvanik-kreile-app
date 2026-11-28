@@ -270,7 +270,7 @@ function mapReceipt(
 
 export async function searchOrderIntakeCustomers(
   authorization: Pick<AuthorizationSnapshot,"tenantId"> & Partial<Pick<AuthorizationSnapshot,"areas">>,input:unknown,
-  options:{nameAlternatives?:boolean;exactSupplier?:'vat'|'name'}={},transaction?:PrivilegedTenantTransaction,
+  options:{nameAlternatives?:boolean;exactSupplier?:'vat'|'name';includeCustomerVat?:true;mailIdentity?:{address:string;domain:string}}={},transaction?:PrivilegedTenantTransaction,
 ):Promise<OrderIntakeCustomerOption[]> {
   if(!validSearchInput(input))throw new Error("ORDER_INTAKE_CUSTOMER_SEARCH_INPUT_INVALID");
   if(input.query.length<(options.exactSupplier?1:2))return [];
@@ -280,6 +280,7 @@ export async function searchOrderIntakeCustomers(
   // Only global search opts in. Intake/customer confirmation keeps strict matching.
   const alternative=options.nameAlternatives&&!input.candidate?alternativeNameQuery(input.query):null;
   const initialPattern=alternative?alternativeNameInitialPattern(alternative):null;
+  const mailIdentity=options.mailIdentity;
   const read=async(tx:PrivilegedTenantTransaction)=>{
     const searchable=foldedSqlText(sql`customer.search_text`);
     const textSearch=tokens.length?sql.join(tokens.map(token=>sql`strpos(${searchable},${token})>0`),sql` OR `):sql`false`;
@@ -287,17 +288,20 @@ export async function searchOrderIntakeCustomers(
     // pg_trgm already exists in the baseline. This only fetches candidates;
     // the shared phonetic/edit rule proves each returned name below.
     const alternativeSearch=alternative&&initialPattern?sql`(${nameText} ~ ${initialPattern} OR public.word_similarity(${alternative},${nameText})>=0.2)`:sql`false`;
-    const exactSupplier=options.exactSupplier?sql`customer.customer_type='lieferant' AND ${options.exactSupplier==='vat'
+    const matchVatForCustomer=options.exactSupplier==='vat'&&options.includeCustomerVat===true;
+    const exactSupplier=options.exactSupplier?sql`(${matchVatForCustomer} OR customer.customer_type='lieferant') AND ${options.exactSupplier==='vat'
       ?sql`upper(regexp_replace(coalesce(customer.vat_id,''),'[[:space:]]','','g'))=${input.query.replace(/\s/gu,'').toUpperCase()}`
       :sql`lower(btrim(customer.name))=lower(${input.query.trim()})`}`:null;
+    const exactMail=mailIdentity?sql`(lower(btrim(customer.email))=${mailIdentity.address}
+      OR split_part(lower(btrim(customer.email)),'@',2)=${mailIdentity.domain})`:null;
     const rows=await tx.execute<CustomerRow>(sql`
       SELECT customer.* FROM private.v_order_intake_customers_v1 customer
-      WHERE ${exactSupplier??sql`(${textSearch} OR ${alternativeSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))`}
+      WHERE ${exactSupplier??exactMail??sql`(${textSearch} OR ${alternativeSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))`}
     `);
     const mapped=rows.map(row=>{const value=mapCustomer(row,authorization.tenantId);if(!value)throw new Error("ORDER_INTAKE_CUSTOMER_READMODEL_INVALID");return value;});
     const query=foldSearchText(input.query);
     const values=mapped.map(customer=>({...customer,duplicateMatch:input.candidate?customerDuplicateMatch(customer,input.candidate):null})).filter(customer=>{
-      if(options.exactSupplier)return true; // The canonical SELECT already proves the exact supplier match.
+      if(options.exactSupplier||mailIdentity)return true; // The SELECT proves the exact identity.
       if(input.candidate)return customer.duplicateMatch!==null;
       const fields=[customer.name,customer.companyName,customer.firstName,customer.lastName,customerContactLabel(customer),customer.email,customer.city,customer.customerNumber];
       return fields.some(value=>value!==null&&value!==undefined&&foldSearchText(value).includes(query)) || national.length>=2&&normaliseCustomerPhone(customer.phone).includes(national)
@@ -311,7 +315,8 @@ export async function searchOrderIntakeCustomers(
       if(names.some(value=>value&&foldSearchText(value).includes(query)))return 0;
       return names.some(value=>nameSearchAlternative(value,alternative)==='phonetic')?1:2;
     };
-    return values.sort((a,b)=>(a.duplicateMatch?.kind==="exact"?0:1)-(b.duplicateMatch?.kind==="exact"?0:1)||nameRank(a)-nameRank(b)||customerSortKey(a).localeCompare(customerSortKey(b),"de")||a.id.localeCompare(b.id)).slice(0,10);
+    const exactAddressRank=(customer:OrderIntakeCustomerOption)=>mailIdentity&&customer.email?.trim().toLowerCase()===mailIdentity.address?0:1;
+    return values.sort((a,b)=>exactAddressRank(a)-exactAddressRank(b)||(a.duplicateMatch?.kind==="exact"?0:1)-(b.duplicateMatch?.kind==="exact"?0:1)||nameRank(a)-nameRank(b)||customerSortKey(a).localeCompare(customerSortKey(b),"de")||a.id.localeCompare(b.id)).slice(0,10);
   };
   return transaction?read(transaction):withPrivilegedTenantTransaction(authorization,read);
 }

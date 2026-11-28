@@ -37,8 +37,8 @@ export async function processIntakeDeviceRequest(input: unknown, sessionFingerpr
         RETURNING id::text,item_id::text`);
       if (input.command === "refresh") return { code: "OK", requests: await readViews(tx, auth.tenantId, auth.userId, input.requestId) };
       if (input.command === "request") {
-        await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von)
-          VALUES(${input.itemId}::uuid,${auth.tenantId},${input.itemId},'foto','rein','geraet',${auth.userId}::uuid) ON CONFLICT(tenant_id,client_key) DO NOTHING`);
+        await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,wartet_seit)
+          VALUES(${input.itemId}::uuid,${auth.tenantId},${input.itemId},'foto','rein','geraet',${auth.userId}::uuid,statement_timestamp()) ON CONFLICT(tenant_id,client_key) DO NOTHING`);
         const item = await tx.execute<{ id: string }>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid`);
         if (item.length !== 1) return { code: "NOT_FOUND", message: "Eingang wurde nicht gefunden." };
         await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)

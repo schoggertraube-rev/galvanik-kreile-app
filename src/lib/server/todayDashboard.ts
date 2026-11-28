@@ -20,6 +20,8 @@ import { getOperationalOrders, type OperationalOrder } from "@/lib/server/operat
 import type { TerminEinstellungenLeser } from "@/lib/server/orderStationRead";
 import {TAG_QUELLEN,TODAY_PROJECTOR_VERSION,todaySourceNeedsRebuild} from './todayProjectionSchedule';
 import type {HeuteZeile} from '@/lib/today/todaySourceRegistry';
+import type {EingangTagFakten} from '@/modules/eingang/public';
+import {eingangCopy} from '@/ui/eingangCopy';
 import {getTodayOrderReadAction,readPageReadSettingsAction} from '@/app/actions/orders.actions';
 import {getIntakeTaskAction,getIntakeMessagesAction} from "@/app/actions/eingang.actions";
 import { withTenantSavepoint, type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -60,7 +62,7 @@ export type TodayCollectionNotice = {
 
 export type TodayQuoteActionRow={quoteId:string;version:number;read:U2Read;facts:Readonly<Record<string,unknown>>;validUntil:string|null;followupAt:string|null};
 type TagQuellenLesestand={code:'OK';zeilen:HeuteZeile[]}|{code:'SOURCE_INCOMPLETE'};
-type TodayTagQuellen={aufgaben:TagQuellenLesestand;taktAusfall:TagQuellenLesestand};
+type TodayTagQuellen={aufgaben:TagQuellenLesestand;taktAusfall:TagQuellenLesestand;eingang?:TagQuellenLesestand};
 type TodayTagQuellePort={
  live:(auth:AuthorizationSnapshot,jetzt:Date)=>Promise<TagQuellenLesestand>;
  ausModell:(auth:AuthorizationSnapshot,value:unknown)=>TagQuellenLesestand;
@@ -350,6 +352,29 @@ function readTodayTaskCalendar(){
  return withPageReadPhase('today.tasks',()=>getIntakeTaskAction({calendar:true}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,rows:[],missingTaskIds:[]})));
 }
 
+export function projiziereEingangTagFakten(auth:AuthorizationSnapshot,stand:EingangTagFakten):TagQuellenLesestand{
+ if(!hasAuthorizationArea(auth,'mails'))return {code:'OK',zeilen:[]};
+ if(stand.code!=='OK')return stand;
+ const zeilen:HeuteZeile[]=[], kanaele=new Set<string>();
+ const preise=hasAuthorizationArea(auth,'preise');
+ for(const fakt of stand.fakten??[]){
+  if(fakt.preisgeschuetzt&&!preise)continue;
+  if(fakt.art==='offen'){
+   if(kanaele.has(fakt.kanal))continue;
+   kanaele.add(fakt.kanal);
+  }
+  const quelleId='eingang.'+fakt.art;
+  const text=eingangCopy.tag;
+  const handlung=fakt.art==='offen'?text.offen:fakt.art==='unklar'?text.unklar:text.nachfassen;
+  const grund=fakt.art==='offen'?(fakt.tage>=2?text.seit(fakt.tage):text.wartet)
+   :fakt.art==='unklar'?text.unsicher:text.gegenvorschlag;
+  zeilen.push({quelleId,key:quelleId+':'+(fakt.art==='offen'?fakt.kanal:fakt.id),
+   gegenstand:fakt.betreff?.trim()||text.eingang,handlung,grund,faellig:fakt.faellig,rang:null,
+   ziel:fakt.gruppe?'/nachrichten?gruppe='+encodeURIComponent(fakt.gruppe):'/nachrichten',befehl:null});
+ }
+ return {code:'OK',zeilen};
+}
+
 export async function collectTodaySources(auth: AuthorizationSnapshot,readComplaints:()=>Promise<ComplaintReadResult>,readQuoteFollowups:()=>Promise<{code:'OK';tasks:TodayQuoteFollowup[]}|{code:string;message:string}>,readTerminEinstellungen:TerminEinstellungenLeser,readNow=new Date(),operationalSource?:ReturnType<typeof getOperationalOrders>) {
   const diagnosticStarted=Date.now();
   const calendar=readTodayCalendar(readNow),today=calendar.today;
@@ -359,7 +384,7 @@ export async function collectTodaySources(auth: AuthorizationSnapshot,readCompla
   const tasksRead=graphAllowed?readTodayTaskCalendar():null;
   const [orderSource, graph, support, complaints,quoteFollowups,companyLetter] = await Promise.all([
     withPageReadPhase('today.orders',()=>ordersAllowed ? (operationalSource??getOperationalOrders(auth,{purpose:'today'},readTerminEinstellungen)).then(data=>({code:'OK' as const,data})).catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'orders',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const};}) : Promise.resolve({code:'OK' as const,data:[]})),
-    withPageReadPhase('today.graph',()=>graphAllowed ? getIntakeMessagesAction('offen').catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
+    withPageReadPhase('today.graph',()=>graphAllowed ? getIntakeMessagesAction({purpose:'tag',jetzt:readNow}).catch(()=>({code:'SOURCE_INCOMPLETE' as const,message:PAGE_READ_COPY.sourceIncomplete})) : Promise.resolve({ code: "FORBIDDEN" as const, message: "" })),
     withPageReadPhase('today.support',()=>readTodaySupport(auth,today,access)),
     withPageReadPhase('today.complaints',()=>access.complaints?readComplaints().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'complaints',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_COMPLAINT_SOURCE'};}):Promise.resolve({code:'OK' as const,complaints:[]})),
     withPageReadPhase('today.followups',()=>graphAllowed?readQuoteFollowups().catch(error=>{console.error('[TODAY_SOURCE_FAILED]',{quelle:'quote-followups',name:error instanceof Error?error.name:'UnknownError'});return {code:'SOURCE_INCOMPLETE' as const,message:'TODAY_QUOTE_FOLLOWUP_SOURCE'};}):Promise.resolve({code:'OK' as const,tasks:[]})),
@@ -662,7 +687,8 @@ export function composeTodayDashboard(auth:AuthorizationSnapshot,sources:TodayDa
   return {
     hauptaktion,hauptaktionsQuelle,
     calendar,
-    ...(sources.tagQuellen?{tagQuellen:sources.tagQuellen}:{}),
+    ...(sources.tagQuellen?{tagQuellen:{...sources.tagQuellen,
+     ...(graphAllowed?{eingang:projiziereEingangTagFakten(auth,graph.code==='OK'&&graph.tagFakten?graph.tagFakten:{code:'SOURCE_INCOMPLETE'})}:{})}}:{}),
     ...(graphAllowed?{quoteActions,quoteSchedule,taskSchedule,messageActions}:{}),
     items:sortedItems,
     challenges:{code:challengeMissing.length?'SOURCE_INCOMPLETE':'OK',groups:challenges.groups,missing:challengeMissing},
@@ -888,7 +914,8 @@ export async function readTodaySourcesFromModel(auth:AuthorizationSnapshot,ports
   const needsOrderTerms = cachedOperationalSource.code !== 'OK' || cachedOperationalSource.data.some(order => !Object.hasOwn(order, 'terminStand'));
   const operationalRead=hasAnyAuthorizationArea(auth)?live<TodayDashboardSources['orderSource']>('orders',cachedOperationalSource,async()=>({code:'OK',data:await getOperationalOrders(auth,{purpose:'today'},ports.readTerminEinstellungen)}),needsOrderTerms):cachedOperationalSource;
   const unknownGraph:TodayDashboardSources['graph']={code:'SOURCE_INCOMPLETE',message:PAGE_READ_COPY.sourceIncomplete};
-  const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)),()=>getIntakeMessagesAction('offen')):{code:'FORBIDDEN' as const,message:''};
+ const cachedGraph=access.messages?project<TodayDashboardSources['graph']>('messages',unknownGraph,payload=>ports.messages(auth,payload)):unknownGraph;
+ const graphRead=access.messages?live<TodayDashboardSources['graph']>('messages',cachedGraph,()=>getIntakeMessagesAction({purpose:'tag',jetzt:readAt}),cachedGraph.code==='OK'&&cachedGraph.tagFakten?.code!=='OK'):{code:'FORBIDDEN' as const,message:''};
   const unknownMoney=unknownTodayMoneySupport();
   const cachedMoney=maskTodayMoneySupport(auth,project<Parameters<typeof maskTodayMoneySupport>[1]>('money',unknownMoney,payload=>{
    const row=modelRecord(payload);if(!row||!Array.isArray(row.supportMissing)||!Array.isArray(row.invoices)||!Array.isArray(row.prepayments)||!Array.isArray(row.collections)
