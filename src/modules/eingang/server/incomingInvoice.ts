@@ -274,21 +274,31 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
   const existingInvoice=mailInvoice?.item_id===row.id?mailInvoice:null;
   if(row.aussortiert||(row.einsatz!=='offen'&&!(existingInvoice&&row.einsatz==='erledigt')))reject('CONFLICT','Eingang ist nicht mehr offen.');
   if(row.vorgang_id&&!existingInvoice)reject('CONFLICT','Eingang ist bereits einem anderen Vorgang zugeordnet.');
-  const [original]=await tx.execute(sql`SELECT file.id
+  const [original]=await tx.execute<{dateiname:string}>(sql`SELECT file.dateiname
    FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND file.id=${input.fileId}::uuid AND ${invoiceOriginal}`);
   if(!original)reject('VALIDATION_ERROR','Gesichertes Original dieser Rechnung fehlt.');
   if(pages&&pageSource?.code==='OK'&&(pageSource.mime!=='application/pdf'||pages.to>await pageSource.countPages()))
    reject('VALIDATION_ERROR','Rechnungsangaben oder Eingangsstand sind ungültig.');
-  const savedOriginal=await tx.execute(sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${auth.tenantId} AND file_id=${input.fileId}::uuid
-   AND seite_von IS NOT DISTINCT FROM ${pages?.from??null}::integer AND seite_bis IS NOT DISTINCT FROM ${pages?.to??null}::integer`);
-  if(savedOriginal.length)reject('CONFLICT','Dieser Eingang hat bereits eine Rechnung.');
+  const [belegt]=await tx.execute<{nummer_intern:string;seite_von:number|null;seite_bis:number|null}>(sql`
+   SELECT nummer_intern,seite_von,seite_bis FROM public.supplier_invoice
+   WHERE tenant_id=${auth.tenantId} AND file_id=${input.fileId}::uuid
+     AND int4range(coalesce(seite_von,1),seite_bis,'[]') && int4range(${pages?.from??1}::integer,${pages?.to??null}::integer,'[]')
+   ORDER BY seite_von NULLS FIRST,nummer_intern LIMIT 1`);
+  if(belegt)reject('CONFLICT',belegt.seite_von===null||belegt.seite_bis===null
+   ?eingangCopy.rechnungDateiBelegt(original.dateiname,belegt.nummer_intern)
+   :eingangCopy.rechnungSeitenBelegt(belegt.seite_von,belegt.seite_bis,original.dateiname,belegt.nummer_intern));
   const vorschlaege=await invoiceSuggestions(tx,auth,row.id,input.fileId,pages,existingInvoice===null);
   const widerspruch=hatRechnungswiderspruch(vorschlaege);
   const missingSupplier=input.status==='offen'&&!input.fields.lieferantId;
   const savedStatus=widerspruch||missingSupplier?'unklar':input.status;
   const unclearReason=widerspruch?eingangCopy.rechnungswiderspruch:missingSupplier?'Lieferant fehlt':input.unclearReason;
   const selected=await validate(tx,auth,input.fields,widerspruch?savedStatus:input.status,input.paidDate,widerspruch?null:input.proofFileId,row.id,deps);
-  if(!existingInvoice&&row.kunde_id&&row.kunde_id!==selected?.id)reject('CONFLICT','Rechnung gehört zu einem anderen zugeordneten Lieferanten.');
+  const andererLieferant=row.kunde_id!==null&&row.kunde_id!==selected?.id;
+  if(!existingInvoice&&andererLieferant){
+   const originale=await tx.execute(sql`SELECT file.id FROM public.intake_file file
+    WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${row.id}::uuid AND ${invoiceOriginal} LIMIT 2`);
+   if(originale.length===1)reject('CONFLICT','Rechnung gehört zu einem anderen zugeordneten Lieferanten.');
+  }
   if(savedStatus==='unklar'&&(!unclearReason||unclearReason.trim().length<3))reject('VALIDATION_ERROR','Grund fehlt',{unclearReason:'Grund fehlt · 3 bis 200 Zeichen'});
   await verifyDuplicate(tx,auth,input.fields,widerspruch?savedStatus:input.status,input.duplicateId,input.duplicateReason);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('invoice-number:'||${auth.tenantId},0))`);
@@ -310,8 +320,8 @@ export async function saveIncomingInvoice(input:unknown,deps:InvoiceDependencies
    await tx.execute(sql`UPDATE public.supplier_invoice SET aufgabe_id=${taskId}::uuid WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid`);
   }
   const concerns=row.anliegen_offen.filter(value=>value!=='rechnung'),usage=concerns.length?'offen':'erledigt';
-  await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${existingInvoice?row.kunde_id:selected?.id??null},
-   zuordnung=CASE WHEN ${existingInvoice!==null} THEN zuordnung ELSE ${selected?'hand':row.kunde_id?'hand':'offen'} END,
+  await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${existingInvoice?row.kunde_id:row.kunde_id??selected?.id??null},
+   zuordnung=CASE WHEN ${existingInvoice!==null||andererLieferant} THEN zuordnung ELSE ${selected?'hand':row.kunde_id?'hand':'offen'} END,
    vorgang_art='rechnung',vorgang_id=${existingInvoice?.id??id},
    einsatz=${usage},anliegen_offen=ARRAY[${sql.join(concerns.map(value=>sql`${value}`),sql`, `)}]::text[],einsatz_aktion=${command},einsatz_am=statement_timestamp(),einsatz_von=${auth.userId}::uuid,
    geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1 WHERE tenant_id=${auth.tenantId} AND id=${row.id}::uuid AND version=${row.version}`);

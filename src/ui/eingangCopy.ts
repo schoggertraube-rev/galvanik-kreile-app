@@ -31,6 +31,10 @@ export const EINGANG_VORSCHLAG_COPY={
 
 export const eingangCopy = {
   rechnungswiderspruch: 'PDF und XML widersprechen',
+  rechnungSeitenBelegt: (von:number,bis:number,datei:string,nummerIntern:string) =>
+    `Seite ${von}–${bis} von ${datei} gehört schon zu Rechnung ${nummerIntern}. Wähl die übrigen Seiten.`,
+  rechnungDateiBelegt: (datei:string,nummerIntern:string) =>
+    `${datei} ist schon ganz als Rechnung ${nummerIntern} erfasst. Gehört ein Teil zu einer anderen Rechnung, grenz zuerst die Seiten von ${nummerIntern} ein.`,
   verdaechtigerText: 'Verdächtiger Text',
   eigeneFirma: 'Eigene Firma',
   gleicherBeleg: 'Gleicher Aussteller, gleiche Belegart und Nummer',
