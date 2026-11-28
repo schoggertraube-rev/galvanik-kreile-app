@@ -63,6 +63,9 @@ it('meldet fehlende Spalten und ein unvollständiges Zitat', () => {
   const encode = (text: string) => new TextEncoder().encode(text);
   expect(leseCsvAuszug(encode('tag,währung\n2026-11-01,EUR'), profil).fehler)
     .toEqual([{ zeile: 1, feld: 'betrag', code: 'SPALTE_FEHLT' }]);
-  expect(leseCsvAuszug(encode('tag,wert\n"2026-11-01,12'), profil).fehler)
-    .toEqual([{ zeile: 2, feld: 'format', code: 'FORMAT_UNBEKANNT' }]);
+  const partial = leseCsvAuszug(encode('tag,wert\n2026-11-01,2.50\n"2026-11-02,12'), profil);
+  expect(partial.zeilen.map(zeile => zeile.betragCents)).toEqual([250]);
+  expect(partial.fehler).toEqual([{ zeile: 3, feld: 'format', code: 'WERT_UNGUELTIG' }]);
+  expect(leseCsvAuszug(encode('"tag,wert'), profil).fehler)
+    .toEqual([{ zeile: 1, feld: 'format', code: 'FORMAT_UNBEKANNT' }]);
 });

@@ -119,9 +119,8 @@ export function leseProfilAuszug<Zeile extends RohBewegung>(
   try { text = new TextDecoder(profil.kodierung, { fatal: true }).decode(bytes); }
   catch { return formatFehlt(1); }
   const { zeilen, abbruch } = csvZeilen(text, profil.trenner);
-  if (abbruch !== undefined) return formatFehlt(abbruch);
   const [kopfzeile, ...saetze] = zeilen;
-  if (!kopfzeile) return formatFehlt(1);
+  if (!kopfzeile) return formatFehlt(abbruch ?? 1);
   const spalten = kopfzeile.werte.map(wert => wert.trim());
   if (spalten.includes('') || new Set(spalten).size !== spalten.length) return formatFehlt(kopfzeile.zeile);
   const index = new Map(spalten.map((wert, position) => [wert, position]));
@@ -166,6 +165,7 @@ export function leseProfilAuszug<Zeile extends RohBewegung>(
       gegenpartei: wert('gegenpartei'), iban: wert('iban'),
     }, roherWert));
   }
+  if (abbruch !== undefined) result.fehler.push({ zeile: abbruch, feld: 'format', code: 'WERT_UNGUELTIG' });
   return result;
 }
 
