@@ -19,14 +19,13 @@ describe('Original: O07 metadata without Mails',()=>{
   const source:InvoiceView={item:{id:itemId,version:1,at:'2026-11-18T08:00:00Z',channel:'mail',sender:null},
    invoice:null,supplier:null,originals:[first,second],fileId:first.id,fields:{...EMPTY_INVOICE_FIELDS},
    uncertain:0,conflict:null,duplicate:null};
-  const supplier={id:'TEST-Lieferant-B',name:'TEST Lieferant B',iban:null,paymentTermDays:null};
-  const selected:InvoiceView={...source,fileId:second.id,supplier,fields:{...source.fields,lieferantId:supplier.id,
+  const selected:InvoiceView={...source,fileId:second.id,fields:{...source.fields,
    nummer:'TEST-L-B',datum:'2026-11-18',netto:'55,00',ust:'0,00',brutto:'55,00',faelligAm:'2026-11-30'}};
   let finishSelection:()=>void=()=>{throw Error('TEST_SELECTION_NOT_STARTED');};
   const ports:InvoicePorts={read:vi.fn<InvoicePorts['read']>(async request=>request.fileId===second.id
     ? new Promise(resolve=>{finishSelection=()=>resolve({code:'OK',view:selected});}) : {code:'OK',view:source}),
    save:vi.fn().mockResolvedValue({code:'UNAVAILABLE',message:'TEST Antwort'}),status:vi.fn(),clarify:vi.fn(),searchSuppliers:vi.fn(),
-   openOriginal:vi.fn(),createSupplier:vi.fn(),prepareFile:vi.fn(),finishFile:vi.fn(),openTask:vi.fn()};
+   openOriginal:vi.fn(),createSupplier:vi.fn().mockResolvedValue({code:'OK'}),prepareFile:vi.fn(),finishFile:vi.fn(),openTask:vi.fn()};
   render(<IncomingInvoiceDialogs ports={ports} allowed onRefresh={vi.fn()}/>);
   window.dispatchEvent(new CustomEvent('kreile:oeffne',{detail:{ziel:'rechnungein',arg:itemId},cancelable:true}));
   fireEvent.click(await screen.findByRole('button',{name:/TEST L-B.pdf/}));
@@ -39,6 +38,8 @@ describe('Original: O07 metadata without Mails',()=>{
   expect(ports.save).not.toHaveBeenCalled();
   finishSelection();
   await waitFor(()=>expect(ports.openOriginal).toHaveBeenCalledWith(itemId,second.id));
+  fireEvent.click(await screen.findByRole('button',{name:'Lieferant ergänzen'}));
+  expect(ports.createSupplier).toHaveBeenCalledWith({id:itemId,fileId:second.id});
   fireEvent.click(await screen.findByRole('button',{name:/^Erfassen/}));
   await waitFor(()=>expect(ports.save).toHaveBeenCalledWith(expect.objectContaining({itemId,fileId:second.id,
    fields:expect.objectContaining({nummer:'TEST-L-B',brutto:'55,00'})})));
