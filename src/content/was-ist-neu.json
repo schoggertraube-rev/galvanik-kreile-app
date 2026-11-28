@@ -1,5 +1,14 @@
 [
   {
+    "datum": "2026-11-28",
+    "pr": 347,
+    "seite": "heute",
+    "ziel": "/",
+    "punkte": [
+      "Auf „Dein Tag“ siehst du den Ablageort eines Pakets ohne Auftrag. Sobald das Paket einem Auftrag zugeordnet ist, verschwindet der Hinweis."
+    ]
+  },
+  {
     "datum": "2026-11-27",
     "pr": 336,
     "seite": "rechnungen",
