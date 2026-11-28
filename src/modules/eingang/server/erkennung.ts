@@ -316,7 +316,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
             const { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle } = stand;
             if (eingang_vorschlaege_max == null || eingang_kandidat_stufen == null) return 'keine';
             return sucheKandidatenInTransaction(nested, { tenantId, akteur }, file.item_id, receiptKey,
-              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle }, {...ports,firma:leseFirma});
+              { eingang_vorschlaege_max, eingang_kandidat_stufen, ki_sicherheitsschwelle }, {...ports,firma:leseFirma},complete&&goodsPhoto);
           });
         } catch {
           kandidaten = 'teilweise';

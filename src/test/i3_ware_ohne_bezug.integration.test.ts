@@ -6,7 +6,7 @@ const tenant=vi.hoisted(()=>'TEST-ablauf-'+globalThis.crypto.randomUUID());
 vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:tenant}));
 
 import {full,sql,withSession} from '../../e2e/ablauf/replayHarness';
-import {chooseIntakeCaptureKindAction,getGoodsReceiptsAction,getIntakeCaptureAction,getIntakeMessagesAction,
+import {chooseIntakeCaptureKindAction,finishIntakeFileAction,getGoodsReceiptsAction,getIntakeCaptureAction,getIntakeMessagesAction,
  legePaketOhneBezugAbAction,verknuepfePaketOhneBezugAction} from '@/app/actions/eingang.actions';
 import {resolveAuthorization} from '@/lib/server/authorization';
 import {projiziereEingangTagFakten} from '@/lib/server/todayDashboard';
@@ -23,8 +23,8 @@ it('legt das Original am angegebenen Ort ab und verbindet es später einmalig mi
   ON CONFLICT(tenant,feature_id) DO UPDATE SET enabled=false`;
  await sql`INSERT INTO public.tenant_features(tenant,feature_id,enabled) VALUES (${tenant},'E01',true)`;
  await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,street,zip,city,country,
-  material_aufschlag_prozent,lager_regelversion,eingang_liegefrist_arbeitsstunden)
-  VALUES (${randomUUID()},${tenant},'TEST Kreile','TEST Weg 1','70176','Stuttgart','DE',0,'TEST-I3',24)`;
+  material_aufschlag_prozent,lager_regelversion,eingang_liegefrist_arbeitsstunden,ki_sicherheitsschwelle)
+  VALUES (${randomUUID()},${tenant},'TEST Kreile','TEST Weg 1','70176','Stuttgart','DE',0,'TEST-I3',24,0.95)`;
  const session=await withSession(full,resolveAuthorization);
  if(!session.ok)throw Error('TEST_I3_TAG_AUTH');
  const auth=session.data;
@@ -36,9 +36,12 @@ it('legt das Original am angegebenen Ort ab und verbindet es später einmalig mi
   return lesestand.zeilen.filter(eintrag=>eintrag.quelleId==='eingang.paketohnebezug');
  };
  const {itemId,fileId}=await storeIntakeGoodsPhoto();
+ expect(await withSession(full,()=>finishIntakeFileAction(fileId),true)).toMatchObject({code:'OK'});
  const lesen=()=>withSession(full,()=>getIntakeCaptureAction(itemId,undefined,{packageExpectation:false}));
  const davor=await lesen();
  if(davor.code!=='OK')throw Error('TEST_I3_PAKET_QUELLE:'+davor.code);
+ expect(davor.capture.concerns).toContain('ware_ohne_bezug');
+ expect(await paketZeilen()).toEqual([]);
  const ware=await withSession(full,()=>chooseIntakeCaptureKindAction({itemId,version:davor.capture.version,
   clientEventId:randomUUID(),kind:'ware'}));
  if(ware.code!=='OK')throw Error('TEST_I3_PAKET_ART:'+ware.code);

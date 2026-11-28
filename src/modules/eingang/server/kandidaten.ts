@@ -261,6 +261,7 @@ export async function leseBelegteKundenTreffer(
 
   return {
     treffer,
+    hinweiseVollstaendig: vollstaendig,
     quellenVollstaendig: geleseneQuellen > 0 && vollstaendig,
     kandidaten: geleseneQuellen === 0 ? 'keine' as const : vollstaendig ? 'ok' as const : 'teilweise' as const,
   };
@@ -328,7 +329,7 @@ export type KandidatenPorts = {
 
 export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransaction,
   kontext: { tenantId: string; akteur: string }, itemId: string, befehlId: string,
-  einstellungen: EingangKandidatenEinstellungen, ports: KandidatenPorts) {
+  einstellungen: EingangKandidatenEinstellungen, ports: KandidatenPorts, warenOriginal=false) {
   await tx.execute(sql`SET LOCAL statement_timeout='2000ms'`);
   const quelle = await leseKandidatenQuellenInTransaction(tx, kontext.tenantId, itemId);
   if (!quelle) return 'keine';
@@ -336,6 +337,7 @@ export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransacti
   const vorschlaege: IntakeCandidate[] = [];
   let automatischKundenId: string | null = null;
   let kundenVollstaendig = true;
+  let warenSucheVollstaendig = quelle.hinweiseVollstaendig;
   const kundenIds = new Set(quelle.kundeId ? [quelle.kundeId] : []);
   const einfuegen = (feld: IntakeCandidate['feld'], wert: IntakeCandidate['wert'], regel: Trefferregel, stufe: number) => {
     const schwelle = einstellungen.ki_sicherheitsschwelle;
@@ -348,6 +350,7 @@ export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransacti
     try { firma = await ports.firma(kontext.tenantId); } catch { kundenVollstaendig = false; }
     const erkannt = await leseBelegteKundenTreffer(quelle.eingang, firma ?? { name: null, ustId: null },
       (query, option) => withTenantSavepoint(tx, nested => ports.leseKunden(nested, kontext.tenantId, query, option)));
+    warenSucheVollstaendig &&= erkannt.hinweiseVollstaendig && firma !== null;
     kundenVollstaendig &&= erkannt.quellenVollstaendig && quelle.hinweiseVollstaendig && firma !== null;
     if (erkannt.kandidaten !== 'keine') {
       arten.push('kunde');
@@ -360,16 +363,24 @@ export async function sucheKandidatenInTransaction(tx: PrivilegedTenantTransacti
       }
     }
   }
-  const vorgaenge = await leseVorgangsTreffer(tx, kontext.tenantId, itemId, quelle, [...kundenIds]);
+  const vorgaenge = await leseVorgangsTreffer(tx, kontext.tenantId, itemId, {...quelle,ware:quelle.ware||warenOriginal}, [...kundenIds]);
   if (vorgaenge.gelesen) {
     arten.push('vorgang');
     for (const vorgang of waehleVorgangsKandidaten(vorgaenge.treffer, einstellungen)) {
       einfuegen('vorgang', { art: vorgang.art, id: vorgang.id }, vorgang.regel, vorgang.sicherheitWert);
     }
   }
-  if (!arten.length) return 'keine';
-  const gespeichert = await saveIntakeCandidatesInTransaction(tx, kontext, {
+  const gespeichert = !arten.length || await saveIntakeCandidatesInTransaction(tx, kontext, {
     itemId, befehlId, version: quelle.version, arten, vorschlaege, kundeId: automatischKundenId,
   });
-  return !gespeichert ? 'keine' : kundenVollstaendig && vorgaenge.vollstaendig ? 'ok' : 'teilweise';
+  const schwelle=einstellungen.ki_sicherheitsschwelle;
+  if(warenOriginal&&gespeichert&&warenSucheVollstaendig&&vorgaenge.vollstaendig&&schwelle!==null&&
+    !vorgaenge.treffer.some(treffer=>einstellungen.eingang_kandidat_stufen[treffer.regel]>=schwelle)){
+    await tx.execute(sql`UPDATE public.intake_item SET anliegen=array_append(anliegen,'ware_ohne_bezug'),
+      anliegen_offen=CASE WHEN 'ware_ohne_bezug'=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,'ware_ohne_bezug') END,
+      version=version+1,geaendert_von=${kontext.akteur}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp()
+      WHERE tenant_id=${kontext.tenantId} AND id=${itemId}::uuid AND vorgang_id IS NULL AND aussortiert IS NULL AND einsatz='offen'
+        AND NOT ('ware_ohne_bezug'=ANY(anliegen))`);
+  }
+  return !arten.length||!gespeichert ? 'keine' : kundenVollstaendig && vorgaenge.vollstaendig ? 'ok' : 'teilweise';
 }
