@@ -10,17 +10,28 @@ import {readIntakeConfirmationMailSource} from './intakeDraftEvents';
 export type CommunicationOriginal={path:string;fileBytes:number};
 export type IntakeMailOriginal=CommunicationOriginal&{sha256:string};
 
-/** PL03:01: exact subject/body bytes in the same immutable original store. */
-export async function storeIntakeMailOriginal(auth:AuthorizationSnapshot,source:{orderId:string;outboxId:string;sourceClientEventId:string},message:{subject:string;body:string}):Promise<IntakeMailOriginal>{
- if(!hasAuthorizationArea(auth,'eingang')||!await withPrivilegedTenantTransaction(auth,tx=>readIntakeConfirmationMailSource(tx,auth,source)))throw Error('INTAKE_MAIL_ORIGINAL_FORBIDDEN');
- const digest=createHash('sha256').update(JSON.stringify(['intake-mail-original',auth.tenantId,auth.userId,source.outboxId,source.sourceClientEventId])).digest();
+async function storeTextMailOriginal(identity:readonly string[],message:{subject:string;body:string},byContent=false):Promise<IntakeMailOriginal>{
+ const bytes=new TextEncoder().encode(JSON.stringify([message.subject.trim(),message.body.trim()]));
+ const sha256=createHash('sha256').update(bytes).digest('hex');
+ const digest=createHash('sha256').update(JSON.stringify(byContent?[...identity,sha256]:identity)).digest();
  digest[6]=(digest[6]&15)|80;digest[8]=(digest[8]&63)|128;
  const h=digest.subarray(0,16).toString('hex'),id=`${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
- const bytes=new TextEncoder().encode(JSON.stringify([message.subject.trim(),message.body.trim()]));
- const original={path:'domain-attachments/v1/'+id+'.json',fileBytes:bytes.byteLength,sha256:createHash('sha256').update(bytes).digest('hex')};
+ const original={path:'domain-attachments/v1/'+id+'.json',fileBytes:bytes.byteLength,sha256};
  await storeDomainAttachmentBytes(original.path,bytes,'application/json');
  await readIntakeMailOriginal(original);
  return original;
+}
+
+/** PL03:01: exact subject/body bytes in the same immutable original store. */
+export async function storeIntakeMailOriginal(auth:AuthorizationSnapshot,source:{orderId:string;outboxId:string;sourceClientEventId:string},message:{subject:string;body:string}):Promise<IntakeMailOriginal>{
+ if(!hasAuthorizationArea(auth,'eingang')||!await withPrivilegedTenantTransaction(auth,tx=>readIntakeConfirmationMailSource(tx,auth,source)))throw Error('INTAKE_MAIL_ORIGINAL_FORBIDDEN');
+ return storeTextMailOriginal(['intake-mail-original',auth.tenantId,auth.userId,source.outboxId,source.sourceClientEventId],message);
+}
+
+/** Called by the mail writer after qualifying the handover and reserving its request. */
+export function storeGoodsOutNoticeOriginal(auth:AuthorizationSnapshot,requestId:string,message:{subject:string;body:string}){
+ if(!hasAuthorizationArea(auth,'mails'))throw Error('GOODS_OUT_NOTICE_ORIGINAL_FORBIDDEN');
+ return storeTextMailOriginal(['goods-out-notice',auth.tenantId,requestId],message,true);
 }
 
 /** Caller qualifies the original actor/source PREPARE before reading this ref. */

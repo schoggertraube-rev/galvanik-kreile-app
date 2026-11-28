@@ -78,7 +78,7 @@ it('bindet den Bescheid an die gebuchte Herausgabe und quittiert ihn mit einem a
     expect(await withPrivilegedTenantTransaction(deniedAuth,tx=>readGoodsOutNoticeTaskSource(tx,deniedAuth,taskId))).toBeNull();
     expect(await withSession(next,()=>completeTask({taskId,version:1,note:null},{effect}))).toMatchObject({code:'CONFLICT'});
 
-    const recovery=await sendGoodsOutNoticeMail(nextAuth,structuredClone(notice));
+    const recovery=await sendGoodsOutNoticeMail(nextAuth,{...notice,subject:'TEST Geänderte Vorlage',body:'TEST Neuer Text.'});
     expect(recovery).toMatchObject({code:'OK',data:{orderId:order.orderId,replayed:true}});
     if(recovery.code!=='OK')throw Error('TEST_B7L_OUTGOING_PROOF_REQUIRED');
     const {threadId,messageId,mailEventId}=recovery.data;
@@ -99,6 +99,8 @@ it('bindet den Bescheid an die gebuchte Herausgabe und quittiert ihn mit einem a
     expect(await sql`SELECT nachher->>'mailEventId' AS receipt,von AS actor FROM public.intake_event
       WHERE tenant_id=${tenant} AND nachher->>'taskId'=${taskId} AND nachher->>'action'='aufgabe.erledigt'`).toEqual([{receipt:mailEventId,actor:next.actorId}]);
     expect(sends).toBe(1);
+    expect(await sql`SELECT count(*)::integer AS count FROM public.communication_messages
+      WHERE tenant_id=${tenant} AND id=${messageId}::uuid AND body=${notice.body}`).toEqual([{count:1}]);
     expect(await sql`SELECT user_id::text AS sender,payload->>'clickedBy' AS retried_by
       FROM public.events WHERE tenant_id=${tenant} AND id=${mailEventId}`).toEqual([{sender:full.actorId,retried_by:next.actorId}]);
   }finally{
