@@ -36,7 +36,7 @@ export type DocumentSuggestion = {
 type AzureResult = {
   code: "OK";
   data: { suggestions: DocumentSuggestion[] };
-  original?: { bytes: Uint8Array; model: string; pages: number | null; tables: unknown[] };
+  original?: { bytes: Uint8Array; model: string; pages: number | null; tables: unknown[]; language: string | null };
 } | { code: "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
 
 function readAzurePayload(bytes: Uint8Array): Record<string, unknown> {
@@ -45,13 +45,28 @@ function readAzurePayload(bytes: Uint8Array): Record<string, unknown> {
   return payload as Record<string, unknown>;
 }
 
+function readDocumentLanguage(languages: unknown): string | null {
+  if (!Array.isArray(languages) || !languages.length) return null;
+  let language: string | null = null;
+  for (const entry of languages) {
+    if (typeof entry?.locale !== "string") return null;
+    let locale: string;
+    try { [locale] = Intl.getCanonicalLocales(entry.locale); }
+    catch { return null; }
+    if (!locale || locale === "und" || language !== null && language !== locale) return null;
+    language = locale;
+  }
+  return language;
+}
+
 function successfulResult(payload: Record<string, unknown>, bytes: Uint8Array, model: string): Extract<AzureResult, { code: "OK" }> {
   const analysis = payload.analyzeResult;
   const document = analysis && typeof analysis === "object" ? analysis as Record<string, unknown> : null;
   if (document?.modelId !== undefined && document.modelId !== model) throw Error("AZURE_RESULT_MODEL_INVALID");
   const pages = Array.isArray(document?.pages) && document.pages.length > 0 ? document.pages.length : null;
   const tables = Array.isArray(document?.tables) ? document.tables : [];
-  return { code: "OK", data: { suggestions: suggestions(payload) }, original: { bytes, model, pages, tables } };
+  const language = readDocumentLanguage(document?.languages);
+  return { code: "OK", data: { suggestions: suggestions(payload) }, original: { bytes, model, pages, tables, language } };
 }
 
 export function readAzureRecognitionOriginal(bytes: Uint8Array, model: string) {
@@ -155,7 +170,7 @@ export async function analyzeWithAzureDocumentIntelligence(
   env: Environment = process.env,
   fetchPort: FetchPort = fetch,
   wait: (milliseconds: number) => Promise<void> = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowOffice?:boolean;keyValuePairs?:boolean},
+  diagnostic?: {subject:LogSubject;originalRef:string;model?:string;allowOffice?:boolean;keyValuePairs?:boolean;languages?:boolean},
 ): Promise<AzureResult> {
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
@@ -173,7 +188,9 @@ export async function analyzeWithAzureDocumentIntelligence(
     const analyzeUrl = new URL(`documentintelligence/documentModels/${model}:analyze`, endpoint.href.endsWith("/") ? endpoint : `${endpoint.href}/`);
     analyzeUrl.searchParams.set("_overload", "analyzeDocument");
     analyzeUrl.searchParams.set("api-version", API_VERSION);
-    if (azureOfficeFormat(mimeType) === null && diagnostic?.keyValuePairs !== false) analyzeUrl.searchParams.set("features", "keyValuePairs");
+    if (azureOfficeFormat(mimeType) === null && diagnostic?.keyValuePairs !== false) {
+      analyzeUrl.searchParams.set("features", diagnostic?.languages ? "keyValuePairs,languages" : "keyValuePairs");
+    }
     attempted=true;
     const response = await fetchPort(analyzeUrl, {
       method: "POST",

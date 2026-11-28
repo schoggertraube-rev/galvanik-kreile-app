@@ -261,6 +261,7 @@ it.each([
     WHERE tenant_id=${tenant}`;
   const rawReply = JSON.stringify({ status: "succeeded", analyzeResult: {
     modelId: model, content: text, pages: [{ pageNumber: 1 }, { pageNumber: 2 }],
+    languages: [{ locale: "de-DE", confidence: 0.96, spans: [{ offset: 0, length: 4 }] }],
     keyValuePairs: [{ key: { content: "Rechnungsnummer" }, value: { content: "TEST-I1-NUMMER" } }],
     tables: [{ cells: [
       { rowIndex: 0, columnIndex: 0, kind: "columnHeader", content: "Artikelnummer" },
@@ -283,6 +284,7 @@ it.each([
     if (url.hostname !== "i1.example.invalid") return nativeFetch(input, init);
     if (init?.method === "POST") {
       analyzePaths.push(url.pathname);
+      expect(url.searchParams.get("features")).toBe("keyValuePairs,languages");
       return new Response(null, { status: 202, headers: {
         "operation-location": "https://i1.example.invalid/documentintelligence/documentModels/" + model + "/analyzeResults/TEST-I1",
       } });
@@ -356,11 +358,11 @@ it.each([
     expect(providerResults).toBe(damagedArchive ? 3 : 2);
     expect(analyzePaths).toEqual(Array(providerResults).fill("/documentintelligence/documentModels/" + model + ":analyze"));
 
-    const [file] = await sql`SELECT erkennung_roh_pfad,erkannter_text,seiten FROM public.intake_file
+    const [file] = await sql`SELECT erkennung_roh_pfad,erkannter_text,seiten,sprache FROM public.intake_file
       WHERE tenant_id=${tenant} AND id=${fileId}::uuid`;
     expect(file).toMatchObject({
       erkennung_roh_pfad: archivePath,
-      erkannter_text: text, seiten: 2,
+      erkannter_text: text, seiten: 2, sprache: "de-DE",
     });
     const original = await storage.from("scans").download(file.erkennung_roh_pfad);
     expect(original.error).toBeNull();

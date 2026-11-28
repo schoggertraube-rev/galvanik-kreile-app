@@ -132,7 +132,7 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       let result = await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
         (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) }),
         undefined, { subject: { type: "intake", id: file.item_id }, originalRef: fileId, model,
-          allowOffice: officeFormat !== null, keyValuePairs });
+          allowOffice: officeFormat !== null, keyValuePairs, languages: keyValuePairs });
       if (result.code !== "OK") recordObservedFailure('INTAKE_FILE_RECOGNITION_UNAVAILABLE');
       let rawPath: string | null = null;
       if (result.code === "OK" && result.original) {
@@ -183,11 +183,13 @@ export async function erkenneOriginal(kontext: RecognitionContext, fileId: strin
       const documentText = mail?.body ?? ocr?.data.suggestions.find(suggestion => suggestion.field === "DOCUMENT_TEXT")?.value ?? null;
       const replaceDocumentText = mail !== null || ocr !== null && (documentText !== null || !rawStorageFailed);
       const pages = ocr?.original?.pages ?? null;
+      const language = ocr?.original?.language ?? null;
       const model = ocr?.original?.model ?? null;
       const complete = ocrDisabled || hasValues && !rawStorageFailed && !specialistArchiveFailed;
       await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead && !ocrDisabled && !ocrSettingMissing},erkennung_status=${complete ? "fertig" : "fehler"},
           foto_art=CASE WHEN ${parcelLabel} THEN coalesce(foto_art,'etikett') ELSE foto_art END,
           erkannter_text=CASE WHEN ${replaceDocumentText} THEN ${documentText} ELSE erkannter_text END, seiten=coalesce(${pages},seiten),
+          sprache=coalesce(${language},sprache),
           erkennung_roh_pfad=CASE WHEN ${rawStorageFailed} THEN NULL ELSE coalesce(${rawPath},erkennung_roh_pfad) END
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
       if(hasValues)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
