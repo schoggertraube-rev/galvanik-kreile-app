@@ -3,9 +3,11 @@ import {createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {hasAuthorizationArea,resolveAuthorization,type AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {quoteCommandContext} from '@/lib/server/quoteAuthorization';
 import type {CustomerStoredProfile} from '@/modules/customers/public';
 import {EINGANG_VORSCHLAG_COPY as copy} from '@/ui/eingangCopy';
 import {EINGANG_FOLGEN} from '../folgen';
+import {CONCERN_OPTIONS} from '../concernMenuContract';
 import {assignInTransaction,canAssignIntakeCustomer,intakeAssignmentFailure,lockIntakeAssignment,
   readIntakeAssignmentSource,readIntakeCustomerSuggestions} from './intakeAssignment';
 
@@ -13,6 +15,7 @@ type KundeLesen=(tx:PrivilegedTenantTransaction,tenant:string,id:string)=>Promis
 type Eingang=Awaited<ReturnType<typeof readIntakeAssignmentSource>>;
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const folge=EINGANG_FOLGEN.kundenZuordnung;
+const kv=EINGANG_FOLGEN.kvVorbereiten;
 
 function zuordnung(eingang:Eingang,kunde:CustomerStoredProfile,grund:string,mode:'confirm'|'manual') {
   const eingabe={itemId:eingang.id,version:eingang.version,customerId:kunde.id,mode};
@@ -21,11 +24,29 @@ function zuordnung(eingang:Eingang,kunde:CustomerStoredProfile,grund:string,mode
     grund,kunde:kunde.name,eingabe};
 }
 
+function kvVorbereitung(eingang:Eingang,kunde:CustomerStoredProfile) {
+  const eingabe={itemId:eingang.id,version:eingang.version,customerId:kunde.id};
+  const vorschlagId=createHash('sha256').update(JSON.stringify([eingang.id,kv.schluessel,eingabe])).digest('hex');
+  return {vorschlagId,schluessel:kv.schluessel,befehl:kv.befehl,knopf:kv.knopf,satz:kv.satz(kunde.name),
+    grund:kv.knopf,kunde:kunde.name,eingabe};
+}
+
+type Vorschlag=ReturnType<typeof zuordnung>|ReturnType<typeof kvVorbereitung>;
+
 async function bildeVorschlag(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,eingang:Eingang,leseKunde:KundeLesen) {
-  const basis={satz:null as string|null,haupt:null as ReturnType<typeof zuordnung>|null,oder:[],anliegenRest:eingang.anliegen_offen,frage:null as
+  const basis={satz:null as string|null,haupt:null as Vorschlag|null,oder:[],anliegenRest:eingang.anliegen_offen,frage:null as
     {satz:string;kandidaten:ReturnType<typeof zuordnung>[]} | null};
   if(eingang.einsatz==='erledigt'&&eingang.anliegen_offen.length===0)return {...basis,satz:copy.fertig};
   if(eingang.einsatz!=='offen')return basis;
+  if(eingang.kunde_id&&!eingang.vorgang_id&&eingang.anliegen_offen.includes('kv_anfrage')&&eingang.text?.trim()&&eingang.text.length<=6000&&
+    quoteCommandContext(auth).capabilities.canCreateQuote&&(hasAuthorizationArea(auth,'mails')||eingang.erstellt_von===auth.userId)){
+    const kunde=await leseKunde(tx,auth.tenantId,eingang.kunde_id);
+    if(kunde){const haupt=kvVorbereitung(eingang,kunde);return {...basis,satz:haupt.satz,haupt};}
+  }
+  if(eingang.vorgang_art==='kv'){
+    const weiter=CONCERN_OPTIONS.find(option=>option.concern===eingang.anliegen_offen[0]);
+    if(weiter)return {...basis,satz:copy.weiterMit(weiter.text)};
+  }
   if(eingang.zuordnung!=='offen'||!canAssignIntakeCustomer(auth)||!hasAuthorizationArea(auth,folge.recht))return basis;
   const kandidaten=await readIntakeCustomerSuggestions(tx,auth,eingang.id);
   const ids=new Set(kandidaten.flatMap(row=>typeof row.wert==='string'?[row.wert]:[]));
@@ -67,7 +88,8 @@ export async function fuehreEingangVorschlagAus(input:unknown,leseKunde:KundeLes
   const session=await resolveAuthorization();
   if(!session.ok)return {code:'UNAUTHENTICATED' as const,message:session.message};
   const auth=session.data;
-  if(!canAssignIntakeCustomer(auth)||!hasAuthorizationArea(auth,folge.recht))return {code:'FORBIDDEN' as const,message:copy.recht};
+  if(!hasAuthorizationArea(auth,'eingang')||(!(canAssignIntakeCustomer(auth)&&hasAuthorizationArea(auth,folge.recht))&&
+    !quoteCommandContext(auth).capabilities.canCreateQuote))return {code:'FORBIDDEN' as const,message:copy.recht};
   try{
     return await withPrivilegedTenantTransaction(auth,async tx=>{
       await lockIntakeAssignment(tx,auth.tenantId);
@@ -90,6 +112,7 @@ export async function fuehreEingangVorschlagAus(input:unknown,leseKunde:KundeLes
       const auswahl=vorschlag.haupt?.vorschlagId===vorschlagId?vorschlag.haupt:
         vorschlag.frage?.kandidaten.find(kandidat=>kandidat.vorschlagId===vorschlagId);
       if(!auswahl)return konflikt;
+      if(auswahl.schluessel===kv.schluessel)return {code:'OK' as const,vorschlag,oeffne:'kv-vorbereiten' as const};
       const ergebnis=await assignInTransaction(tx,auth,{...auswahl.eingabe,clientEventId},leseKunde);
       if(ergebnis.code!=='OK')return konflikt;
       const quittung=await tx.execute<{nachher:{ergebnisId:string}}>(sql`

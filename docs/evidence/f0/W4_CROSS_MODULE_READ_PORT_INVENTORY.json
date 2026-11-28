@@ -247,6 +247,9 @@
     ]
   },
   "commandOwners": {
+    "src/lib/server/documentIntelligencePort.ts": [
+      "public.scan_uploads"
+    ],
     "src/lib/server/domainAttachment.ts": [
       "public.scan_uploads"
     ],

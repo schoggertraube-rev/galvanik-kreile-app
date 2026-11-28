@@ -22,6 +22,9 @@ export const WARE_OHNE_BEZUG_COPY={
 export const EINGANG_VORSCHLAG_COPY={
   sollZuordnen:(kunde:string)=>`Soll ich den Eingang ${kunde} zuordnen?`,
   jaZuordnen:'Ja, zuordnen',vonWem:'Von wem ist das?',fertig:'Alles aus diesem Eingang ist erledigt',
+  sollKvVorbereiten:(kunde:string)=>`Soll ich für ${kunde} einen KV vorbereiten?`,
+  jaKvVorbereiten:'Ja, KV vorbereiten',
+  weiterMit:(anliegen:string)=>`Weiter mit ${anliegen}`,
   veraltet:'Eingang wurde inzwischen geändert · bitte neu lesen.',
   ungueltig:'Eingang oder Vorschlag ist ungültig.',recht:'Vorschläge benötigen Eingang.',
 } as const;

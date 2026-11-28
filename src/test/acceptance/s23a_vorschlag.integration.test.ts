@@ -54,3 +54,32 @@ it('liest die Vorgabe und den ausgeschalteten Wert aus den vorhandenen Firmenein
  await sql`UPDATE public.company_settings SET eingang_selbst_handeln=false WHERE tenant_id=${tenant}`;
  expect(await settings()).toMatchObject({eingang_selbst_handeln:false});
 });
+
+it('öffnet die vorhandene KV-Vorbereitung und liest nach dem Speichern das nächste echte Anliegen',async()=>{
+ const {selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const {createQuoteAction,prepareQuoteFromIntakeAction}=await import('@/app/actions/quotes.actions');
+ const kundeId=await customerFixture('TEST S23a KV-Folge');
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,material_aufschlag_prozent,lager_regelversion)
+  SELECT ${randomUUID()},${tenant},'TEST S23a KV-Folge',0,'TEST-KV' WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${tenant})`;
+ const itemId=randomUUID();
+ const source=await withSession(full,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),context:{customerId:kundeId},
+  text:'TEST 4 Weber-Trompeten verchromen, ein KV in zwei Wochen. Alte Halter bitte behalten.',concerns:['aufgabe']}));
+ if(source.code!=='OK')throw Error('TEST_S23A_KV_QUELLE:'+source.code);
+ const chosen=await withSession(full,()=>selectIntakeConcernAction({itemId,version:source.capture.version,clientEventId:randomUUID(),concern:'kv_anfrage'}));
+ if(chosen.code!=='OK')throw Error('TEST_S23A_KV_ANLIEGEN:'+chosen.code);
+ const proposal=await withSession(full,()=>leseEingangVorschlagAction(itemId));
+ if(proposal.code!=='OK'||!proposal.vorschlag.haupt)throw Error('TEST_S23A_KV_VORSCHLAG:'+proposal.code);
+ expect(proposal.vorschlag.haupt).toMatchObject({befehl:'prepareQuoteFromIntakeAction',eingabe:{customerId:kundeId}});
+ const ohnePreise=await createFixture(['eingang','kunden','auftraege']);
+ expect(await withSession(ohnePreise,()=>leseEingangVorschlagAction(itemId))).toMatchObject({code:'OK',vorschlag:{haupt:null}});
+ expect(await withSession(full,()=>fuehreEingangVorschlagAusAction({itemId,vorschlagId:proposal.vorschlag.haupt!.vorschlagId,clientEventId:randomUUID()})))
+  .toMatchObject({code:'OK',oeffne:'kv-vorbereiten'});
+ const prep=await withSession(full,()=>prepareQuoteFromIntakeAction({sourceItemId:itemId}));
+ if(prep.code!=='OK')throw Error('TEST_S23A_KV_PREP:'+prep.code);
+ expect(prep.preparation).toMatchObject({customer:{id:kundeId},source:{itemId,version:chosen.capture.version}});
+ const input={clientEventId:randomUUID(),customerId:kundeId,dueDate:'2027-04-20',note:'TEST KV-Folge',source:prep.preparation.source,
+  positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]};
+ expect(await withSession(full,()=>createQuoteAction(input))).toMatchObject({code:'OK',quote:{lifecycle:{sourceItemId:itemId}}});
+ expect(await withSession(full,()=>createQuoteAction(structuredClone(input)))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(full,()=>leseEingangVorschlagAction(itemId))).toMatchObject({code:'OK',vorschlag:{haupt:null,anliegenRest:['aufgabe'],satz:'Weiter mit Aufgabe anlegen'}});
+});

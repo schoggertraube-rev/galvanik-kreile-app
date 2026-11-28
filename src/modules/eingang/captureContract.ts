@@ -52,7 +52,7 @@ export type EingangVorschlag={
   satz:string|null;haupt:EingangVorschlagOption|null;oder:readonly EingangVorschlagOption[];
   frage:{satz:string;kandidaten:EingangVorschlagOption[]}|null;anliegenRest:readonly string[];
 };
-export type EingangVorschlagResult={code:'OK';vorschlag:EingangVorschlag}|{code:'CONFLICT';message:string;vorschlag?:EingangVorschlag}|
+export type EingangVorschlagResult={code:'OK';vorschlag:EingangVorschlag;oeffne?:'kv-vorbereiten'}|{code:'CONFLICT';message:string;vorschlag?:EingangVorschlag}|
   {code:'UNAUTHENTICATED'|'FORBIDDEN'|'VALIDATION_ERROR'|'NOT_FOUND'|'UNAVAILABLE'|'INVOICE_REVIEW_REQUIRED';message:string};
 export type IntakeNoteInput = {
   itemId: string; textstand: string; text: string; context?: IntakeContext; concerns?: string[]; expectedVersion?:number; deviceCapturedAt?:string;takeover?:IntakeOriginalTakeover;

@@ -49,5 +49,18 @@ it('records actual OCR provider OK/HTTP failure/timeout and secured original has
    expect(attempts).toBe(before+1);
    expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG} AND dienst='belegerkennung' AND original_ref=${input.fileId}`).toHaveLength(1);
   }
+  vi.stubEnv('AZURE_DOCINTEL_ENDPOINT','');
+  const unconfigured=new File(['%PDF-1.4\nTEST without OCR configuration '+randomUUID()],'TEST-OCR-offen.pdf',{type:'application/pdf'});
+  const sha256=createHash('sha256').update(Buffer.from(await unconfigured.arrayBuffer())).digest('hex');
+  const input={itemId:randomUUID(),fileId:randomUUID(),name:unconfigured.name,mime:unconfigured.type,bytes:unconfigured.size,sha256};
+  const prepared=await withSession(full,()=>prepareIntakeFileAction(input));
+  if(prepared.code!=='OK'||!prepared.upload)throw Error('TEST_UNCONFIGURED_OCR_UPLOAD_REQUIRED');
+  expect((await uploadIntakeOriginal(prepared.upload,unconfigured)).ok).toBe(true);
+  const attempted=attempts;
+  expect(await withSession(full,()=>finishIntakeFileAction(input.fileId),true)).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true}]}});
+  expect(await withSession(full,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',capture:{files:[{id:input.fileId,secured:true}]}});
+  expect(attempts).toBe(attempted);
+  expect(await sql`SELECT id FROM public.technical_protocol WHERE tenant_id=${KREILE_TENANT_SLUG}
+    AND dienst='belegerkennung' AND original_ref=${input.fileId} AND event_type='external' AND ergebnis='ok'`).toEqual([]);
  }finally{provider.mockRestore();vi.unstubAllEnvs();}
 });

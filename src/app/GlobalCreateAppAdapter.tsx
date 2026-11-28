@@ -167,7 +167,10 @@ export function GlobalCreateAppAdapter() {
   useEffect(()=>{
     const handler=(event:Event)=>{const {ziel,arg,sourceItemId}=(event as CustomEvent<{ziel:string;arg?:unknown;sourceItemId?:string}>).detail??{};
       if((ziel==='kv'||ziel==='quote')&&typeof arg==='string'){event.preventDefault();openQuote(arg);return;}
-      if(ziel==='kv-vorbereiten'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'QUOTE',prefill:{sourceItemId}});return;}
+      if(ziel==='kv-vorbereiten'){
+        const original=sourceItemId??(typeof arg==='string'?arg:null);
+        if(original){event.preventDefault();requestGlobalCreate({intent:'QUOTE',prefill:{sourceItemId:original}});return;}
+      }
       if(ziel==='nachrichten'){event.preventDefault();router.push('/nachrichten'+(typeof arg==='string'&&arg?'?gruppe='+encodeURIComponent(arg):''));return;}
       if(ziel==='eingang'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId,intakeKind:hasArea('preise')?'kv':'auftrag'}});return;}
       if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}

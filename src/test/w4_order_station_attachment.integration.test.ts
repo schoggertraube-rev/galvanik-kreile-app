@@ -467,15 +467,7 @@ beforeAll(async () => {
     );
   }
   await seedFixtures();
-  const appActions = await import("@/app/warendurchlauf/actions");
-  const [{resolveAuthorization},{reserveOrderStationAttachment}]=await Promise.all([
-    import('@/lib/server/authorization'),import('@/lib/server/orderStationAttachment'),
-  ]);
-  actions={...appActions,async reserveGalvanikHandoffAttachmentAction(input){
-    const auth=await resolveAuthorization();
-    // Isolated replay keeps the pre-S23 reservations for historical read/resume cases.
-    return auth.ok?reserveOrderStationAttachment(auth.data,input):appActions.reserveGalvanikHandoffAttachmentAction(input);
-  }};
+  actions = await import("@/app/warendurchlauf/actions");
   ({ OrderStationAttachmentPanel: ModulePanel } =
     await import("@/modules/orders/public"));
   anonClient = (await import("@/lib/supabase/client")).createClient();

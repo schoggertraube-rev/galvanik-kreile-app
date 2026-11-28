@@ -441,17 +441,14 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/domainAttachments.actions.ts",
       "exported_functions": [
-        "reserveDomainAttachmentAction",
-        "finalizeDomainAttachmentAction",
         "setEvidenceVisibilityAction",
         "attachIntakeDraftAttachmentAction",
         "getDomainAttachmentsAction",
         "getDomainAttachmentOriginalAction",
-        "getDocumentIntelligenceStatusAction",
-        "analyzeDomainAttachmentAction"
+        "getDocumentIntelligenceStatusAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Tenant-bound attachment upload and Azure Document Intelligence analysis. Owner verification remains pending.",
+      "open_reason": "Tenant-bound historical attachments and visibility. New originals are captured by the common intake. Owner verification remains pending.",
       "visible": false,
       "reachable": true,
       "provider": "supabase-storage"
@@ -482,9 +479,9 @@
         "erfasseAuftragAusEingangAction",
         "createOrderIntakeAction",
         "discardIntakeCaptureAction",
-        "chooseIntakeCaptureKindAction",
         "getIntakeDraftsAction",
         "saveIntakeDraftAction",
+        "loeseEntwurfskonfliktAction",
         "createIntakeContinuationAction",
         "discardIntakeDraftAction",
         "retryIntakeRecognitionAction",
@@ -505,6 +502,8 @@
         "assignIntakeCustomerAction",
         "setIntakeNoBusinessAction",
         "createCustomerForIntakeAction",
+        "leseEingangVorschlagAction",
+        "fuehreEingangVorschlagAusAction",
         "createDispatchCallTaskAction",
         "createStorageFinalTaskAction"
       ],
