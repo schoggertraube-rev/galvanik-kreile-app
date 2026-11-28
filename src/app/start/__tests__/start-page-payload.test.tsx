@@ -9,6 +9,7 @@ const ports = vi.hoisted(() => ({
   reportProductActorOperationalFailure: vi.fn(),
   loginWithPin: vi.fn(),
   resolveAuthorization: vi.fn(),
+  requestHeaders: new Headers(),
   searchParams: "",
 }));
 
@@ -22,6 +23,7 @@ vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
 }));
 vi.mock("@/hooks/usePageView", () => ({ usePageView: vi.fn() }));
+vi.mock("next/headers", () => ({ headers: async () => ports.requestHeaders }));
 vi.mock("next/image", () => ({
   default: ({ alt }: { alt?: string }) => (
     <span aria-label={alt} data-testid="next-image" role="img" />
@@ -50,6 +52,12 @@ const activeUsers = [
   { loginHandle: "synthetic-gregor-handle", fullName: "Gregor", shortCode: "G", designation: "Wartung", role: "developer" as const, emailLoginAvailable: true },
 ];
 
+async function readStartElement() {
+  const element = await StartPage();
+  if (!element) throw new Error("TEST_START_ELEMENT_REQUIRED");
+  return element;
+}
+
 afterEach(() => {
   cleanup();
   window.localStorage.removeItem('kreile:last-login-handle');
@@ -65,6 +73,7 @@ describe("StartPage product actor boundary", () => {
     );
     ports.loginWithPin.mockResolvedValue({ ok: false, message: "synthetic" });
     ports.resolveAuthorization.mockResolvedValue({ ok: false, reason: "NO_SESSION" });
+    ports.requestHeaders = new Headers();
     ports.searchParams = "";
   });
 
@@ -74,11 +83,19 @@ describe("StartPage product actor boundary", () => {
     await expect(StartPage()).rejects.toThrow("TEST_REDIRECT_TO_/");
     expect(ports.readActiveStartUsers).not.toHaveBeenCalled();
     ports.resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "INVALID_SESSION" });
-    expect((await StartPage()).props.users).toEqual(activeUsers);
+    expect((await readStartElement()).props.users).toEqual(activeUsers);
+  });
+
+  it("leaves the successful PIN action response to the single client navigation", async () => {
+    ports.requestHeaders.set("next-action", "synthetic-pin-action");
+    ports.resolveAuthorization.mockResolvedValueOnce({ ok: true });
+    await expect(StartPage()).resolves.toBeNull();
+    expect(ports.readActiveStartUsers).not.toHaveBeenCalled();
+    expect((await readStartElement()).props.users).toEqual(activeUsers);
   });
 
   it("emits only browser-safe handles for every active app user", async () => {
-    const element = await StartPage();
+    const element = await readStartElement();
 
     expect(element.props.users).toEqual(activeUsers);
     expect(element.props.loginUnavailable).toBe(false);
@@ -239,7 +256,7 @@ describe("StartPage product actor boundary", () => {
 
   it("disables every login path and exposes only a correlation reference on readiness failure", async () => {
     ports.readActiveStartUsers.mockResolvedValue({ code: "UNAVAILABLE" });
-    const element = await StartPage();
+    const element = await readStartElement();
     expect(element.props.users).toEqual([]);
     expect(element.props.loginUnavailable).toBe(true);
 
@@ -258,7 +275,7 @@ describe("StartPage product actor boundary", () => {
 
   it("fails closed and records a safe operational reference on an unexpected read error", async () => {
     ports.readActiveStartUsers.mockRejectedValue(new Error("synthetic failure"));
-    const element = await StartPage();
+    const element = await readStartElement();
 
     expect(element.props).toMatchObject({
       users: [],

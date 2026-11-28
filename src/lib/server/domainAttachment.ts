@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { readSecuredDomainAttachmentSource } from "./documentIntelligencePort";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -219,11 +220,8 @@ export async function getDomainAttachmentOriginal(authorization: AuthorizationSn
   if (!input || Object.keys(input).join(",") !== "attachmentId" || !UUID.test(input.attachmentId)) return { code: "VALIDATION_ERROR" as const, message: "Dateikennung ist ungültig." };
   if (!authorization.permissions.includes("perm_view_leitstand")) return { code: "FORBIDDEN" as const, message: "Dokumente und Fotos sind nicht erlaubt." };
   try {
-    const row = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const rows = await tx.execute<ScanRow>(sql`SELECT * FROM public.scan_uploads WHERE tenant_id=${authorization.tenantId} AND id=${input.attachmentId} AND status='secured' LIMIT 2`);
-      if (rows.length > 1) throw new Error("DOMAIN_ATTACHMENT_AMBIGUOUS");
-      return rows[0] ?? null;
-    });
+    const row = await withPrivilegedTenantTransaction(authorization, (tx) =>
+      readSecuredDomainAttachmentSource(tx, authorization.tenantId, input.attachmentId));
     if (!row || !row.original_storage_path || !validMime(row.file_type)) return { code: "NOT_FOUND" as const, message: "Datei nicht verfügbar." };
     const storage = await import("@/lib/server/domainAttachmentStorage");
     const download = await storage.createDomainAttachmentDownloadUrl(row.original_storage_path, `Kreile-Dokument-${row.id}.${MIME_EXTENSION[row.file_type]}`);
@@ -233,35 +231,20 @@ export async function getDomainAttachmentOriginal(authorization: AuthorizationSn
   }
 }
 
-export async function importDomainAttachmentBytes(authorization: AuthorizationSnapshot, input: {
-  targetType: AttachmentTarget; targetId: string; sourceKey: string; mimeType: AttachmentMime; bytes: Uint8Array;
-}): Promise<DomainAttachmentResult<{ receipt: DomainAttachmentReceipt; replayed: boolean }>> {
-  if (typeof input.sourceKey !== "string" || input.sourceKey.length < 1 || input.sourceKey.length > 4096 || !validMime(input.mimeType)
-    || !(input.bytes instanceof Uint8Array) || input.bytes.byteLength < 1 || input.bytes.byteLength > MAX_FILE_BYTES) {
-    return { code: "VALIDATION_ERROR", message: "Importierte Datei ist ungültig." };
-  }
-  const digest = createHash("sha256").update(input.bytes).digest("hex");
-  const key = createHash("sha256").update(`${authorization.tenantId}:${input.sourceKey}`).digest("hex");
-  const clientRequestId = `${key.slice(0,8)}-${key.slice(8,12)}-5${key.slice(13,16)}-a${key.slice(17,20)}-${key.slice(20,32)}`;
-  const reserved = await reserveDomainAttachment(authorization, {
-    targetType: input.targetType, targetId: input.targetId, clientRequestId, mimeType: input.mimeType,
-    fileBytes: input.bytes.byteLength, contentSha256: digest,
-  });
-  if (reserved.code !== "OK") return reserved;
-  if (reserved.data.receipt.state === "FINALIZED") return { code: "OK", data: { receipt: reserved.data.receipt, replayed: true } };
-  if (!reserved.data.upload) return { code: "UNAVAILABLE", message: "Private Ablage konnte nicht vorbereitet werden." };
-  try {
-    const storage = await import("@/lib/server/domainAttachmentStorage");
-    await storage.storeDomainAttachmentBytes(reserved.data.upload.path, input.bytes, input.mimeType);
-  } catch {
-    return { code: "UNAVAILABLE", message: "Mailanhang konnte nicht privat gespeichert werden." };
-  }
-  return finalizeDomainAttachment(authorization, { attachmentId: reserved.data.receipt.attachmentId, fileBytes: input.bytes.byteLength, contentSha256: digest });
-}
-
 /** Secured photo ownership stays with the attachment owner, in the caller transaction. */
 export async function readSecuredOrderPhotoIds(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,orderId:string,ids:readonly string[]):Promise<string[]> {
   if(!ids.length)return [];
-  const rows=await tx.execute<{id:string}>(sql`SELECT id::text AS id FROM public.scan_uploads WHERE tenant_id=${authorization.tenantId} AND id IN (${sql.join(ids.map(id=>sql`${id}`),sql`, `)}) AND linked_order_id=${orderId} AND status='secured' AND file_type LIKE 'image/%'`);
+  const requested=sql.join(ids.map(id=>sql`${id}`),sql`, `);
+  const rows=await tx.execute<{id:string}>(sql`
+    SELECT id::text AS id FROM public.scan_uploads WHERE tenant_id=${authorization.tenantId} AND id IN (${requested})
+      AND linked_order_id=${orderId} AND status='secured' AND file_type LIKE 'image/%'
+    UNION
+    SELECT file.id::text FROM public.intake_file file JOIN public.intake_item source
+      ON source.tenant_id=file.tenant_id AND source.id=file.item_id
+    WHERE file.tenant_id=${authorization.tenantId} AND file.id IN (${requested}) AND file.mime LIKE 'image/%'
+      AND source.vorgang_art='auftrag' AND source.vorgang_id=${orderId} AND source.zuordnung_regel='kontext'
+      AND EXISTS(SELECT 1 FROM public.intake_event receipt WHERE receipt.tenant_id=file.tenant_id
+        AND receipt.item_id=file.item_id AND receipt.art='original_gespeichert'
+        AND receipt.nachher->>'fileId'=file.id::text AND receipt.nachher->>'sha256'=file.sha256)`);
   return rows.map(row=>row.id);
 }

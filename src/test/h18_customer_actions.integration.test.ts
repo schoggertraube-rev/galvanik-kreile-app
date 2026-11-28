@@ -489,9 +489,9 @@ describe("E28: a handover change keeps the one existing customer condition",()=>
 });
 
 describe("P55 E40: phone and photograph provenance",()=>{
- it("U241: an explicit kind choice persists once, rereads the same original and cannot bypass invoice review",async()=>withLocalReplayStorage(async()=>{
+ it("S23a: an unclassified original remains readable without a manual kind or fake action",async()=>withLocalReplayStorage(async()=>{
   const actor=await createFixture('werkstatt',['eingang']);
-  const {prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction,chooseIntakeCaptureKindAction}=await import('@/app/actions/eingang.actions');
+  const {prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction,leseEingangVorschlagAction}=await import('@/app/actions/eingang.actions');
   const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
   vi.mocked(analyzeWithAzureDocumentIntelligence).mockResolvedValueOnce({code:'OK',data:{suggestions:[]}});
   const {uploadIntakeOriginal}=await import('@/modules/eingang/public');
@@ -500,17 +500,11 @@ describe("P55 E40: phone and photograph provenance",()=>{
   const grant=await withSession(actor,()=>prepareIntakeFileAction(file));if(grant.code!=='OK')throw Error('U241_GRANT:'+grant.message);
   if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],file.name,{type:file.mime}))).ok).toBe(true);
   const original=await withSession(actor,()=>finishIntakeFileAction(file.fileId));if(original.code!=='OK')throw Error('U241_ORIGINAL:'+original.message);
-  const input={itemId:file.itemId,version:original.capture.version,clientEventId:randomUUID(),kind:'anfrage' as const};
-  const chosen=await withSession(actor,()=>chooseIntakeCaptureKindAction(input));if(chosen.code!=='OK')throw Error('U241_KIND:'+chosen.message);
-  expect(chosen.capture.recognition).toEqual({kind:'anfrage',source:'hand',text:''});
-  expect(await withSession(actor,()=>chooseIntakeCaptureKindAction(input))).toMatchObject({code:'OK',capture:{version:chosen.capture.version}});
-  expect(await sql`SELECT wert,status,entschieden_von FROM public.intake_suggestion WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid AND feld='art'`).toEqual([{wert:'anfrage',status:'uebernommen',entschieden_von:actor.actorId}]);
-  expect(await sql`SELECT count(*)::int AS n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid AND befehl_id=${input.clientEventId}::uuid`).toEqual([{n:1}]);
-  const other=await createFixture('werkstatt',['eingang']);
-  expect(await withSession(other,()=>chooseIntakeCaptureKindAction({...input,version:chosen.capture.version,clientEventId:randomUUID(),kind:'dokument'}))).toMatchObject({code:'FORBIDDEN'});
-  const invoice=await withSession(actor,()=>chooseIntakeCaptureKindAction({itemId:file.itemId,version:chosen.capture.version,clientEventId:randomUUID(),kind:'rechnung'}));if(invoice.code!=='OK')throw Error('U241_INVOICE:'+invoice.message);
-  expect(await withSession(actor,()=>getIntakeCaptureAction(file.itemId))).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung',source:'hand',text:''},concerns:['rechnung']}});
-  expect(await withSession(actor,()=>chooseIntakeCaptureKindAction({itemId:file.itemId,version:invoice.capture.version,clientEventId:randomUUID(),kind:'notiz'}))).toMatchObject({code:'CONFLICT'});
+  expect(await withSession(actor,()=>leseEingangVorschlagAction(file.itemId))).toMatchObject({code:'OK',vorschlag:{haupt:null}});
+  expect(await withSession(actor,()=>getIntakeCaptureAction(file.itemId))).toMatchObject({code:'OK',capture:{
+   version:original.capture.version,recognition:{kind:'unklar'},files:[{id:file.fileId,secured:true}]}});
+  expect(await sql`SELECT id FROM public.intake_suggestion WHERE tenant_id=${KREILE_TENANT_SLUG}
+   AND item_id=${file.itemId}::uuid AND feld='art' AND status='uebernommen'`).toEqual([]);
   expect(await sql`SELECT sha256 FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${file.fileId}::uuid`).toEqual([{sha256:file.sha256}]);
  }));
  it("P63: an unreadable label rereads the two actual expected orders through the tenant-bound view",async()=>withLocalReplayStorage(async()=>{

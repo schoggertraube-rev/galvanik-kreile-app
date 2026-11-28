@@ -106,9 +106,10 @@ export function v45OrderSourceFacts(card:{id:string;version:number;handoverMode:
  }
  return facts;
 }
-function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'title'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>&Partial<Pick<LiveOrderCard,'customerName'>>,release?:ReleaseSource,evidence?:{orderId:string;records:readonly EvidenceReadRecord[]},sources?:OrderSources){
+function readV45OrderRuleRaw(auth:AuthorizationSnapshot,card:Pick<LiveOrderCard,'id'|'version'|'orderNumber'|'customerId'|'title'|'dueAt'|'station'|'handoverMode'|'items'|'operationalFacts'>&Partial<Pick<LiveOrderCard,'customerName'>>,release?:ReleaseSource,evidence?:{orderId:string;records:readonly EvidenceReadRecord[];intakePhotoParts?:readonly string[]|null},sources?:OrderSources){
  const source={kind:'order' as const,id:card.id,version:card.version};
- const missingPhotoItems=evidence?.orderId===card.id?card.items.filter(item=>!evidence.records.some(record=>record.source==='ORDER_STATION_ATTACHMENT'&&record.original.state==='VERIFIED'&&['image/jpeg','image/png','image/webp'].includes(record.original.mimeType??'')&&record.targets.some(target=>target.targetType==='ORDER'&&target.targetId===card.id)&&record.targets.some(target=>target.targetType==='ORDER_ITEM'&&target.targetId===item.id))):null;
+ const uncovered=evidence?.orderId===card.id?card.items.filter(item=>!evidence.intakePhotoParts?.includes(item.id)&&!evidence.records.some(record=>record.source==='ORDER_STATION_ATTACHMENT'&&record.original.state==='VERIFIED'&&['image/jpeg','image/png','image/webp'].includes(record.original.mimeType??'')&&record.targets.some(target=>target.targetType==='ORDER'&&target.targetId===card.id)&&record.targets.some(target=>target.targetType==='ORDER_ITEM'&&target.targetId===item.id))):null;
+ const missingPhotoItems=evidence?.intakePhotoParts===null&&uncovered?.length?null:uncovered;
  // S38a / PL19.11.22:11: captured collection facts now require their qualified source (R1).
  // PL15.11.16:43: packPhoto has no capture path until S37. R15 skips absent facts; malformed supplied facts still stop at R1.
  const facts={...v45OrderFacts(card),...v45OrderReleaseFacts(card,release),...v45OrderSourceFacts(card,sources),...(missingPhotoItems!==null?{photosMissing:missingPhotoItems.length>0}:{})};

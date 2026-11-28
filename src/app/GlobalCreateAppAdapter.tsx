@@ -8,7 +8,7 @@ import {type InvoicePorts} from '@/modules/eingang/public';
 import { logoutWithReadCleanup } from "@/lib/offline/logoutWithReadCleanup";
 import {saveIntakeTaskAction,completeIntakeTaskAction,getIntakeTaskAction,createCustomerForIntakeAction,getIntakeAssignmentAction,assignIntakeCustomerAction,setIntakeNoBusinessAction} from '@/app/actions/eingang.actions';
 import type {TaskPorts,AssignmentPorts} from '@/modules/eingang/public';
-import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
+import {fuehreEingangVorschlagAusAction,leseEingangVorschlagAction} from "@/app/actions/eingang.actions";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
 import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, createIntakeContinuationAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
 import {getOrderIntakeSuggestionsAction,getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,confirmIntakeOriginalAction,retryIntakeRecognitionAction} from "@/app/actions/eingang.actions";
@@ -104,7 +104,7 @@ export function GlobalCreateAppAdapter() {
   // PL22.11.13:57: the existing deferred event transport loads dialog
   // receivers on the first real open request, never during layout idle.
   const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,...(canAction('createQuote')?{createQuote:(source:{id:string;number:string;customerId:string})=>requestGlobalCreate({intent:'QUOTE',prefill:{sourceComplaint:source}})}:{}),read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,sendReminder:sendeNacharbeitBegleitscheinAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
-    addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
+    addPhoto:(orderId,file)=>uploadDomainAttachment('ORDER',orderId,file,offlineScope),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
       const rows=await getDomainAttachmentsAction({targetType:'ORDER',targetId:orderId});
       if(rows.code!=='OK')throw Error(rows.message);
@@ -115,7 +115,7 @@ export function GlobalCreateAppAdapter() {
       if(!url)throw Error('Original ist nicht freigegeben.');
       window.open(url,'_blank','noopener,noreferrer');
     },
-  }),[areas,openOrder,canAction]);
+  }),[areas,openOrder,canAction,offlineScope]);
 
   const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
     openOriginal:(itemId,fileId,invoiceId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{
@@ -167,7 +167,10 @@ export function GlobalCreateAppAdapter() {
   useEffect(()=>{
     const handler=(event:Event)=>{const {ziel,arg,sourceItemId}=(event as CustomEvent<{ziel:string;arg?:unknown;sourceItemId?:string}>).detail??{};
       if((ziel==='kv'||ziel==='quote')&&typeof arg==='string'){event.preventDefault();openQuote(arg);return;}
-      if(ziel==='kv-vorbereiten'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'QUOTE',prefill:{sourceItemId}});return;}
+      if(ziel==='kv-vorbereiten'){
+        const original=sourceItemId??(typeof arg==='string'?arg:null);
+        if(original){event.preventDefault();requestGlobalCreate({intent:'QUOTE',prefill:{sourceItemId:original}});return;}
+      }
       if(ziel==='nachrichten'){event.preventDefault();router.push('/nachrichten'+(typeof arg==='string'&&arg?'?gruppe='+encodeURIComponent(arg):''));return;}
       if(ziel==='eingang'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId,intakeKind:hasArea('preise')?'kv':'auftrag'}});return;}
       if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}
@@ -213,7 +216,8 @@ export function GlobalCreateAppAdapter() {
         readCaptureNote: recognizeIntakeNoteAction,
         prepareCaptureFile: prepareIntakeFileAction,
         finishCaptureFile: finishIntakeFileAction,
-        chooseCaptureKind: chooseIntakeCaptureKindAction,
+        readCaptureProposal: leseEingangVorschlagAction,
+        runCaptureProposal: fuehreEingangVorschlagAusAction,
         openCaptureObject: (ziel, arg) => !window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg }, cancelable: true })),
         canCreateOrder: hasArea("eingang"),
         canCreateQuote,

@@ -10,6 +10,7 @@ const ports = vi.hoisted(() => ({
   readIntake: vi.fn(),
   readEvidence: vi.fn(),
   readEvidenceByTarget: vi.fn(),
+  readIntakeFiles: vi.fn(),
   reserve: vi.fn(),
   finalize: vi.fn(),
   original: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@/lib/server/orderStationAttachment", () => {
   ports.domainLoaded();
   return {
     readOrderStationAttachments: ports.read,
+    readHandoffIntakeOriginals: ports.readIntakeFiles,
     readOrderIntakeAttachments: ports.readIntake,
     reserveOrderStationAttachment: ports.reserve,
     finalizeOrderStationAttachment: ports.finalize,
@@ -78,6 +80,7 @@ beforeEach(() => {
   ports.readIntake.mockResolvedValue({ code: "OK", data: [] });
   ports.readEvidence.mockResolvedValue({ code: "OK", data: [] });
   ports.readEvidenceByTarget.mockResolvedValue({ code: "OK", data: [] });
+  ports.readIntakeFiles.mockResolvedValue({code:'OK',data:[]});
   ports.reserve.mockResolvedValue({ code: "OK", data: { receipt: {}, upload: {}, replayed: false } });
   ports.finalize.mockResolvedValue({ code: "OK", data: { receipt: {receiptId:'55555555-5555-4555-8555-555555555555'}, replayed: false } });
   ports.original.mockResolvedValue({ code: "OK", data: { downloadUrl: "https://local.invalid", expiresInSeconds: 60 } });
@@ -133,7 +136,7 @@ describe("W4 attachment server actions", () => {
 
       await expect(getGalvanikHandoffAttachmentsAction(readInput)).resolves.toEqual({
         code: "OK",
-        data: { receipts: [], evidenceRecords: [], canOperate: false, currentActorId: USER_ID },
+        data: { receipts: [], evidenceRecords: [], intakeFiles: [], canOperate: false, currentActorId: USER_ID },
       });
       await expect(getGalvanikEvidenceByTargetAction(targetInput)).resolves.toEqual({ code: "OK", data: [] });
       await expect(getOrderIntakeAttachmentsAction(readInput)).resolves.toEqual({
@@ -142,6 +145,7 @@ describe("W4 attachment server actions", () => {
       });
 
       expect(ports.read).toHaveBeenCalledWith(readOnlySnapshot, readInput);
+      expect(ports.readIntakeFiles).toHaveBeenCalledWith(readOnlySnapshot, readInput);
       expect(ports.readIntake).toHaveBeenCalledWith(readOnlySnapshot, readInput);
       expect(ports.readEvidence).toHaveBeenNthCalledWith(1, readOnlySnapshot, readInput);
       expect(ports.readEvidence).toHaveBeenNthCalledWith(2, readOnlySnapshot, readInput);
@@ -230,7 +234,7 @@ describe("W4 attachment server actions", () => {
     expect(ports.read).toHaveBeenCalledWith(snapshot, readInput);
     expect(ports.readEvidence).toHaveBeenCalledWith(snapshot, readInput);
     expect(ports.readEvidenceByTarget).toHaveBeenCalledWith(snapshot, targetInput);
-    expect(ports.reserve).toHaveBeenCalledWith(snapshot, reserveInput);
+    expect(ports.reserve).toHaveBeenCalledWith(snapshot, reserveInput,true);
     expect(ports.finalize).toHaveBeenCalledWith(snapshot, finalizeInput);
     expect(ports.original).toHaveBeenCalledWith(snapshot, originalInput);
     expect(ports.noStore).toHaveBeenCalledTimes(5);

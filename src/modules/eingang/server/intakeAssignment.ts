@@ -31,6 +31,7 @@ async function customer(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapsho
  const row=await read(tx,auth.tenantId,id);if(!row)reject('NOT_FOUND','Kunde nicht verfügbar.');return {id:row.id,name:row.name,type:row.customerType,reason:null};
 }
 async function suggestions(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string){return tx.execute<{id:string;wert:unknown;grund:string|null}>(sql`SELECT id::text,wert,grund FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${id}::uuid AND feld='kunde' AND status='offen' ORDER BY sicherheit_wert DESC NULLS LAST,id`);}
+export {source as readIntakeAssignmentSource,suggestions as readIntakeCustomerSuggestions,failed as intakeAssignmentFailure,lockIntakeAssignment};
 export async function readIntakeAssignment(input:unknown,readCustomer:CustomerReader):Promise<AssignmentReadResult>{
  if(!object(input)||Object.keys(input).sort().join(',')!=='itemId,mode'||!uuid(input.itemId)||!['normal','rein','kein','umhaengen'].includes(String(input.mode)))return {code:'VALIDATION_ERROR',message:'Zuordnungsaufruf ist ungültig.'};
  try{const auth=await session();if(!hasAuthorizationArea(auth,'eingang')&&!(input.mode==='kein'&&hasAuthorizationArea(auth,'mails')))reject('FORBIDDEN','Zuordnung benötigt Eingang.');

@@ -52,10 +52,10 @@ export function KartenBlock({ label, rechts, children }: KartenBlockProps) {
 export function NaechsteAktion({ titel, aktionen }: { titel: string; aktionen: ReactNode }) {
   return <div className="kr-naechste"><div className="kr-naechste-t">{titel}</div><div className="kr-naechste-a">{aktionen}</div></div>;
 }
-export interface TeilProps { nr: string; name: string; meta: string; fertig?: boolean; fotoFehlt?: boolean; status?: ReactNode; aktionen?: ReactNode;
+export interface TeilProps { nr: string; name: string; meta: string; fertig?: boolean; fotoFehlt?: boolean | null; status?: ReactNode; aktionen?: ReactNode;
   /** Owner 2026-09-27: Foto-Knopf direkt am Teil – Zustand festhalten, wird im Auftrag gespeichert */ onFoto?: () => void; /** Handy: nur Symbol */ geraet?: 'desktop' | 'tablet' | 'handy'; }
 export function Teil({ nr, name, meta, fertig, fotoFehlt, status, aktionen, onFoto, geraet }: TeilProps) {
-  return <div className={cx('kr-teil', fertig && 'kr-teil--fertig')}><span className={cx('kr-bild', fotoFehlt && 'kr-bild--leer')}><Icon name={fotoFehlt ? 'photooff' : 'photo'} /></span>
+  return <div className={cx('kr-teil', fertig && 'kr-teil--fertig')}><span className={cx('kr-bild', fotoFehlt === true && 'kr-bild--leer')}>{fotoFehlt !== null && <Icon name={fotoFehlt ? 'photooff' : 'photo'} />}</span>
     <div style={{ minWidth: 0 }}><div className="kr-zeile-t" style={{ fontSize: 14 }}><span className="kr-id">{nr}</span>{name}{status}</div><div className="kr-zeile-s">{meta}</div></div><div style={{ display: 'flex', gap: 6 }}>{onFoto && <Button className="kr-teil-foto" art="sekundaer" icon="camera" text={geraet === 'handy' ? undefined : 'Foto'} label={'Foto zu ' + nr} onClick={onFoto} />}{aktionen}</div></div>;
 }
 export function Notiz({ text, bezug, autor }: { text: ReactNode; bezug: ReactNode; autor: string }) {

@@ -47,6 +47,16 @@ const card: OrderCardModel = {
 };
 
 describe("Orders V1.1 one-surface truth", () => {
+  it("shows the secured intake photo only on its linked part", () => {
+    const items = [card.items[0], { ...card.items[0], id: "item-2", position: 2, name: "TEST zweites Teil" }];
+    render(<OrderCardView state={{kind:"data",card:{...card,items,intakePhotoParts:["item-1"]}}}
+      actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} />);
+    const first = screen.getByText("Haltewinkel").closest(".kr-teil");
+    const second = screen.getByText("TEST zweites Teil").closest(".kr-teil");
+    expect(first?.querySelector(".kr-bild svg")).toBeInTheDocument();
+    expect(first?.querySelector(".kr-bild")).not.toHaveClass("kr-bild--leer");
+    expect(second?.querySelector(".kr-bild")).toHaveClass("kr-bild--leer");
+  });
   it('TEST PL09:37 existing position editor opens after loading, uniquely prefills from the central alias, and preserves stored line values',()=>{
     const save=vi.fn(),ports={...actions,content:{visible:true,enabled:true,reason:null},onSaveContent:save};
     const raw='TEST chrom Spezial';

@@ -792,10 +792,150 @@ async function readAttachmentsForWorkflow(
   }
 }
 
+type StationPhotoTarget=Pick<ReserveOrderStationAttachmentInput,'orderId'|'itemId'|'expectedVersion'>;
+
+async function readStationPhotoTarget(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,
+  input:StationPhotoTarget,workflow:AttachmentWorkflow):Promise<{terminal:Exclude<OrderStationAttachmentResult<never>,{code:'OK'}>}|{order:LockedOrder;customerId:string;event:TransitionEventRow}> {
+  const orders = await tx.execute<LockedOrder>(sql`
+    SELECT id, tenant_id, customer_id, version, station, current_station, current_station_id, status
+    FROM public.orders
+    WHERE id = ${input.orderId} AND tenant_id = ${authorization.tenantId}
+    FOR UPDATE
+  `);
+  const order = orders[0];
+  if (!order) return { terminal: { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." } as const };
+  if (orders.length !== 1 || order.version !== input.expectedVersion) {
+    return { terminal: { code: "CONFLICT", reason: "ORDER_CHANGED", message: "Auftrag wurde bereits geändert." } as const };
+  }
+  if (
+    order.id !== input.orderId
+    || order.tenant_id !== authorization.tenantId
+    || !order.customer_id
+    || order.station !== workflow.station
+    || order.current_station !== workflow.station
+    || order.current_station_id !== workflow.station
+    || order.status !== workflow.orderStatus
+  ) return { terminal: { code: "VALIDATION_ERROR", message: "Auftrag ist nicht übergabebereit." } as const };
+
+  const customers = await tx.execute<{ id: string; tenant_id: string }>(sql`
+    SELECT id, tenant_id FROM public.customers
+    WHERE id = ${order.customer_id} AND tenant_id = ${authorization.tenantId}
+    FOR SHARE
+  `);
+  if (
+    customers.length !== 1 || customers[0]?.id !== order.customer_id
+    || customers[0]?.tenant_id !== authorization.tenantId
+  ) return { terminal: { code: "VALIDATION_ERROR", message: "Kundenzuordnung ist ungültig." } as const };
+
+  const items = await tx.execute<LockedItem>(sql`
+    SELECT id, order_id, tenant_id, customer_id, current_station_id
+    FROM public.items WHERE order_id = ${order.id} FOR UPDATE
+  `);
+  if (
+    items.some((item) => item.order_id !== order.id
+      || item.tenant_id !== authorization.tenantId
+      || item.customer_id !== order.customer_id
+      || item.current_station_id===null || !photoItemStations(workflow).includes(item.current_station_id))
+    || items.filter((item) => item.id === input.itemId).length !== 1
+  ) return { terminal: { code: "VALIDATION_ERROR", message: "Teilezuordnung ist ungültig." } as const };
+
+  const events = await tx.execute<TransitionEventRow>(sql`
+    SELECT event.id, event.tenant_id, event.order_id, event.item_id, event.event_type,
+           event.client_event_id, event.correlation_id, event.event_schema_version,
+           event.aggregate_version, event.from_station, event.station, event.status,
+           event.user_id AS actor_id, actor.tenant_id AS actor_tenant_id
+    FROM public.events event
+    LEFT JOIN public.app_users actor ON actor.id = event.user_id
+    WHERE event.tenant_id = ${authorization.tenantId}
+      AND event.order_id = ${order.id}
+      AND event.aggregate_version = (
+        SELECT max(prior.aggregate_version) FROM public.events prior
+        WHERE prior.tenant_id=${authorization.tenantId} AND prior.order_id=${order.id}
+          AND prior.event_type=${workflow.eventType}
+          AND prior.aggregate_version<=${input.expectedVersion}
+          AND (${workflow.key==='HANDOFF'} OR prior.aggregate_version=${input.expectedVersion})
+      )
+      AND event.event_type = ${workflow.eventType}
+    LIMIT 2
+  `);
+  const event = events[0];
+  if (
+    events.length !== 1 || !event || !validUuid(event.id)
+    || event.tenant_id !== authorization.tenantId
+    || event.order_id !== order.id || event.item_id !== null
+    || !validUuid(event.client_event_id) || !validUuid(event.correlation_id)
+    || event.event_schema_version !== 1 || typeof event.aggregate_version!=='number' || !Number.isSafeInteger(event.aggregate_version) || event.aggregate_version<1
+    || !(event.aggregate_version === input.expectedVersion || workflow.key==='HANDOFF'&&event.aggregate_version<input.expectedVersion)
+    // Existing originals keep their historical event; new handoffs use angenommen.
+    || !(event.from_station === workflow.fromStation || workflow.key==='HANDOFF'&&event.from_station==='wareneingang') || event.station !== workflow.station
+    || event.status !== "success" || !validUuid(event.actor_id)
+    || event.actor_tenant_id !== authorization.tenantId
+  ) return { terminal: { code: "VALIDATION_ERROR", message: "Übergabeereignis ist ungültig." } as const };
+
+  return {order,customerId:order.customer_id,event};
+}
+
+/** Qualifies the same station and transition before the shared intake stores a new photo. */
+export async function readHandoffIntakePhotoTarget(tx:PrivilegedTenantTransaction,authorization:AuthorizationSnapshot,
+  input:StationPhotoTarget) {
+  const result=await readStationPhotoTarget(tx,authorization,input,HANDOFF_WORKFLOW);
+  if('terminal' in result)return result.terminal;
+  return {code:'OK' as const,customerId:result.customerId,transitionEventId:result.event.id};
+}
+
+export function isOrderStationPhoto(mime:string,bytes:number) {
+  return Object.hasOwn(MIME_EXTENSION,mime)&&Number.isSafeInteger(bytes)&&bytes>0&&bytes<=MAX_FILE_BYTES;
+}
+
+export const intakeFileContextReceipt=sql`(SELECT event.nachher
+  FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
+    AND event.art='zugeordnet' AND event.befehl_id=file.id
+    AND event.von=file.aufgenommen_von::text AND event.nachher->>'action'='original_kontext'
+    AND event.nachher->>'fileId'=file.id::text AND event.nachher->>'sha256'=file.sha256)`;
+
+export const intakeFileContextEvidence=sql`(${intakeFileContextReceipt}->'kontext')`;
+
+/** The original and the station transition retain their own independent receipts. */
+export const intakeFileHandoffEvidence=sql`EXISTS(SELECT 1 FROM public.events transition
+  WHERE transition.tenant_id=file.tenant_id AND source.vorgang_art='auftrag' AND transition.order_id=source.vorgang_id
+    AND transition.id=(${intakeFileContextReceipt}->>'uebergabeEreignisId') AND transition.event_type='ORDER_STATION_MOVED_V1'
+    AND transition.station='galvanik' AND transition.status='success')`;
+
+export async function readHandoffIntakeOriginalsInTransaction(tx:PrivilegedTenantTransaction,auth:Pick<AuthorizationSnapshot,'tenantId'>,
+ input:{orderId:string;itemId?:string}|{orderIds:readonly string[]}){
+  const orderIds='orderId' in input?[input.orderId]:input.orderIds;
+  const itemId='itemId' in input?input.itemId:undefined;
+  if(!orderIds.length)return [];
+  const rows=await tx.execute<{id:string;name:string;mime:string;bytes:string;at:string;itemId:string;orderId:string}>(sql`
+   SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,source.erstellt_am::text AS at,
+    ${intakeFileContextEvidence}->>'teilId' AS "itemId",source.vorgang_id AS "orderId"
+   FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id
+   WHERE file.tenant_id=${auth.tenantId} AND source.vorgang_art='auftrag'
+    AND source.vorgang_id IN (${sql.join(orderIds.map(id=>sql`${id}`),sql`, `)})
+    AND source.zuordnung_regel='kontext' AND file.foto_art='teile' AND file.phase='arbeit'
+    AND ${intakeFileContextEvidence}->>'teilId' IS NOT NULL AND ${intakeFileHandoffEvidence}
+    ${itemId===undefined?sql``:sql`AND ${intakeFileContextEvidence}->>'teilId'=${itemId}`}
+    AND EXISTS(SELECT 1 FROM public.intake_event stored WHERE stored.tenant_id=file.tenant_id AND stored.item_id=file.item_id
+      AND stored.art='original_gespeichert' AND stored.nachher->>'fileId'=file.id::text AND stored.nachher->>'sha256'=file.sha256)
+   ORDER BY source.erstellt_am DESC,file.id`);
+  return rows.map(row=>({...row,bytes:Number(row.bytes)}));
+}
+
+export async function readHandoffIntakeOriginals(auth:AuthorizationSnapshot,input:{orderId:string;itemId?:string}){
+ try{
+  const data=await withPrivilegedTenantTransaction(auth,tx=>readHandoffIntakeOriginalsInTransaction(tx,auth,input));
+  return {code:'OK' as const,data};
+ }catch(error){
+  console.error('[INTAKE_HANDOFF_ORIGINALS_READ_FAILED]',error);
+  return {code:'UNAVAILABLE' as const,message:'Neue Werkstattfotos konnten nicht geladen werden. Code: INTAKE_HANDOFF_ORIGINALS_READ_FAILED.'};
+ }
+}
+
 async function reserveAttachmentForWorkflow(
   workflow: AttachmentWorkflow,
   authorization: AuthorizationSnapshot,
   input: ReserveOrderStationAttachmentInput,
+  historicalOnly: boolean,
 ): Promise<OrderStationAttachmentResult<ReserveAttachmentData>> {
   if (invalidReserveInput(input)) return { code: "VALIDATION_ERROR", message: "Ungültige Dateimetadaten oder Auftragsversion." };
   if (!canManage(authorization)) return { code: "FORBIDDEN", message: "Übergabeoriginale sind nicht erlaubt." };
@@ -866,82 +1006,11 @@ async function reserveAttachmentForWorkflow(
         }
         return { reservation: existing, replayed: true as const };
       }
+      if(historicalOnly)return {terminal:{code:'FORBIDDEN',message:'Übergabeoriginale sind nicht erlaubt.'} as const};
 
-      const orders = await tx.execute<LockedOrder>(sql`
-        SELECT id, tenant_id, customer_id, version, station, current_station, current_station_id, status
-        FROM public.orders
-        WHERE id = ${input.orderId} AND tenant_id = ${authorization.tenantId}
-        FOR UPDATE
-      `);
-      const order = orders[0];
-      if (!order) return { terminal: { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." } as const };
-      if (orders.length !== 1 || order.version !== input.expectedVersion) {
-        return { terminal: { code: "CONFLICT", reason: "ORDER_CHANGED", message: "Auftrag wurde bereits geändert." } as const };
-      }
-      if (
-        order.id !== input.orderId
-        || order.tenant_id !== authorization.tenantId
-        || !order.customer_id
-        || order.station !== workflow.station
-        || order.current_station !== workflow.station
-        || order.current_station_id !== workflow.station
-        || order.status !== workflow.orderStatus
-      ) return { terminal: { code: "VALIDATION_ERROR", message: "Auftrag ist nicht übergabebereit." } as const };
-
-      const customers = await tx.execute<{ id: string; tenant_id: string }>(sql`
-        SELECT id, tenant_id FROM public.customers
-        WHERE id = ${order.customer_id} AND tenant_id = ${authorization.tenantId}
-        FOR SHARE
-      `);
-      if (
-        customers.length !== 1 || customers[0]?.id !== order.customer_id
-        || customers[0]?.tenant_id !== authorization.tenantId
-      ) return { terminal: { code: "VALIDATION_ERROR", message: "Kundenzuordnung ist ungültig." } as const };
-
-      const items = await tx.execute<LockedItem>(sql`
-        SELECT id, order_id, tenant_id, customer_id, current_station_id
-        FROM public.items WHERE order_id = ${order.id} FOR UPDATE
-      `);
-      if (
-        items.some((item) => item.order_id !== order.id
-          || item.tenant_id !== authorization.tenantId
-          || item.customer_id !== order.customer_id
-          || item.current_station_id===null || !photoItemStations(workflow).includes(item.current_station_id))
-        || items.filter((item) => item.id === input.itemId).length !== 1
-      ) return { terminal: { code: "VALIDATION_ERROR", message: "Teilezuordnung ist ungültig." } as const };
-
-      const events = await tx.execute<TransitionEventRow>(sql`
-        SELECT event.id, event.tenant_id, event.order_id, event.item_id, event.event_type,
-               event.client_event_id, event.correlation_id, event.event_schema_version,
-               event.aggregate_version, event.from_station, event.station, event.status,
-               event.user_id AS actor_id, actor.tenant_id AS actor_tenant_id
-        FROM public.events event
-        LEFT JOIN public.app_users actor ON actor.id = event.user_id
-        WHERE event.tenant_id = ${authorization.tenantId}
-          AND event.order_id = ${order.id}
-          AND event.aggregate_version = (
-            SELECT max(prior.aggregate_version) FROM public.events prior
-            WHERE prior.tenant_id=${authorization.tenantId} AND prior.order_id=${order.id}
-              AND prior.event_type=${workflow.eventType}
-              AND prior.aggregate_version<=${input.expectedVersion}
-              AND (${workflow.key==='HANDOFF'} OR prior.aggregate_version=${input.expectedVersion})
-          )
-          AND event.event_type = ${workflow.eventType}
-        LIMIT 2
-      `);
-      const event = events[0];
-      if (
-        events.length !== 1 || !event || !validUuid(event.id)
-        || event.tenant_id !== authorization.tenantId
-        || event.order_id !== order.id || event.item_id !== null
-        || !validUuid(event.client_event_id) || !validUuid(event.correlation_id)
-        || event.event_schema_version !== 1 || typeof event.aggregate_version!=='number' || !Number.isSafeInteger(event.aggregate_version) || event.aggregate_version<1
-        || !(event.aggregate_version === input.expectedVersion || workflow.key==='HANDOFF'&&event.aggregate_version<input.expectedVersion)
-        // Existing originals keep their historical event; new handoffs use angenommen.
-        || !(event.from_station === workflow.fromStation || workflow.key==='HANDOFF'&&event.from_station==='wareneingang') || event.station !== workflow.station
-        || event.status !== "success" || !validUuid(event.actor_id)
-        || event.actor_tenant_id !== authorization.tenantId
-      ) return { terminal: { code: "VALIDATION_ERROR", message: "Übergabeereignis ist ungültig." } as const };
+      const target=await readStationPhotoTarget(tx,authorization,input,workflow);
+      if('terminal' in target)return target;
+      const {order,customerId,event}=target;
 
       const reservationId = randomUUID();
       const inserted = await tx.execute<ReservationRow>(sql`
@@ -950,7 +1019,7 @@ async function reserveAttachmentForWorkflow(
           order_version, actor_id, client_request_id, purpose, station, bucket_id,
           object_path, mime_type, file_bytes, content_sha256
         ) VALUES (
-          ${reservationId}, ${authorization.tenantId}, ${order.customer_id}, ${order.id},
+          ${reservationId}, ${authorization.tenantId}, ${customerId}, ${order.id},
           ${input.itemId}, ${event.id}, ${input.expectedVersion}, ${authorization.userId},
           ${input.clientRequestId}, ${workflow.purpose}, ${workflow.station}, ${BUCKET_ID},
           ${objectPath(workflow, reservationId, input.mimeType)}, ${input.mimeType}, ${input.fileBytes},
@@ -965,7 +1034,7 @@ async function reserveAttachmentForWorkflow(
         authorization,
         input,
         reservationId,
-        order.customer_id,
+        customerId,
         event.id,
       )) {
         throw new Error("ORDER_STATION_ATTACHMENT_INSERT_FAILED");
@@ -1330,8 +1399,9 @@ export function readOrderIntakeAttachments(
 export function reserveOrderStationAttachment(
   authorization: AuthorizationSnapshot,
   input: ReserveOrderStationAttachmentInput,
+  historicalOnly=false,
 ): Promise<OrderStationAttachmentResult<ReserveAttachmentData>> {
-  return reserveAttachmentForWorkflow(HANDOFF_WORKFLOW, authorization, input);
+  return reserveAttachmentForWorkflow(HANDOFF_WORKFLOW, authorization, input,historicalOnly);
 }
 
 export function finalizeOrderStationAttachment(

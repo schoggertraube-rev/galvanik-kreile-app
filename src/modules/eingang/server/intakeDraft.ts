@@ -8,7 +8,27 @@ import { mayUseContinuationSources } from "./intakeContinuationAccess";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type DraftRow = { id: string; art: "eingang" | "kunde" | null; payload: Record<string, unknown>; zuletzt_feld: string | null; version: number; updated_at: string };
+type Entwurfsstand={payload:Record<string,unknown>;lastField:string|null};
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
+function entwurfsstand(value:unknown):value is Record<string,unknown>&Entwurfsstand {
+  return object(value)&&object(value.payload)&&typeof value.payload.clientKey==='string'&&UUID.test(value.payload.clientKey)
+    &&(value.lastField===null||typeof value.lastField==='string'&&/^[a-zA-Z0-9_.:[\]-]{1,160}$/.test(value.lastField));
+}
+
+function neuerEntwurf(current:DraftRow) {
+  return {version:current.version,stand:{payload:current.payload,lastField:current.zuletzt_feld}};
+}
+
+function draftOwnerLock(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot) {
+  return tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-draft:'||${auth.tenantId}||':'||${auth.userId},0))`);
+}
+
+async function ownDraftForUpdate(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string) {
+  const [current]=await tx.execute<DraftRow&{status:string}>(sql`SELECT id::text,art,payload,zuletzt_feld,version,status,
+    to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at FROM private.intake_drafts
+    WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND id=${id}::uuid FOR UPDATE`);
+  return current;
+}
 async function authorizeDraft(art?: "eingang" | "kunde") {
   const auth=await resolveAuthorization();
   if(!auth.ok)return {code:"UNAUTHENTICATED" as const,message:"Sitzung konnte nicht geprüft werden."};
@@ -34,11 +54,9 @@ export async function readIntakeDrafts() {
 }
 
 export async function writeIntakeDraft(input: unknown) {
-  if (!object(input) || typeof input.id !== "string" || !UUID.test(input.id)
+  if (!entwurfsstand(input) || typeof input.id !== "string" || !UUID.test(input.id)
     || typeof input.clientEventId !== "string" || !UUID.test(input.clientEventId)
-    || (input.art !== "eingang" && input.art !== "kunde") || !object(input.payload)
-    || typeof input.payload.clientKey !== "string" || !UUID.test(input.payload.clientKey)
-    || !(input.lastField === null || typeof input.lastField === "string" && /^[a-zA-Z0-9_.:[\]-]{1,160}$/.test(input.lastField))
+    || (input.art !== "eingang" && input.art !== "kunde")
     || !(input.expectedVersion === null || typeof input.expectedVersion === "number" && Number.isSafeInteger(input.expectedVersion) && input.expectedVersion >= 0)) {
     return { code: "VALIDATION_ERROR" as const, message: "Entwurfsdaten sind ungültig." };
   }
@@ -56,6 +74,37 @@ export async function writeIntakeDraft(input: unknown) {
   }
 }
 
+export async function loeseEntwurfskonflikt(input:unknown) {
+  if(!object(input)||typeof input.draftId!=='string'||!UUID.test(input.draftId)
+    ||typeof input.clientEventId!=='string'||!UUID.test(input.clientEventId)
+    ||typeof input.expectedVersion!=='number'||!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<0
+    ||!(input.wahl==='neuere'&&input.stand===undefined||input.wahl==='meine'&&entwurfsstand(input.stand))) {
+    return {code:'VALIDATION_ERROR' as const,message:'Entwurfsdaten sind ungültig.'};
+  }
+  const {draftId,clientEventId,expectedVersion}=input;
+  const stand=input.wahl==='meine'?input.stand as Entwurfsstand:undefined;
+  const auth=await authorizeDraft();
+  if('code' in auth)return auth;
+  try{
+    return await withPrivilegedTenantTransaction(auth,async tx=>{
+      await draftOwnerLock(tx,auth);
+      const current=await ownDraftForUpdate(tx,auth,draftId);
+      if(!current?.art||current.status!=='open')return {code:'NOT_FOUND' as const,message:'Entwurf wurde nicht gefunden.'};
+      if(!hasAuthorizationArea(auth,current.art==='kunde'?'kunden':'eingang'))return {code:'FORBIDDEN' as const,message:'Erfassung ist nicht freigegeben.'};
+      if(!stand)return current.version===expectedVersion?{code:'OK' as const,draft:neuerEntwurf(current)}:
+        {code:'CONFLICT' as const,neuere:neuerEntwurf(current),message:'Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten.'};
+      const result=await writeIntakeDraftInTransaction(tx,auth,{id:draftId,clientEventId,expectedVersion,art:current.art,...stand});
+      if(result)return result;
+      const saved=await ownDraftForUpdate(tx,auth,draftId);
+      if(!saved||saved.version<=expectedVersion)throw Error('INTAKE_DRAFT_RESOLUTION_RECEIPT_MISSING');
+      return {code:'OK' as const,draft:neuerEntwurf(saved)};
+    });
+  }catch(error){
+    console.error('[INTAKE_DRAFT_RESOLUTION_FAILED]',error);
+    return {code:'UNAVAILABLE' as const,message:'Entwurf wurde nicht sicher gespeichert. Alle Eingaben behalten. Fehlercode: INTAKE_DRAFT_RESOLUTION_FAILED.'};
+  }
+}
+
 export async function discardIntakeDraft(input: unknown) {
   if (!object(input) || typeof input.id !== "string" || !UUID.test(input.id)
     || typeof input.clientEventId !== "string" || !UUID.test(input.clientEventId)
@@ -66,7 +115,7 @@ export async function discardIntakeDraft(input: unknown) {
   if ("code" in auth) return auth;
   try {
     const result = await withPrivilegedTenantTransaction(auth, async tx => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-draft:'||${auth.tenantId}||':'||${auth.userId},0))`);
+      await draftOwnerLock(tx,auth);
       const prior=await readIntakeDraftEvent(tx,auth,input.clientEventId as string,"INTAKE_DRAFT_DISCARDED_V1");
       if(prior.length)return prior.length===1&&prior[0].payload.draftId===input.id&&(prior[0].payload.reason??null)===(typeof input.reason==='string'?input.reason.trim():null)?null:{code:"CONFLICT" as const,message:"Diese Kennung wurde für einen anderen Entwurf verwendet."};
       const deleted = await tx.execute<{ id:string }>(sql`DELETE FROM private.intake_drafts WHERE tenant_id=${auth.tenantId}
@@ -88,14 +137,15 @@ export async function writeIntakeDraftInTransaction(tx:PrivilegedTenantTransacti
   const serialized=JSON.stringify(input.payload);
   if(serialized.length>250_000)return {code:'VALIDATION_ERROR' as const,message:'Entwurf ist zu groß.'};
   const intent = createHash("sha256").update(JSON.stringify([input.id,input.art,input.payload,input.lastField,input.expectedVersion])).digest("hex");
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-draft:'||${auth.tenantId}||':'||${auth.userId},0))`);
+  await draftOwnerLock(tx,auth);
   const prior = await readIntakeDraftEvent(tx,auth,input.clientEventId as string,"INTAKE_DRAFT_SAVED_V1");
   if (prior.length) return prior.length===1 && prior[0].payload.intent===intent ? null : { code: "CONFLICT" as const, message: "Diese Speicherung wurde bereits anders verwendet." };
-  const current = await tx.execute<DraftRow>(sql`SELECT id::text,art,payload,zuletzt_feld,version,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at FROM private.intake_drafts
-    WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND id=${input.id}::uuid FOR UPDATE`);
-  if (!current.length && input.expectedVersion!==null) return {code:"CONFLICT" as const,message:"Dieser Entwurf wurde bereits gebucht oder verworfen. Eingaben bleiben erhalten."};
-  if (current.length && current[0]!.version!==input.expectedVersion) return {code:"CONFLICT" as const,message:"Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten."};
-  if (current.length) await tx.execute(sql`UPDATE private.intake_drafts SET art=${input.art},payload=${serialized}::jsonb,
+  const current = await ownDraftForUpdate(tx,auth,input.id);
+  if(current?.art&&!hasAuthorizationArea(auth,current.art==='kunde'?'kunden':'eingang'))return {code:'FORBIDDEN' as const,message:'Erfassung ist nicht freigegeben.'};
+  if (!current && input.expectedVersion!==null) return {code:"CONFLICT" as const,message:"Dieser Entwurf wurde bereits gebucht oder verworfen. Eingaben bleiben erhalten."};
+  if (current && current.version!==input.expectedVersion) return {code:"CONFLICT" as const,message:"Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten.",
+    neuere:neuerEntwurf(current),meine:{stand:{payload:input.payload,lastField:input.lastField}}};
+  if (current) await tx.execute(sql`UPDATE private.intake_drafts SET art=${input.art},payload=${serialized}::jsonb,
     zuletzt_feld=${input.lastField},status='open',version=version+1,updated_at=statement_timestamp()
     WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid AND id=${input.id}::uuid`);
   else await tx.execute(sql`INSERT INTO private.intake_drafts(id,tenant_id,actor_id,art,payload,zuletzt_feld)

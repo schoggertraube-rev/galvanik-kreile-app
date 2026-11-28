@@ -3,7 +3,7 @@ import {expect,it} from 'vitest';
 import {KREILE_TENANT_SLUG} from '@/lib/tenant';
 import {sql,full,withSession,createFixture} from './replayHarness';
 import {customerFixture} from './orderFixture';
-import {storeOrderPhoto,TEST_PHOTO_BYTES} from './photoFixture';
+import {storeOrderPhoto,TEST_PHOTO_BYTES,reserveLegacyStationPhoto} from './photoFixture';
 
 it('H3 existing order-card part photo path must satisfy the completion gate without a second upload',async()=>{
  const customerId=await customerFixture('H3-UI');
@@ -22,7 +22,8 @@ it('H3 existing order-card part photo path must satisfy the completion gate with
  const reserveInput={orderId,itemId,expectedVersion:finished.receipt.aggregateVersion,clientRequestId:randomUUID(),mimeType:'image/png' as const,fileBytes:TEST_PHOTO_BYTES.length,contentSha256};
  const reader=await createFixture([],'readonly');
  expect(await withSession(reader,()=>reserveGalvanikHandoffAttachmentAction(structuredClone(reserveInput)))).toMatchObject({code:'FORBIDDEN'});
- const reserve=await withSession(full,()=>reserveGalvanikHandoffAttachmentAction(reserveInput));
+ expect(await withSession(full,()=>reserveGalvanikHandoffAttachmentAction(reserveInput))).toMatchObject({code:'FORBIDDEN'});
+ const reserve=await withSession(full,()=>reserveLegacyStationPhoto(reserveInput));
  expect(reserve,JSON.stringify(reserve)).toMatchObject({code:'OK'});if(reserve.code!=='OK'||!reserve.data.upload)throw Error('H3_EXISTING_RESERVE:'+reserve.code);
  const endpoint=new URL('/storage/v1/object/upload/sign/item-photos/'+reserve.data.upload.path,process.env.NEXT_PUBLIC_SUPABASE_URL);
  expect(endpoint.hostname).toBe('127.0.0.1');endpoint.searchParams.set('token',reserve.data.upload.token);

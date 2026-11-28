@@ -97,6 +97,7 @@ type Stand = Kennzeichen & Zielwerte & KanalFristen & Omit<MetallkursEinstellung
   kanal_aufbewahrung: string;
   erkennung_modelle: Readonly<{ dokument: string; rechnung: string | null; bon: string | null }>;
   eingang_vorschlaege_max?: number | null;
+  eingang_selbst_handeln?: boolean | null;
   eingang_liegefrist_arbeitsstunden?: number | null;
   eingang_kandidat_stufen?: Readonly<Record<"ustid" | "adresse" | "domain" | "telefon" | "name" | "mailfaden" | "teil" | "ware_erwartet", number>> | null;
   eingang_verdacht_muster?: readonly string[] | null;
@@ -209,6 +210,7 @@ async function readSpurDStand(tx: PrivilegedTenantTransaction, tenantId: string)
           ELSE firma.erkennung_modelle END,
         'annahme_zustaende', firma.annahme_zustaende,
         'eingang_vorschlaege_max', to_jsonb(firma)->'eingang_vorschlaege_max',
+        'eingang_selbst_handeln', to_jsonb(firma)->'eingang_selbst_handeln',
         'eingang_liegefrist_arbeitsstunden', to_jsonb(firma)->'eingang_liegefrist_arbeitsstunden',
         'eingang_kandidat_stufen', to_jsonb(firma)->'eingang_kandidat_stufen',
         'eingang_verdacht_muster', to_jsonb(firma)->'eingang_verdacht_muster',
@@ -510,7 +512,7 @@ function istZustandsChip(wert: unknown): wert is ZustandsChip {
 }
 
 export async function readErkennungsEinstellungenInTransaction(tx: PrivilegedTenantTransaction, tenantId: string) {
-  const { ki_sicherheitsschwelle, annahme_zustaende, erkennung_modelle, eingang_vorschlaege_max,
+  const { ki_sicherheitsschwelle, annahme_zustaende, erkennung_modelle, eingang_vorschlaege_max, eingang_selbst_handeln,
     eingang_liegefrist_arbeitsstunden, eingang_kandidat_stufen, eingang_verdacht_muster } = await readSpurDStand(tx, tenantId);
   if (!Array.isArray(annahme_zustaende) || !annahme_zustaende.every(istZustandsChip)
     || new Set(annahme_zustaende.map(chip => chip.id)).size !== annahme_zustaende.length) {
@@ -519,7 +521,7 @@ export async function readErkennungsEinstellungenInTransaction(tx: PrivilegedTen
   const features = await readTenantFeatureRows(tx, tenantId);
   const dokument_lesen = features.find(({ feature_id }) => feature_id === "E04")?.enabled ?? null;
   return { ki_sicherheitsschwelle, annahme_zustaende, erkennung_modelle, dokument_lesen,
-    eingang_vorschlaege_max, eingang_liegefrist_arbeitsstunden, eingang_kandidat_stufen, eingang_verdacht_muster };
+    eingang_vorschlaege_max, eingang_liegefrist_arbeitsstunden, eingang_kandidat_stufen, eingang_verdacht_muster, eingang_selbst_handeln };
 }
 
 function istSuchaliasGruppe(wert: unknown): wert is string[] {

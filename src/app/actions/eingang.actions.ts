@@ -110,7 +110,7 @@ export async function reopenIntakeAction(input:unknown){
  return observeAction('reopenIntakeAction',subjectForAction('reopenIntakeAction',input),async()=>{return reopenIntake(input);
  },readLoggingSettings);
 }
-import {createIntakeMailFailureTask,createMailboxFetchRetryTask,saveTask,completeTask,readTask,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
+import {createIntakeMailFailureTask,createMailboxFetchRetryTask,saveTask,completeTask,readTask,readTaskForAuthorization,createMissingGoodsTask,createOrderHandoverTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
 import {createDispatchCall,recordDispatchCallResult,readDispatchCallRequirement,protectDispatchCallTask,readCompletedDispatchCallReceipt} from '@/lib/server/dispatchCallPort';
 import {DISPATCH_CALL_COPY} from '@/ui/situationCatalog';
 import {createStorageFinalTask,readStorageFinalTaskReceipt,protectStorageFinalTask} from '@/lib/server/storageFinalStagePort';
@@ -307,12 +307,8 @@ async function syncIntakeMailbox():Promise<string|null>{
   return failureNotice&&pendingNotice?failureNotice+'\n'+pendingNotice:failureNotice??pendingNotice;
  }catch{recordObservedFailure('INTAKE_MAIL_SYNC_FAILED');return MAILBOX_SYNC_COPY.unavailable;}
 }
-import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
-export async function chooseIntakeCaptureKindAction(input: unknown) {
- return observeAction('chooseIntakeCaptureKindAction',subjectForAction('chooseIntakeCaptureKindAction',input),async()=>{ return chooseIntakeCaptureKind(input);
- },readLoggingSettings);
-}
-import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";
+import { processIntakeDeviceRequest, discardIntakeCapture } from "@/modules/eingang/server-public";
+import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation, loeseEntwurfskonflikt } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
 import {legePaketOhneBezugAb,verknuepfePaketOhneBezug} from '@/modules/eingang/server-public';
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
@@ -353,6 +349,20 @@ export async function getIntakeDraftsAction() { return readIntakeDrafts(); }
 export async function saveIntakeDraftAction(input:unknown) {
  return observeAction('saveIntakeDraftAction',subjectForAction('saveIntakeDraftAction',input),async()=>{ return writeIntakeDraft(input);
  },readLoggingSettings);
+}
+export async function loeseEntwurfskonfliktAction(input:unknown) {
+ return observeAction('loeseEntwurfskonfliktAction',subjectForAction('loeseEntwurfskonfliktAction',input),
+  async()=>loeseEntwurfskonflikt(input),readLoggingSettings);
+}
+import {leseEingangVorschlag,fuehreEingangVorschlagAus} from '@/modules/eingang/server-public';
+async function leseEingangAufgabenbezug(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,itemId:string,version:number){
+ const task=await readTaskForAuthorization(auth,{reference:{type:'eingang',id:itemId},kind:'aufgabe',itemId},tx);
+ return task.code==='OK'&&task.canEdit&&task.reference.sourceVersion===version;
+}
+export async function leseEingangVorschlagAction(itemId:string){return leseEingangVorschlag(itemId,readCustomerProfile,leseEingangAufgabenbezug);}
+export async function fuehreEingangVorschlagAusAction(input:unknown){
+ return observeAction('fuehreEingangVorschlagAusAction',subjectForAction('fuehreEingangVorschlagAusAction',input),
+  async()=>fuehreEingangVorschlagAus(input,readCustomerProfile,leseEingangAufgabenbezug),readLoggingSettings);
 }
 export async function createIntakeContinuationAction(input:unknown) {
  return observeAction('createIntakeContinuationAction',subjectForAction('createIntakeContinuationAction',input),async()=>{ return createIntakeContinuation(input);
@@ -419,7 +429,7 @@ async function matchesPendingActor(scope:string|undefined){
 export async function prepareIntakeFileAction(input: unknown,pendingScope?:string) {
  return observeAction('prepareIntakeFileAction',subjectForAction('prepareIntakeFileAction',input),async()=>{
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- return prepareIntakeFile(input);
+ return prepareIntakeFile(input,false,readCustomerProfile);
 
  },readLoggingSettings);
 }
@@ -427,10 +437,12 @@ export async function finishIntakeFileAction(fileId: string,pendingScope?:string
  return observeAction('finishIntakeFileAction',subjectForAction('finishIntakeFileAction',{fileId}),async()=>{
  if(customerVisible!==undefined&&typeof customerVisible!=='boolean')return {code:'VALIDATION_ERROR' as const,message:EVIDENCE_VISIBILITY_COPY.invalid};
  if(!await matchesPendingActor(pendingScope))return {code:'FORBIDDEN' as const,message:'Die Aufnahme wartet auf die ursprüngliche Anmeldung.'};
- const result=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after,kandidaten:intakeCandidatePorts}),fileId);if(result.code!=='OK')return result;
+ const finished=await logCapturedTakeovers(await finishIntakeFile(fileId,{readSettings:readErkennungsEinstellungenInTransaction,scheduleRecognition:after,kandidaten:intakeCandidatePorts}),fileId);if(finished.code!=='OK')return finished;
+ const {kontextSichtbarkeit,...result}=finished;
  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:EVIDENCE_VISIBILITY_COPY.save};
  const {synchronizeEvidenceVisibilityRetryTask}=await import('@/modules/tasks/server-public');
- const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,customerVisible,
+ const requestedVisibility=kontextSichtbarkeit===false?undefined:kontextSichtbarkeit??customerVisible;
+ const flag=await applyEvidenceUploadVisibility(auth.data,'intake-file:'+fileId,requestedVisibility,
   {synchronizeTask:(tx,actor,id)=>synchronizeEvidenceVisibilityRetryTask(tx,actor,id,
    {effect:(writeTx,writer,effect)=>recordIntakeTaskEffect(writeTx,writer,effect,readCustomerProfile)})});
  // No visibility intent means the unchanged native capture receipt. Its fresh

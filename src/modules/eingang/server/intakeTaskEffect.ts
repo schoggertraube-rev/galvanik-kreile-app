@@ -9,6 +9,11 @@ import {writeIntakeNoteInTransaction} from './intakeCapture';
 type Effect={key:string;taskId:string;action:'angelegt'|'geaendert'|'erledigt';kind:string;title:string;note:string|null;reference:{type:string;id:string|null;customerId:string|null;customerType:string|null;orderId:string|null};itemId?:string;itemVersion?:number;priceTaskReceipt?:true};
 type CustomerReader=(tx:PrivilegedTenantTransaction,tenantId:string,id:string)=>Promise<CustomerStoredProfile|null>;
 
+export function canRecordIntakeTaskEffect(auth:AuthorizationSnapshot,source:{kanal:string;erstellt_von:string}){
+ return hasAuthorizationArea(auth,'mails')||
+  (source.kanal!=='mail'&&hasAuthorizationArea(auth,'eingang')&&source.erstellt_von===auth.userId);
+}
+
 /** Task and its visible history use the existing original/event writer in the same transaction. */
 export async function recordIntakeTaskEffect(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:Effect,readCustomer:CustomerReader){
  if(input.priceTaskReceipt&&(input.itemId||input.reference.type!=='lagerartikel'||!input.reference.id))throw Error('TASK_PRICE_RECEIPT_REFERENCE_INVALID');
@@ -17,7 +22,7 @@ export async function recordIntakeTaskEffect(tx:PrivilegedTenantTransaction,auth
   const sources=await tx.execute<{id:string;kanal:string;erstellt_von:string;version:number;kunde_id:string|null;vorgang_art:string|null;vorgang_id:string|null;anliegen_offen:string[]}>(sql`SELECT id::text,kanal,erstellt_von::text,version,kunde_id,vorgang_art,vorgang_id,anliegen_offen
    FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${targetItem}::uuid FOR UPDATE`);
   if(sources.length!==1)return {code:'NOT_FOUND' as const,message:'Auslösender Eingang nicht verfügbar.'};const source=sources[0];
-  if(!hasAuthorizationArea(auth,'mails')&&(source.kanal==='mail'||!hasAuthorizationArea(auth,'eingang')||source.erstellt_von!==auth.userId))return {code:'FORBIDDEN' as const,message:'Dieses Anliegen benötigt Mails oder den eigenen Eingang.'};
+  if(!canRecordIntakeTaskEffect(auth,source))return {code:'FORBIDDEN' as const,message:'Dieses Anliegen benötigt Mails oder den eigenen Eingang.'};
   if(source.version!==input.itemVersion)return {code:'CONFLICT' as const,message:'Eingang wurde inzwischen geändert · Eingaben bleiben erhalten.'};
   if(source.kunde_id&&source.kunde_id!==input.reference.customerId||source.vorgang_id&&input.reference.orderId&&source.vorgang_id!==input.reference.orderId)return {code:'CONFLICT' as const,message:'Eingang gehört zu einem anderen Bezug.'};
   if(!['rueckruf','frist','aufgabe'].includes(input.kind)||!source.anliegen_offen.includes(input.kind))return {code:'CONFLICT' as const,message:'Dieses Anliegen ist nicht mehr offen.'};
