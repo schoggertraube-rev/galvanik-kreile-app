@@ -349,6 +349,12 @@ export async function loeseEntwurfskonfliktAction(input:unknown) {
  return observeAction('loeseEntwurfskonfliktAction',subjectForAction('loeseEntwurfskonfliktAction',input),
   async()=>loeseEntwurfskonflikt(input),readLoggingSettings);
 }
+import {leseEingangVorschlag,fuehreEingangVorschlagAus} from '@/modules/eingang/server-public';
+export async function leseEingangVorschlagAction(itemId:string){return leseEingangVorschlag(itemId,readCustomerProfile);}
+export async function fuehreEingangVorschlagAusAction(input:unknown){
+ return observeAction('fuehreEingangVorschlagAusAction',subjectForAction('fuehreEingangVorschlagAusAction',input),
+  async()=>fuehreEingangVorschlagAus(input,readCustomerProfile),readLoggingSettings);
+}
 export async function createIntakeContinuationAction(input:unknown) {
  return observeAction('createIntakeContinuationAction',subjectForAction('createIntakeContinuationAction',input),async()=>{ return createIntakeContinuation(input);
  },readLoggingSettings);

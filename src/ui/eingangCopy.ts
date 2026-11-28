@@ -4,6 +4,13 @@ export const INTAKE_FILE_CONTEXT_COPY={contextMismatch:'Eingang gehört nicht zu
  pending:'Die Datei bleibt auf diesem Gerät und wartet auf die Übertragung.'} as const;
 export const INCOMING_INVOICE_COPY={addSupplier:'Lieferant ergänzen',taxRateMismatch:'Steuersätze passen nicht zur Gesamt-USt · prüf die Rechnung',supplierSearchUnavailable:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'} as const;
 
+export const EINGANG_VORSCHLAG_COPY={
+  sollZuordnen:(kunde:string)=>`Soll ich den Eingang ${kunde} zuordnen?`,
+  jaZuordnen:'Ja, zuordnen',vonWem:'Von wem ist das?',fertig:'Alles aus diesem Eingang ist erledigt',
+  veraltet:'Eingang wurde inzwischen geändert · bitte neu lesen.',
+  ungueltig:'Eingang oder Vorschlag ist ungültig.',recht:'Vorschläge benötigen Eingang.',
+} as const;
+
 export const eingangCopy = {
   rechnungswiderspruch: 'PDF und XML widersprechen',
   verdaechtigerText: 'Verdächtiger Text',

@@ -16,6 +16,7 @@ export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals,readDo
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction } from "./server/goodsReceipt";
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
 export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation, loeseEntwurfskonflikt } from "./server/intakeDraft";
+export { leseEingangVorschlag, fuehreEingangVorschlagAus } from './server/vorschlag';
 
 export { saveIntakeNote, readIntakeCapture, readIntakeNoteText, readIntakePendingScope, discardIntakeCapture, chooseIntakeCaptureKind } from "./server/intakeCapture";
 export { prepareIntakeFile, finishIntakeFile, retryIntakeRecognition } from "./server/intakeFile";
