@@ -2,7 +2,7 @@ import 'server-only';
 
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
-import {hasLagerCapability} from '@/lib/auth/authorizationContract';
+import {hasAuthorizationArea,hasLagerCapability} from '@/lib/auth/authorizationContract';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 import {withTenantSavepoint,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {LagerBeleg,LagerBelegPosition} from '@/modules/lager/public';
@@ -140,12 +140,32 @@ async function leseBeleg(tx: PrivilegedTenantTransaction, tenantId: string, item
  };
 }
 
+type OriginalAuswahl = { modus: 'original'; fileId?: string };
+type Belegoriginal = Pick<LagerBeleg, 'fileId' | 'dokumentSha256'>;
+
+export function leseLieferantenbelegFuerLagerInTransaction(tx: PrivilegedTenantTransaction,
+ auth: AuthorizationSnapshot, itemId: string, auswahl: OriginalAuswahl): Promise<Belegoriginal | null>;
+export function leseLieferantenbelegFuerLagerInTransaction(tx: PrivilegedTenantTransaction,
+ auth: AuthorizationSnapshot, itemId: string, rechnungId?: string): Promise<LagerBeleg | null>;
 export async function leseLieferantenbelegFuerLagerInTransaction(tx: PrivilegedTenantTransaction,
- auth: AuthorizationSnapshot, itemId: string, rechnungId?:string): Promise<LagerBeleg | null> {
+ auth: AuthorizationSnapshot, itemId: string, auswahl?: string | OriginalAuswahl): Promise<LagerBeleg | Belegoriginal | null> {
  try {
   return await withTenantSavepoint(tx,async nested=>{
    await nested.execute(sql`SET LOCAL statement_timeout='2000ms'`);
-   return leseBeleg(nested,auth.tenantId,itemId,rechnungId);
+   if (typeof auswahl !== 'object') return leseBeleg(nested, auth.tenantId, itemId, auswahl);
+   if (!auswahl || auswahl.modus !== 'original' || !hasLagerCapability(auth, 'lager.buchen')) return null;
+   const rows = await nested.execute<Belegoriginal>(sql`
+     SELECT file.id::text AS "fileId", file.sha256 AS "dokumentSha256"
+     FROM public.intake_file file JOIN public.intake_item item
+       ON item.tenant_id=file.tenant_id AND item.id=file.item_id
+     WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${itemId}::uuid
+       AND item.richtung='rein' AND cardinality(item.anliegen)=0
+       AND item.einsatz_aktion IS DISTINCT FROM 'kein_gv'
+       AND (item.kanal<>'mail' OR ${hasAuthorizationArea(auth,'mails')})
+       AND file.aufnahme_herkunft='dokument' AND ${gespeichertesBelegoriginal}
+       ${auswahl.fileId===undefined?sql``:sql`AND file.id=${auswahl.fileId}::uuid`}
+     LIMIT 2`);
+   return rows.length===1?rows[0]:null;
   });
  } catch(error) {
   const ursache = error instanceof Error && error.cause ? error.cause : error;
