@@ -18,6 +18,7 @@
     "@/modules/eingang/server-public#openIntakePredicate",
     "@/modules/eingang/server-public#readOrderIntakeOriginals",
     "@/modules/eingang/server-public#readDomainIntakeOriginals",
+    "@/modules/eingang/server-public#leseBelegoriginalFuerHandbuchungInTransaction",
     "@/modules/eingang/server-public#readInvoiceTaskContext",
     "@/modules/eingang/server-public#sperreLieferantenrechnungFuerGeldInTransaction",
     "@/modules/eingang/public#IncomingInvoiceDialogs",

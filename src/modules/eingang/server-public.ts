@@ -15,7 +15,10 @@ export {recordIntakeComplaintEffect} from './server/intakeComplaintEffect';
 export {saveIntakeProspect} from './server/intakeProspect';
 export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead";
 export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from './server/intakeMailImport';
-export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals,readDomainIntakeOriginals} from "./server/intakeOriginal";
+export {
+  openIntakeOriginal, confirmIntakeOriginal, readOrderIntakeOriginals, readDomainIntakeOriginals,
+  leseBelegoriginalFuerHandbuchungInTransaction,
+} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction } from "./server/goodsReceipt";
 export {legePaketOhneBezugAb,verknuepfePaketOhneBezug} from './server/wareOhneBezug';
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
