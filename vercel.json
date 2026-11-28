@@ -3,6 +3,6 @@
   "regions": ["fra1"],
   "crons": [{"path":"/api/takt","schedule":"0 2 * * *"}],
   "git": {
-    "deploymentEnabled": {"codex/ablauf-*": false}
+    "deploymentEnabled": {"codex/*": false, "codex-b/*": false}
   }
 }
